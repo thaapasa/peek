@@ -9,15 +9,17 @@ use crate::pager::Output;
 use super::Viewer;
 
 /// ASCII characters ordered by visual density (light → dark).
-/// Each character's glyph occupies a different amount of the cell,
-/// giving the illusion of brightness levels.
-const DENSITY_RAMP: &[u8] = b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
+const DENSITY_RAMP: &[u8] =
+    b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 
-pub struct ImageViewer {
+/// Legacy density-ramp image renderer.
+/// Maps each pixel to a character based on perceived brightness,
+/// with foreground-only 24-bit color.
+pub struct DensityRenderer {
     width: u32,
 }
 
-impl ImageViewer {
+impl DensityRenderer {
     pub fn new(width: u32) -> Self {
         Self { width }
     }
@@ -31,7 +33,7 @@ impl ImageViewer {
     }
 }
 
-impl Viewer for ImageViewer {
+impl Viewer for DensityRenderer {
     fn render(&self, path: &Path, _file_type: &FileType, output: &mut Output) -> Result<()> {
         let img = image::open(path).context("failed to open image")?;
 

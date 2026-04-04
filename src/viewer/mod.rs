@@ -7,7 +7,7 @@ use crate::pager::Output;
 use crate::theme::ThemeManager;
 use crate::Args;
 
-mod image;
+pub mod image;
 mod structured;
 mod syntax;
 mod text;
@@ -29,10 +29,11 @@ pub struct Registry {
 impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
         let theme = ThemeManager::new(&args.theme);
+        let image_mode = image::ImageMode::from_str(&args.image_mode);
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(theme, args.language.clone()),
             structured_viewer: structured::StructuredViewer::new(),
-            image_viewer: image::ImageViewer::new(args.width),
+            image_viewer: image::ImageViewer::new(args.width, image_mode),
             text_viewer: text::TextViewer,
             plain_mode: args.plain,
         })

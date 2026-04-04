@@ -38,6 +38,10 @@ thiserror = "2"
 # Colored output helpers
 owo-colors = "4"
 
+[dev-dependencies]
+# Font rasterization for glyph atlas generation
+fontdue = "0.9"
+
 [profile.release]
 opt-level = 3
 lto = true

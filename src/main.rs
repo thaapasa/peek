@@ -45,6 +45,10 @@ pub struct Args {
     /// Image rendering width in characters (0 = auto-fit terminal)
     #[arg(long, default_value = "0")]
     width: u32,
+
+    /// Image rendering mode: "full" (all glyphs), "block" (block elements only), "ascii" (legacy density ramp)
+    #[arg(long, default_value = "full", value_parser = ["full", "block", "ascii"])]
+    image_mode: String,
 }
 
 fn main() -> Result<()> {
