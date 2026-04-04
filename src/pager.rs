@@ -1,0 +1,64 @@
+use std::fmt::Write as FmtWrite;
+use std::io::{self, IsTerminal, Write};
+
+use anyhow::Result;
+
+use crate::Args;
+
+/// Output abstraction: either a pager or direct stdout.
+pub enum Output {
+    Pager(minus::Pager),
+    Direct(io::Stdout),
+}
+
+impl Output {
+    pub fn new(args: &Args) -> Result<Self> {
+        let use_pager = !args.no_pager && io::stdout().is_terminal();
+
+        if use_pager {
+            let pager = minus::Pager::new();
+            Ok(Output::Pager(pager))
+        } else {
+            Ok(Output::Direct(io::stdout()))
+        }
+    }
+
+    /// Write a line of text to the output.
+    pub fn write_line(&mut self, line: &str) -> Result<()> {
+        match self {
+            Output::Pager(pager) => {
+                writeln!(pager, "{line}")?;
+            }
+            Output::Direct(stdout) => {
+                writeln!(stdout, "{line}")?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Write raw text (no trailing newline).
+    pub fn write_str(&mut self, text: &str) -> Result<()> {
+        match self {
+            Output::Pager(pager) => {
+                write!(pager, "{text}")?;
+            }
+            Output::Direct(stdout) => {
+                write!(stdout, "{text}")?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Finalize output. For the pager, this blocks until the user quits.
+    pub fn finish(self) -> Result<()> {
+        match self {
+            Output::Pager(pager) => {
+                minus::page_all(pager)?;
+            }
+            Output::Direct(mut stdout) => {
+                stdout.flush()?;
+            }
+        }
+        Ok(())
+    }
+}

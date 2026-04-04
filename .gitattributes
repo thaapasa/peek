@@ -1,0 +1,184 @@
+# See: https://help.github.com/articles/dealing-with-line-endings/
+
+# ensure the .gitattributes file itself is normalized
+.gitattributes text eol=lf
+
+# Set the default behavior, in case people don't have core.autocrlf set.
+* text=auto
+
+# Explicitly declare text files that are always converted
+
+# Code files - normalized to LF in repo, checked out per platform (via core.autocrlf)
+*.java text diff=java
+*.kotlin text diff=kotlin
+*.kt text diff=kotlin
+*.scala text
+*.sbt text
+*.c text diff=cpp
+*.cpp text diff=cpp
+*.c++ text diff=cpp
+*.h text diff=cpp
+*.hpp text diff=cpp
+*.h++ text diff=cpp
+*.cs text diff=csharp
+*.rs text diff=rust eol=lf
+*.go text diff=golang
+*.swift text
+*.m text diff=objc
+*.mm text diff=objc
+*.groovy text
+*.gradle text
+*.gradle.kts text diff=kotlin
+
+# Scripting languages
+*.py text diff=python
+*.php text diff=php
+*.php3 text diff=php
+*.rb text diff=ruby
+*.pl text
+*.lua text
+*.coffee text
+*.handlebars text
+*.ddl text
+*.sql text
+
+# Web/Frontend
+*.html text diff=html
+*.htm text diff=html
+*.css text diff=css
+*.less text
+*.sass text
+*.scss text
+*.stylus text
+*.js text
+*.jsx text
+*.ts text
+*.tsx text
+*.vue text
+*.htc text
+*.svg text
+
+# Markup & Data
+*.xml text
+*.xaml text
+*.xsd text
+*.dtd text
+*.ent text
+*.csv text
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+
+# Config & Build files
+*.properties text
+*.settings text
+*.conf text
+*.resx text
+*.wsdd text
+*.wsdl text
+*.classpath text
+*.project text
+*.info text
+*.jmx text
+*.jtl text
+*.tmpl text
+*.lst text
+*.prefs text
+*.launch text
+Cargo.toml text eol=lf
+Cargo.lock text eol=lf
+
+# Documentation
+*.txt text
+*.log text
+*.md text eol=lf
+*.markdown text eol=lf
+*.readme text
+*.README text
+*.tex text diff=tex
+
+# Windows project files
+*.csproj text
+*.props text
+*.targets text
+
+# Fonts (binary)
+*.ttf -text
+*.otf -text
+*.woff -text
+*.woff2 -text
+
+# Certificates & keys (binary / don't normalize)
+*.pem -text
+*.key -text
+*.pfx -text
+*.p12 -text
+*.cer -text
+
+# Databases / blobs
+*.sqlite -text
+*.db -text
+
+# Unix scripts - keep LF only (no CRLF conversion)
+*.sh text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf
+.editorconfig text eol=lf
+
+# Windows scripts - keep CRLF only (no LF conversion)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Patches and diffs - keep LF only
+*.patch text eol=lf
+*.diff text eol=lf
+
+# npm/yarn config - keep LF for consistency with npm standards
+package.json text eol=lf
+package-lock.json text eol=lf
+yarn.lock text eol=lf
+pnpm-lock.yaml text eol=lf
+
+# Denote all files that are truly binary and should not be modified
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.xcf binary
+*.mp4 binary
+*.psd binary
+*.swf binary
+*.wav binary
+*.mpg binary
+*.webm binary
+*.wmv binary
+
+# Documents
+*.pdf binary
+*.doc binary
+*.dot binary
+*.odt binary
+*.xls binary
+*.xlsx binary
+
+# Archives
+*.7z binary
+*.zip binary
+*.gz binary
+*.tgz binary
+*.tar binary
+*.tar.gz binary
+*.bz binary
+*.tar.bz binary
+*.jar binary
+*.war binary
+*.ear binary
+*.pack binary
+
+# Cache, class, etc.
+*.cache binary
+*.class binary
+*.bin binary

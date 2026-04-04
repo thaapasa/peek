@@ -1,0 +1,44 @@
+[package]
+name = "peek"
+version = "0.1.0"
+edition = "2024"
+description = "A modern file viewer with syntax highlighting, pretty-printing, and image rendering"
+license = "MIT"
+
+[dependencies]
+# CLI framework with derive macros for self-documenting commands
+clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+
+# Terminal handling and colors
+crossterm = "0.28"
+
+# Syntax highlighting
+syntect = "5"
+
+# Built-in pager
+minus = { version = "5", features = ["dynamic_output", "static_output", "search"] }
+
+# File type detection via magic bytes
+infer = "0.16"
+
+# Structured data parsing
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+toml = "0.8"
+quick-xml = { version = "0.37", features = ["serialize"] }
+
+# Image handling
+image = "0.25"
+
+# Error handling
+anyhow = "1"
+thiserror = "2"
+
+# Colored output helpers
+owo-colors = "4"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
