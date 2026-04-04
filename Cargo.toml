@@ -33,14 +33,25 @@ image = "0.25"
 
 # Error handling
 anyhow = "1"
-thiserror = "2"
-
 # Colored output helpers
 owo-colors = "4"
 
 [dev-dependencies]
 # Font rasterization for glyph atlas generation
 fontdue = "0.9"
+
+# Optimize image processing dependencies even in dev builds —
+# these are unusably slow without at least -O2
+[profile.dev.package.image]
+opt-level = 2
+[profile.dev.package.zune-inflate]
+opt-level = 2
+[profile.dev.package.zune-jpeg]
+opt-level = 2
+[profile.dev.package.png]
+opt-level = 2
+[profile.dev.package.color_quant]
+opt-level = 2
 
 [profile.release]
 opt-level = 3

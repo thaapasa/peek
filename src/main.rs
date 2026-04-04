@@ -4,7 +4,6 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 mod detect;
-mod error;
 mod pager;
 mod theme;
 mod viewer;
