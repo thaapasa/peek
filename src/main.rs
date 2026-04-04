@@ -46,8 +46,8 @@ pub struct Args {
     #[arg(long, default_value = "0")]
     width: u32,
 
-    /// Image rendering mode: "full" (all glyphs), "block" (block elements only), "ascii" (legacy density ramp)
-    #[arg(long, default_value = "full", value_parser = ["full", "block", "ascii"])]
+    /// Image rendering mode: "full" (all glyphs), "block" (blocks + punctuation), "geo" (blocks + lines only), "ascii" (legacy density ramp)
+    #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii"])]
     image_mode: String,
 }
 

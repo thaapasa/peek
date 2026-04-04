@@ -165,7 +165,9 @@ pub fn load_and_render(
 
     let lines = match mode {
         ImageMode::Ascii => render_density(&img, cols, rows),
-        ImageMode::Full | ImageMode::Block => render_block_color(&img, cols, rows, mode),
+        ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
+            render_block_color(&img, cols, rows, mode)
+        }
     };
 
     Ok(lines)

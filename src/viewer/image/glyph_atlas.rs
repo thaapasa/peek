@@ -9,6 +9,8 @@ pub const CELL_H: u32 = 16;
 pub enum GlyphCategory {
     /// Unicode block/quadrant elements — geometrically precise
     Block,
+    /// Line segments: /\|-_
+    Geo,
     /// Curated ASCII subset with distinct spatial patterns
     Curated,
     /// Extended characters (full ASCII, Latin-1, box drawing, geometric shapes)
@@ -70,16 +72,51 @@ pub fn best_glyph(cell_bits: u128, atlas: &[GlyphBitmap]) -> GlyphMatch {
     }
 }
 
+/// Check if a character is safe to use in a fixed-width grid.
+///
+/// Many Unicode characters have "ambiguous" East Asian Width (EAW),
+/// meaning terminals may render them as 1 or 2 columns depending on
+/// settings (e.g., iTerm2's "Ambiguous characters are double-width").
+/// Using a double-width character in our grid breaks alignment.
+///
+/// We only allow:
+/// - ASCII characters (always 1 column)
+/// - Space (used as the "empty" glyph)
+fn is_safe_width(ch: char) -> bool {
+    ch.is_ascii()
+}
+
 /// Get the glyph atlas filtered by rendering mode.
+///
+/// - `full`: all ASCII glyphs + block elements
+/// - `block`: block/quadrant elements + curated ASCII subset
+/// - `geo`: block/quadrant elements + line segments (`/\|-_`) only
+///
+/// Non-ASCII font-rasterized glyphs (Latin-1, box-drawing, geometric
+/// shapes) are excluded because their terminal width is unpredictable.
 pub fn atlas_for_mode(mode: ImageMode) -> Vec<&'static GlyphBitmap> {
-    match mode {
-        ImageMode::Full => GLYPH_ATLAS.iter().collect(),
-        ImageMode::Block => GLYPH_ATLAS
-            .iter()
-            .filter(|g| matches!(g.category, GlyphCategory::Block | GlyphCategory::Curated))
-            .collect(),
-        ImageMode::Ascii => Vec::new(), // not used for block-color rendering
-    }
+    GLYPH_ATLAS
+        .iter()
+        .filter(|g| {
+            let mode_ok = match mode {
+                ImageMode::Full => true,
+                ImageMode::Block => {
+                    matches!(
+                        g.category,
+                        GlyphCategory::Block | GlyphCategory::Geo | GlyphCategory::Curated
+                    )
+                }
+                ImageMode::Geo => {
+                    matches!(g.category, GlyphCategory::Block | GlyphCategory::Geo)
+                }
+                ImageMode::Ascii => false,
+            };
+            // Block elements are hardcoded with exact geometry and are
+            // reliably single-width in all modern terminals that support
+            // Unicode. Font-rasterized glyphs must pass the ASCII safety check.
+            mode_ok && (g.category == GlyphCategory::Block || is_safe_width(g.ch))
+        })
+        .collect()
 }
 
 // ── Block element bitmaps (programmatically defined, exact geometry) ─────

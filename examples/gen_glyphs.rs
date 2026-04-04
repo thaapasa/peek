@@ -16,9 +16,12 @@ use fontdue::{Font, FontSettings};
 const CELL_W: usize = 8;
 const CELL_H: usize = 16;
 
+/// Line segment characters for "geo" mode — purely geometric, no text noise.
+const GEO_CHARS: &str = r"/\|-_";
+
 /// Characters to categorize as "Curated" — distinct spatial patterns useful
 /// for image rendering without looking like text.
-const CURATED_CHARS: &str = r#"/\|-_()[]{}<>^v.:;,'"!?#@%&*+=~oO0TLJ71"#;
+const CURATED_CHARS: &str = r#"()[]{}<>^.:;,'"!?#@%&*+=~"#;
 
 fn main() {
     let font_path = std::env::var("PEEK_FONT").unwrap_or_else(|_| find_system_font());
@@ -63,7 +66,9 @@ fn main() {
     // Printable ASCII (32–126)
     for cp in 32u32..=126 {
         if let Some(ch) = char::from_u32(cp) {
-            let cat = if CURATED_CHARS.contains(ch) {
+            let cat = if GEO_CHARS.contains(ch) {
+                "Geo"
+            } else if CURATED_CHARS.contains(ch) {
                 "Curated"
             } else {
                 "Extended"

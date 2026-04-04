@@ -15,10 +15,12 @@ mod render;
 /// Image rendering mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageMode {
-    /// All glyphs: ASCII + extended + block elements + box drawing + geometric shapes
+    /// All glyphs: ASCII + block elements
     Full,
     /// Unicode block/quadrant elements + curated ASCII subset
     Block,
+    /// Unicode block/quadrant elements + line segments (/\|-_) only
+    Geo,
     /// Legacy density-ramp renderer (brightness-based, foreground only)
     Ascii,
 }
@@ -27,6 +29,7 @@ impl ImageMode {
     pub fn from_str(s: &str) -> Self {
         match s {
             "block" => Self::Block,
+            "geo" => Self::Geo,
             "ascii" => Self::Ascii,
             _ => Self::Full,
         }
