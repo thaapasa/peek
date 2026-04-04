@@ -7,10 +7,10 @@ use crate::pager::Output;
 
 use super::Viewer;
 
-mod block_color;
 mod clustering;
-mod density;
 mod glyph_atlas;
+mod interactive;
+mod render;
 
 /// Image rendering mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,20 +42,21 @@ impl ImageViewer {
     pub fn new(width: u32, mode: ImageMode) -> Self {
         Self { width, mode }
     }
+
+    /// Interactive image viewing with resize support.
+    /// Enters alternate screen and blocks until the user quits.
+    pub fn view_interactive(&self, path: &Path) -> Result<()> {
+        interactive::view_interactive(path, self.mode, self.width)
+    }
 }
 
 impl Viewer for ImageViewer {
-    fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()> {
-        match self.mode {
-            ImageMode::Ascii => {
-                let renderer = density::DensityRenderer::new(self.width);
-                renderer.render(path, file_type, output)
-            }
-            ImageMode::Full | ImageMode::Block => {
-                let renderer =
-                    block_color::BlockColorRenderer::new(self.width, self.mode);
-                renderer.render(path, file_type, output)
-            }
+    fn render(&self, path: &Path, _file_type: &FileType, output: &mut Output) -> Result<()> {
+        let term = render::TermSize::detect();
+        let lines = render::load_and_render(path, self.mode, self.width, term)?;
+        for line in &lines {
+            output.write_line(line)?;
         }
+        Ok(())
     }
 }

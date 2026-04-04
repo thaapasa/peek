@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -52,18 +53,48 @@ pub struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let is_tty = std::io::stdout().is_terminal();
+    let use_pager = !args.no_pager && is_tty;
 
     let viewers = viewer::Registry::new(&args)?;
-    let mut output = pager::Output::new(&args)?;
 
-    for path in &args.files {
-        let file_type = detect::detect(path)?;
-        let viewer = viewers.viewer_for(&file_type);
-        viewer
-            .render(path, &file_type, &mut output)
-            .with_context(|| format!("failed to render {}", path.display()))?;
+    // Collect files and their types
+    let files: Vec<_> = args
+        .files
+        .iter()
+        .map(|path| {
+            let file_type = detect::detect(path)?;
+            Ok((path.clone(), file_type))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    // Images on interactive terminals get their own interactive viewer
+    // with contain-ratio sizing and resize support.
+    // Non-image files go through the normal pager pipeline.
+    let mut non_image_files = Vec::new();
+
+    for (path, file_type) in &files {
+        if matches!(file_type, detect::FileType::Image) && use_pager && !args.plain {
+            viewers
+                .image_viewer()
+                .view_interactive(path)
+                .with_context(|| format!("failed to render {}", path.display()))?;
+        } else {
+            non_image_files.push((path, file_type));
+        }
     }
 
-    output.finish()?;
+    // Render remaining files through the normal pager pipeline
+    if !non_image_files.is_empty() {
+        let mut output = pager::Output::new(&args)?;
+        for (path, file_type) in non_image_files {
+            let viewer = viewers.viewer_for(file_type);
+            viewer
+                .render(path, file_type, &mut output)
+                .with_context(|| format!("failed to render {}", path.display()))?;
+        }
+        output.finish()?;
+    }
+
     Ok(())
 }

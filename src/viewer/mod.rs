@@ -39,6 +39,10 @@ impl Registry {
         })
     }
 
+    pub fn image_viewer(&self) -> &image::ImageViewer {
+        &self.image_viewer
+    }
+
     pub fn viewer_for(&self, file_type: &FileType) -> &dyn Viewer {
         if self.plain_mode {
             return &self.text_viewer;
