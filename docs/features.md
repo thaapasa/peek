@@ -181,8 +181,10 @@ black. For images without transparency, the background setting is irrelevant and
 ignored.
 
 **Status: Partially implemented.** Auto-detection of background color is implemented
-(dark content → white bg, light content → black bg). Manual background selection via
-keyboard or CLI (`--background`) is not yet implemented.
+(dark content → white bg, light content → black bg). `--background` CLI flag and `b`
+key cycling in the interactive viewer are implemented. Checkerboard uses 8×8 pixel gray
+pattern. No per-image auto-detection of whether to enable compositing (always applied
+when alpha channel is present).
 
 #### Image Sizing Modes
 

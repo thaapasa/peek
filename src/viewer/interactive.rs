@@ -1,5 +1,7 @@
+use std::cell::Cell;
 use std::io::{self, Write};
 use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
 use crossterm::{
@@ -11,6 +13,7 @@ use crossterm::{
 
 use crate::detect::FileType;
 use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+use crate::viewer::image::Background;
 
 #[derive(Clone, Copy, PartialEq)]
 enum ViewMode {
@@ -33,6 +36,20 @@ pub fn view_interactive(
     pretty: bool,
     render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
+    view_interactive_with_bg(path, file_type, theme_name, rerender_on_resize, pretty, None, render_content)
+}
+
+/// Interactive viewer with optional background cycling support.
+/// When `background` is `Some`, the `b` key cycles the background mode.
+pub fn view_interactive_with_bg(
+    path: &Path,
+    file_type: &FileType,
+    theme_name: PeekThemeName,
+    rerender_on_resize: bool,
+    pretty: bool,
+    background: Option<Rc<Cell<Background>>>,
+    render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
+) -> Result<()> {
     let mut stdout = io::stdout();
 
     execute!(
@@ -50,6 +67,7 @@ pub fn view_interactive(
         theme_name,
         rerender_on_resize,
         pretty,
+        background,
         &render_content,
     );
 
@@ -63,6 +81,7 @@ pub fn view_interactive(
     result
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_event_loop(
     stdout: &mut io::Stdout,
     path: &Path,
@@ -70,6 +89,7 @@ fn run_event_loop(
     initial_theme: PeekThemeName,
     rerender_on_resize: bool,
     initial_pretty: bool,
+    background: Option<Rc<Cell<Background>>>,
     render_content: &dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
     let mut view_mode = ViewMode::Content;
@@ -184,6 +204,20 @@ fn run_event_loop(
                         &content_lines, &info_lines, &help_lines,
                         &peek_theme, current_theme,
                     )?;
+                }
+
+                // Background cycling (image/SVG viewers only)
+                KeyCode::Char('b') => {
+                    if let Some(ref bg_cell) = background {
+                        bg_cell.set(bg_cell.get().next());
+                        content_lines = render_content(current_theme, pretty)?;
+                        content_scroll = 0;
+                        redraw(
+                            stdout, view_mode, content_scroll,
+                            &content_lines, &info_lines, &help_lines,
+                            &peek_theme, current_theme,
+                        )?;
+                    }
                 }
 
                 // Scrolling
@@ -453,6 +487,7 @@ const HELP_KEYS: &[(&str, &str)] = &[
     ("h / ?", "Toggle help"),
     ("t", "Next theme"),
     ("r", "Toggle raw / pretty"),
+    ("b", "Cycle background (images)"),
 ];
 
 fn render_help_lines(theme: &PeekTheme, current_theme: PeekThemeName) -> Vec<String> {
