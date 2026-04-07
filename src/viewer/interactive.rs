@@ -77,6 +77,11 @@ fn run_event_loop(
     let mut peek_theme = make_peek_theme(current_theme);
     let mut pretty = initial_pretty;
 
+    let filename = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("?");
+
     // Render initial content
     let mut content_lines = render_content(current_theme, pretty)?;
 
@@ -90,7 +95,24 @@ fn run_event_loop(
     let mut info_scroll: usize = 0;
     let mut help_scroll: usize = 0;
 
-    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, content_scroll)?;
+    let redraw = |stdout: &mut io::Stdout,
+                  mode: ViewMode,
+                  scroll: usize,
+                  content: &[String],
+                  info: &[String],
+                  help: &[String],
+                  theme: &PeekTheme,
+                  theme_name: PeekThemeName|
+     -> Result<()> {
+        let status = render_status_line(filename, mode, theme_name, theme);
+        draw(stdout, mode, content, info, help, scroll, &status)
+    };
+
+    redraw(
+        stdout, view_mode, content_scroll,
+        &content_lines, &info_lines, &help_lines,
+        &peek_theme, current_theme,
+    )?;
 
     loop {
         match event::read()? {
@@ -107,12 +129,20 @@ fn run_event_loop(
                         ViewMode::Info | ViewMode::Help => ViewMode::Content,
                     };
                     let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
+                    redraw(
+                        stdout, view_mode, scroll,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::Char('i') => {
                     if view_mode != ViewMode::Info {
                         view_mode = ViewMode::Info;
-                        draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, info_scroll)?;
+                        redraw(
+                            stdout, view_mode, info_scroll,
+                            &content_lines, &info_lines, &help_lines,
+                            &peek_theme, current_theme,
+                        )?;
                     }
                 }
                 KeyCode::Char('h') | KeyCode::Char('?') => {
@@ -122,7 +152,11 @@ fn run_event_loop(
                         ViewMode::Help
                     };
                     let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
+                    redraw(
+                        stdout, view_mode, scroll,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
 
                 // Theme cycling
@@ -133,7 +167,11 @@ fn run_event_loop(
                     info_lines = crate::info::render(&file_info, &peek_theme);
                     help_lines = render_help_lines(&peek_theme, current_theme);
                     let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
+                    redraw(
+                        stdout, view_mode, scroll,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
 
                 // Raw / pretty-print toggle
@@ -141,49 +179,77 @@ fn run_event_loop(
                     pretty = !pretty;
                     content_lines = render_content(current_theme, pretty)?;
                     content_scroll = 0;
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, content_scroll)?;
+                    redraw(
+                        stdout, view_mode, content_scroll,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
 
                 // Scrolling
                 KeyCode::Up | KeyCode::Char('k') => {
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = s.saturating_sub(1);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, *s)?;
+                    redraw(
+                        stdout, view_mode, *s,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::Down | KeyCode::Char('j') => {
                     let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = terminal_rows();
+                    let rows = content_rows();
                     let max = lines.len().saturating_sub(rows);
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = (*s + 1).min(max);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, *s)?;
+                    redraw(
+                        stdout, view_mode, *s,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::PageUp => {
-                    let rows = terminal_rows();
+                    let rows = content_rows();
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = s.saturating_sub(rows.saturating_sub(1));
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, *s)?;
+                    redraw(
+                        stdout, view_mode, *s,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::PageDown | KeyCode::Char(' ') => {
                     let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = terminal_rows();
+                    let rows = content_rows();
                     let max = lines.len().saturating_sub(rows);
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = (*s + rows.saturating_sub(1)).min(max);
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, *s)?;
+                    redraw(
+                        stdout, view_mode, *s,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::Home => {
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = 0;
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, 0)?;
+                    redraw(
+                        stdout, view_mode, 0,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
                 KeyCode::End => {
                     let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = terminal_rows();
+                    let rows = content_rows();
                     let max = lines.len().saturating_sub(rows);
                     let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
                     *s = max;
-                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, max)?;
+                    redraw(
+                        stdout, view_mode, max,
+                        &content_lines, &info_lines, &help_lines,
+                        &peek_theme, current_theme,
+                    )?;
                 }
 
                 _ => {}
@@ -193,11 +259,89 @@ fn run_event_loop(
                     content_lines = render_content(current_theme, pretty)?;
                 }
                 let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
+                redraw(
+                    stdout, view_mode, scroll,
+                    &content_lines, &info_lines, &help_lines,
+                    &peek_theme, current_theme,
+                )?;
             }
             _ => {}
         }
     }
+}
+
+impl ViewMode {
+    fn label(self) -> &'static str {
+        match self {
+            ViewMode::Content => "Content",
+            ViewMode::Info => "Info",
+            ViewMode::Help => "Help",
+        }
+    }
+}
+
+fn render_status_line(
+    filename: &str,
+    mode: ViewMode,
+    theme_name: PeekThemeName,
+    theme: &PeekTheme,
+) -> String {
+    use syntect::highlighting::Color;
+
+    // Foreground-only escape that won't reset the background
+    let fg = |text: &str, color: Color| -> String {
+        format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
+    };
+
+    let left = format!(
+        " {} {} {} {} {}",
+        fg(filename, theme.accent),
+        fg("\u{2502}", theme.muted),
+        fg(mode.label(), theme.label),
+        fg("\u{2502}", theme.muted),
+        fg(theme_name.cli_name(), theme.muted),
+    );
+
+    let hints = format!(
+        "{}  {}  {}  {} ",
+        fg("h:help", theme.muted),
+        fg("Tab:cycle", theme.muted),
+        fg("t:theme", theme.muted),
+        fg("q:quit", theme.muted),
+    );
+
+    // Compute visible widths (strip ANSI escapes for padding)
+    let left_visible = strip_ansi_width(&left);
+    let hints_visible = strip_ansi_width(&hints);
+    let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+
+    let gap = cols.saturating_sub(left_visible + hints_visible);
+    let padding = " ".repeat(gap);
+
+    let bg = theme.selection;
+    format!(
+        "\x1b[48;2;{};{};{}m{}{}{}\x1b[0m",
+        bg.r, bg.g, bg.b,
+        left, padding, hints,
+    )
+}
+
+/// Count the visible character width of a string, ignoring ANSI escape sequences.
+fn strip_ansi_width(s: &str) -> usize {
+    let mut width = 0;
+    let mut in_escape = false;
+    for c in s.chars() {
+        if in_escape {
+            if c.is_ascii_alphabetic() {
+                in_escape = false;
+            }
+        } else if c == '\x1b' {
+            in_escape = true;
+        } else {
+            width += 1;
+        }
+    }
+    width
 }
 
 fn make_peek_theme(name: PeekThemeName) -> PeekTheme {
@@ -248,6 +392,11 @@ fn lines_for<'a>(
     }
 }
 
+/// Visible rows available for content (total rows minus status line).
+fn content_rows() -> usize {
+    terminal_rows().saturating_sub(1)
+}
+
 fn draw(
     stdout: &mut io::Stdout,
     view_mode: ViewMode,
@@ -255,9 +404,14 @@ fn draw(
     info_lines: &[String],
     help_lines: &[String],
     scroll: usize,
+    status: &str,
 ) -> Result<()> {
-    let rows = terminal_rows();
+    let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
+    let rows = (total_rows as usize).saturating_sub(1); // reserve last row for status
 
+    // Reset all attributes before clearing so the clear doesn't
+    // fill the screen with a leftover background color.
+    stdout.write_all(b"\x1b[0m")?;
     execute!(
         stdout,
         terminal::Clear(ClearType::All),
@@ -273,6 +427,11 @@ fn draw(
         }
         stdout.write_all(line.as_bytes())?;
     }
+
+    // Reset all attributes, then draw the status line on the last row
+    stdout.write_all(b"\x1b[0m")?;
+    execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
+    stdout.write_all(status.as_bytes())?;
 
     stdout.flush()?;
     Ok(())
