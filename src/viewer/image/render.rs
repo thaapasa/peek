@@ -3,7 +3,7 @@ use image::{DynamicImage, GenericImageView};
 
 use super::clustering::fast_2_color;
 use super::glyph_atlas::{atlas_for_mode, best_glyph, GlyphBitmap, CELL_H, CELL_W};
-use super::ImageMode;
+use super::{Background, ImageMode};
 
 /// Terminal dimensions in characters.
 #[derive(Debug, Clone, Copy)]
@@ -152,14 +152,122 @@ pub fn render_density(img: &DynamicImage, term_cols: u32, term_rows: u32) -> Vec
     lines
 }
 
+/// Add transparent margin around an image.
+pub fn add_margin(img: DynamicImage, margin: u32) -> DynamicImage {
+    if margin == 0 {
+        return img;
+    }
+    let (w, h) = img.dimensions();
+    let new_w = w + margin * 2;
+    let new_h = h + margin * 2;
+    let mut canvas = image::RgbaImage::new(new_w, new_h);
+    // Canvas is initialized to [0,0,0,0] (fully transparent)
+    let rgba = img.to_rgba8();
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        canvas.put_pixel(x + margin, y + margin, *pixel);
+    }
+    DynamicImage::ImageRgba8(canvas)
+}
+
+/// Check if an image has an alpha channel.
+fn has_alpha(img: &DynamicImage) -> bool {
+    use image::ColorType;
+    matches!(
+        img.color(),
+        ColorType::Rgba8 | ColorType::Rgba16 | ColorType::Rgba32F | ColorType::La8 | ColorType::La16
+    )
+}
+
+/// Analyze non-transparent pixels to choose a compositing background.
+/// Dark content → white background, light content → black background.
+fn auto_background(img: &DynamicImage) -> [u8; 3] {
+    let rgba = img.to_rgba8();
+    let (mut luma_sum, mut count) = (0.0f64, 0u64);
+    for pixel in rgba.pixels() {
+        let [r, g, b, a] = pixel.0;
+        if a < 10 {
+            continue;
+        }
+        luma_sum += 0.299 * r as f64 + 0.587 * g as f64 + 0.114 * b as f64;
+        count += 1;
+    }
+    if count == 0 {
+        return [255, 255, 255];
+    }
+    if luma_sum / (count as f64) < 128.0 {
+        [255, 255, 255]
+    } else {
+        [0, 0, 0]
+    }
+}
+
+/// Resolve a Background setting to an RGB color for a given pixel position.
+fn resolve_bg(bg: Background, img: &DynamicImage) -> Box<dyn Fn(u32, u32) -> [u8; 3]> {
+    match bg {
+        Background::Auto => {
+            let color = if has_alpha(img) {
+                auto_background(img)
+            } else {
+                [0, 0, 0]
+            };
+            Box::new(move |_x, _y| color)
+        }
+        Background::Black => Box::new(|_x, _y| [0, 0, 0]),
+        Background::White => Box::new(|_x, _y| [255, 255, 255]),
+        Background::Checkerboard => {
+            // 8x8 pixel checkerboard, light gray + dark gray
+            Box::new(|x, y| {
+                let cell = (x / 8 + y / 8) % 2;
+                if cell == 0 { [204, 204, 204] } else { [102, 102, 102] }
+            })
+        }
+    }
+}
+
+/// Composite an RGBA image against a background, returning an RGB image.
+fn composite_onto(img: &DynamicImage, bg_fn: &dyn Fn(u32, u32) -> [u8; 3]) -> DynamicImage {
+    let rgba = img.to_rgba8();
+    let (w, h) = rgba.dimensions();
+    let mut rgb = image::RgbImage::new(w, h);
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        let [r, g, b, a] = pixel.0;
+        let alpha = a as f32 / 255.0;
+        let inv = 1.0 - alpha;
+        let bg = bg_fn(x, y);
+        rgb.put_pixel(
+            x,
+            y,
+            image::Rgb([
+                (r as f32 * alpha + bg[0] as f32 * inv) as u8,
+                (g as f32 * alpha + bg[1] as f32 * inv) as u8,
+                (b as f32 * alpha + bg[2] as f32 * inv) as u8,
+            ]),
+        );
+    }
+    DynamicImage::ImageRgb8(rgb)
+}
+
+/// Apply alpha compositing with the given background mode.
+pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
+    if !has_alpha(&img) && bg == Background::Auto {
+        return img;
+    }
+    let bg_fn = resolve_bg(bg, &img);
+    composite_onto(&img, &*bg_fn)
+}
+
 /// Load and render an image to lines, using contain-ratio sizing.
 pub fn load_and_render(
     path: &std::path::Path,
     mode: ImageMode,
     forced_width: u32,
     term: TermSize,
+    bg: Background,
+    margin: u32,
 ) -> Result<Vec<String>> {
     let img = image::open(path).context("failed to open image")?;
+    let img = add_margin(img, margin);
+    let img = composite_with_bg(img, bg);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, forced_width);
 
@@ -168,6 +276,40 @@ pub fn load_and_render(
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
             render_block_color(&img, cols, rows, mode)
         }
+    };
+
+    Ok(lines)
+}
+
+/// Load and render an SVG file to ASCII art lines.
+/// Rasterizes at the exact target pixel resolution for maximum sharpness.
+pub fn load_and_render_svg(
+    path: &std::path::Path,
+    mode: ImageMode,
+    forced_width: u32,
+    term: TermSize,
+    bg: Background,
+    margin: u32,
+) -> Result<Vec<String>> {
+    let (svg_w, svg_h) = super::svg::svg_dimensions(path)?;
+    // Account for margin in aspect ratio calculation
+    let padded_w = svg_w + margin * 2;
+    let padded_h = svg_h + margin * 2;
+    let (cols, rows) = contain_size(padded_w, padded_h, term, forced_width);
+
+    // Rasterize at the exact pixel resolution the renderer needs
+    let (px_w, px_h) = match mode {
+        ImageMode::Ascii => (cols, rows),
+        _ => (cols * CELL_W, rows * CELL_H),
+    };
+
+    let img = super::svg::rasterize_svg(path, px_w.max(1), px_h.max(1))?;
+    let img = add_margin(img, margin);
+    let img = composite_with_bg(img, bg);
+
+    let lines = match mode {
+        ImageMode::Ascii => render_density(&img, cols, rows),
+        _ => render_block_color(&img, cols, rows, mode),
     };
 
     Ok(lines)

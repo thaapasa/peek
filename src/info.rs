@@ -128,6 +128,7 @@ fn mime_from_type(file_type: &FileType, path: &Path) -> String {
             }
             .to_string()
         }
+        FileType::Svg => "image/svg+xml".to_string(),
         FileType::Binary => "application/octet-stream".to_string(),
     }
 }
@@ -144,6 +145,7 @@ fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
                 StructuredFormat::Xml => "XML",
             },
         },
+        FileType::Svg => gather_text_extras(path),
         FileType::Binary => FileExtras::Binary,
     }
 }

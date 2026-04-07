@@ -31,6 +31,9 @@ quick-xml = { version = "0.37", features = ["serialize"] }
 # Image handling
 image = "0.25"
 
+# SVG rasterization
+resvg = "0.44"
+
 # EXIF metadata extraction
 kamadak-exif = "0.5"
 
@@ -52,6 +55,10 @@ opt-level = 2
 [profile.dev.package.png]
 opt-level = 2
 [profile.dev.package.color_quant]
+opt-level = 2
+[profile.dev.package.resvg]
+opt-level = 2
+[profile.dev.package.tiny-skia]
 opt-level = 2
 
 [profile.release]

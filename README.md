@@ -38,6 +38,9 @@ peek data.yaml
 # View an image (glyph-matched ASCII art)
 peek photo.jpg
 
+# View an SVG (rasterized to ASCII art, r to toggle XML source)
+peek icon.svg
+
 # Pipe output (no viewer, still highlighted)
 peek data.json | less -R
 
@@ -55,6 +58,12 @@ peek -P file.txt
 
 # Choose a theme
 peek --theme vivid-dark src/main.rs
+
+# Image with white background (auto/black/white/checkerboard)
+peek --background white logo.png
+
+# Image with transparent margin padding
+peek --margin 20 icon.svg
 
 # Show file metadata (includes EXIF for images)
 peek --info photo.jpg

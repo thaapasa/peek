@@ -64,6 +64,14 @@ pub struct Args {
     #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii"])]
     image_mode: String,
 
+    /// Image transparency background: "auto" (detect), "black", "white", "checkerboard"
+    #[arg(long, default_value = "auto", value_parser = ["auto", "black", "white", "checkerboard", "checker"])]
+    background: String,
+
+    /// Image margin in pixels of transparent padding (0 = no margin)
+    #[arg(long, default_value = "0")]
+    margin: u32,
+
     /// Show file info instead of file contents
     #[arg(long)]
     info: bool,
@@ -124,6 +132,12 @@ fn main() -> Result<()> {
                 // Images re-render on resize for correct aspect ratio
                 viewers
                     .image_viewer()
+                    .view_interactive(path, file_type)
+                    .with_context(|| format!("failed to render {}", path.display()))?;
+            } else if matches!(file_type, detect::FileType::Svg) && !args.plain {
+                // SVGs: rasterized preview with r to toggle XML source
+                viewers
+                    .svg_viewer()
                     .view_interactive(path, file_type)
                     .with_context(|| format!("failed to render {}", path.display()))?;
             } else {

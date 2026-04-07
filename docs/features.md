@@ -151,12 +151,13 @@ cycling in viewer yet (only via `--image-mode` CLI).
 SVG files (`.svg`) are vector graphics and not supported by the `image` crate. They
 require a separate rasterizer (e.g. `resvg`) to convert to a bitmap before rendering.
 
-SVG should support two viewing modes (cyclable with `Tab`):
-- **Source view:** Syntax-highlighted XML source (works with existing syntax viewer).
-- **Rendered preview:** Rasterize the SVG and render as ASCII art through the image
-  pipeline.
+SVG supports two viewing modes (togglable with `r` in viewer mode):
+- **Rendered preview** (default): Rasterize the SVG and render as ASCII art through the
+  image pipeline.
+- **Source view:** Syntax-highlighted XML source (pretty-printed or raw).
 
-**Status: Not implemented.**
+**Status: Implemented.** SVG rasterization via `resvg`, with `r` key to toggle between
+rendered preview and XML source. Re-renders on terminal resize.
 
 #### Transparency Handling
 
@@ -179,7 +180,9 @@ mostly dark, prefer a light background (white or checkerboard); if mostly light,
 black. For images without transparency, the background setting is irrelevant and can be
 ignored.
 
-**Status: Not implemented.**
+**Status: Partially implemented.** Auto-detection of background color is implemented
+(dark content → white bg, light content → black bg). Manual background selection via
+keyboard or CLI (`--background`) is not yet implemented.
 
 #### Image Sizing Modes
 
@@ -545,8 +548,9 @@ Current and planned CLI options:
 | `--width`        |       | Image rendering width in characters             | Implemented  |
 | `--image-mode`   |       | Image rendering mode                            | Implemented  |
 | `--info`         |       | Show file info instead of contents              | Implemented  |
+| `--background`   |       | Image transparency background (auto/black/white/checkerboard) | Implemented |
+| `--margin`       |       | Image margin in transparent pixels              | Implemented  |
 | `--line-numbers` |       | Enable/disable line numbers                     | Planned      |
-| `--background`   |       | Image transparency background                   | Planned      |
 | `--sizing`       |       | Image sizing mode                               | Planned      |
 | `--color-mode`   |       | Select compatibility/color mode                 | Planned      |
 

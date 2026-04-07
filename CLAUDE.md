@@ -28,6 +28,7 @@ src/
     image/
       mod.rs           — Image viewer (interactive + piped)
       render.rs        — Image → glyph-matched ASCII art with true color
+      svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
   detect.rs            — File type detection (extension + magic bytes)

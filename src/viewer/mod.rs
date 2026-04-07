@@ -57,6 +57,7 @@ pub struct Registry {
     syntax_viewer: syntax::SyntaxViewer,
     structured_viewer: structured::StructuredViewer,
     image_viewer: image::ImageViewer,
+    svg_viewer: image::SvgViewer,
     text_viewer: text::TextViewer,
     theme_manager: Rc<ThemeManager>,
     forced_language: Option<String>,
@@ -70,10 +71,12 @@ impl Registry {
         let theme = Rc::new(ThemeManager::new(args.theme));
         let peek_theme = theme.peek_theme().clone();
         let image_mode = image::ImageMode::from_str(&args.image_mode);
+        let background = image::Background::from_str(&args.background);
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
             structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme), args.raw),
-            image_viewer: image::ImageViewer::new(args.width, image_mode, args.theme),
+            image_viewer: image::ImageViewer::new(args.width, image_mode, background, args.margin, args.theme),
+            svg_viewer: image::SvgViewer::new(args.width, image_mode, background, args.margin, args.theme, Rc::clone(&theme), args.raw),
             text_viewer: text::TextViewer,
             theme_manager: theme,
             forced_language: args.language.clone(),
@@ -85,6 +88,10 @@ impl Registry {
 
     pub fn image_viewer(&self) -> &image::ImageViewer {
         &self.image_viewer
+    }
+
+    pub fn svg_viewer(&self) -> &image::SvgViewer {
+        &self.svg_viewer
     }
 
     pub fn theme_name(&self) -> PeekThemeName {
@@ -104,6 +111,7 @@ impl Registry {
             FileType::SourceCode { .. } => &self.syntax_viewer,
             FileType::Structured(_) => &self.structured_viewer,
             FileType::Image => &self.image_viewer,
+            FileType::Svg => &self.svg_viewer,
             FileType::Binary => &self.text_viewer,
         }
     }
@@ -172,6 +180,7 @@ impl Registry {
                 }
                 .to_string(),
             ),
+            FileType::Svg => Some("XML".to_string()),
             _ => None,
         }
     }

@@ -12,6 +12,8 @@ pub enum FileType {
     Structured(StructuredFormat),
     /// Raster image
     Image,
+    /// SVG vector image (rasterized for preview, XML source for raw view)
+    Svg,
     /// Binary / unknown
     Binary,
 }
@@ -42,7 +44,10 @@ pub fn detect(path: &Path) -> Result<FileType> {
             "toml" => {
                 return Ok(FileType::Structured(StructuredFormat::Toml));
             }
-            "xml" | "svg" | "html" | "htm" | "xhtml" | "plist" => {
+            "svg" => {
+                return Ok(FileType::Svg);
+            }
+            "xml" | "html" | "htm" | "xhtml" | "plist" => {
                 return Ok(FileType::Structured(StructuredFormat::Xml));
             }
             _ => {}
