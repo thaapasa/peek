@@ -3,9 +3,10 @@ use std::path::Path;
 use std::time::SystemTime;
 
 use anyhow::Result;
+use syntect::highlighting::Color;
 
 use crate::detect::{FileType, StructuredFormat};
-use crate::theme::PeekTheme;
+use crate::theme::{PeekTheme, lerp_color};
 
 // ---------------------------------------------------------------------------
 // Data types
@@ -16,7 +17,7 @@ pub struct FileInfo {
     pub file_name: String,
     pub path: String,
     pub size_bytes: u64,
-    pub mime_type: Option<String>,
+    pub mime_type: String,
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
     pub permissions: Option<String>,
@@ -54,12 +55,10 @@ pub fn gather(path: &Path, file_type: &FileType) -> Result<FileInfo> {
         .unwrap_or_default();
     let display_path = path.to_string_lossy().into_owned();
 
-    // MIME type via infer (read first bytes)
-    let mime_type = detect_mime(path);
+    // MIME type: try magic bytes first, fall back to extension-based detection
+    let mime_type = detect_mime(path).unwrap_or_else(|| mime_from_type(file_type, path));
 
-    // Permissions (Unix only)
     let permissions = format_permissions_from_meta(&meta);
-
     let extras = gather_extras(path, file_type);
 
     Ok(FileInfo {
@@ -75,9 +74,59 @@ pub fn gather(path: &Path, file_type: &FileType) -> Result<FileInfo> {
 }
 
 fn detect_mime(path: &Path) -> Option<String> {
-    let buf = fs::read(path).ok()?;
-    let kind = infer::get(&buf)?;
+    let mut file = fs::File::open(path).ok()?;
+    let mut buf = [0u8; 8192];
+    let n = std::io::Read::read(&mut file, &mut buf).ok()?;
+    let kind = infer::get(&buf[..n])?;
     Some(kind.mime_type().to_string())
+}
+
+fn mime_from_type(file_type: &FileType, path: &Path) -> String {
+    match file_type {
+        FileType::Image => {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("");
+            match ext {
+                "png" => "image/png",
+                "jpg" | "jpeg" => "image/jpeg",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                "bmp" => "image/bmp",
+                "svg" => "image/svg+xml",
+                "ico" => "image/x-icon",
+                "tiff" | "tif" => "image/tiff",
+                _ => "image/unknown",
+            }
+            .to_string()
+        }
+        FileType::Structured(fmt) => match fmt {
+            StructuredFormat::Json => "application/json",
+            StructuredFormat::Yaml => "text/yaml",
+            StructuredFormat::Toml => "application/toml",
+            StructuredFormat::Xml => "application/xml",
+        }
+        .to_string(),
+        FileType::SourceCode { syntax } => {
+            let ext = syntax
+                .as_deref()
+                .or_else(|| path.extension().and_then(|e| e.to_str()))
+                .unwrap_or("");
+            // Use IANA-registered types where they exist (RFC 6648: no x- prefixes).
+            // Languages without registered types fall back to text/plain.
+            match ext {
+                "js" | "mjs" | "cjs" => "text/javascript",
+                "css" => "text/css",
+                "html" | "htm" => "text/html",
+                "md" | "markdown" => "text/markdown",
+                "sql" => "application/sql",
+                _ => "text/plain",
+            }
+            .to_string()
+        }
+        FileType::Binary => "application/octet-stream".to_string(),
+    }
 }
 
 fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
@@ -140,42 +189,88 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
 
     // Section: File
     push_section_header(&mut lines, "File", theme);
-    push_field(&mut lines, "Name", &info.file_name, theme);
-    push_field(&mut lines, "Path", &info.path, theme);
-    push_field(&mut lines, "Size", &format_size_display(info.size_bytes), theme);
-    if let Some(ref mime) = info.mime_type {
-        push_field(&mut lines, "MIME", mime, theme);
-    }
+    push_field(&mut lines, "Name", &paint_filename(&info.file_name, theme), theme);
+    push_field(&mut lines, "Path", &paint_path(&info.path, theme), theme);
+    push_field(
+        &mut lines,
+        "Size",
+        &paint_size(info.size_bytes, theme),
+        theme,
+    );
+    push_field(&mut lines, "MIME", &theme.paint_value(&info.mime_type), theme);
     if let Some(modified) = info.modified {
-        push_field(&mut lines, "Modified", &format_time(modified), theme);
+        push_field(
+            &mut lines,
+            "Modified",
+            &paint_timestamp(modified, theme),
+            theme,
+        );
     }
     if let Some(created) = info.created {
-        push_field(&mut lines, "Created", &format_time(created), theme);
+        push_field(
+            &mut lines,
+            "Created",
+            &paint_timestamp(created, theme),
+            theme,
+        );
     }
     if let Some(ref perms) = info.permissions {
-        push_field(&mut lines, "Permissions", perms, theme);
+        push_field(
+            &mut lines,
+            "Permissions",
+            &paint_permissions(perms, theme),
+            theme,
+        );
     }
 
     // Type-specific section
     match &info.extras {
-        FileExtras::Image { width, height, color_type } => {
+        FileExtras::Image {
+            width,
+            height,
+            color_type,
+        } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Image", theme);
-            push_field(&mut lines, "Dimensions", &format!("{width} \u{00d7} {height}"), theme);
-            push_field(&mut lines, "Color", color_type, theme);
+            push_field(
+                &mut lines,
+                "Dimensions",
+                &paint_dimensions(*width, *height, theme),
+                theme,
+            );
+            push_field(&mut lines, "Color", &theme.paint_value(color_type), theme);
         }
-        FileExtras::Text { line_count, word_count, char_count } => {
+        FileExtras::Text {
+            line_count,
+            word_count,
+            char_count,
+        } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Content", theme);
-            push_field(&mut lines, "Lines", &thousands_sep(*line_count as u64), theme);
-            push_field(&mut lines, "Words", &thousands_sep(*word_count as u64), theme);
-            push_field(&mut lines, "Characters", &thousands_sep(*char_count as u64), theme);
-            push_field(&mut lines, "Encoding", "UTF-8", theme);
+            push_field(
+                &mut lines,
+                "Lines",
+                &paint_count(*line_count, theme),
+                theme,
+            );
+            push_field(
+                &mut lines,
+                "Words",
+                &paint_count(*word_count, theme),
+                theme,
+            );
+            push_field(
+                &mut lines,
+                "Characters",
+                &paint_count(*char_count, theme),
+                theme,
+            );
+            push_field(&mut lines, "Encoding", &theme.paint_muted("UTF-8"), theme);
         }
         FileExtras::Structured { format_name } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Format", theme);
-            push_field(&mut lines, "Type", format_name, theme);
+            push_field(&mut lines, "Type", &theme.paint_accent(format_name), theme);
         }
         FileExtras::Binary => {}
     }
@@ -196,19 +291,176 @@ fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) 
     ));
 }
 
-fn push_field(lines: &mut Vec<String>, label: &str, value: &str, theme: &PeekTheme) {
+/// Push a field with a themed label and a pre-colored value.
+fn push_field(lines: &mut Vec<String>, label: &str, colored_value: &str, theme: &PeekTheme) {
     lines.push(format!(
         "  {:<width$}{}",
         theme.paint_label(label),
-        theme.paint_value(value),
+        colored_value,
         width = LABEL_WIDTH + ansi_overhead(theme, label),
     ));
 }
 
 /// The ANSI escape overhead added by paint_label for a given text length.
-/// We need this to correctly pad the visible width.
 fn ansi_overhead(theme: &PeekTheme, sample: &str) -> usize {
     theme.paint_label(sample).len() - sample.len()
+}
+
+// ---------------------------------------------------------------------------
+// Color helpers
+// ---------------------------------------------------------------------------
+
+/// Paint filename with extension highlighted in accent.
+fn paint_filename(name: &str, theme: &PeekTheme) -> String {
+    if let Some(pos) = name.rfind('.') {
+        let base = &name[..pos];
+        let ext = &name[pos..];
+        format!(
+            "{}{}",
+            theme.paint(base, theme.heading),
+            theme.paint(ext, theme.accent)
+        )
+    } else {
+        theme.paint(name, theme.heading)
+    }
+}
+
+/// Paint path with directory components muted and final name highlighted.
+fn paint_path(path: &str, theme: &PeekTheme) -> String {
+    if let Some(pos) = path.rfind('/') {
+        let dir = &path[..=pos];
+        let name = &path[pos + 1..];
+        format!(
+            "{}{}",
+            theme.paint(dir, theme.muted),
+            theme.paint(name, theme.foreground)
+        )
+    } else {
+        theme.paint(path, theme.foreground)
+    }
+}
+
+/// Paint file size with color based on magnitude.
+fn paint_size(bytes: u64, theme: &PeekTheme) -> String {
+    let color = size_color(bytes, theme);
+    let text = format_size_display(bytes);
+    theme.paint(&text, color)
+}
+
+fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
+    if bytes == 0 {
+        return theme.muted;
+    }
+    let kb = bytes as f64 / 1024.0;
+    if kb < 1.0 {
+        // < 1 KB: blend muted → value
+        lerp_color(theme.muted, theme.value, kb as f32)
+    } else if kb < 1024.0 {
+        // 1 KB – 1 MB: value color
+        theme.value
+    } else if kb < 100.0 * 1024.0 {
+        // 1 MB – 100 MB: value → accent
+        let t = ((kb / 1024.0).ln() / 100_f64.ln()) as f32;
+        lerp_color(theme.value, theme.accent, t.clamp(0.0, 1.0))
+    } else {
+        // > 100 MB: accent → warning
+        let mb = kb / 1024.0;
+        let t = ((mb / 100.0).clamp(1.0, 100.0).ln() / 100_f64.ln()) as f32;
+        lerp_color(theme.accent, theme.warning, t.clamp(0.0, 1.0))
+    }
+}
+
+/// Paint timestamp with age-based color (recent = bright, old = dim).
+fn paint_timestamp(time: SystemTime, theme: &PeekTheme) -> String {
+    let color = timestamp_color(time, theme);
+    let text = format_time(time);
+    theme.paint(&text, color)
+}
+
+fn timestamp_color(time: SystemTime, theme: &PeekTheme) -> Color {
+    let age_secs = SystemTime::now()
+        .duration_since(time)
+        .map(|d| d.as_secs())
+        .unwrap_or(u64::MAX);
+
+    let t = age_blend_factor(age_secs);
+    lerp_color(theme.value, theme.muted, t)
+}
+
+/// Smooth age-to-blend curve. Returns 0.0 for fresh, up to 0.6 for very old.
+fn age_blend_factor(age_secs: u64) -> f32 {
+    const HOUR: f64 = 3600.0;
+    const DAY: f64 = 86400.0;
+    const WEEK: f64 = 604800.0;
+    const MONTH: f64 = 2_592_000.0;
+    const YEAR: f64 = 31_536_000.0;
+
+    let s = age_secs as f64;
+    let t = if s < HOUR {
+        0.0
+    } else if s < DAY {
+        0.15 * ((s - HOUR) / (DAY - HOUR))
+    } else if s < WEEK {
+        0.15 + 0.15 * ((s - DAY) / (WEEK - DAY))
+    } else if s < MONTH {
+        0.30 + 0.15 * ((s - WEEK) / (MONTH - WEEK))
+    } else if s < YEAR {
+        0.45 + 0.15 * ((s - MONTH) / (YEAR - MONTH))
+    } else {
+        0.60
+    };
+
+    t as f32
+}
+
+/// Paint permissions with per-character coloring.
+fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
+    let mut result = String::new();
+    for (i, ch) in perms.chars().enumerate() {
+        let color = match ch {
+            'r' => theme.value,
+            'w' => theme.accent,
+            'x' => theme.heading,
+            '-' => lerp_color(theme.muted, theme.background, 0.3),
+            _ => theme.foreground,
+        };
+        result.push_str(&theme.paint(&ch.to_string(), color));
+        // Add subtle separator between rwx groups
+        if (i == 2 || i == 5) && i + 1 < perms.len() {
+            result.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
+        }
+    }
+    result
+}
+
+/// Paint a count with magnitude-based intensity.
+fn paint_count(count: usize, theme: &PeekTheme) -> String {
+    let color = count_color(count, theme);
+    theme.paint(&thousands_sep(count as u64), color)
+}
+
+fn count_color(count: usize, theme: &PeekTheme) -> Color {
+    if count == 0 {
+        return theme.muted;
+    }
+    // Logarithmic: 1→0.4, 100→0.6, 10k→0.8, 1M→1.0 of value color
+    let magnitude = (count as f64).log10();
+    let t = (0.4 + 0.1 * magnitude).clamp(0.4, 1.0) as f32;
+    lerp_color(theme.muted, theme.value, t)
+}
+
+/// Paint image dimensions with resolution-based coloring.
+fn paint_dimensions(width: u32, height: u32, theme: &PeekTheme) -> String {
+    let megapixels = (width as f64 * height as f64) / 1_000_000.0;
+    let color = if megapixels < 0.5 {
+        lerp_color(theme.muted, theme.value, (megapixels * 2.0) as f32)
+    } else if megapixels < 8.0 {
+        theme.value
+    } else {
+        let t = ((megapixels / 8.0).clamp(1.0, 10.0).ln() / 10_f64.ln()) as f32;
+        lerp_color(theme.value, theme.accent, t)
+    };
+    theme.paint(&format!("{width} \u{00d7} {height}"), color)
 }
 
 // ---------------------------------------------------------------------------
@@ -257,7 +509,6 @@ fn format_time(time: SystemTime) -> String {
 
     let secs = duration.as_secs();
 
-    // Manual date/time calculation from Unix timestamp
     let days = secs / 86400;
     let time_of_day = secs % 86400;
     let hours = time_of_day / 3600;
@@ -295,16 +546,26 @@ fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
 #[cfg(not(unix))]
 fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     let perms = meta.permissions();
-    Some(if perms.readonly() { "read-only".to_string() } else { "read-write".to_string() })
+    Some(if perms.readonly() {
+        "read-only".to_string()
+    } else {
+        "read-write".to_string()
+    })
 }
 
 #[cfg(unix)]
 fn format_unix_permissions(mode: u32) -> String {
     let mut s = String::with_capacity(9);
     let flags = [
-        (0o400, 'r'), (0o200, 'w'), (0o100, 'x'),
-        (0o040, 'r'), (0o020, 'w'), (0o010, 'x'),
-        (0o004, 'r'), (0o002, 'w'), (0o001, 'x'),
+        (0o400, 'r'),
+        (0o200, 'w'),
+        (0o100, 'x'),
+        (0o040, 'r'),
+        (0o020, 'w'),
+        (0o010, 'x'),
+        (0o004, 'r'),
+        (0o002, 'w'),
+        (0o001, 'x'),
     ];
     for (bit, ch) in flags {
         s.push(if mode & bit != 0 { ch } else { '-' });
