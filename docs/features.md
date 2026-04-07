@@ -221,12 +221,12 @@ be decided.
 
 **Status: Not implemented.**
 
-### Animated GIFs
+### Animated Images (GIF, WebP)
 
-Animated GIFs should be playable in viewer mode — render each frame as ASCII art and
-cycle through them at the original frame rate. Since the image rendering pipeline
-already exists, this is primarily a matter of extracting frames and timing the playback
-loop.
+Animated GIFs and WebPs should be playable in viewer mode — render each frame as ASCII
+art and cycle through them at the original frame rate. Since the image rendering
+pipeline already exists, this is primarily a matter of extracting frames and timing
+the playback loop.
 
 Viewer mode should also support a single-frame mode where playback is paused and the
 user can step through frames using arrow keys or `n`/`N` (the latter also works when
@@ -234,12 +234,12 @@ zoomed in, where arrow keys are used for panning).
 
 In print mode, a reasonable default would be to render the first frame.
 
-Transparency handling (see above) applies to animated GIFs as well.
+Transparency handling (see above) applies to animated images as well.
 
-**Status: Implemented.** Auto-plays GIF animations at native frame rate. `p` toggles
-play/pause, `n`/`N` and Left/Right step frames, `b` cycles background. Status line
-shows frame counter and play/pause state. Print mode renders first frame. Frame count
-shown in file info screen.
+**Status: Implemented.** Auto-plays GIF and WebP animations at native frame rate. `p`
+toggles play/pause, `n`/`N` and Left/Right step frames, `b` cycles background. Status
+line shows frame counter and play/pause state. Print mode renders first frame. Frame
+count shown in file info screen.
 
 ### Video Files (tentative)
 
@@ -427,7 +427,7 @@ certain file types.
 | `-`         | Zoom out                                         |
 | Arrow keys  | Pan (when zoomed beyond terminal size)           |
 
-### Animated GIF Views *(context)*
+### Animated Image Views *(context: GIF, WebP)*
 
 | Key              | Action                                            |
 |------------------|---------------------------------------------------|

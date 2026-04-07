@@ -20,7 +20,8 @@ The example images included in this repository are used under the
 
 ## Animated test images
 
-| File                        | Source                              | License                                             |
-|-----------------------------|-------------------------------------|-----------------------------------------------------|
+| File                        | Source                              | License                                                                                        |
+|-----------------------------|-------------------------------------|------------------------------------------------------------------------------------------------|
 | `test-images/rickroll.gif`  | [Giphy](https://giphy.com/)         | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |
 | `test-images/rickroll.webp` | [Giphy](https://giphy.com/)         | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |
+| `test-images/lightning.gif` | [Giphy](https://giphy.com/)         | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |

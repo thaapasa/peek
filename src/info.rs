@@ -168,7 +168,7 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         .unwrap_or(0) as u8;
 
     let hdr_format = detect_hdr(path);
-    let frame_count = crate::viewer::image::animate::gif_frame_count(path);
+    let frame_count = crate::viewer::image::animate::anim_frame_count(path);
     let exif = gather_exif(path);
 
     FileExtras::Image {

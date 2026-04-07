@@ -28,18 +28,22 @@ pub struct AnimFrame {
     pub delay: Duration,
 }
 
-/// Decode all frames from an animated GIF file.
-/// Returns `None` if the file is not a GIF or has ≤1 frame (not animated).
-pub fn decode_gif_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
+/// Decode all frames from an animated image (GIF or WebP).
+/// Returns `None` if the file is not animated or has ≤1 frame.
+pub fn decode_anim_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if ext != "gif" {
-        return Ok(None);
+    match ext.as_str() {
+        "gif" => decode_gif_frames(path),
+        "webp" => decode_webp_frames(path),
+        _ => Ok(None),
     }
+}
 
+fn decode_gif_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
     let file = std::fs::File::open(path).context("failed to open GIF")?;
     let decoder = image::codecs::gif::GifDecoder::new(BufReader::new(file))
         .context("failed to decode GIF")?;
@@ -62,19 +66,54 @@ pub fn decode_gif_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
     Ok(Some(frames))
 }
 
-/// Count GIF frames without fully decoding pixel data.
-/// Returns None for non-GIF or non-animated files.
-pub fn gif_frame_count(path: &Path) -> Option<usize> {
+fn decode_webp_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
+    let file = std::fs::File::open(path).context("failed to open WebP")?;
+    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file))
+        .context("failed to decode WebP")?;
+    let frames_iter = decoder.into_frames();
+
+    let mut frames = Vec::new();
+    for frame_result in frames_iter {
+        let frame = frame_result.context("failed to decode WebP frame")?;
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let ms = if denom == 0 { 100 } else { numer / denom };
+        let delay = Duration::from_millis(ms.max(20) as u64);
+        let image = DynamicImage::ImageRgba8(frame.into_buffer());
+        frames.push(AnimFrame { image, delay });
+    }
+
+    if frames.len() <= 1 {
+        return Ok(None);
+    }
+
+    Ok(Some(frames))
+}
+
+/// Count animation frames without full pixel decoding.
+/// Returns None for non-animated files.
+pub fn anim_frame_count(path: &Path) -> Option<usize> {
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
-    if ext != "gif" {
-        return None;
+    match ext.as_str() {
+        "gif" => gif_frame_count(path),
+        "webp" => webp_frame_count(path),
+        _ => None,
     }
+}
+
+fn gif_frame_count(path: &Path) -> Option<usize> {
     let file = std::fs::File::open(path).ok()?;
     let decoder = image::codecs::gif::GifDecoder::new(BufReader::new(file)).ok()?;
+    let count = decoder.into_frames().count();
+    if count > 1 { Some(count) } else { None }
+}
+
+fn webp_frame_count(path: &Path) -> Option<usize> {
+    let file = std::fs::File::open(path).ok()?;
+    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file)).ok()?;
     let count = decoder.into_frames().count();
     if count > 1 { Some(count) } else { None }
 }
