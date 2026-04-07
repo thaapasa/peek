@@ -30,6 +30,8 @@ pub enum FileExtras {
         width: u32,
         height: u32,
         color_type: String,
+        bit_depth: u8,
+        hdr_format: Option<String>,
         exif: Vec<(String, String)>,
     },
     Text {
@@ -152,18 +154,43 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         Err(_) => return FileExtras::Binary,
     };
 
-    let color_type = image::open(path)
-        .map(|img| format!("{:?}", img.color()))
+    let img = image::open(path);
+    let color_type = img
+        .as_ref()
+        .map(|i| format!("{:?}", i.color()))
         .unwrap_or_else(|_| "unknown".to_string());
+    let bit_depth = img
+        .as_ref()
+        .map(|i| i.color().bits_per_pixel() / i.color().channel_count() as u16)
+        .unwrap_or(0) as u8;
 
+    let hdr_format = detect_hdr(path);
     let exif = gather_exif(path);
 
     FileExtras::Image {
         width,
         height,
         color_type,
+        bit_depth,
+        hdr_format,
         exif,
     }
+}
+
+/// Detect HDR format by scanning for known markers in file data.
+fn detect_hdr(path: &Path) -> Option<String> {
+    // Read enough to cover XMP metadata (typically in first 128KB)
+    let mut file = fs::File::open(path).ok()?;
+    let mut buf = vec![0u8; 128 * 1024];
+    let n = std::io::Read::read(&mut file, &mut buf).ok()?;
+    let data = &buf[..n];
+
+    // Ultra HDR (ISO 21496-1 gain map) — used by Google, Adobe
+    if data.windows(6).any(|w| w == b"hdrgm:") {
+        return Some("Ultra HDR (gain map)".to_string());
+    }
+
+    None
 }
 
 /// Extract interesting EXIF fields from an image file.
@@ -283,6 +310,8 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
             width,
             height,
             color_type,
+            bit_depth,
+            hdr_format,
             exif,
         } => {
             lines.push(String::new());
@@ -294,6 +323,17 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
                 theme,
             );
             push_field(&mut lines, "Color", &theme.paint_value(color_type), theme);
+            if *bit_depth > 0 {
+                push_field(
+                    &mut lines,
+                    "Bit Depth",
+                    &theme.paint_value(&format!("{bit_depth} bits/channel")),
+                    theme,
+                );
+            }
+            if let Some(hdr) = hdr_format {
+                push_field(&mut lines, "HDR", &theme.paint_accent(hdr), theme);
+            }
 
             if !exif.is_empty() {
                 lines.push(String::new());

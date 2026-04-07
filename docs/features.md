@@ -315,12 +315,13 @@ Also available in print mode via a CLI flag (e.g. `--info`).
 
 **Status: Partially implemented.** Basic file info (name, path, size, MIME, timestamps,
 permissions) works for all file types via `--info` flag and Tab/i in the interactive
-viewer. Image extras (dimensions, color type, EXIF metadata) and text extras
-(line/word/char counts) are included. Info screen uses semantic coloring (age-based
-timestamps, size-based colors, per-character permission coloring). EXIF extraction
-covers camera make/model, lens, exposure, aperture, ISO, focal length, flash, white
-balance, date taken, GPS coordinates, artist, and copyright. Not yet implemented:
-structured data key count/nesting depth, schema summary.
+viewer. Image extras (dimensions, color type, bit depth, HDR detection, EXIF metadata)
+and text extras (line/word/char counts) are included. Info screen uses semantic coloring
+(age-based timestamps, size-based colors, per-character permission coloring). HDR
+detection scans for Ultra HDR gain map markers. EXIF extraction covers camera
+make/model, lens, exposure, aperture, ISO, focal length, flash, white balance, date
+taken, GPS coordinates, artist, and copyright. Not yet implemented: structured data key
+count/nesting depth, schema summary.
 
 ### Text Search
 
