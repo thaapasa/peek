@@ -14,11 +14,12 @@ use super::Viewer;
 
 pub struct StructuredViewer {
     theme: Rc<ThemeManager>,
+    raw_mode: bool,
 }
 
 impl StructuredViewer {
-    pub fn new(theme: Rc<ThemeManager>) -> Self {
-        Self { theme }
+    pub fn new(theme: Rc<ThemeManager>, raw_mode: bool) -> Self {
+        Self { theme, raw_mode }
     }
 }
 
@@ -31,11 +32,15 @@ impl Viewer for StructuredViewer {
 
         let raw = fs::read_to_string(path)?;
 
-        let pretty = match format {
-            StructuredFormat::Json => pretty_json(&raw)?,
-            StructuredFormat::Yaml => pretty_yaml(&raw)?,
-            StructuredFormat::Toml => pretty_toml(&raw)?,
-            StructuredFormat::Xml => pretty_xml(&raw),
+        let pretty = if self.raw_mode {
+            raw.clone()
+        } else {
+            match format {
+                StructuredFormat::Json => pretty_json(&raw)?,
+                StructuredFormat::Yaml => pretty_yaml(&raw)?,
+                StructuredFormat::Toml => pretty_toml(&raw)?,
+                StructuredFormat::Xml => pretty_xml(&raw),
+            }
         };
 
         // Syntax-highlight the pretty-printed output
@@ -90,12 +95,15 @@ fn pretty_toml(raw: &str) -> Result<String> {
 }
 
 fn pretty_xml(raw: &str) -> String {
-    // Simple indentation pass for XML
+    // Split at tag boundaries so each tag gets its own line,
+    // then indent based on nesting depth.
+    let split = raw.replace("><", ">\n<");
+
     let mut result = String::new();
     let mut depth: usize = 0;
     let indent = "  ";
 
-    for line in raw.lines() {
+    for line in split.lines() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
@@ -112,17 +120,44 @@ fn pretty_xml(raw: &str) -> String {
         result.push_str(trimmed);
         result.push('\n');
 
-        // Increase depth for opening tags (not self-closing, not closing)
+        // Increase depth for opening tags, but not if:
+        // - self-closing (/>), closing (</), declaration (<!), processing (<?)
+        // - contains its own closing tag (<tag>text</tag>)
+        // - is an HTML void element (<meta>, <br>, <img>, etc.)
         if trimmed.starts_with('<')
             && !trimmed.starts_with("</")
             && !trimmed.starts_with("<!")
             && !trimmed.starts_with("<?")
             && !trimmed.ends_with("/>")
             && trimmed.ends_with('>')
+            && !has_inline_close(trimmed)
+            && !is_void_element(trimmed)
         {
             depth += 1;
         }
     }
 
     result
+}
+
+/// Check if a line like `<tag>content</tag>` contains its own closing tag.
+fn has_inline_close(line: &str) -> bool {
+    match line.find('>') {
+        Some(pos) => line[pos + 1..].contains("</"),
+        None => false,
+    }
+}
+
+/// Check if the tag is an HTML void element (self-closing without `/>` suffix).
+fn is_void_element(line: &str) -> bool {
+    const VOID_TAGS: &[&str] = &[
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
+        "source", "track", "wbr",
+    ];
+    let tag = line.trim_start_matches('<');
+    let end = tag
+        .find(|c: char| c.is_whitespace() || c == '>' || c == '/')
+        .unwrap_or(tag.len());
+    let name = tag[..end].to_lowercase();
+    VOID_TAGS.iter().any(|&t| t == name)
 }

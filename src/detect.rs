@@ -42,7 +42,7 @@ pub fn detect(path: &Path) -> Result<FileType> {
             "toml" => {
                 return Ok(FileType::Structured(StructuredFormat::Toml));
             }
-            "xml" | "svg" | "xhtml" | "plist" => {
+            "xml" | "svg" | "html" | "htm" | "xhtml" | "plist" => {
                 return Ok(FileType::Structured(StructuredFormat::Xml));
             }
             _ => {}

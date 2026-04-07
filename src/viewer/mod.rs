@@ -17,7 +17,8 @@ mod syntax;
 mod text;
 
 /// Closure type for theme-aware content rendering.
-pub type ContentRenderer = Box<dyn Fn(PeekThemeName) -> Result<Vec<String>>>;
+/// The `bool` parameter is `pretty`: true = pretty-print structured data, false = raw.
+pub type ContentRenderer = Box<dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>>;
 
 /// Trait for all file viewers.
 pub trait Viewer {
@@ -67,7 +68,7 @@ impl Registry {
         let image_mode = image::ImageMode::from_str(&args.image_mode);
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
-            structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme)),
+            structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme), args.raw),
             image_viewer: image::ImageViewer::new(args.width, image_mode, args.theme),
             text_viewer: text::TextViewer,
             theme_manager: theme,
@@ -105,19 +106,23 @@ impl Registry {
 
     /// Build a closure that renders file content to lines for any given theme.
     /// Used by the interactive viewer for theme-aware re-rendering.
+    /// The `pretty` parameter controls whether structured files are pretty-printed.
     pub fn content_renderer(
         &self,
         path: &Path,
         file_type: &FileType,
     ) -> Result<ContentRenderer> {
-        // Read and optionally pretty-print the content
-        let content = if self.plain_mode {
-            std::fs::read_to_string(path)?
-        } else if let FileType::Structured(fmt) = file_type {
-            let raw = std::fs::read_to_string(path)?;
-            structured::pretty_print(&raw, *fmt)?
+        let raw_content = std::fs::read_to_string(path)?;
+
+        // Pre-compute pretty-printed version for structured files
+        let pretty_content = if !self.plain_mode {
+            if let FileType::Structured(fmt) = file_type {
+                Some(structured::pretty_print(&raw_content, *fmt)?)
+            } else {
+                None
+            }
         } else {
-            std::fs::read_to_string(path)?
+            None
         };
 
         // Determine syntax token for highlighting
@@ -129,9 +134,14 @@ impl Registry {
 
         let tm = Rc::clone(&self.theme_manager);
 
-        Ok(Box::new(move |theme_name| {
+        Ok(Box::new(move |theme_name, pretty| {
+            let content = if pretty {
+                pretty_content.as_deref().unwrap_or(&raw_content)
+            } else {
+                &raw_content
+            };
             if let Some(ref token) = syntax_token {
-                highlight_lines(&content, token, &tm, theme_name)
+                highlight_lines(content, token, &tm, theme_name)
             } else {
                 Ok(content.lines().map(String::from).collect())
             }

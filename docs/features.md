@@ -12,8 +12,8 @@ switching between views.
 
 **Status: Partially implemented.** Interactive viewing works for all file types with
 scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i view switching (content ↔ file
-info), help screen (h/?), and live theme cycling (t). No search, line numbers, or
-context-specific option toggling yet.
+info), help screen (h/?), live theme cycling (t), and raw/pretty toggle (r) for
+structured data. No search, line numbers, or image-specific keybindings yet.
 
 ### Print Mode
 
@@ -80,7 +80,7 @@ yet implemented.
 | YAML   | `.yaml`, `.yml`             | Implemented |
 | TOML   | `.toml`                     | Implemented |
 | XML    | `.xml`                      | Implemented |
-| HTML   | `.html`, `.htm`             | Planned     |
+| HTML   | `.html`, `.htm`             | Implemented |
 | CSV    | `.csv`, `.tsv`              | Planned     |
 
 JSONC and JSON5 need parsers that handle comments and extended syntax. HTML may benefit
@@ -92,10 +92,10 @@ mode, selectable via `--raw` CLI flag for print mode):
 - **Pretty-printed** (default): reformatted for readability with syntax highlighting.
 - **Raw**: verbatim file contents with syntax highlighting only.
 
-**Status: Partially implemented.** Pretty-printing with syntax highlighting works for
-JSON, YAML, TOML, XML. Current `--plain` flag disables both highlighting and
-pretty-printing; needs to be split into `--plain` (colors/styling only) and `--raw`
-(structure only). No `r` toggle yet.
+**Status: Implemented.** Pretty-printing with syntax highlighting works for JSON, YAML,
+TOML, XML, HTML. `--raw` / `-r` outputs verbatim source with highlighting only (no
+pretty-printing). `--plain` / `-P` disables all styling. In the interactive viewer,
+`r` toggles between pretty-printed and raw views.
 
 ### Markup / Documentation
 
@@ -536,7 +536,7 @@ Current and planned CLI options:
 | `--viewer`       | `-v`  | Force viewer mode                               | Planned      |
 | `--print`        | `-p`  | Force print mode (direct stdout)                | Implemented  |
 | `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing | Implemented  |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)        | Planned      |
+| `--raw`          | `-r`  | Output verbatim source (no pretty-print)        | Implemented  |
 | `--theme`        | `-t`  | Syntax highlighting theme                       | Implemented  |
 | `--language`     | `-l`  | Force syntax language                           | Implemented  |
 | `--width`        |       | Image rendering width in characters             | Implemented  |

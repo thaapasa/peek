@@ -30,7 +30,8 @@ pub fn view_interactive(
     file_type: &FileType,
     theme_name: PeekThemeName,
     rerender_on_resize: bool,
-    render_content: impl Fn(PeekThemeName) -> Result<Vec<String>>,
+    pretty: bool,
+    render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
     let mut stdout = io::stdout();
 
@@ -47,6 +48,7 @@ pub fn view_interactive(
         file_type,
         theme_name,
         rerender_on_resize,
+        pretty,
         &render_content,
     );
 
@@ -66,14 +68,16 @@ fn run_event_loop(
     file_type: &FileType,
     initial_theme: PeekThemeName,
     rerender_on_resize: bool,
-    render_content: &dyn Fn(PeekThemeName) -> Result<Vec<String>>,
+    initial_pretty: bool,
+    render_content: &dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
     let mut view_mode = ViewMode::Content;
     let mut current_theme = initial_theme;
     let mut peek_theme = make_peek_theme(current_theme);
+    let mut pretty = initial_pretty;
 
     // Render initial content
-    let mut content_lines = render_content(current_theme)?;
+    let mut content_lines = render_content(current_theme, pretty)?;
 
     // Pre-compute file info and help lines
     let file_info = crate::info::gather(path, file_type)?;
@@ -124,11 +128,19 @@ fn run_event_loop(
                 KeyCode::Char('t') => {
                     current_theme = current_theme.next();
                     peek_theme = make_peek_theme(current_theme);
-                    content_lines = render_content(current_theme)?;
+                    content_lines = render_content(current_theme, pretty)?;
                     info_lines = crate::info::render(&file_info, &peek_theme);
                     help_lines = render_help_lines(&peek_theme, current_theme);
                     let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
                     draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
+                }
+
+                // Raw / pretty-print toggle
+                KeyCode::Char('r') => {
+                    pretty = !pretty;
+                    content_lines = render_content(current_theme, pretty)?;
+                    content_scroll = 0;
+                    draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, content_scroll)?;
                 }
 
                 // Scrolling
@@ -177,7 +189,7 @@ fn run_event_loop(
             },
             Event::Resize(_, _) => {
                 if rerender_on_resize {
-                    content_lines = render_content(current_theme)?;
+                    content_lines = render_content(current_theme, pretty)?;
                 }
                 let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
                 draw(stdout, view_mode, &content_lines, &info_lines, &help_lines, scroll)?;
@@ -278,6 +290,7 @@ const HELP_KEYS: &[(&str, &str)] = &[
     ("i", "File info"),
     ("h / ?", "Toggle help"),
     ("t", "Next theme"),
+    ("r", "Toggle raw / pretty"),
 ];
 
 fn render_help_lines(theme: &PeekTheme, current_theme: PeekThemeName) -> Vec<String> {

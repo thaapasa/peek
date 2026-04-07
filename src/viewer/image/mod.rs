@@ -53,7 +53,7 @@ impl ImageViewer {
         let mode = self.mode;
         let width = self.width;
         let path = path.to_path_buf();
-        super::interactive::view_interactive(&path, file_type, self.theme_name, true, |_theme| {
+        super::interactive::view_interactive(&path, file_type, self.theme_name, true, true, |_theme, _pretty| {
             let term = render::TermSize::detect();
             render::load_and_render(&path, mode, width, term)
         })

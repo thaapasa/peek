@@ -45,6 +45,10 @@ peek data.json | less -R
 peek --print file.txt
 peek -p file.txt
 
+# View raw source (no pretty-printing, still highlighted)
+peek --raw config.json
+peek -r data.xml
+
 # Disable syntax highlighting and pretty-printing
 peek --plain file.txt
 peek -P file.txt
@@ -75,6 +79,7 @@ with `--print`, output goes directly to stdout.
 | `i`             | File info                  |
 | `h` / `?`       | Toggle help                |
 | `t`             | Cycle theme                |
+| `r`             | Toggle raw / pretty        |
 
 ## Themes
 

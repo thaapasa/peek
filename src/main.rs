@@ -34,6 +34,10 @@ pub struct Args {
     #[arg(short = 'P', long)]
     plain: bool,
 
+    /// Output verbatim source (no pretty-printing, still highlighted)
+    #[arg(short, long)]
+    raw: bool,
+
     /// Force print mode (direct stdout, no interactive viewer)
     #[arg(short = 'p', long = "print")]
     print: bool,
@@ -133,6 +137,7 @@ fn main() -> Result<()> {
                     file_type,
                     viewers.theme_name(),
                     false,
+                    !args.raw,
                     render_content,
                 )
                 .with_context(|| format!("failed to render {}", path.display()))?;
