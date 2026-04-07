@@ -6,6 +6,7 @@ use clap::Parser;
 
 mod detect;
 mod help;
+mod info;
 mod pager;
 mod theme;
 mod viewer;
@@ -30,12 +31,12 @@ pub struct Args {
     version: bool,
 
     /// Disable syntax highlighting and pretty-printing (plain output)
-    #[arg(short, long)]
+    #[arg(short = 'P', long)]
     plain: bool,
 
-    /// Disable the built-in pager even on interactive terminals
-    #[arg(short = 'P', long)]
-    no_pager: bool,
+    /// Force print mode (direct stdout, no interactive viewer)
+    #[arg(short = 'p', long = "print")]
+    print: bool,
 
     /// Syntax highlighting theme
     #[arg(
@@ -58,6 +59,10 @@ pub struct Args {
     /// Image rendering mode: "full" (all glyphs), "block" (blocks + punctuation), "geo" (blocks + lines only), "ascii" (legacy density ramp)
     #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii"])]
     image_mode: String,
+
+    /// Show file info instead of file contents
+    #[arg(long)]
+    info: bool,
 }
 
 fn main() -> Result<()> {
@@ -78,7 +83,7 @@ fn main() -> Result<()> {
     }
 
     let is_tty = std::io::stdout().is_terminal();
-    let use_pager = !args.no_pager && is_tty;
+    let use_pager = !args.print && is_tty;
 
     let viewers = viewer::Registry::new(&args)?;
 
@@ -92,26 +97,58 @@ fn main() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    // Images on interactive terminals get their own interactive viewer
-    // with contain-ratio sizing and resize support.
-    // Non-image files go through the normal pager pipeline.
-    let mut non_image_files = Vec::new();
-
-    for (path, file_type) in &files {
-        if matches!(file_type, detect::FileType::Image) && use_pager && !args.plain {
-            viewers
-                .image_viewer()
-                .view_interactive(path)
-                .with_context(|| format!("failed to render {}", path.display()))?;
-        } else {
-            non_image_files.push((path, file_type));
+    // --info mode: show file metadata instead of content
+    if args.info {
+        let mut output = pager::Output::new(&args)?;
+        for (path, file_type) in &files {
+            let file_info = info::gather(path, file_type)
+                .with_context(|| format!("failed to read info for {}", path.display()))?;
+            let lines = info::render(&file_info, viewers.peek_theme());
+            for line in &lines {
+                output.write_line(line)?;
+            }
         }
+        output.finish()?;
+        return Ok(());
     }
 
-    // Render remaining files through the normal pager pipeline
-    if !non_image_files.is_empty() {
+    if use_pager {
+        // Interactive TTY: each file gets its own interactive viewer
+        // with Tab/i view switching between content and file info.
+        for (path, file_type) in &files {
+            if matches!(file_type, detect::FileType::Image) && !args.plain {
+                // Images re-render on resize for correct aspect ratio
+                viewers
+                    .image_viewer()
+                    .view_interactive(path, file_type)
+                    .with_context(|| format!("failed to render {}", path.display()))?;
+            } else {
+                // Other files: pre-render content, show in interactive viewer
+                let viewer = viewers.viewer_for(file_type);
+                let mut buf = pager::Output::buffer();
+                viewer.render(path, file_type, &mut buf)?;
+                let content_lines = buf.into_lines();
+
+                viewer::interactive::view_interactive(
+                    path,
+                    file_type,
+                    viewers.peek_theme(),
+                    |stdout| {
+                        use std::io::Write;
+                        for line in &content_lines {
+                            stdout.write_all(line.as_bytes())?;
+                            stdout.write_all(b"\r\n")?;
+                        }
+                        Ok(())
+                    },
+                )
+                .with_context(|| format!("failed to render {}", path.display()))?;
+            }
+        }
+    } else {
+        // Piped or --no-pager: direct output
         let mut output = pager::Output::new(&args)?;
-        for (path, file_type) in non_image_files {
+        for (path, file_type) in &files {
             let viewer = viewers.viewer_for(file_type);
             viewer
                 .render(path, file_type, &mut output)

@@ -26,8 +26,8 @@ Default print mode output by file type:
 - **Documents:** extracted text content.
 - **Binary / unknown:** file info (type, size, metadata).
 
-**Status: Partially implemented.** Direct stdout output works when `--no-pager` is set
-or stdout is not a TTY. Flag to be renamed to `--print`.
+**Status: Partially implemented.** Direct stdout output works when `--print` / `-p` is
+set or stdout is not a TTY.
 
 ### Mode Selection
 
@@ -38,7 +38,7 @@ or stdout is not a TTY. Flag to be renamed to `--print`.
 - All data types should support both modes where it makes sense — the same content
   should be viewable interactively or printable to stdout.
 
-**Status: Partial.** TTY detection and `--no-pager` exist (to be renamed `--print`).
+**Status: Partial.** TTY detection and `--print` / `-p` implemented.
 No content-length-based auto-selection yet (currently: TTY → viewer, non-TTY → print).
 
 ### Input
@@ -308,8 +308,11 @@ view and info screen) or `i` (jump directly to info). Contains details such as:
 
 Also available in print mode via a CLI flag (e.g. `--info`).
 
-**Status: Not implemented.** File type detection and MIME sniffing exist internally but
-no user-facing info display.
+**Status: Partially implemented.** Basic file info (name, path, size, MIME, timestamps,
+permissions) works for all file types via `--info` flag. Image extras (dimensions, color
+type) and text extras (line/word/char counts) are included. Tab/i switching implemented
+in the interactive image viewer. Not yet implemented: EXIF data, structured data key
+count/nesting depth, schema summary.
 
 ### Text Search
 
@@ -518,14 +521,14 @@ Current and planned CLI options:
 | `--help`         | `-h`  | Show help screen and exit                          | Implemented |
 | `--version`      |       | Show version info and exit                         | Implemented |
 | `--viewer`       | `-v`  | Force viewer mode                                  | Planned     |
-| `--print`        | `-p`  | Force print mode (direct stdout)                   | Planned     |
-| `--plain`        | `-P`  | Disable console enhancements (colors, bold/italic) | Implemented |
+| `--print`        | `-p`  | Force print mode (direct stdout)                   | Implemented |
+| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing     | Implemented |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)           | Planned     |
 | `--theme`        | `-t`  | Syntax highlighting theme                          | Implemented |
 | `--language`     | `-l`  | Force syntax language                              | Implemented |
 | `--width`        |       | Image rendering width in characters                | Implemented |
 | `--image-mode`   |       | Image rendering mode                               | Implemented |
-| `--info`         |       | Show file info instead of contents                 | Planned     |
+| `--info`         |       | Show file info instead of contents                 | Implemented |
 | `--line-numbers` |       | Enable/disable line numbers                        | Planned     |
 | `--background`   |       | Image transparency background                      | Planned     |
 | `--sizing`       |       | Image sizing mode                                  | Planned     |
@@ -536,9 +539,8 @@ Current and planned CLI options:
 console enhancements (colors, bold, italic) but doesn't change structure. They can be
 combined: `--plain --raw` gives completely unmodified file content with no styling.
 
-Note: `--no-pager` exists in current implementation and will be renamed to `--print`.
-Short flags `-p` (currently on `--plain`) will be reassigned to `--print`, with
-`--plain` getting `-P`.
+`--print` / `-p` forces print mode (direct stdout). `--plain` / `-P` disables syntax
+highlighting and pretty-printing.
 
 ### `--help` Screen
 

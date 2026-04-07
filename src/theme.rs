@@ -110,6 +110,7 @@ const YELLOW: Color = Color {
 };
 
 /// Semantic color roles for all non-syntax UI output.
+#[derive(Clone)]
 #[allow(unused)]
 pub struct PeekTheme {
     pub foreground: Color,

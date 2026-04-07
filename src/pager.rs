@@ -5,21 +5,35 @@ use anyhow::Result;
 
 use crate::Args;
 
-/// Output abstraction: either a pager or direct stdout.
+/// Output abstraction: pager, direct stdout, or in-memory buffer.
 pub enum Output {
     Pager(minus::Pager),
     Direct(io::Stdout),
+    Buffer(Vec<String>),
 }
 
 impl Output {
     pub fn new(args: &Args) -> Result<Self> {
-        let use_pager = !args.no_pager && io::stdout().is_terminal();
+        let use_pager = !args.print && io::stdout().is_terminal();
 
         if use_pager {
             let pager = minus::Pager::new();
             Ok(Output::Pager(pager))
         } else {
             Ok(Output::Direct(io::stdout()))
+        }
+    }
+
+    /// Create an in-memory buffer for capturing rendered output.
+    pub fn buffer() -> Self {
+        Output::Buffer(Vec::new())
+    }
+
+    /// Extract captured lines from a buffer output.
+    pub fn into_lines(self) -> Vec<String> {
+        match self {
+            Output::Buffer(lines) => lines,
+            _ => Vec::new(),
         }
     }
 
@@ -31,6 +45,9 @@ impl Output {
             }
             Output::Direct(stdout) => {
                 writeln!(stdout, "{line}")?;
+            }
+            Output::Buffer(lines) => {
+                lines.push(line.to_string());
             }
         }
         Ok(())
@@ -45,6 +62,14 @@ impl Output {
             Output::Direct(stdout) => {
                 write!(stdout, "{text}")?;
             }
+            Output::Buffer(lines) => {
+                // Append to the last line or start a new one
+                if let Some(last) = lines.last_mut() {
+                    last.push_str(text);
+                } else {
+                    lines.push(text.to_string());
+                }
+            }
         }
         Ok(())
     }
@@ -58,6 +83,7 @@ impl Output {
             Output::Direct(mut stdout) => {
                 stdout.flush()?;
             }
+            Output::Buffer(_) => {}
         }
         Ok(())
     }
