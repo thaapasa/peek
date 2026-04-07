@@ -43,7 +43,7 @@ pub struct Args {
         short,
         long,
         env = "PEEK_THEME",
-        default_value_t = theme::PeekThemeName::Base16OceanDark,
+        default_value_t = theme::PeekThemeName::IslandsDark,
         value_enum,
     )]
     theme: theme::PeekThemeName,

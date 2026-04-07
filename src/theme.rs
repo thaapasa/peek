@@ -1,57 +1,51 @@
+use std::collections::BTreeMap;
 use std::fmt;
+use std::io::Cursor;
 
 use syntect::highlighting::{Color, Theme, ThemeSet};
 use syntect::parsing::{Scope, SyntaxSet};
+
+// ---------------------------------------------------------------------------
+// Embedded theme data
+// ---------------------------------------------------------------------------
+
+const THEME_ISLANDS_DARK: &str = include_str!("../themes/islands-dark.tmTheme");
+const THEME_DARK_2026: &str = include_str!("../themes/dark-2026.tmTheme");
+const THEME_VIVID_DARK: &str = include_str!("../themes/vivid-dark.tmTheme");
 
 /// Supported built-in themes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum PeekThemeName {
     #[default]
-    Base16OceanDark,
-    Base16EightiesDark,
-    Base16MochaDark,
-    Base16OceanLight,
-    InspiredGitHub,
-    SolarizedDark,
-    SolarizedLight,
+    IslandsDark,
+    Dark2026,
+    VividDark,
 }
 
 impl PeekThemeName {
     /// Short CLI name for this theme.
     pub fn cli_name(self) -> &'static str {
         match self {
-            Self::Base16OceanDark => "ocean-dark",
-            Self::Base16EightiesDark => "eighties",
-            Self::Base16MochaDark => "mocha",
-            Self::Base16OceanLight => "ocean-light",
-            Self::InspiredGitHub => "github",
-            Self::SolarizedDark => "solarized-dark",
-            Self::SolarizedLight => "solarized-light",
+            Self::IslandsDark => "islands-dark",
+            Self::Dark2026 => "dark-2026",
+            Self::VividDark => "vivid-dark",
         }
     }
 
-    /// The exact key string used in syntect's `ThemeSet::load_defaults()`.
-    pub fn syntect_key(self) -> &'static str {
+    /// Embedded .tmTheme source for this theme.
+    fn tmtheme_source(self) -> &'static str {
         match self {
-            Self::Base16OceanDark => "base16-ocean.dark",
-            Self::Base16EightiesDark => "base16-eighties.dark",
-            Self::Base16MochaDark => "base16-mocha.dark",
-            Self::Base16OceanLight => "base16-ocean.light",
-            Self::InspiredGitHub => "InspiredGitHub",
-            Self::SolarizedDark => "Solarized (dark)",
-            Self::SolarizedLight => "Solarized (light)",
+            Self::IslandsDark => THEME_ISLANDS_DARK,
+            Self::Dark2026 => THEME_DARK_2026,
+            Self::VividDark => THEME_VIVID_DARK,
         }
     }
 
     pub fn help_text(self) -> &'static str {
         match self {
-            Self::Base16OceanDark => "Dark theme with ocean blues (base16)",
-            Self::Base16EightiesDark => "Dark theme with warm eighties palette (base16)",
-            Self::Base16MochaDark => "Dark theme with mocha tones (base16)",
-            Self::Base16OceanLight => "Light theme with ocean blues (base16)",
-            Self::InspiredGitHub => "Light GitHub-inspired theme",
-            Self::SolarizedDark => "Solarized dark",
-            Self::SolarizedLight => "Solarized light",
+            Self::IslandsDark => "JetBrains Islands-inspired dark theme",
+            Self::Dark2026 => "VS Code Dark 2026-inspired theme",
+            Self::VividDark => "High-contrast dark theme with vivid colors",
         }
     }
 }
@@ -65,13 +59,9 @@ impl fmt::Display for PeekThemeName {
 impl clap::ValueEnum for PeekThemeName {
     fn value_variants<'a>() -> &'a [Self] {
         &[
-            Self::Base16OceanDark,
-            Self::Base16EightiesDark,
-            Self::Base16MochaDark,
-            Self::Base16OceanLight,
-            Self::InspiredGitHub,
-            Self::SolarizedDark,
-            Self::SolarizedLight,
+            Self::IslandsDark,
+            Self::Dark2026,
+            Self::VividDark,
         ]
     }
 
@@ -230,6 +220,12 @@ fn scope_color(theme: &Theme, scope_name: &str) -> Option<Color> {
     best_color
 }
 
+/// Parse an embedded .tmTheme string into a syntect Theme.
+fn load_embedded_theme(source: &str) -> Theme {
+    let mut cursor = Cursor::new(source.as_bytes());
+    ThemeSet::load_from_reader(&mut cursor).expect("failed to parse embedded theme")
+}
+
 // ---------------------------------------------------------------------------
 // ThemeManager
 // ---------------------------------------------------------------------------
@@ -245,13 +241,22 @@ pub struct ThemeManager {
 impl ThemeManager {
     pub fn new(theme_name: PeekThemeName) -> Self {
         let syntax_set = SyntaxSet::load_defaults_newlines();
-        let theme_set = ThemeSet::load_defaults();
+
+        // Load all custom themes into a ThemeSet
+        let mut themes = BTreeMap::new();
+        for variant in <PeekThemeName as clap::ValueEnum>::value_variants() {
+            themes.insert(
+                variant.cli_name().to_string(),
+                load_embedded_theme(variant.tmtheme_source()),
+            );
+        }
+        let theme_set = ThemeSet { themes };
+
         let peek_theme = {
             let syntect_theme = theme_set
                 .themes
-                .get(theme_name.syntect_key())
-                .or_else(|| theme_set.themes.values().next())
-                .expect("no themes available");
+                .get(theme_name.cli_name())
+                .expect("theme must exist");
             PeekTheme::from_syntect(syntect_theme)
         };
         Self {
@@ -265,14 +270,8 @@ impl ThemeManager {
     pub fn theme(&self) -> &syntect::highlighting::Theme {
         self.theme_set
             .themes
-            .get(self.theme_name.syntect_key())
-            .unwrap_or_else(|| {
-                self.theme_set
-                    .themes
-                    .values()
-                    .next()
-                    .expect("no themes available")
-            })
+            .get(self.theme_name.cli_name())
+            .expect("theme must exist")
     }
 
     pub fn peek_theme(&self) -> &PeekTheme {
