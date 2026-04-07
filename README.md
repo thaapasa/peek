@@ -11,10 +11,11 @@
 A modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the file.
 
 - **Syntax highlighting** for source code (powered by syntect/TextMate grammars)
-- **Pretty-printing** for structured data: JSON, YAML, TOML, XML, and more
-- **ASCII art rendering** for images with character-density mapping and true color
-- **Built-in pager** — scrollable by default on interactive terminals, like `less`
-- **True color support** — uses the full 24-bit color range of modern terminals
+- **Pretty-printing** for structured data: JSON, YAML, TOML, XML — with syntax highlighting
+- **ASCII art rendering** for images with glyph-matched character mapping and true color
+- **Interactive viewer** with scrolling, file info, help screen, and live theme cycling
+- **Three custom dark themes** — Islands Dark, Dark 2026, Vivid Dark
+- **True color support** — 24-bit color throughout
 
 ## Install
 
@@ -22,65 +23,100 @@ A modern file viewer for the terminal. Like `cat`, but it actually tries to show
 cargo install --path .
 ```
 
-### Dependencies
-
-No external runtime dependencies. Image rendering uses a built-in ASCII art renderer.
+No external runtime dependencies.
 
 ## Usage
 
 ```sh
-# View a file (syntax highlighted, paged)
+# View a file (syntax highlighted, interactive viewer)
 peek src/main.rs
 
-# View structured data (auto-formatted)
+# View structured data (pretty-printed + highlighted)
 peek config.json
 peek data.yaml
 
-# View an image (ASCII art)
+# View an image (glyph-matched ASCII art)
 peek photo.jpg
 
-# Pipe output (pager disabled, plain text)
-peek data.json | jq .
+# Pipe output (no viewer, still highlighted)
+peek data.json | less -R
 
-# Force plain output (no highlighting, no pager)
+# Force direct output on a TTY
+peek --print file.txt
+peek -p file.txt
+
+# Disable syntax highlighting and pretty-printing
 peek --plain file.txt
+peek -P file.txt
 
-# Disable pager even on interactive terminal
-peek --no-pager file.txt
+# Choose a theme
+peek --theme vivid-dark src/main.rs
+
+# Show file metadata
+peek --info photo.jpg
 ```
 
-## Behavior
+## Interactive Viewer
 
-When stdout is an **interactive terminal**, peek opens its built-in pager so you can scroll through the output. When stdout is **piped** or redirected, peek writes directly to stdout with no paging (but still highlights unless `--plain` is used).
+When stdout is an interactive terminal, peek opens a full-screen viewer. When piped or
+with `--print`, output goes directly to stdout.
 
-## Supported file types
+### Keyboard Shortcuts
+
+| Key             | Action                     |
+|-----------------|----------------------------|
+| `q` / `Esc`     | Quit                       |
+| `Up` / `k`      | Scroll up                  |
+| `Down` / `j`    | Scroll down                |
+| `PgUp` / `PgDn` | Page scroll                |
+| `Space`         | Page down                  |
+| `Home` / `End`  | Top / bottom               |
+| `Tab`           | Toggle content / file info |
+| `i`             | File info                  |
+| `h` / `?`       | Toggle help                |
+| `t`             | Cycle theme                |
+
+## Themes
+
+Three custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
+
+| Theme          | Description                               |
+|----------------|-------------------------------------------|
+| `islands-dark` | JetBrains Islands-inspired dark (default) |
+| `dark-2026`    | VS Code Dark 2026-inspired                |
+| `vivid-dark`   | High-contrast with vivid colors           |
+
+Press `t` in the interactive viewer to cycle between themes live.
+
+## Supported File Types
 
 ### Syntax highlighting
 
-All languages supported by the default Sublime Text / TextMate grammar set — hundreds of languages including Rust, Python, TypeScript, Go, C/C++, Java, Ruby, Shell, Markdown, and many more.
+All languages supported by the default Sublime Text / TextMate grammar set — hundreds
+of languages including Rust, Python, TypeScript, Go, C/C++, Java, Ruby, Shell,
+Markdown, and many more.
 
 ### Pretty-printing
 
-| Format | Extensions |
-|--------|------------|
-| JSON   | `.json`, `.geojson`, `.jsonl` |
-| YAML   | `.yaml`, `.yml` |
-| TOML   | `.toml` |
+| Format | Extensions                        |
+|--------|-----------------------------------|
+| JSON   | `.json`, `.geojson`, `.jsonl`     |
+| YAML   | `.yaml`, `.yml`                   |
+| TOML   | `.toml`                           |
 | XML    | `.xml`, `.svg`, `.html`, `.xhtml` |
 
 ### Image rendering
 
-All formats supported by the `image` crate: PNG, JPEG, GIF, BMP, TIFF, WebP, ICO, and more. Rendered using character-density mapping with 24-bit ANSI color.
+All formats supported by the `image` crate: PNG, JPEG, GIF, BMP, TIFF, WebP, ICO, and
+more. Rendered using glyph-matched character selection with two-color clustering and
+24-bit ANSI color. Multiple rendering modes available via `--image-mode`:
+`full`, `block`, `geo`, `ascii`.
 
 ## Configuration
 
-Peek respects the following environment variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `PEEK_THEME` | Syntax highlighting theme | `base16-ocean.dark` |
-| `PEEK_PAGER` | Enable/disable built-in pager (`1`/`0`) | `1` (on TTY) |
-| `PEEK_STYLE` | Output style: `full`, `plain`, `grid`, `header` | `full` |
+| Variable     | Description               | Default        |
+|--------------|---------------------------|----------------|
+| `PEEK_THEME` | Syntax highlighting theme | `islands-dark` |
 
 ## License
 

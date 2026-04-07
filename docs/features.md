@@ -10,8 +10,10 @@ Full-screen interactive console view. The user must manually quit (e.g. `q`, `Es
 to exit. Supports keyboard interaction for toggling options, scrolling, searching, and
 switching between views.
 
-**Status: Partially implemented.** Interactive viewing works for text and images.
-Image viewer supports resize and quit. No keyboard toggling of options yet.
+**Status: Partially implemented.** Interactive viewing works for all file types with
+scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i view switching (content ↔ file
+info), help screen (h/?), and live theme cycling (t). No search, line numbers, or
+context-specific option toggling yet.
 
 ### Print Mode
 
@@ -46,7 +48,8 @@ No content-length-based auto-selection yet (currently: TTY → viewer, non-TTY �
 peek operates on a single file at a time. The file path is given as a positional
 argument. Reading from stdin is supported by passing `-` as the file path.
 
-**Status: Implemented.** Single file and stdin (`-`) both work.
+**Status: Partially implemented.** Single file works. Multiple files are supported
+sequentially. Stdin (`-`) is declared but not yet functional.
 
 
 ## Supported File Types
@@ -89,10 +92,10 @@ mode, selectable via `--raw` CLI flag for print mode):
 - **Pretty-printed** (default): reformatted for readability with syntax highlighting.
 - **Raw**: verbatim file contents with syntax highlighting only.
 
-**Status: Partially implemented.** Pretty-printing works for JSON, YAML, TOML, XML.
-Current `--plain` flag disables both highlighting and pretty-printing; needs to be
-split into `--plain` (colors/styling only) and `--raw` (structure only). No `r` toggle
-yet.
+**Status: Partially implemented.** Pretty-printing with syntax highlighting works for
+JSON, YAML, TOML, XML. Current `--plain` flag disables both highlighting and
+pretty-printing; needs to be split into `--plain` (colors/styling only) and `--raw`
+(structure only). No `r` toggle yet.
 
 ### Markup / Documentation
 
@@ -140,7 +143,8 @@ Rendering mode also selectable via `--image-mode` CLI option.
 In viewer mode, `Tab` switches between the ASCII art view and the file info screen.
 
 **Status: Partially implemented.** Four modes work with 24-bit truecolor. Interactive
-image viewer supports resize. No mode cycling or `Tab` switching yet.
+image viewer supports resize. Tab/i view switching to file info works. No `m` mode
+cycling in viewer yet (only via `--image-mode` CLI).
 
 #### SVG
 
@@ -287,8 +291,9 @@ be added later with dedicated parsers on a per-format basis.
 This ensures that peek always has something useful to show for any file, even if it
 can't render the contents.
 
-**Status: Not implemented.** MIME detection exists internally but no user-facing info
-display yet.
+**Status: Partially implemented.** File info screen shows MIME type, file size, and
+filesystem metadata for all file types via `--info` flag and Tab/i in the interactive
+viewer. No format-specific deep metadata (archive listing, executable info) yet.
 
 
 ## Viewer Features
@@ -309,10 +314,11 @@ view and info screen) or `i` (jump directly to info). Contains details such as:
 Also available in print mode via a CLI flag (e.g. `--info`).
 
 **Status: Partially implemented.** Basic file info (name, path, size, MIME, timestamps,
-permissions) works for all file types via `--info` flag. Image extras (dimensions, color
-type) and text extras (line/word/char counts) are included. Tab/i switching implemented
-in the interactive image viewer. Not yet implemented: EXIF data, structured data key
-count/nesting depth, schema summary.
+permissions) works for all file types via `--info` flag and Tab/i in the interactive
+viewer. Image extras (dimensions, color type) and text extras (line/word/char counts)
+are included. Info screen uses semantic coloring (age-based timestamps, size-based
+colors, per-character permission coloring). Not yet implemented: EXIF data, structured
+data key count/nesting depth, schema summary.
 
 ### Text Search
 
@@ -381,7 +387,7 @@ certain file types.
 |-----------|--------------------------------------------|
 | `Tab`     | Toggle content / file info               |
 | `i`       | Jump to file info screen                   |
-| `h` / `?` | Show help screen                           |
+| `h` / `?` | Toggle help screen                         |
 | `t`       | Cycle theme                                |
 
 ### Search
@@ -475,8 +481,8 @@ adjusted brightness).
 
 **How the layers work:**
 
-1. **Syntect theme** — loaded from the bundled defaults or a `.tmTheme` file. Provides
-   syntax scope colors and editor UI slots.
+1. **Syntect theme** — loaded from custom embedded `.tmTheme` files. Provides syntax
+   scope colors and editor UI slots.
 2. **peek theme roles** — derived automatically from the syntect theme. Provides
    semantic colors for all non-syntax UI output.
 3. **All colored text output** goes through a common rendering layer that uses either
@@ -490,9 +496,10 @@ below) — the rendering layer can downgrade colors from 24-bit to 256/16/none r
 of the source.
 
 **Status: Implemented.** The `PeekTheme` struct derives semantic color roles from
-the active syntect theme. All non-syntax UI output (info screens, help text, `--help`,
-gutter, search highlights) uses these roles. Themes are `.tmTheme` files embedded at
-compile time via `include_str!`.
+the active syntect theme. All non-syntax UI output (info screens, help text, `--help`)
+uses these roles via `PeekTheme::paint()`. Themes are `.tmTheme` files embedded at
+compile time via `include_str!`. Gutter and search highlight roles are defined but not
+yet used (line numbers and search are not implemented).
 
 ### Compatibility Modes
 

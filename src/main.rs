@@ -19,7 +19,7 @@ mod viewer;
 #[derive(Parser, Debug)]
 #[command(name = "peek", about, long_about, disable_help_flag = true, disable_version_flag = true)]
 pub struct Args {
-    /// Files to view. Use `-` for stdin.
+    /// Files to view.
     files: Vec<PathBuf>,
 
     /// Show themed help screen and exit

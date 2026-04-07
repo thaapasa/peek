@@ -18,27 +18,41 @@ No external runtime dependencies. Image rendering is built-in.
 
 ```
 src/
-  main.rs          — CLI entry point (clap), file type dispatch
+  main.rs              — CLI entry point (clap), file type dispatch
   viewer/
-    mod.rs         — Viewer trait and registry
-    text.rs        — Plain text passthrough
-    syntax.rs      — Syntax-highlighted source code (syntect)
-    json.rs        — JSON pretty-printer
-    yaml.rs        — YAML pretty-printer
-    toml.rs        — TOML pretty-printer
-    xml.rs         — XML pretty-printer
-    image.rs       — Image → ASCII art with density mapping + true color
-  detect.rs        — File type detection (extension + magic bytes)
-  pager.rs         — Built-in pager (minus crate) with TTY detection
-  theme.rs         — Color theme management, true color output
-  error.rs         — Error types
+    mod.rs             — Viewer trait, Registry, highlight_lines helper
+    interactive.rs     — Generic interactive viewer (alternate screen, scrolling, keys)
+    syntax.rs          — Syntax-highlighted source code (syntect)
+    structured.rs      — JSON/YAML/TOML/XML pretty-print + syntax highlight
+    text.rs            — Plain text passthrough
+    image/
+      mod.rs           — Image viewer (interactive + piped)
+      render.rs        — Image → glyph-matched ASCII art with true color
+      glyph_atlas.rs   — Precomputed glyph bitmaps
+      clustering.rs    — Two-color clustering for cell rendering
+  detect.rs            — File type detection (extension + magic bytes)
+  info.rs              — File metadata gathering and themed rendering
+  pager.rs             — Output abstraction (pager / direct stdout)
+  theme.rs             — Theme management, PeekTheme semantic colors, color blending
+  help.rs              — CLI help and version screens
+themes/
+  islands-dark.tmTheme — JetBrains Islands-inspired dark theme (default)
+  dark-2026.tmTheme    — VS Code Dark 2026-inspired theme
+  vivid-dark.tmTheme   — High-contrast vivid dark theme
+docs/
+  features.md          — Feature specification and status tracking
+  conventions.md       — Coding conventions
 ```
 
 ## Conventions
 
-- Use `anyhow::Result` for application errors, `thiserror` for library-style typed errors
-- CLI args defined via clap derive macros on a single `Args` struct in main.rs
-- All viewer implementations implement the `Viewer` trait
-- Target 24-bit true color; degrade gracefully when terminal doesn't support it
-- When stdout is a TTY: use built-in pager. When piped: write directly to stdout
-- No unwrap() in non-test code; propagate errors with `?`
+See [docs/conventions.md](docs/conventions.md) for coding conventions.
+
+## Documentation
+
+Keep documentation up to date when making changes. In particular:
+
+- **README.md** — project overview, feature summary, usage examples
+- **docs/features.md** — feature specification and implementation status
+- **docs/conventions.md** — coding conventions and patterns
+- **CLAUDE.md** — architecture map (if files/modules are added, moved, or removed)
