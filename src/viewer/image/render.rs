@@ -65,9 +65,12 @@ pub fn render_block_color(
 ) -> Vec<String> {
     let px_w = term_cols * CELL_W;
     let px_h = term_rows * CELL_H;
-    let resized = img
-        .resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3)
-        .to_rgb8();
+    let resized = if img.width() == px_w && img.height() == px_h {
+        img.to_rgb8()
+    } else {
+        img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3)
+            .to_rgb8()
+    };
 
     let raw = resized.as_raw();
     let stride = (px_w * 3) as usize;
@@ -124,11 +127,15 @@ pub fn render_density(img: &DynamicImage, term_cols: u32, term_rows: u32) -> Vec
     const DENSITY_RAMP: &[u8] =
         b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 
-    let resized = img.resize_exact(
-        term_cols,
-        term_rows,
-        image::imageops::FilterType::Lanczos3,
-    );
+    let resized = if img.width() == term_cols && img.height() == term_rows {
+        img.clone()
+    } else {
+        img.resize_exact(
+            term_cols,
+            term_rows,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
 
     let ramp_len = DENSITY_RAMP.len();
     let mut lines = Vec::with_capacity(term_rows as usize);
@@ -215,7 +222,7 @@ fn resolve_bg(bg: Background, img: &DynamicImage) -> Box<dyn Fn(u32, u32) -> [u8
         Background::Black => Box::new(|_x, _y| [0, 0, 0]),
         Background::White => Box::new(|_x, _y| [255, 255, 255]),
         Background::Checkerboard => {
-            // 8x8 pixel checkerboard, light gray + dark gray
+            // Half-block-sized checkerboard (8x8 px = one half-block glyph)
             Box::new(|x, y| {
                 let cell = (x / 8 + y / 8) % 2;
                 if cell == 0 { [204, 204, 204] } else { [102, 102, 102] }
@@ -257,6 +264,8 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
 }
 
 /// Load and render an image to lines, using contain-ratio sizing.
+/// Resizes to target resolution before compositing so that the checkerboard
+/// pattern is always aligned to the glyph grid.
 pub fn load_and_render(
     path: &std::path::Path,
     mode: ImageMode,
@@ -267,9 +276,17 @@ pub fn load_and_render(
 ) -> Result<Vec<String>> {
     let img = image::open(path).context("failed to open image")?;
     let img = add_margin(img, margin);
-    let img = composite_with_bg(img, bg);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, forced_width);
+
+    // Resize to exact target pixel resolution first (preserving alpha),
+    // then composite — so checkerboard aligns to the glyph grid.
+    let (px_w, px_h) = match mode {
+        ImageMode::Ascii => (cols, rows),
+        _ => (cols * CELL_W, rows * CELL_H),
+    };
+    let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
+    let img = composite_with_bg(img, bg);
 
     let lines = match mode {
         ImageMode::Ascii => render_density(&img, cols, rows),
@@ -297,14 +314,26 @@ pub fn load_and_render_svg(
     let padded_h = svg_h + margin * 2;
     let (cols, rows) = contain_size(padded_w, padded_h, term, forced_width);
 
-    // Rasterize at the exact pixel resolution the renderer needs
+    // Compute target pixel size, then rasterize SVG into the inner area
+    // (target minus margin) so that adding margin reaches exact target size.
     let (px_w, px_h) = match mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
+    let scale_x = px_w as f64 / padded_w as f64;
+    let scale_y = px_h as f64 / padded_h as f64;
+    let target_margin_x = (margin as f64 * scale_x).round() as u32;
+    let target_margin_y = (margin as f64 * scale_y).round() as u32;
+    let inner_w = px_w.saturating_sub(target_margin_x * 2).max(1);
+    let inner_h = px_h.saturating_sub(target_margin_y * 2).max(1);
 
-    let img = super::svg::rasterize_svg(path, px_w.max(1), px_h.max(1))?;
-    let img = add_margin(img, margin);
+    let inner = super::svg::rasterize_svg(path, inner_w, inner_h)?;
+    // Place the SVG content centered in a full-size transparent canvas
+    let mut canvas = image::RgbaImage::new(px_w, px_h);
+    let offset_x = (px_w - inner_w) / 2;
+    let offset_y = (px_h - inner_h) / 2;
+    image::imageops::overlay(&mut canvas, &inner.to_rgba8(), offset_x as i64, offset_y as i64);
+    let img = DynamicImage::ImageRgba8(canvas);
     let img = composite_with_bg(img, bg);
 
     let lines = match mode {

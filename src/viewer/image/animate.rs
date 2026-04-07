@@ -442,12 +442,23 @@ fn render_frame(
     bg: Background,
     margin: u32,
 ) -> Vec<String> {
+    use super::glyph_atlas::{CELL_H, CELL_W};
+
     let mut term = render::TermSize::detect();
     term.rows = term.rows.saturating_sub(1);
     let img = render::add_margin(frame.image.clone(), margin);
-    let img = render::composite_with_bg(img, bg);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = render::contain_size(img_w, img_h, term, forced_width);
+
+    // Resize to target resolution before compositing so checkerboard
+    // aligns to the glyph grid.
+    let (px_w, px_h) = match mode {
+        ImageMode::Ascii => (cols, rows),
+        _ => (cols * CELL_W, rows * CELL_H),
+    };
+    let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
+    let img = render::composite_with_bg(img, bg);
+
     match mode {
         ImageMode::Ascii => render::render_density(&img, cols, rows),
         _ => render::render_block_color(&img, cols, rows, mode),
