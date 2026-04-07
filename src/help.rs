@@ -146,13 +146,8 @@ fn render_gradient_line(
                 0.0
             };
             let color = lerp_color(start, end, t);
-            write!(
-                out,
-                "\x1b[38;2;{};{};{}m{ch}",
-                color.r, color.g, color.b
-            )?;
+            write!(out, "{}", pt.paint(&ch.to_string(), color))?;
         }
     }
-    write!(out, "\x1b[0m")?;
     Ok(())
 }
