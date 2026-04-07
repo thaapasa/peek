@@ -1,18 +1,24 @@
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
+use syntect::easy::HighlightLines;
+use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::detect::{FileType, StructuredFormat};
 use crate::pager::Output;
+use crate::theme::ThemeManager;
 
 use super::Viewer;
 
-pub struct StructuredViewer;
+pub struct StructuredViewer {
+    theme: Rc<ThemeManager>,
+}
 
 impl StructuredViewer {
-    pub fn new() -> Self {
-        Self
+    pub fn new(theme: Rc<ThemeManager>) -> Self {
+        Self { theme }
     }
 }
 
@@ -32,11 +38,39 @@ impl Viewer for StructuredViewer {
             StructuredFormat::Xml => pretty_xml(&raw),
         };
 
-        // The pretty-printed output is plain text for now.
-        // TODO: apply syntax highlighting on top of the formatted output
-        output.write_str(&pretty)?;
+        // Syntax-highlight the pretty-printed output
+        let syntax_name = match format {
+            StructuredFormat::Json => "JSON",
+            StructuredFormat::Yaml => "YAML",
+            StructuredFormat::Toml => "TOML",
+            StructuredFormat::Xml => "XML",
+        };
+
+        let syntax = self
+            .theme
+            .syntax_set
+            .find_syntax_by_name(syntax_name)
+            .unwrap_or_else(|| self.theme.syntax_set.find_syntax_plain_text());
+        let theme = self.theme.theme();
+        let mut highlighter = HighlightLines::new(syntax, theme);
+
+        for line in pretty.lines() {
+            let ranges = highlighter.highlight_line(line, &self.theme.syntax_set)?;
+            let escaped = as_24_bit_terminal_escaped(&ranges, false);
+            output.write_line(&format!("{escaped}\x1b[0m"))?;
+        }
 
         Ok(())
+    }
+}
+
+/// Pretty-print a structured document.
+pub fn pretty_print(raw: &str, format: StructuredFormat) -> Result<String> {
+    match format {
+        StructuredFormat::Json => pretty_json(raw),
+        StructuredFormat::Yaml => pretty_yaml(raw),
+        StructuredFormat::Toml => pretty_toml(raw),
+        StructuredFormat::Xml => Ok(pretty_xml(raw)),
     }
 }
 

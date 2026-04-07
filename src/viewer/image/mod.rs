@@ -1,11 +1,10 @@
-use std::io::Write;
 use std::path::Path;
 
 use anyhow::Result;
 
 use crate::detect::FileType;
 use crate::pager::Output;
-use crate::theme::PeekTheme;
+use crate::theme::PeekThemeName;
 
 use super::Viewer;
 
@@ -40,12 +39,12 @@ impl ImageMode {
 pub struct ImageViewer {
     width: u32,
     mode: ImageMode,
-    peek_theme: PeekTheme,
+    theme_name: PeekThemeName,
 }
 
 impl ImageViewer {
-    pub fn new(width: u32, mode: ImageMode, peek_theme: PeekTheme) -> Self {
-        Self { width, mode, peek_theme }
+    pub fn new(width: u32, mode: ImageMode, theme_name: PeekThemeName) -> Self {
+        Self { width, mode, theme_name }
     }
 
     /// Interactive image viewing with resize support.
@@ -53,14 +52,10 @@ impl ImageViewer {
     pub fn view_interactive(&self, path: &Path, file_type: &FileType) -> Result<()> {
         let mode = self.mode;
         let width = self.width;
-        super::interactive::view_interactive(path, file_type, &self.peek_theme, |stdout| {
+        let path = path.to_path_buf();
+        super::interactive::view_interactive(&path, file_type, self.theme_name, true, |_theme| {
             let term = render::TermSize::detect();
-            let lines = render::load_and_render(path, mode, width, term)?;
-            for line in &lines {
-                stdout.write_all(line.as_bytes())?;
-                stdout.write_all(b"\r\n")?;
-            }
-            Ok(())
+            render::load_and_render(&path, mode, width, term)
         })
     }
 }

@@ -9,11 +9,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
 
 const LOGO: &[&str] = &[
-    r"               __  ",
-    r" ___  ___ ___ / /__",
-    r"/ _ \/ -_) -_)  '_/",
-    r"/ .__/\__/\__/_/\_\ ",
-    r"/_/                  ",
+    r"                 __  ",
+    r"   ___  ___ ___ / /__",
+    r"  / _ \/ -_) -_)  '_/",
+    r" / .__/\__/\__/_/\_\ ",
+    concat!(r"/_/  any file v", env!("CARGO_PKG_VERSION")),
 ];
 
 pub fn render_version(theme_manager: &ThemeManager) -> Result<()> {

@@ -123,24 +123,17 @@ fn main() -> Result<()> {
                     .view_interactive(path, file_type)
                     .with_context(|| format!("failed to render {}", path.display()))?;
             } else {
-                // Other files: pre-render content, show in interactive viewer
-                let viewer = viewers.viewer_for(file_type);
-                let mut buf = pager::Output::buffer();
-                viewer.render(path, file_type, &mut buf)?;
-                let content_lines = buf.into_lines();
+                // Other files: render on demand with theme-aware re-rendering
+                let render_content = viewers
+                    .content_renderer(path, file_type)
+                    .with_context(|| format!("failed to read {}", path.display()))?;
 
                 viewer::interactive::view_interactive(
                     path,
                     file_type,
-                    viewers.peek_theme(),
-                    |stdout| {
-                        use std::io::Write;
-                        for line in &content_lines {
-                            stdout.write_all(line.as_bytes())?;
-                            stdout.write_all(b"\r\n")?;
-                        }
-                        Ok(())
-                    },
+                    viewers.theme_name(),
+                    false,
+                    render_content,
                 )
                 .with_context(|| format!("failed to render {}", path.display()))?;
             }

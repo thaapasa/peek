@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::easy::HighlightLines;
@@ -12,12 +13,12 @@ use crate::theme::ThemeManager;
 use super::Viewer;
 
 pub struct SyntaxViewer {
-    theme: ThemeManager,
+    theme: Rc<ThemeManager>,
     forced_language: Option<String>,
 }
 
 impl SyntaxViewer {
-    pub fn new(theme: ThemeManager, forced_language: Option<String>) -> Self {
+    pub fn new(theme: Rc<ThemeManager>, forced_language: Option<String>) -> Self {
         Self {
             theme,
             forced_language,

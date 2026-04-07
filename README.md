@@ -1,5 +1,13 @@
 # peek
 
+```
+                 __  
+   ___  ___ ___ / /__
+  / _ \/ -_) -_)  '_/
+ / .__/\__/\__/_/\_\ 
+/_/ a file previewer
+```
+
 A modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the file.
 
 - **Syntax highlighting** for source code (powered by syntect/TextMate grammars)

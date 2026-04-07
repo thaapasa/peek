@@ -33,11 +33,20 @@ impl PeekThemeName {
     }
 
     /// Embedded .tmTheme source for this theme.
-    fn tmtheme_source(self) -> &'static str {
+    pub fn tmtheme_source(self) -> &'static str {
         match self {
             Self::IslandsDark => THEME_ISLANDS_DARK,
             Self::Dark2026 => THEME_DARK_2026,
             Self::VividDark => THEME_VIVID_DARK,
+        }
+    }
+
+    /// Cycle to the next theme.
+    pub fn next(self) -> Self {
+        match self {
+            Self::IslandsDark => Self::Dark2026,
+            Self::Dark2026 => Self::VividDark,
+            Self::VividDark => Self::IslandsDark,
         }
     }
 
@@ -221,7 +230,7 @@ fn scope_color(theme: &Theme, scope_name: &str) -> Option<Color> {
 }
 
 /// Parse an embedded .tmTheme string into a syntect Theme.
-fn load_embedded_theme(source: &str) -> Theme {
+pub fn load_embedded_theme(source: &str) -> Theme {
     let mut cursor = Cursor::new(source.as_bytes());
     ThemeSet::load_from_reader(&mut cursor).expect("failed to parse embedded theme")
 }
@@ -271,6 +280,13 @@ impl ThemeManager {
         self.theme_set
             .themes
             .get(self.theme_name.cli_name())
+            .expect("theme must exist")
+    }
+
+    pub fn theme_for(&self, name: PeekThemeName) -> &syntect::highlighting::Theme {
+        self.theme_set
+            .themes
+            .get(name.cli_name())
             .expect("theme must exist")
     }
 

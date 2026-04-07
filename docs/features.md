@@ -353,7 +353,9 @@ An in-app help screen accessible via `h` or `?` that lists all available keyboar
 commands and their descriptions. Should reflect the current context (e.g. image-specific
 commands only shown when viewing an image).
 
-**Status: Not implemented.**
+**Status: Partially implemented.** A global help screen is accessible via `h` or `?`.
+It shows keyboard shortcuts and the currently active theme. Context-specific commands
+(per file type) are not yet shown.
 
 
 ## Keyboard Shortcuts
@@ -366,8 +368,8 @@ certain file types.
 | Key                   | Action       |
 |-----------------------|--------------|
 | `q` / `Esc`           | Quit         |
-| `Up`                  | Scroll up    |
-| `Down`                | Scroll down  |
+| `Up` / `k`            | Scroll up    |
+| `Down` / `j`          | Scroll down  |
 | `Page Up`             | Page up      |
 | `Page Down` / `Space` | Page down    |
 | `Home`                | Go to top    |
@@ -377,9 +379,10 @@ certain file types.
 
 | Key       | Action                                     |
 |-----------|--------------------------------------------|
-| `Tab`     | Cycle through views (content → info → ...) |
+| `Tab`     | Toggle content / file info               |
 | `i`       | Jump to file info screen                   |
 | `h` / `?` | Show help screen                           |
+| `t`       | Cycle theme                                |
 
 ### Search
 
@@ -428,15 +431,16 @@ is the authoritative in-app reference.
 ### Theme Selection
 
 - Themes are selected via `--theme` CLI option or `PEEK_THEME` environment variable.
-- Default theme: `base16-ocean.dark`.
-- Planned themes: IDEA default, VSCode default (in addition to bundled syntect themes).
-- Custom `.tmTheme` files can be loaded (syntect supports the TextMate theme format
-  natively). Many popular themes are available in this format.
+- Default theme: `islands-dark`.
+- Three custom embedded themes in `.tmTheme` format, compiled into the binary:
+  - **islands-dark** — JetBrains Islands-inspired dark theme (default)
+  - **dark-2026** — VS Code Dark 2026-inspired theme
+  - **vivid-dark** — High-contrast dark theme with vivid colors
+- Themes can be cycled live in the interactive viewer with `t`.
 
-**Status: Partially implemented.** Theme selection works via CLI/env var. Themes are
-loaded from syntect's default set (7 themes: base16-ocean dark/light,
-base16-eighties.dark, base16-mocha.dark, InspiredGitHub, Solarized dark/light).
-No custom theme loading or IDEA/VSCode themes yet.
+**Status: Implemented.** Theme selection works via CLI/env var. Three custom embedded
+themes replace the previous syntect defaults. Live theme cycling is available in the
+interactive viewer.
 
 ### Theme Architecture
 
@@ -485,8 +489,10 @@ This abstraction also serves as the integration point for compatibility modes (s
 below) — the rendering layer can downgrade colors from 24-bit to 256/16/none regardless
 of the source.
 
-**Status: Not implemented.** Currently syntect themes are used directly for syntax
-highlighting only; no peek-level theme abstraction exists.
+**Status: Implemented.** The `PeekTheme` struct derives semantic color roles from
+the active syntect theme. All non-syntax UI output (info screens, help text, `--help`,
+gutter, search highlights) uses these roles. Themes are `.tmTheme` files embedded at
+compile time via `include_str!`.
 
 ### Compatibility Modes
 
@@ -516,23 +522,23 @@ colors after syntect renders them, since syntect always outputs 24-bit ANSI code
 
 Current and planned CLI options:
 
-| Option           | Short | Description                                        | Status      |
-|------------------|-------|----------------------------------------------------|-------------|
-| `--help`         | `-h`  | Show help screen and exit                          | Implemented |
-| `--version`      |       | Show version info and exit                         | Implemented |
-| `--viewer`       | `-v`  | Force viewer mode                                  | Planned     |
-| `--print`        | `-p`  | Force print mode (direct stdout)                   | Implemented |
-| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing     | Implemented |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)           | Planned     |
-| `--theme`        | `-t`  | Syntax highlighting theme                          | Implemented |
-| `--language`     | `-l`  | Force syntax language                              | Implemented |
-| `--width`        |       | Image rendering width in characters                | Implemented |
-| `--image-mode`   |       | Image rendering mode                               | Implemented |
-| `--info`         |       | Show file info instead of contents                 | Implemented |
-| `--line-numbers` |       | Enable/disable line numbers                        | Planned     |
-| `--background`   |       | Image transparency background                      | Planned     |
-| `--sizing`       |       | Image sizing mode                                  | Planned     |
-| `--color-mode`   |       | Select compatibility/color mode                    | Planned     |
+| Option           | Short | Description                                     | Status       |
+|------------------|-------|-------------------------------------------------|--------------|
+| `--help`         | `-h`  | Show help screen and exit                       | Implemented  |
+| `--version`      |       | Show version info and exit                      | Implemented  |
+| `--viewer`       | `-v`  | Force viewer mode                               | Planned      |
+| `--print`        | `-p`  | Force print mode (direct stdout)                | Implemented  |
+| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing | Implemented  |
+| `--raw`          | `-r`  | Output verbatim source (no pretty-print)        | Planned      |
+| `--theme`        | `-t`  | Syntax highlighting theme                       | Implemented  |
+| `--language`     | `-l`  | Force syntax language                           | Implemented  |
+| `--width`        |       | Image rendering width in characters             | Implemented  |
+| `--image-mode`   |       | Image rendering mode                            | Implemented  |
+| `--info`         |       | Show file info instead of contents              | Implemented  |
+| `--line-numbers` |       | Enable/disable line numbers                     | Planned      |
+| `--background`   |       | Image transparency background                   | Planned      |
+| `--sizing`       |       | Image sizing mode                               | Planned      |
+| `--color-mode`   |       | Select compatibility/color mode                 | Planned      |
 
 `--plain` and `--raw` are orthogonal: `--raw` preserves the original file structure
 (no pretty-printing) but still applies colors and font styles. `--plain` disables all

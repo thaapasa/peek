@@ -6,6 +6,7 @@ use anyhow::Result;
 use crate::Args;
 
 /// Output abstraction: pager, direct stdout, or in-memory buffer.
+#[allow(dead_code)]
 pub enum Output {
     Pager(minus::Pager),
     Direct(io::Stdout),
@@ -21,19 +22,6 @@ impl Output {
             Ok(Output::Pager(pager))
         } else {
             Ok(Output::Direct(io::stdout()))
-        }
-    }
-
-    /// Create an in-memory buffer for capturing rendered output.
-    pub fn buffer() -> Self {
-        Output::Buffer(Vec::new())
-    }
-
-    /// Extract captured lines from a buffer output.
-    pub fn into_lines(self) -> Vec<String> {
-        match self {
-            Output::Buffer(lines) => lines,
-            _ => Vec::new(),
         }
     }
 

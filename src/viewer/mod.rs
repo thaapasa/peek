@@ -1,21 +1,50 @@
 use std::path::Path;
+use std::rc::Rc;
 
 use anyhow::Result;
+use syntect::easy::HighlightLines;
+use syntect::util::as_24_bit_terminal_escaped;
 
-use crate::detect::FileType;
+use crate::detect::{FileType, StructuredFormat};
 use crate::pager::Output;
-use crate::theme::{PeekTheme, ThemeManager};
+use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::Args;
 
 pub mod image;
 pub mod interactive;
-mod structured;
+pub mod structured;
 mod syntax;
 mod text;
+
+/// Closure type for theme-aware content rendering.
+pub type ContentRenderer = Box<dyn Fn(PeekThemeName) -> Result<Vec<String>>>;
 
 /// Trait for all file viewers.
 pub trait Viewer {
     fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()>;
+}
+
+/// Highlight text content as colored terminal lines.
+pub fn highlight_lines(
+    content: &str,
+    syntax_token: &str,
+    tm: &ThemeManager,
+    theme_name: PeekThemeName,
+) -> Result<Vec<String>> {
+    let syntax = tm
+        .syntax_set
+        .find_syntax_by_token(syntax_token)
+        .or_else(|| tm.syntax_set.find_syntax_by_name(syntax_token))
+        .unwrap_or_else(|| tm.syntax_set.find_syntax_plain_text());
+    let theme = tm.theme_for(theme_name);
+    let mut hl = HighlightLines::new(syntax, theme);
+    let mut lines = Vec::new();
+    for line in content.lines() {
+        let ranges = hl.highlight_line(line, &tm.syntax_set)?;
+        let escaped = as_24_bit_terminal_escaped(&ranges, false);
+        lines.push(format!("{escaped}\x1b[0m"));
+    }
+    Ok(lines)
 }
 
 /// Registry of viewers, dispatches by file type.
@@ -24,27 +53,37 @@ pub struct Registry {
     structured_viewer: structured::StructuredViewer,
     image_viewer: image::ImageViewer,
     text_viewer: text::TextViewer,
+    theme_manager: Rc<ThemeManager>,
+    forced_language: Option<String>,
     plain_mode: bool,
+    theme_name: PeekThemeName,
     peek_theme: PeekTheme,
 }
 
 impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
-        let theme = ThemeManager::new(args.theme);
+        let theme = Rc::new(ThemeManager::new(args.theme));
         let peek_theme = theme.peek_theme().clone();
         let image_mode = image::ImageMode::from_str(&args.image_mode);
         Ok(Self {
-            syntax_viewer: syntax::SyntaxViewer::new(theme, args.language.clone()),
-            structured_viewer: structured::StructuredViewer::new(),
-            image_viewer: image::ImageViewer::new(args.width, image_mode, peek_theme.clone()),
+            syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
+            structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme)),
+            image_viewer: image::ImageViewer::new(args.width, image_mode, args.theme),
             text_viewer: text::TextViewer,
+            theme_manager: theme,
+            forced_language: args.language.clone(),
             plain_mode: args.plain,
+            theme_name: args.theme,
             peek_theme,
         })
     }
 
     pub fn image_viewer(&self) -> &image::ImageViewer {
         &self.image_viewer
+    }
+
+    pub fn theme_name(&self) -> PeekThemeName {
+        self.theme_name
     }
 
     pub fn peek_theme(&self) -> &PeekTheme {
@@ -61,6 +100,65 @@ impl Registry {
             FileType::Structured(_) => &self.structured_viewer,
             FileType::Image => &self.image_viewer,
             FileType::Binary => &self.text_viewer,
+        }
+    }
+
+    /// Build a closure that renders file content to lines for any given theme.
+    /// Used by the interactive viewer for theme-aware re-rendering.
+    pub fn content_renderer(
+        &self,
+        path: &Path,
+        file_type: &FileType,
+    ) -> Result<ContentRenderer> {
+        // Read and optionally pretty-print the content
+        let content = if self.plain_mode {
+            std::fs::read_to_string(path)?
+        } else if let FileType::Structured(fmt) = file_type {
+            let raw = std::fs::read_to_string(path)?;
+            structured::pretty_print(&raw, *fmt)?
+        } else {
+            std::fs::read_to_string(path)?
+        };
+
+        // Determine syntax token for highlighting
+        let syntax_token = if self.plain_mode {
+            None
+        } else {
+            self.syntax_token_for(path, file_type)
+        };
+
+        let tm = Rc::clone(&self.theme_manager);
+
+        Ok(Box::new(move |theme_name| {
+            if let Some(ref token) = syntax_token {
+                highlight_lines(&content, token, &tm, theme_name)
+            } else {
+                Ok(content.lines().map(String::from).collect())
+            }
+        }))
+    }
+
+    fn syntax_token_for(&self, path: &Path, file_type: &FileType) -> Option<String> {
+        match file_type {
+            FileType::SourceCode { syntax } => self
+                .forced_language
+                .clone()
+                .or_else(|| syntax.clone())
+                .or_else(|| {
+                    path.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(String::from)
+                }),
+            FileType::Structured(fmt) => Some(
+                match fmt {
+                    StructuredFormat::Json => "JSON",
+                    StructuredFormat::Yaml => "YAML",
+                    StructuredFormat::Toml => "TOML",
+                    StructuredFormat::Xml => "XML",
+                }
+                .to_string(),
+            ),
+            _ => None,
         }
     }
 }
