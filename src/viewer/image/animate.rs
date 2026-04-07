@@ -18,8 +18,8 @@ use super::render;
 use super::{Background, ImageMode};
 
 use crate::viewer::interactive::{
-    ViewMode, content_rows, current_scroll, draw, lines_for, make_peek_theme,
-    render_help_with_keys, scroll_mut, strip_ansi_width,
+    ViewMode, compose_status_line, content_rows, current_scroll, draw, lines_for,
+    make_peek_theme, render_help_with_keys, scroll_mut,
 };
 
 /// A single decoded animation frame with its display duration.
@@ -511,17 +511,11 @@ fn render_anim_status_line(
         )
     };
 
-    let left_visible = strip_ansi_width(&left);
-    let hints_visible = strip_ansi_width(&hints);
     let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-
-    let gap = cols.saturating_sub(left_visible + hints_visible);
-    let padding = " ".repeat(gap);
-
     let bg = theme.selection;
     format!(
-        "\x1b[48;2;{};{};{}m{}{}{}\x1b[0m",
+        "\x1b[48;2;{};{};{}m{}\x1b[0m",
         bg.r, bg.g, bg.b,
-        left, padding, hints,
+        compose_status_line(&left, &hints, cols),
     )
 }

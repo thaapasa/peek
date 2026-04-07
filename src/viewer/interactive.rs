@@ -344,20 +344,36 @@ fn render_status_line(
         fg("q:quit", theme.muted),
     );
 
-    // Compute visible widths (strip ANSI escapes for padding)
-    let left_visible = strip_ansi_width(&left);
-    let hints_visible = strip_ansi_width(&hints);
     let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-
-    let gap = cols.saturating_sub(left_visible + hints_visible);
-    let padding = " ".repeat(gap);
-
     let bg = theme.selection;
     format!(
-        "\x1b[48;2;{};{};{}m{}{}{}\x1b[0m",
+        "\x1b[48;2;{};{};{}m{}\x1b[0m",
         bg.r, bg.g, bg.b,
-        left, padding, hints,
+        compose_status_line(&left, &hints, cols),
     )
+}
+
+/// Compose a status line from left and right parts, padding or truncating to fit `cols`.
+/// Drops hints first, then truncates left if still too wide.
+pub(crate) fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
+    let left_w = strip_ansi_width(left);
+    let hints_w = strip_ansi_width(hints);
+
+    if left_w + hints_w <= cols {
+        // Both fit — pad the gap
+        let gap = cols.saturating_sub(left_w + hints_w);
+        format!("{}{}{}", left, " ".repeat(gap), hints)
+    } else if left_w < cols {
+        // Left fits, truncate hints to fill remaining space
+        let remaining = cols.saturating_sub(left_w);
+        let truncated_hints = truncate_ansi(hints, remaining);
+        let hints_actual = strip_ansi_width(&truncated_hints);
+        let pad = cols.saturating_sub(left_w + hints_actual);
+        format!("{}{}{}", left, " ".repeat(pad), truncated_hints)
+    } else {
+        // Left alone overflows — truncate it, no hints
+        truncate_ansi(left, cols)
+    }
 }
 
 /// Count the visible character width of a string, ignoring ANSI escape sequences.
@@ -376,6 +392,31 @@ pub(crate) fn strip_ansi_width(s: &str) -> usize {
         }
     }
     width
+}
+
+/// Truncate a string containing ANSI escapes to at most `max_width` visible characters.
+pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut width = 0;
+    let mut in_escape = false;
+    for c in s.chars() {
+        if in_escape {
+            result.push(c);
+            if c.is_ascii_alphabetic() {
+                in_escape = false;
+            }
+        } else if c == '\x1b' {
+            in_escape = true;
+            result.push(c);
+        } else {
+            if width >= max_width {
+                break;
+            }
+            result.push(c);
+            width += 1;
+        }
+    }
+    result
 }
 
 pub(crate) fn make_peek_theme(name: PeekThemeName) -> PeekTheme {
