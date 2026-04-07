@@ -128,7 +128,15 @@ fn main() -> Result<()> {
         // Interactive TTY: each file gets its own interactive viewer
         // with Tab/i view switching between content and file info.
         for (path, file_type) in &files {
-            if matches!(file_type, detect::FileType::Image) && !args.plain {
+            if matches!(file_type, detect::FileType::Binary) {
+                // Binary files: print info and exit (no content to display)
+                let file_info = info::gather(path, file_type)
+                    .with_context(|| format!("failed to read info for {}", path.display()))?;
+                let lines = info::render(&file_info, viewers.peek_theme());
+                for line in &lines {
+                    println!("{line}");
+                }
+            } else if matches!(file_type, detect::FileType::Image) && !args.plain {
                 // Images re-render on resize for correct aspect ratio
                 viewers
                     .image_viewer()
@@ -161,10 +169,20 @@ fn main() -> Result<()> {
         // Piped or --no-pager: direct output
         let mut output = pager::Output::new(&args)?;
         for (path, file_type) in &files {
-            let viewer = viewers.viewer_for(file_type);
-            viewer
-                .render(path, file_type, &mut output)
-                .with_context(|| format!("failed to render {}", path.display()))?;
+            if matches!(file_type, detect::FileType::Binary) {
+                // Binary files: show file info instead of content
+                let file_info = info::gather(path, file_type)
+                    .with_context(|| format!("failed to read info for {}", path.display()))?;
+                let lines = info::render(&file_info, viewers.peek_theme());
+                for line in &lines {
+                    output.write_line(line)?;
+                }
+            } else {
+                let viewer = viewers.viewer_for(file_type);
+                viewer
+                    .render(path, file_type, &mut output)
+                    .with_context(|| format!("failed to render {}", path.display()))?;
+            }
         }
         output.finish()?;
     }

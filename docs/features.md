@@ -37,11 +37,14 @@ set or stdout is not a TTY.
 - `--print` / `-p` forces print mode.
 - **Default behavior:** if output is longer than the console size, start in viewer mode;
   otherwise use print mode.
+- **Binary / unknown files** default to printing file info and exiting. `--viewer`
+  forces the interactive viewer (for future features like hex dump).
 - All data types should support both modes where it makes sense — the same content
   should be viewable interactively or printable to stdout.
 
-**Status: Partial.** TTY detection and `--print` / `-p` implemented.
-No content-length-based auto-selection yet (currently: TTY → viewer, non-TTY → print).
+**Status: Partial.** TTY detection and `--print` / `-p` implemented. Binary files
+print info and exit by default. No content-length-based auto-selection yet (currently:
+TTY → viewer, non-TTY → print).
 
 ### Input
 
@@ -60,15 +63,16 @@ types may be added over time.
 ### Source Code
 
 All standard programming languages supported by the syntax highlighting library
-(syntect). This covers a wide range including but not limited to: Rust, Python,
-JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, etc.
+(syntect with extended definitions via `two-face`/bat). This covers 100+ languages
+including: Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell,
+TOML, Dockerfile, and many more.
 
 Viewing features:
 - Syntax-colored source with theme support.
 - Toggleable line numbers.
 
-**Status: Implemented** via syntect's built-in language definitions. Line numbers not
-yet implemented.
+**Status: Implemented** via syntect with `two-face` extended syntax definitions. Line
+numbers not yet implemented.
 
 ### Structured Data / Config Files
 
@@ -299,9 +303,10 @@ be added later with dedicated parsers on a per-format basis.
 This ensures that peek always has something useful to show for any file, even if it
 can't render the contents.
 
-**Status: Partially implemented.** File info screen shows MIME type, file size, and
-filesystem metadata for all file types via `--info` flag and Tab/i in the interactive
-viewer. No format-specific deep metadata (archive listing, executable info) yet.
+**Status: Implemented (basic).** Binary files print the file info screen (MIME type,
+file size, filesystem metadata) and exit. Also available for all file types via `--info`
+flag and Tab/i in the interactive viewer. No format-specific deep metadata (archive
+listing, executable info, hex dump) yet.
 
 
 ## Viewer Features
