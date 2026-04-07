@@ -31,6 +31,9 @@ quick-xml = { version = "0.37", features = ["serialize"] }
 # Image handling
 image = "0.25"
 
+# EXIF metadata extraction
+kamadak-exif = "0.5"
+
 # Error handling
 anyhow = "1"
 

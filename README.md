@@ -56,7 +56,7 @@ peek -P file.txt
 # Choose a theme
 peek --theme vivid-dark src/main.rs
 
-# Show file metadata
+# Show file metadata (includes EXIF for images)
 peek --info photo.jpg
 ```
 

@@ -30,6 +30,7 @@ pub enum FileExtras {
         width: u32,
         height: u32,
         color_type: String,
+        exif: Vec<(String, String)>,
     },
     Text {
         line_count: usize,
@@ -155,11 +156,64 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         .map(|img| format!("{:?}", img.color()))
         .unwrap_or_else(|_| "unknown".to_string());
 
+    let exif = gather_exif(path);
+
     FileExtras::Image {
         width,
         height,
         color_type,
+        exif,
     }
+}
+
+/// Extract interesting EXIF fields from an image file.
+fn gather_exif(path: &Path) -> Vec<(String, String)> {
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return Vec::new(),
+    };
+    let mut buf_reader = std::io::BufReader::new(file);
+    let exif_reader = exif::Reader::new();
+    let exif = match exif_reader.read_from_container(&mut buf_reader) {
+        Ok(e) => e,
+        Err(_) => return Vec::new(),
+    };
+
+    // Fields to extract, in display order
+    const FIELDS: &[(exif::Tag, &str)] = &[
+        (exif::Tag::Make, "Camera Make"),
+        (exif::Tag::Model, "Camera Model"),
+        (exif::Tag::LensModel, "Lens"),
+        (exif::Tag::ExposureTime, "Exposure"),
+        (exif::Tag::FNumber, "Aperture"),
+        (exif::Tag::PhotographicSensitivity, "ISO"),
+        (exif::Tag::FocalLength, "Focal Length"),
+        (exif::Tag::FocalLengthIn35mmFilm, "Focal Length (35mm)"),
+        (exif::Tag::ExposureBiasValue, "Exposure Bias"),
+        (exif::Tag::MeteringMode, "Metering"),
+        (exif::Tag::Flash, "Flash"),
+        (exif::Tag::WhiteBalance, "White Balance"),
+        (exif::Tag::DateTimeOriginal, "Date Taken"),
+        (exif::Tag::Software, "Software"),
+        (exif::Tag::ImageDescription, "Description"),
+        (exif::Tag::Artist, "Artist"),
+        (exif::Tag::Copyright, "Copyright"),
+        (exif::Tag::GPSLatitude, "GPS Latitude"),
+        (exif::Tag::GPSLongitude, "GPS Longitude"),
+        (exif::Tag::GPSAltitude, "GPS Altitude"),
+    ];
+
+    let mut result = Vec::new();
+    for &(tag, label) in FIELDS {
+        if let Some(field) = exif.get_field(tag, exif::In::PRIMARY) {
+            let value = field.display_value().with_unit(&exif).to_string();
+            let value = value.trim().to_string();
+            if !value.is_empty() {
+                result.push((label.to_string(), value));
+            }
+        }
+    }
+    result
 }
 
 fn gather_text_extras(path: &Path) -> FileExtras {
@@ -229,6 +283,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
             width,
             height,
             color_type,
+            exif,
         } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Image", theme);
@@ -239,6 +294,14 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
                 theme,
             );
             push_field(&mut lines, "Color", &theme.paint_value(color_type), theme);
+
+            if !exif.is_empty() {
+                lines.push(String::new());
+                push_section_header(&mut lines, "EXIF", theme);
+                for (label, value) in exif {
+                    push_field(&mut lines, label, &theme.paint_value(value), theme);
+                }
+            }
         }
         FileExtras::Text {
             line_count,
@@ -292,19 +355,17 @@ fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) 
 }
 
 /// Push a field with a themed label and a pre-colored value.
+/// Guarantees at least one space between label and value.
 fn push_field(lines: &mut Vec<String>, label: &str, colored_value: &str, theme: &PeekTheme) {
-    lines.push(format!(
-        "  {:<width$}{}",
-        theme.paint_label(label),
-        colored_value,
-        width = LABEL_WIDTH + ansi_overhead(theme, label),
-    ));
+    let painted = theme.paint_label(label);
+    let pad = if label.len() < LABEL_WIDTH {
+        LABEL_WIDTH - label.len()
+    } else {
+        1
+    };
+    lines.push(format!("  {}{}{}", painted, " ".repeat(pad), colored_value));
 }
 
-/// The ANSI escape overhead added by paint_label for a given text length.
-fn ansi_overhead(theme: &PeekTheme, sample: &str) -> usize {
-    theme.paint_label(sample).len() - sample.len()
-}
 
 // ---------------------------------------------------------------------------
 // Color helpers
