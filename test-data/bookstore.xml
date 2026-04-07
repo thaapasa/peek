@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bookstore name="Terminal Books" established="2020">
+<inventory updated="2026-04-01T10:30:00Z">
+<book id="1" isbn="978-0-13-468599-1"><title>The Rust Programming Language</title><author>Steve Klabnik</author><author>Carol Nichols</author><year>2023</year><price currency="USD">49.99</price><categories><category>Programming</category><category>Systems</category></categories><in-stock>true</in-stock></book>
+<book id="2" isbn="978-1-718-50185-8"><title>Rust for Rustaceans</title><author>Jon Gjengset</author><year>2021</year><price currency="USD">39.95</price><categories><category>Programming</category><category>Advanced</category></categories><in-stock>true</in-stock></book>
+<book id="3" isbn="978-0-596-51774-8"><title>The Art of Unix Programming</title><author>Eric S. Raymond</author><year>2003</year><price currency="USD">35.00</price><categories><category>Unix</category><category>Philosophy</category></categories><in-stock>false</in-stock></book>
+</inventory>
+<staff><employee id="101" role="manager"><name>Dana Torres</name><since>2020-03-15</since></employee><employee id="102" role="clerk"><name>Kenji Watanabe</name><since>2022-08-01</since></employee></staff>
+</bookstore>

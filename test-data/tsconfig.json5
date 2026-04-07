@@ -1,0 +1,59 @@
+// TypeScript compiler configuration
+// JSON5 allows comments and trailing commas — much nicer for config files
+{
+  compilerOptions: {
+    // Language & environment
+    target: "ES2024",
+    module: "NodeNext",
+    moduleResolution: "NodeNext",
+    lib: ["ES2024", "DOM", "DOM.Iterable"],
+
+    // Type checking — strict mode with extras
+    strict: true,
+    noUncheckedIndexedAccess: true,
+    noPropertyAccessFromIndexSignature: true,
+    exactOptionalPropertyTypes: true,
+
+    // Output
+    outDir: "./dist",
+    rootDir: "./src",
+    declaration: true,
+    declarationMap: true,
+    sourceMap: true,
+
+    // Interop
+    esModuleInterop: true,
+    allowSyntheticDefaultImports: true,
+    forceConsistentCasingInFileNames: true,
+    resolveJsonModule: true,
+    isolatedModules: true,
+    verbatimModuleSyntax: true,
+
+    // Path aliases
+    baseUrl: ".",
+    paths: {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/components/*"],
+      "@utils/*": ["./src/utils/*"],
+    },
+  },
+
+  include: [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+  ],
+
+  exclude: [
+    "node_modules",
+    "dist",
+    "**/*.test.ts",
+    "**/*.spec.ts",
+  ],
+
+  // Watch mode configuration
+  watchOptions: {
+    watchFile: "useFsEvents",
+    watchDirectory: "useFsEvents",
+    fallbackPolling: "dynamicPriority",
+  },
+}

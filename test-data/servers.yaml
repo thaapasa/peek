@@ -1,0 +1,39 @@
+cluster: production
+region: eu-west-1
+servers:
+  - hostname: web-01.prod.internal
+    role: frontend
+    ip: 10.0.1.10
+    port: 8080
+    tags: [web, nginx, load-balanced]
+    resources: {cpu: 4, memory_gb: 16, disk_gb: 500}
+    healthy: true
+  - hostname: web-02.prod.internal
+    role: frontend
+    ip: 10.0.1.11
+    port: 8080
+    tags: [web, nginx, load-balanced]
+    resources: {cpu: 4, memory_gb: 16, disk_gb: 500}
+    healthy: true
+  - hostname: api-01.prod.internal
+    role: backend
+    ip: 10.0.2.20
+    port: 3000
+    tags: [api, rust, primary]
+    resources: {cpu: 8, memory_gb: 32, disk_gb: 1000}
+    healthy: true
+  - hostname: db-01.prod.internal
+    role: database
+    ip: 10.0.3.30
+    port: 5432
+    tags: [postgres, primary, encrypted]
+    resources: {cpu: 16, memory_gb: 64, disk_gb: 2000}
+    healthy: true
+    replicas: [db-02.prod.internal, db-03.prod.internal]
+monitoring:
+  endpoint: https://metrics.internal/api/v1
+  interval_seconds: 30
+  alerts:
+    cpu_threshold: 85
+    memory_threshold: 90
+    disk_threshold: 80

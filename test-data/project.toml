@@ -1,0 +1,40 @@
+[package]
+name = "stellar-engine"
+version = "2.4.1"
+edition = "2024"
+authors = ["Alice Chen <alice@example.com>", "Bob Park <bob@example.com>"]
+description = "High-performance rendering engine for terminal graphics"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/example/stellar-engine"
+keywords = ["terminal", "rendering", "graphics", "tui"]
+
+[dependencies]
+tokio = { version = "1.38", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+crossterm = "0.28"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.4"
+insta = "1.39"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[[bench]]
+name = "render_benchmark"
+harness = false
+
+[features]
+default = ["gpu"]
+gpu = ["wgpu"]
+simd = []

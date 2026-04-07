@@ -118,6 +118,12 @@ more. Rendered using glyph-matched character selection with two-color clustering
 |--------------|---------------------------|----------------|
 | `PEEK_THEME` | Syntax highlighting theme | `islands-dark` |
 
+## Test Files
+
+`test-data/` and `test-images/` contain sample files for trying out peek's various
+viewers — minified JSON/XML/HTML for pretty-printing, source code in several languages
+for syntax highlighting, and photographs for image rendering.
+
 ## License
 
 MIT
