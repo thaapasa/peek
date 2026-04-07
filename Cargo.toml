@@ -33,8 +33,6 @@ image = "0.25"
 
 # Error handling
 anyhow = "1"
-# Colored output helpers
-owo-colors = "4"
 
 [dev-dependencies]
 # Font rasterization for glyph atlas generation

@@ -447,19 +447,19 @@ consistent theming.
 To support this, peek should define its own **theme abstraction** with semantic color
 roles:
 
-| Role          | Purpose                                       | Derived from (syntect)        |
-|---------------|-----------------------------------------------|-------------------------------|
-| `foreground`  | Default text color                            | `settings.foreground`         |
-| `background`  | View background                               | `settings.background`         |
-| `heading`     | Section headings, titles                      | scope `keyword` or `accent`   |
-| `label`       | Field names, option names                     | scope `entity.name`           |
-| `value`       | Field values, literals                        | scope `string`                |
-| `accent`      | Emphasis, highlights                          | `settings.accent` or scope `keyword` |
-| `muted`       | Secondary text, comments, descriptions        | scope `comment`               |
-| `warning`     | File size warnings, errors                    | scope `invalid` or red        |
-| `gutter`      | Line numbers                                  | `settings.gutter_foreground`  |
-| `search_match`| Search result highlighting                    | `settings.find_highlight`     |
-| `selection`   | Selected / active item                        | `settings.selection`          |
+| Role           | Purpose                                       | Derived from (syntect)               |
+|----------------|-----------------------------------------------|--------------------------------------|
+| `foreground`   | Default text color                            | `settings.foreground`                |
+| `background`   | View background                               | `settings.background`                |
+| `heading`      | Section headings, titles                      | scope `keyword` or `accent`          |
+| `label`        | Field names, option names                     | scope `entity.name`                  |
+| `value`        | Field values, literals                        | scope `string`                       |
+| `accent`       | Emphasis, highlights                          | `settings.accent` or scope `keyword` |
+| `muted`        | Secondary text, comments, descriptions        | scope `comment`                      |
+| `warning`      | File size warnings, errors                    | scope `invalid` or red               |
+| `gutter`       | Line numbers                                  | `settings.gutter_foreground`         |
+| `search_match` | Search result highlighting                    | `settings.find_highlight`            |
+| `selection`    | Selected / active item                        | `settings.selection`                 |
 
 The mapping above is a starting point — the "Derived from" column shows how each role
 could be automatically populated from a syntect theme. Sensible fallbacks should be
@@ -515,7 +515,8 @@ Current and planned CLI options:
 
 | Option           | Short | Description                                        | Status      |
 |------------------|-------|----------------------------------------------------|-------------|
-| `--help`         | `-h`  | Show help screen and exit                          | Planned     |
+| `--help`         | `-h`  | Show help screen and exit                          | Implemented |
+| `--version`      |       | Show version info and exit                         | Implemented |
 | `--viewer`       | `-v`  | Force viewer mode                                  | Planned     |
 | `--print`        | `-p`  | Force print mode (direct stdout)                   | Planned     |
 | `--plain`        | `-P`  | Disable console enhancements (colors, bold/italic) | Implemented |
@@ -573,4 +574,18 @@ The entire help output should be styled using the active theme's colors — head
 option names, descriptions, etc. This means `--help --theme <name>` can be used to
 preview and compare different themes. The help screen itself becomes a theme showcase.
 
-**Status: Not implemented.** Currently uses clap's default `--help`.
+**Status: Implemented.** Custom themed help screen with gradient logo, version,
+description, options reference, and theme listing with active marker.
+
+### `--version` Screen
+
+The `--version` output shows a subset of the `--help` screen:
+
+1. **ASCII art "peek" logo** — same gradient-colored logo as `--help`.
+2. **Version** — `peek v{VERSION}` in heading color.
+3. **Brief description** — one-line description in foreground color.
+
+No usage, options, or theme listing is shown. Like `--help`, it respects
+`--theme <name>` for previewing different color schemes.
+
+**Status: Implemented.**

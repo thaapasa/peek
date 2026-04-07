@@ -1,10 +1,11 @@
 use std::io::IsTerminal;
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 
 mod detect;
+mod help;
 mod pager;
 mod theme;
 mod viewer;
@@ -15,11 +16,18 @@ mod viewer;
 /// pretty-printing, and ASCII art image rendering. Works like `less`
 /// by default on interactive terminals.
 #[derive(Parser, Debug)]
-#[command(name = "peek", version, about, long_about)]
+#[command(name = "peek", about, long_about, disable_help_flag = true, disable_version_flag = true)]
 pub struct Args {
     /// Files to view. Use `-` for stdin.
-    #[arg(required = true)]
     files: Vec<PathBuf>,
+
+    /// Show themed help screen and exit
+    #[arg(short = 'h', long = "help")]
+    help: bool,
+
+    /// Show version info and exit
+    #[arg(long = "version")]
+    version: bool,
 
     /// Disable syntax highlighting and pretty-printing (plain output)
     #[arg(short, long)]
@@ -34,9 +42,10 @@ pub struct Args {
         short,
         long,
         env = "PEEK_THEME",
-        default_value = "base16-ocean.dark"
+        default_value_t = theme::PeekThemeName::Base16OceanDark,
+        value_enum,
     )]
-    theme: String,
+    theme: theme::PeekThemeName,
 
     /// Force a specific language for syntax highlighting (skip auto-detection)
     #[arg(short, long)]
@@ -53,6 +62,21 @@ pub struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    if args.help || args.version {
+        let theme_manager = theme::ThemeManager::new(args.theme);
+        if args.help {
+            help::render_help(&theme_manager)?;
+        } else {
+            help::render_version(&theme_manager)?;
+        }
+        return Ok(());
+    }
+
+    if args.files.is_empty() {
+        bail!("no files specified; run `peek --help` for usage");
+    }
+
     let is_tty = std::io::stdout().is_terminal();
     let use_pager = !args.no_pager && is_tty;
 

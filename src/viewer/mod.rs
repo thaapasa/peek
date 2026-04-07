@@ -28,7 +28,7 @@ pub struct Registry {
 
 impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
-        let theme = ThemeManager::new(&args.theme);
+        let theme = ThemeManager::new(args.theme);
         let image_mode = image::ImageMode::from_str(&args.image_mode);
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(theme, args.language.clone()),

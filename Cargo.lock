@@ -979,12 +979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "owo-colors"
-version = "4.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d211803b9b6b570f68772237e415a029d5a50c65d382910b879fb19d3271f94d"
-
-[[package]]
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1030,7 +1024,6 @@ dependencies = [
  "image",
  "infer",
  "minus",
- "owo-colors",
  "quick-xml 0.37.5",
  "serde",
  "serde_json",
