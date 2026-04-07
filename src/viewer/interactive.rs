@@ -38,6 +38,7 @@ pub fn view_interactive(
     execute!(
         stdout,
         terminal::EnterAlternateScreen,
+        cursor::MoveTo(0, 0),
         cursor::Hide,
     )?;
     terminal::enable_raw_mode()?;
