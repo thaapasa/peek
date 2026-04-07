@@ -249,7 +249,7 @@ pub struct ThemeManager {
 
 impl ThemeManager {
     pub fn new(theme_name: PeekThemeName) -> Self {
-        let syntax_set = SyntaxSet::load_defaults_newlines();
+        let syntax_set = SyntaxSet::load_defaults_nonewlines();
 
         // Load all custom themes into a ThemeSet
         let mut themes = BTreeMap::new();

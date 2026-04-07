@@ -266,9 +266,11 @@ fn draw(
     let lines = lines_for(view_mode, content_lines, info_lines, help_lines);
     let start = scroll.min(lines.len());
     let end = (start + rows).min(lines.len());
-    for line in &lines[start..end] {
+    for (i, line) in lines[start..end].iter().enumerate() {
+        if i > 0 {
+            stdout.write_all(b"\r\n")?;
+        }
         stdout.write_all(line.as_bytes())?;
-        stdout.write_all(b"\r\n")?;
     }
 
     stdout.flush()?;

@@ -3,8 +3,6 @@ use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
-use syntect::easy::HighlightLines;
-use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::detect::FileType;
 use crate::pager::Output;
@@ -50,25 +48,14 @@ impl Viewer for SyntaxViewer {
     fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()> {
         let content = fs::read_to_string(path)?;
 
-        let syntax_name = self.find_syntax_name(path, file_type);
+        let lines = if let Some(token) = self.find_syntax_name(path, file_type) {
+            super::highlight_lines(&content, &token, &self.theme, self.theme.theme_name)?
+        } else {
+            content.lines().map(String::from).collect()
+        };
 
-        // Try to find a matching syntax definition
-        let syntax = syntax_name
-            .and_then(|name| {
-                self.theme
-                    .syntax_set
-                    .find_syntax_by_token(&name)
-                    .or_else(|| self.theme.syntax_set.find_syntax_by_extension(&name))
-            })
-            .unwrap_or_else(|| self.theme.syntax_set.find_syntax_plain_text());
-
-        let theme = self.theme.theme();
-        let mut highlighter = HighlightLines::new(syntax, theme);
-
-        for line in content.lines() {
-            let ranges = highlighter.highlight_line(line, &self.theme.syntax_set)?;
-            let escaped = as_24_bit_terminal_escaped(&ranges, false);
-            output.write_line(&format!("{escaped}\x1b[0m"))?;
+        for line in &lines {
+            output.write_line(line)?;
         }
 
         Ok(())

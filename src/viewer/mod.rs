@@ -36,6 +36,10 @@ pub fn highlight_lines(
         .syntax_set
         .find_syntax_by_token(syntax_token)
         .or_else(|| tm.syntax_set.find_syntax_by_name(syntax_token))
+        .or_else(|| {
+            fallback_syntax_token(syntax_token)
+                .and_then(|t| tm.syntax_set.find_syntax_by_name(t))
+        })
         .unwrap_or_else(|| tm.syntax_set.find_syntax_plain_text());
     let theme = tm.theme_for(theme_name);
     let mut hl = HighlightLines::new(syntax, theme);
@@ -170,5 +174,21 @@ impl Registry {
             ),
             _ => None,
         }
+    }
+}
+
+/// Map file extensions that syntect doesn't natively support to the closest
+/// available syntax name.
+fn fallback_syntax_token(ext: &str) -> Option<&'static str> {
+    match ext {
+        "ts" | "tsx" | "mts" | "cts" => Some("JavaScript"),
+        "jsx" | "mjs" | "cjs" => Some("JavaScript"),
+        "jsonc" | "json5" => Some("JSON"),
+        "zsh" | "bash" | "fish" => Some("Bourne Again Shell (bash)"),
+        "h" => Some("C++"),
+        "hpp" | "hxx" => Some("C++"),
+        "cxx" | "cc" => Some("C++"),
+        "dockerfile" | "Dockerfile" => Some("Dockerfile"),
+        _ => None,
     }
 }
