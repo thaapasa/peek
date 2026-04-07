@@ -16,7 +16,7 @@ use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
 use crate::viewer::image::Background;
 
 #[derive(Clone, Copy, PartialEq)]
-enum ViewMode {
+pub(crate) enum ViewMode {
     Content,
     Info,
     Help,
@@ -305,7 +305,7 @@ fn run_event_loop(
 }
 
 impl ViewMode {
-    fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> &'static str {
         match self {
             ViewMode::Content => "Content",
             ViewMode::Info => "Info",
@@ -361,7 +361,7 @@ fn render_status_line(
 }
 
 /// Count the visible character width of a string, ignoring ANSI escape sequences.
-fn strip_ansi_width(s: &str) -> usize {
+pub(crate) fn strip_ansi_width(s: &str) -> usize {
     let mut width = 0;
     let mut in_escape = false;
     for c in s.chars() {
@@ -378,16 +378,16 @@ fn strip_ansi_width(s: &str) -> usize {
     width
 }
 
-fn make_peek_theme(name: PeekThemeName) -> PeekTheme {
+pub(crate) fn make_peek_theme(name: PeekThemeName) -> PeekTheme {
     let syntect_theme = load_embedded_theme(name.tmtheme_source());
     PeekTheme::from_syntect(&syntect_theme)
 }
 
-fn terminal_rows() -> usize {
+pub(crate) fn terminal_rows() -> usize {
     terminal::size().map(|(_, h)| h as usize).unwrap_or(24)
 }
 
-fn current_scroll(
+pub(crate) fn current_scroll(
     mode: ViewMode,
     content: usize,
     info: usize,
@@ -400,7 +400,7 @@ fn current_scroll(
     }
 }
 
-fn scroll_mut<'a>(
+pub(crate) fn scroll_mut<'a>(
     mode: ViewMode,
     content: &'a mut usize,
     info: &'a mut usize,
@@ -413,7 +413,7 @@ fn scroll_mut<'a>(
     }
 }
 
-fn lines_for<'a>(
+pub(crate) fn lines_for<'a>(
     mode: ViewMode,
     content: &'a [String],
     info: &'a [String],
@@ -427,11 +427,11 @@ fn lines_for<'a>(
 }
 
 /// Visible rows available for content (total rows minus status line).
-fn content_rows() -> usize {
+pub(crate) fn content_rows() -> usize {
     terminal_rows().saturating_sub(1)
 }
 
-fn draw(
+pub(crate) fn draw(
     stdout: &mut io::Stdout,
     view_mode: ViewMode,
     content_lines: &[String],
@@ -491,6 +491,14 @@ const HELP_KEYS: &[(&str, &str)] = &[
 ];
 
 fn render_help_lines(theme: &PeekTheme, current_theme: PeekThemeName) -> Vec<String> {
+    render_help_with_keys(theme, current_theme, HELP_KEYS)
+}
+
+pub(crate) fn render_help_with_keys(
+    theme: &PeekTheme,
+    current_theme: PeekThemeName,
+    keys: &[(&str, &str)],
+) -> Vec<String> {
     let mut lines = Vec::new();
 
     // Section header
@@ -507,7 +515,7 @@ fn render_help_lines(theme: &PeekTheme, current_theme: PeekThemeName) -> Vec<Str
     let overhead = sample_painted.len() - 1;
     let key_width = 14 + overhead;
 
-    for (key, desc) in HELP_KEYS {
+    for (key, desc) in keys {
         lines.push(format!(
             "  {:<width$}{}",
             theme.paint_label(key),

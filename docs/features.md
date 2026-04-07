@@ -236,7 +236,10 @@ In print mode, a reasonable default would be to render the first frame.
 
 Transparency handling (see above) applies to animated GIFs as well.
 
-**Status: Planned.**
+**Status: Implemented.** Auto-plays GIF animations at native frame rate. `p` toggles
+play/pause, `n`/`N` and Left/Right step frames, `b` cycles background. Status line
+shows frame counter and play/pause state. Print mode renders first frame. Frame count
+shown in file info screen.
 
 ### Video Files (tentative)
 

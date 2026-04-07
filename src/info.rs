@@ -32,6 +32,7 @@ pub enum FileExtras {
         color_type: String,
         bit_depth: u8,
         hdr_format: Option<String>,
+        frame_count: Option<usize>,
         exif: Vec<(String, String)>,
     },
     Text {
@@ -167,6 +168,7 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         .unwrap_or(0) as u8;
 
     let hdr_format = detect_hdr(path);
+    let frame_count = crate::viewer::image::animate::gif_frame_count(path);
     let exif = gather_exif(path);
 
     FileExtras::Image {
@@ -175,6 +177,7 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         color_type,
         bit_depth,
         hdr_format,
+        frame_count,
         exif,
     }
 }
@@ -314,6 +317,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
             color_type,
             bit_depth,
             hdr_format,
+            frame_count,
             exif,
         } => {
             lines.push(String::new());
@@ -335,6 +339,14 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
             }
             if let Some(hdr) = hdr_format {
                 push_field(&mut lines, "HDR", &theme.paint_accent(hdr), theme);
+            }
+            if let Some(count) = frame_count {
+                push_field(
+                    &mut lines,
+                    "Frames",
+                    &theme.paint_value(&format!("{count} (animated)")),
+                    theme,
+                );
             }
 
             if !exif.is_empty() {

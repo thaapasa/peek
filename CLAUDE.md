@@ -28,6 +28,7 @@ src/
     image/
       mod.rs           — Image viewer (interactive + piped)
       render.rs        — Image → glyph-matched ASCII art with true color
+      animate.rs       — Animated GIF playback with frame-rate-driven event loop
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering

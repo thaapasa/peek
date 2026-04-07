@@ -10,6 +10,7 @@ use crate::theme::{PeekThemeName, ThemeManager};
 
 use super::Viewer;
 
+pub(crate) mod animate;
 mod clustering;
 mod glyph_atlas;
 pub mod render;
@@ -98,6 +99,14 @@ impl ImageViewer {
     /// Interactive image viewing with resize support.
     /// Enters alternate screen and blocks until the user quits.
     pub fn view_interactive(&self, path: &Path, file_type: &FileType) -> Result<()> {
+        // Check for animated GIF — use dedicated animation viewer
+        if let Some(frames) = animate::decode_gif_frames(path)? {
+            return animate::view_animated(
+                path, file_type, frames,
+                self.mode, self.width, self.background, self.margin, self.theme_name,
+            );
+        }
+
         let mode = self.mode;
         let width = self.width;
         let bg = Rc::new(Cell::new(self.background));
