@@ -8,7 +8,7 @@ use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::detect::{FileType, StructuredFormat};
 use crate::pager::Output;
-use crate::theme::ThemeManager;
+use crate::theme::{ThemeManager, ANSI_RESET};
 
 use super::Viewer;
 
@@ -62,7 +62,7 @@ impl Viewer for StructuredViewer {
         for line in pretty.lines() {
             let ranges = highlighter.highlight_line(line, &self.theme.syntax_set)?;
             let escaped = as_24_bit_terminal_escaped(&ranges, false);
-            output.write_line(&format!("{escaped}\x1b[0m"))?;
+            output.write_line(&format!("{escaped}{ANSI_RESET}"))?;
         }
 
         Ok(())

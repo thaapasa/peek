@@ -162,9 +162,25 @@ impl PeekTheme {
 
     // -- paint helpers -------------------------------------------------------
 
-    /// Wrap text in 24-bit ANSI foreground escape for the given color.
+    /// Wrap text in 24-bit ANSI foreground escape for the given color, with
+    /// a trailing reset.
     pub fn paint(&self, text: &str, color: Color) -> String {
-        format!("\x1b[38;2;{};{};{}m{}\x1b[0m", color.r, color.g, color.b, text)
+        format!("{}{ANSI_RESET}", self.paint_fg(text, color))
+    }
+
+    /// Wrap text in 24-bit ANSI foreground escape **without** a trailing reset.
+    /// Use this when composing multiple colored segments inside a shared
+    /// background (e.g. status lines).
+    pub fn paint_fg(&self, text: &str, color: Color) -> String {
+        format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
+    }
+
+    /// Wrap content in a 24-bit ANSI background color with a trailing reset.
+    pub fn paint_bg(&self, content: &str, color: Color) -> String {
+        format!(
+            "\x1b[48;2;{};{};{}m{}{ANSI_RESET}",
+            color.r, color.g, color.b, content
+        )
     }
 
     pub fn paint_heading(&self, text: &str) -> String {
@@ -191,6 +207,32 @@ impl PeekTheme {
     pub fn paint_warning(&self, text: &str) -> String {
         self.paint(text, self.warning)
     }
+}
+
+// -- ANSI constants & free helpers ------------------------------------------
+
+/// ANSI escape that resets all attributes.
+pub const ANSI_RESET: &str = "\x1b[0m";
+
+/// Byte form of [`ANSI_RESET`] for use with `write_all`.
+pub const ANSI_RESET_BYTES: &[u8] = b"\x1b[0m";
+
+/// Append a foreground-colored character to `buf` (no trailing reset).
+/// Intended for per-pixel image rendering in tight loops.
+pub fn write_fg(buf: &mut String, r: u8, g: u8, b: u8, ch: char) {
+    use std::fmt::Write;
+    let _ = write!(buf, "\x1b[38;2;{r};{g};{b}m{ch}");
+}
+
+/// Append a character with both foreground and background color to `buf`
+/// (no trailing reset).  Intended for block-color image rendering.
+pub fn write_fg_bg(buf: &mut String, fg: [u8; 3], bg: [u8; 3], ch: char) {
+    use std::fmt::Write;
+    let _ = write!(
+        buf,
+        "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m{}",
+        fg[0], fg[1], fg[2], bg[0], bg[1], bg[2], ch
+    );
 }
 
 /// Linearly interpolate between two colors.

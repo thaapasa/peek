@@ -6,7 +6,6 @@ use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal;
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
-use syntect::highlighting::Color;
 
 use crate::detect::FileType;
 use crate::theme::PeekThemeName;
@@ -307,48 +306,39 @@ fn render_anim_status_line(
 ) -> String {
     let theme = &state.peek_theme;
 
-    let fg = |text: &str, color: Color| -> String {
-        format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
-    };
-
     let play_icon = if playing { "\u{25b6}" } else { "\u{23f8}" };
     let frame_info = format!("Frame {}/{} {}", frame_idx + 1, frame_count, play_icon);
 
     let left = format!(
         " {} {} {} {} {} {} {}",
-        fg(filename, theme.accent),
-        fg("\u{2502}", theme.muted),
-        fg(&frame_info, theme.label),
-        fg("\u{2502}", theme.muted),
-        fg(state.view_mode.label(), theme.label),
-        fg("\u{2502}", theme.muted),
-        fg(state.current_theme.cli_name(), theme.muted),
+        theme.paint_fg(filename, theme.accent),
+        theme.paint_fg("\u{2502}", theme.muted),
+        theme.paint_fg(&frame_info, theme.label),
+        theme.paint_fg("\u{2502}", theme.muted),
+        theme.paint_fg(state.view_mode.label(), theme.label),
+        theme.paint_fg("\u{2502}", theme.muted),
+        theme.paint_fg(state.current_theme.cli_name(), theme.muted),
     );
 
     let hints = if playing {
         format!(
             "{}  {}  {}  {} ",
-            fg("h:help", theme.muted),
-            fg("p:pause", theme.muted),
-            fg("b:bg", theme.muted),
-            fg("q:quit", theme.muted),
+            theme.paint_fg("h:help", theme.muted),
+            theme.paint_fg("p:pause", theme.muted),
+            theme.paint_fg("b:bg", theme.muted),
+            theme.paint_fg("q:quit", theme.muted),
         )
     } else {
         format!(
             "{}  {}  {}  {}  {} ",
-            fg("h:help", theme.muted),
-            fg("p:play", theme.muted),
-            fg("n/N:step", theme.muted),
-            fg("b:bg", theme.muted),
-            fg("q:quit", theme.muted),
+            theme.paint_fg("h:help", theme.muted),
+            theme.paint_fg("p:play", theme.muted),
+            theme.paint_fg("n/N:step", theme.muted),
+            theme.paint_fg("b:bg", theme.muted),
+            theme.paint_fg("q:quit", theme.muted),
         )
     };
 
     let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-    let bg = theme.selection;
-    format!(
-        "\x1b[48;2;{};{};{}m{}\x1b[0m",
-        bg.r, bg.g, bg.b,
-        compose_status_line(&left, &hints, cols),
-    )
+    theme.paint_bg(&compose_status_line(&left, &hints, cols), theme.selection)
 }

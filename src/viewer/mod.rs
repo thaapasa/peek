@@ -7,7 +7,7 @@ use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::detect::{FileType, StructuredFormat};
 use crate::pager::Output;
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
+use crate::theme::{PeekTheme, PeekThemeName, ThemeManager, ANSI_RESET};
 use crate::Args;
 
 pub mod image;
@@ -48,7 +48,7 @@ pub fn highlight_lines(
     for line in content.lines() {
         let ranges = hl.highlight_line(line, &tm.syntax_set)?;
         let escaped = as_24_bit_terminal_escaped(&ranges, false);
-        lines.push(format!("{escaped}\x1b[0m"));
+        lines.push(format!("{escaped}{ANSI_RESET}"));
     }
     Ok(lines)
 }

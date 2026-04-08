@@ -4,6 +4,7 @@ use image::{DynamicImage, GenericImageView};
 use super::clustering::fast_2_color;
 use super::glyph_atlas::{atlas_for_mode, best_glyph, GlyphBitmap, CELL_H, CELL_W};
 use super::{Background, ImageMode};
+use crate::theme::{write_fg, write_fg_bg, ANSI_RESET};
 
 /// Terminal dimensions in characters.
 #[derive(Debug, Clone, Copy)]
@@ -108,13 +109,10 @@ pub fn render_block_color(
                 (cluster.color_a, cluster.color_b)
             };
 
-            line.push_str(&format!(
-                "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m{}",
-                fg[0], fg[1], fg[2], bg[0], bg[1], bg[2], glyph_match.ch
-            ));
+            write_fg_bg(&mut line, fg, bg, glyph_match.ch);
         }
 
-        line.push_str("\x1b[0m");
+        line.push_str(ANSI_RESET);
         lines.push(line);
     }
 
@@ -150,9 +148,9 @@ pub fn render_density(img: &DynamicImage, term_cols: u32, term_rows: u32) -> Vec
             let idx = ((luma / 255.0) * (ramp_len - 1) as f64) as usize;
             let ch = DENSITY_RAMP[idx.min(ramp_len - 1)] as char;
 
-            line.push_str(&format!("\x1b[38;2;{r};{g};{b}m{ch}"));
+            write_fg(&mut line, r, g, b, ch);
         }
-        line.push_str("\x1b[0m");
+        line.push_str(ANSI_RESET);
         lines.push(line);
     }
 

@@ -6,7 +6,6 @@ use std::rc::Rc;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 use crossterm::terminal;
-use syntect::highlighting::Color;
 
 use crate::detect::FileType;
 use crate::theme::PeekThemeName;
@@ -151,32 +150,23 @@ fn run_event_loop(
 fn render_status_line(filename: &str, state: &ViewerState) -> String {
     let theme = &state.peek_theme;
 
-    let fg = |text: &str, color: Color| -> String {
-        format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
-    };
-
     let left = format!(
         " {} {} {} {} {}",
-        fg(filename, theme.accent),
-        fg("\u{2502}", theme.muted),
-        fg(state.view_mode.label(), theme.label),
-        fg("\u{2502}", theme.muted),
-        fg(state.current_theme.cli_name(), theme.muted),
+        theme.paint_fg(filename, theme.accent),
+        theme.paint_fg("\u{2502}", theme.muted),
+        theme.paint_fg(state.view_mode.label(), theme.label),
+        theme.paint_fg("\u{2502}", theme.muted),
+        theme.paint_fg(state.current_theme.cli_name(), theme.muted),
     );
 
     let hints = format!(
         "{}  {}  {}  {} ",
-        fg("h:help", theme.muted),
-        fg("Tab:cycle", theme.muted),
-        fg("t:theme", theme.muted),
-        fg("q:quit", theme.muted),
+        theme.paint_fg("h:help", theme.muted),
+        theme.paint_fg("Tab:cycle", theme.muted),
+        theme.paint_fg("t:theme", theme.muted),
+        theme.paint_fg("q:quit", theme.muted),
     );
 
     let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-    let bg = theme.selection;
-    format!(
-        "\x1b[48;2;{};{};{}m{}\x1b[0m",
-        bg.r, bg.g, bg.b,
-        compose_status_line(&left, &hints, cols),
-    )
+    theme.paint_bg(&compose_status_line(&left, &hints, cols), theme.selection)
 }

@@ -10,7 +10,7 @@ use crossterm::{
 
 use crate::detect::FileType;
 use crate::info::FileInfo;
-use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme, ANSI_RESET_BYTES};
 
 // ---------------------------------------------------------------------------
 // View mode
@@ -275,7 +275,7 @@ fn draw_screen(
 
     // Reset all attributes before clearing so the clear doesn't
     // fill the screen with a leftover background color.
-    stdout.write_all(b"\x1b[0m")?;
+    stdout.write_all(ANSI_RESET_BYTES)?;
     execute!(
         stdout,
         terminal::Clear(ClearType::All),
@@ -292,7 +292,7 @@ fn draw_screen(
     }
 
     // Reset all attributes, then draw the status line on the last row
-    stdout.write_all(b"\x1b[0m")?;
+    stdout.write_all(ANSI_RESET_BYTES)?;
     execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
     stdout.write_all(status.as_bytes())?;
 
