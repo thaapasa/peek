@@ -8,9 +8,11 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
+use syntect::highlighting::Color;
+
 use crate::detect::FileType;
 use crate::info::FileInfo;
-use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme, ANSI_RESET_BYTES};
+use crate::theme::{PeekTheme, PeekThemeName, ANSI_RESET_BYTES, load_embedded_theme};
 
 // ---------------------------------------------------------------------------
 // View mode
@@ -304,9 +306,39 @@ fn draw_screen(
 // Status line helpers
 // ---------------------------------------------------------------------------
 
+/// Build a themed status line from labeled segments and hint strings.
+///
+/// `segments` are shown on the left, joined by muted `│` separators.
+/// `hints` are shown on the right, all in the muted color.
+/// The whole line gets the theme's `selection` background.
+pub(crate) fn render_themed_status_line(
+    segments: &[(&str, Color)],
+    hints: &[&str],
+    theme: &PeekTheme,
+) -> String {
+    let sep = theme.paint_fg("\u{2502}", theme.muted);
+
+    let left = segments
+        .iter()
+        .map(|(text, color)| theme.paint_fg(text, *color))
+        .collect::<Vec<_>>()
+        .join(&format!(" {sep} "));
+    let left = format!(" {left}");
+
+    let hints = hints
+        .iter()
+        .map(|h| theme.paint_fg(h, theme.muted))
+        .collect::<Vec<_>>()
+        .join("  ");
+    let hints = format!("{hints} ");
+
+    let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+    theme.paint_bg(&compose_status_line(&left, &hints, cols), theme.selection)
+}
+
 /// Compose a status line from left and right parts, padding or truncating to fit `cols`.
 /// Drops hints first, then truncates left if still too wide.
-pub(crate) fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
+fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
     let left_w = strip_ansi_width(left);
     let hints_w = strip_ansi_width(hints);
 

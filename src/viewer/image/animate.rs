@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode};
-use crossterm::terminal;
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
 use crate::detect::FileType;
@@ -14,7 +13,7 @@ use super::render;
 use super::ImageConfig;
 
 use crate::viewer::ui::{
-    KeyAction, ViewMode, ViewerState, compose_status_line, with_alternate_screen,
+    KeyAction, ViewMode, ViewerState, render_themed_status_line, with_alternate_screen,
 };
 
 /// A single decoded animation frame with its display duration.
@@ -309,36 +308,20 @@ fn render_anim_status_line(
     let play_icon = if playing { "\u{25b6}" } else { "\u{23f8}" };
     let frame_info = format!("Frame {}/{} {}", frame_idx + 1, frame_count, play_icon);
 
-    let left = format!(
-        " {} {} {} {} {} {} {}",
-        theme.paint_fg(filename, theme.accent),
-        theme.paint_fg("\u{2502}", theme.muted),
-        theme.paint_fg(&frame_info, theme.label),
-        theme.paint_fg("\u{2502}", theme.muted),
-        theme.paint_fg(state.view_mode.label(), theme.label),
-        theme.paint_fg("\u{2502}", theme.muted),
-        theme.paint_fg(state.current_theme.cli_name(), theme.muted),
-    );
-
-    let hints = if playing {
-        format!(
-            "{}  {}  {}  {} ",
-            theme.paint_fg("h:help", theme.muted),
-            theme.paint_fg("p:pause", theme.muted),
-            theme.paint_fg("b:bg", theme.muted),
-            theme.paint_fg("q:quit", theme.muted),
-        )
+    let hints: &[&str] = if playing {
+        &["h:help", "p:pause", "b:bg", "q:quit"]
     } else {
-        format!(
-            "{}  {}  {}  {}  {} ",
-            theme.paint_fg("h:help", theme.muted),
-            theme.paint_fg("p:play", theme.muted),
-            theme.paint_fg("n/N:step", theme.muted),
-            theme.paint_fg("b:bg", theme.muted),
-            theme.paint_fg("q:quit", theme.muted),
-        )
+        &["h:help", "p:play", "n/N:step", "b:bg", "q:quit"]
     };
 
-    let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-    theme.paint_bg(&compose_status_line(&left, &hints, cols), theme.selection)
+    render_themed_status_line(
+        &[
+            (filename, theme.accent),
+            (&frame_info, theme.label),
+            (state.view_mode.label(), theme.label),
+            (state.current_theme.cli_name(), theme.muted),
+        ],
+        hints,
+        theme,
+    )
 }

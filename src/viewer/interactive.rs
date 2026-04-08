@@ -5,13 +5,12 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
-use crossterm::terminal;
 
 use crate::detect::FileType;
 use crate::theme::PeekThemeName;
 use crate::viewer::image::Background;
 use crate::viewer::ui::{
-    KeyAction, ViewerState, compose_status_line, with_alternate_screen,
+    KeyAction, ViewerState, render_themed_status_line, with_alternate_screen,
 };
 
 // ---------------------------------------------------------------------------
@@ -149,24 +148,13 @@ fn run_event_loop(
 
 fn render_status_line(filename: &str, state: &ViewerState) -> String {
     let theme = &state.peek_theme;
-
-    let left = format!(
-        " {} {} {} {} {}",
-        theme.paint_fg(filename, theme.accent),
-        theme.paint_fg("\u{2502}", theme.muted),
-        theme.paint_fg(state.view_mode.label(), theme.label),
-        theme.paint_fg("\u{2502}", theme.muted),
-        theme.paint_fg(state.current_theme.cli_name(), theme.muted),
-    );
-
-    let hints = format!(
-        "{}  {}  {}  {} ",
-        theme.paint_fg("h:help", theme.muted),
-        theme.paint_fg("Tab:cycle", theme.muted),
-        theme.paint_fg("t:theme", theme.muted),
-        theme.paint_fg("q:quit", theme.muted),
-    );
-
-    let cols = terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
-    theme.paint_bg(&compose_status_line(&left, &hints, cols), theme.selection)
+    render_themed_status_line(
+        &[
+            (filename, theme.accent),
+            (state.view_mode.label(), theme.label),
+            (state.current_theme.cli_name(), theme.muted),
+        ],
+        &["h:help", "Tab:cycle", "t:theme", "q:quit"],
+        theme,
+    )
 }
