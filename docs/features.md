@@ -621,3 +621,29 @@ No usage, options, or theme listing is shown. Like `--help`, it respects
 `--theme <name>` for previewing different color schemes.
 
 **Status: Implemented.**
+
+
+## Future / Optional Features
+
+### Block Collapsing / Folding
+
+Allow collapsing blocks (objects, arrays, nested structures) in the interactive viewer.
+Primarily useful for structured data (JSON, YAML, TOML, XML) but could extend to code
+viewers as well (folding functions, blocks, etc.).
+
+**Challenges:** The current rendering pipeline produces a flat `Vec<String>` of
+ANSI-escaped lines with no structural metadata. Implementing folding would require:
+
+- A **line metadata layer** (fold level, block boundaries, visibility state) replacing
+  the bare `String` lines.
+- A **virtual line mapping** so scroll offsets work correctly with collapsed regions.
+- **Preserving fold state** across re-renders (theme toggle, raw/pretty toggle).
+- For structured data: retaining parsed structure or using indentation heuristics to
+  detect foldable blocks.
+- For code: language-aware block detection via syntect scopes (significantly harder,
+  language-dependent).
+
+Indentation-based folding for structured data (JSON/YAML) would be the most practical
+starting point, since pretty-printed output has reliable indentation levels.
+
+**Status: Idea — feasible but requires architectural changes to the rendering pipeline.**
