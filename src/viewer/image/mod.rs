@@ -83,17 +83,23 @@ impl ImageMode {
     }
 }
 
+/// Shared configuration for image rendering (mode, size, background, margin).
+#[derive(Debug, Clone, Copy)]
+pub struct ImageConfig {
+    pub mode: ImageMode,
+    pub width: u32,
+    pub background: Background,
+    pub margin: u32,
+}
+
 pub struct ImageViewer {
-    width: u32,
-    mode: ImageMode,
-    background: Background,
-    margin: u32,
+    config: ImageConfig,
     theme_name: PeekThemeName,
 }
 
 impl ImageViewer {
-    pub fn new(width: u32, mode: ImageMode, background: Background, margin: u32, theme_name: PeekThemeName) -> Self {
-        Self { width, mode, background, margin, theme_name }
+    pub fn new(config: ImageConfig, theme_name: PeekThemeName) -> Self {
+        Self { config, theme_name }
     }
 
     /// Interactive image viewing with resize support.
@@ -102,16 +108,13 @@ impl ImageViewer {
         // Check for animated image (GIF/WebP) — use dedicated animation viewer
         if let Some(frames) = animate::decode_anim_frames(path)? {
             return animate::view_animated(
-                path, file_type, frames,
-                self.mode, self.width, self.background, self.margin, self.theme_name,
+                path, file_type, frames, self.config, self.theme_name,
             );
         }
 
-        let mode = self.mode;
-        let width = self.width;
-        let bg = Rc::new(Cell::new(self.background));
+        let config = self.config;
+        let bg = Rc::new(Cell::new(config.background));
         let bg_closure = Rc::clone(&bg);
-        let margin = self.margin;
         let path_buf = path.to_path_buf();
         super::interactive::view_interactive_with_bg(
             path, file_type, self.theme_name, true, true,
@@ -119,7 +122,7 @@ impl ImageViewer {
             move |_theme, _pretty| {
                 let mut term = render::TermSize::detect();
                 term.rows = term.rows.saturating_sub(1);
-                render::load_and_render(&path_buf, mode, width, term, bg_closure.get(), margin)
+                render::load_and_render(&path_buf, config.mode, config.width, term, bg_closure.get(), config.margin)
             },
         )
     }
@@ -128,7 +131,8 @@ impl ImageViewer {
 impl Viewer for ImageViewer {
     fn render(&self, path: &Path, _file_type: &FileType, output: &mut Output) -> Result<()> {
         let term = render::TermSize::detect();
-        let lines = render::load_and_render(path, self.mode, self.width, term, self.background, self.margin)?;
+        let c = &self.config;
+        let lines = render::load_and_render(path, c.mode, c.width, term, c.background, c.margin)?;
         for line in &lines {
             output.write_line(line)?;
         }
@@ -137,10 +141,7 @@ impl Viewer for ImageViewer {
 }
 
 pub struct SvgViewer {
-    width: u32,
-    mode: ImageMode,
-    background: Background,
-    margin: u32,
+    config: ImageConfig,
     theme_name: PeekThemeName,
     theme_manager: Rc<ThemeManager>,
     raw_mode: bool,
@@ -148,23 +149,18 @@ pub struct SvgViewer {
 
 impl SvgViewer {
     pub fn new(
-        width: u32,
-        mode: ImageMode,
-        background: Background,
-        margin: u32,
+        config: ImageConfig,
         theme_name: PeekThemeName,
         theme_manager: Rc<ThemeManager>,
         raw_mode: bool,
     ) -> Self {
-        Self { width, mode, background, margin, theme_name, theme_manager, raw_mode }
+        Self { config, theme_name, theme_manager, raw_mode }
     }
 
     pub fn view_interactive(&self, path: &Path, file_type: &FileType) -> Result<()> {
-        let mode = self.mode;
-        let width = self.width;
-        let bg = Rc::new(Cell::new(self.background));
+        let config = self.config;
+        let bg = Rc::new(Cell::new(config.background));
         let bg_closure = Rc::clone(&bg);
-        let margin = self.margin;
         let path_buf = path.to_path_buf();
         let tm = Rc::clone(&self.theme_manager);
         let raw_mode = self.raw_mode;
@@ -181,7 +177,7 @@ impl SvgViewer {
                     // Render as ASCII art image
                     let mut term = render::TermSize::detect();
                     term.rows = term.rows.saturating_sub(1);
-                    render::load_and_render_svg(&path_buf, mode, width, term, bg_closure.get(), margin)
+                    render::load_and_render_svg(&path_buf, config.mode, config.width, term, bg_closure.get(), config.margin)
                 } else {
                     // Render as XML source
                     let raw_content = std::fs::read_to_string(&path_buf)?;
@@ -203,7 +199,8 @@ impl SvgViewer {
 impl Viewer for SvgViewer {
     fn render(&self, path: &Path, _file_type: &FileType, output: &mut Output) -> Result<()> {
         let term = render::TermSize::detect();
-        let lines = render::load_and_render_svg(path, self.mode, self.width, term, self.background, self.margin)?;
+        let c = &self.config;
+        let lines = render::load_and_render_svg(path, c.mode, c.width, term, c.background, c.margin)?;
         for line in &lines {
             output.write_line(line)?;
         }

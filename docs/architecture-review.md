@@ -26,19 +26,10 @@ Resolved: replaced hand-rolled XML indentation with `quick-xml` Reader/Writer
 which properly handles CDATA, comments, processing instructions, self-closing
 tags, and namespaces. `quick-xml` was already a direct dependency.
 
-### 4. Parameter explosion for image rendering
+### 4. ~~Parameter explosion for image rendering~~ (done)
 
-`ImageMode`, `Background`, `margin`, `forced_width` are threaded through 5+
-function signatures. A single config struct would clean up the API:
-
-```rust
-struct ImageConfig {
-    mode: ImageMode,
-    background: Background,
-    width: u32,
-    margin: u32,
-}
-```
+Resolved: introduced `ImageConfig` struct bundling `mode`, `width`, `background`,
+`margin`. Used by `ImageViewer`, `SvgViewer`, `view_animated`, `render_frame`.
 
 ### 5. Eager viewer initialization
 
@@ -48,11 +39,11 @@ would be cleaner.
 
 ## Low Priority
 
-### 6. Scroll offset management
+### 6. ~~Scroll offset management~~ (done)
 
-Three separate `usize` variables (`content_scroll`, `info_scroll`, `help_scroll`)
-with repeated `scroll_mut()`/`current_scroll()` dispatch. A `ScrollState` struct
-with `get(mode)`/`set(mode, val)` methods would reduce boilerplate.
+Resolved: `ScrollState` struct with `get(mode)`/`get_mut(mode)` methods replaces
+the three separate variables and free-function dispatchers. Part of the `ui.rs`
+extraction (#1).
 
 ### 7. Color painting functions in info.rs
 

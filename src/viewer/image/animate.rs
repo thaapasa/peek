@@ -12,7 +12,7 @@ use crate::detect::FileType;
 use crate::theme::PeekThemeName;
 
 use super::render;
-use super::{Background, ImageMode};
+use super::ImageConfig;
 
 use crate::viewer::ui::{
     KeyAction, ViewMode, ViewerState, compose_status_line, with_alternate_screen,
@@ -141,22 +141,15 @@ const HELP_KEYS_ANIMATED: &[(&str, &str)] = &[
 // ---------------------------------------------------------------------------
 
 /// Interactive animated GIF/WebP viewer with frame-rate-driven playback.
-#[allow(clippy::too_many_arguments)]
 pub fn view_animated(
     path: &Path,
     file_type: &FileType,
     frames: Vec<AnimFrame>,
-    mode: ImageMode,
-    forced_width: u32,
-    background: Background,
-    margin: u32,
+    config: ImageConfig,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
-        run_animation_loop(
-            stdout, path, file_type, &frames,
-            mode, forced_width, background, margin, initial_theme,
-        )
+        run_animation_loop(stdout, path, file_type, &frames, config, initial_theme)
     })
 }
 
@@ -164,23 +157,19 @@ pub fn view_animated(
 // Animation event loop
 // ---------------------------------------------------------------------------
 
-#[allow(clippy::too_many_arguments)]
 fn run_animation_loop(
     stdout: &mut io::Stdout,
     path: &Path,
     file_type: &FileType,
     frames: &[AnimFrame],
-    mode: ImageMode,
-    forced_width: u32,
-    mut background: Background,
-    margin: u32,
+    mut config: ImageConfig,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
     let mut playing = true;
     let mut current_frame: usize = 0;
     let frame_count = frames.len();
 
-    let content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
+    let content_lines = render_frame(&frames[current_frame], &config);
     let mut state = ViewerState::new(path, file_type, initial_theme, content_lines, HELP_KEYS_ANIMATED)?;
 
     let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
@@ -230,7 +219,7 @@ fn run_animation_loop(
                         KeyCode::Char('n') | KeyCode::Right => {
                             current_frame = (current_frame + 1) % frame_count;
                             state.content_lines = render_frame(
-                                &frames[current_frame], mode, forced_width, background, margin,
+                                &frames[current_frame], &config,
                             );
                             last_advance = Instant::now();
                             redraw(stdout, &state, current_frame, playing)?;
@@ -239,16 +228,16 @@ fn run_animation_loop(
                         KeyCode::Char('N') | KeyCode::Left => {
                             current_frame = (current_frame + frame_count - 1) % frame_count;
                             state.content_lines = render_frame(
-                                &frames[current_frame], mode, forced_width, background, margin,
+                                &frames[current_frame], &config,
                             );
                             last_advance = Instant::now();
                             redraw(stdout, &state, current_frame, playing)?;
                         }
                         // Background cycling
                         KeyCode::Char('b') => {
-                            background = background.next();
+                            config.background = config.background.next();
                             state.content_lines = render_frame(
-                                &frames[current_frame], mode, forced_width, background, margin,
+                                &frames[current_frame], &config,
                             );
                             redraw(stdout, &state, current_frame, playing)?;
                         }
@@ -257,7 +246,7 @@ fn run_animation_loop(
                 },
                 Event::Resize(_, _) => {
                     state.content_lines = render_frame(
-                        &frames[current_frame], mode, forced_width, background, margin,
+                        &frames[current_frame], &config,
                     );
                     redraw(stdout, &state, current_frame, playing)?;
                 }
@@ -267,7 +256,7 @@ fn run_animation_loop(
             // Timeout: advance to next frame
             current_frame = (current_frame + 1) % frame_count;
             state.content_lines = render_frame(
-                &frames[current_frame], mode, forced_width, background, margin,
+                &frames[current_frame], &config,
             );
             last_advance = Instant::now();
             if state.view_mode == ViewMode::Content {
@@ -281,33 +270,27 @@ fn run_animation_loop(
 // Frame rendering
 // ---------------------------------------------------------------------------
 
-fn render_frame(
-    frame: &AnimFrame,
-    mode: ImageMode,
-    forced_width: u32,
-    bg: Background,
-    margin: u32,
-) -> Vec<String> {
+fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
     use super::glyph_atlas::{CELL_H, CELL_W};
 
     let mut term = render::TermSize::detect();
     term.rows = term.rows.saturating_sub(1);
-    let img = render::add_margin(frame.image.clone(), margin);
+    let img = render::add_margin(frame.image.clone(), config.margin);
     let (img_w, img_h) = img.dimensions();
-    let (cols, rows) = render::contain_size(img_w, img_h, term, forced_width);
+    let (cols, rows) = render::contain_size(img_w, img_h, term, config.width);
 
     // Resize to target resolution before compositing so checkerboard
     // aligns to the glyph grid.
-    let (px_w, px_h) = match mode {
-        ImageMode::Ascii => (cols, rows),
+    let (px_w, px_h) = match config.mode {
+        super::ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
     let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
-    let img = render::composite_with_bg(img, bg);
+    let img = render::composite_with_bg(img, config.background);
 
-    match mode {
-        ImageMode::Ascii => render::render_density(&img, cols, rows),
-        _ => render::render_block_color(&img, cols, rows, mode),
+    match config.mode {
+        super::ImageMode::Ascii => render::render_density(&img, cols, rows),
+        _ => render::render_block_color(&img, cols, rows, config.mode),
     }
 }
 

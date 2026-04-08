@@ -71,13 +71,17 @@ impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
         let theme = Rc::new(ThemeManager::new(args.theme));
         let peek_theme = theme.peek_theme().clone();
-        let image_mode = image::ImageMode::from_str(&args.image_mode);
-        let background = image::Background::from_str(&args.background);
+        let img_config = image::ImageConfig {
+            mode: image::ImageMode::from_str(&args.image_mode),
+            width: args.width,
+            background: image::Background::from_str(&args.background),
+            margin: args.margin,
+        };
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
             structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme), args.raw),
-            image_viewer: image::ImageViewer::new(args.width, image_mode, background, args.margin, args.theme),
-            svg_viewer: image::SvgViewer::new(args.width, image_mode, background, args.margin, args.theme, Rc::clone(&theme), args.raw),
+            image_viewer: image::ImageViewer::new(img_config, args.theme),
+            svg_viewer: image::SvgViewer::new(img_config, args.theme, Rc::clone(&theme), args.raw),
             text_viewer: text::TextViewer,
             theme_manager: theme,
             forced_language: args.language.clone(),
