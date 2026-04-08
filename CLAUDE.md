@@ -43,6 +43,7 @@ themes/
   dark-2026.tmTheme    — VS Code Dark 2026-inspired theme
   vivid-dark.tmTheme   — High-contrast vivid dark theme
 docs/
+  architecture.md      — Design, data flow, key abstractions, extension guide
   features.md          — Feature specification and status tracking
   conventions.md       — Coding conventions
 ```
@@ -60,6 +61,7 @@ See [docs/conventions.md](docs/conventions.md) for coding conventions.
 Keep documentation up to date when making changes. In particular:
 
 - **README.md** — project overview, feature summary, usage examples
+- **docs/architecture.md** — design, data flow, key abstractions, how to extend
 - **docs/features.md** — feature specification and implementation status
 - **docs/conventions.md** — coding conventions and patterns
 - **CLAUDE.md** — architecture map (if files/modules are added, moved, or removed)
