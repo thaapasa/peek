@@ -47,6 +47,10 @@ docs/
   conventions.md       — Coding conventions
 ```
 
+## Workflow
+
+- **Do not commit unless explicitly asked.** The user decides when and what to commit.
+
 ## Conventions
 
 See [docs/conventions.md](docs/conventions.md) for coding conventions.
