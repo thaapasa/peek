@@ -21,14 +21,15 @@ src/
   main.rs              — CLI entry point (clap), file type dispatch
   viewer/
     mod.rs             — Viewer trait, Registry, highlight_lines helper
-    interactive.rs     — Generic interactive viewer (alternate screen, scrolling, keys)
+    ui.rs              — Shared viewer UI: ViewerState, ScrollState, key handling, drawing
+    interactive.rs     — Static content interactive viewer (text, code, structured data)
     syntax.rs          — Syntax-highlighted source code (syntect)
     structured.rs      — JSON/YAML/TOML/XML pretty-print + syntax highlight
     text.rs            — Plain text passthrough
     image/
       mod.rs           — Image viewer (interactive + piped)
       render.rs        — Image → glyph-matched ASCII art with true color
-      animate.rs       — Animated GIF playback with frame-rate-driven event loop
+      animate.rs       — Animated GIF/WebP playback with frame-rate-driven event loop
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering

@@ -1,26 +1,42 @@
 use std::cell::Cell;
-use std::io::{self, Write};
+use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
-use crossterm::{
-    cursor,
-    event::{self, Event, KeyCode, KeyModifiers},
-    execute,
-    terminal::{self, ClearType},
-};
+use crossterm::event::{self, Event, KeyCode};
+use crossterm::terminal;
+use syntect::highlighting::Color;
 
 use crate::detect::FileType;
-use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+use crate::theme::PeekThemeName;
 use crate::viewer::image::Background;
+use crate::viewer::ui::{
+    KeyAction, ViewerState, compose_status_line, with_alternate_screen,
+};
 
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum ViewMode {
-    Content,
-    Info,
-    Help,
-}
+// ---------------------------------------------------------------------------
+// Help keys for the generic interactive viewer
+// ---------------------------------------------------------------------------
+
+const HELP_KEYS: &[(&str, &str)] = &[
+    ("q / Esc", "Quit"),
+    ("Up / k", "Scroll up"),
+    ("Down / j", "Scroll down"),
+    ("PgUp / PgDn", "Page scroll"),
+    ("Space", "Page down"),
+    ("Home / End", "Top / bottom"),
+    ("Tab", "Toggle content / file info"),
+    ("i", "File info"),
+    ("h / ?", "Toggle help"),
+    ("t", "Next theme"),
+    ("r", "Toggle raw / pretty"),
+    ("b", "Cycle background (images)"),
+];
+
+// ---------------------------------------------------------------------------
+// Entry points
+// ---------------------------------------------------------------------------
 
 /// Generic interactive viewer with alternate screen, scrolling, event loop,
 /// Tab/i view switching, theme cycling, and help screen.
@@ -50,36 +66,17 @@ pub fn view_interactive_with_bg(
     background: Option<Rc<Cell<Background>>>,
     render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
-    let mut stdout = io::stdout();
-
-    execute!(
-        stdout,
-        terminal::EnterAlternateScreen,
-        cursor::MoveTo(0, 0),
-        cursor::Hide,
-    )?;
-    terminal::enable_raw_mode()?;
-
-    let result = run_event_loop(
-        &mut stdout,
-        path,
-        file_type,
-        theme_name,
-        rerender_on_resize,
-        pretty,
-        background,
-        &render_content,
-    );
-
-    terminal::disable_raw_mode()?;
-    execute!(
-        stdout,
-        cursor::Show,
-        terminal::LeaveAlternateScreen,
-    )?;
-
-    result
+    with_alternate_screen(|stdout| {
+        run_event_loop(
+            stdout, path, file_type, theme_name,
+            rerender_on_resize, pretty, background, &render_content,
+        )
+    })
 }
+
+// ---------------------------------------------------------------------------
+// Event loop
+// ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
 fn run_event_loop(
@@ -92,237 +89,68 @@ fn run_event_loop(
     background: Option<Rc<Cell<Background>>>,
     render_content: &dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
-    let mut view_mode = ViewMode::Content;
-    let mut current_theme = initial_theme;
-    let mut peek_theme = make_peek_theme(current_theme);
     let mut pretty = initial_pretty;
+    let content_lines = render_content(initial_theme, pretty)?;
+    let mut state = ViewerState::new(path, file_type, initial_theme, content_lines, HELP_KEYS)?;
 
-    let filename = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("?");
+    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
 
-    // Render initial content
-    let mut content_lines = render_content(current_theme, pretty)?;
-
-    // Pre-compute file info and help lines
-    let file_info = crate::info::gather(path, file_type)?;
-    let mut info_lines = crate::info::render(&file_info, &peek_theme);
-    let mut help_lines = render_help_lines(&peek_theme, current_theme);
-
-    // Per-view scroll offsets
-    let mut content_scroll: usize = 0;
-    let mut info_scroll: usize = 0;
-    let mut help_scroll: usize = 0;
-
-    let redraw = |stdout: &mut io::Stdout,
-                  mode: ViewMode,
-                  scroll: usize,
-                  content: &[String],
-                  info: &[String],
-                  help: &[String],
-                  theme: &PeekTheme,
-                  theme_name: PeekThemeName|
-     -> Result<()> {
-        let status = render_status_line(filename, mode, theme_name, theme);
-        draw(stdout, mode, content, info, help, scroll, &status)
+    let redraw = |stdout: &mut io::Stdout, state: &ViewerState| -> Result<()> {
+        let status = render_status_line(filename, state);
+        state.draw(stdout, &status)
     };
 
-    redraw(
-        stdout, view_mode, content_scroll,
-        &content_lines, &info_lines, &help_lines,
-        &peek_theme, current_theme,
-    )?;
+    redraw(stdout, &state)?;
 
     loop {
         match event::read()? {
-            Event::Key(key) => match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    return Ok(());
+            Event::Key(key) => match state.handle_key(key) {
+                KeyAction::Quit => return Ok(()),
+                KeyAction::Redraw => {
+                    redraw(stdout, &state)?;
                 }
-
-                // View switching
-                KeyCode::Tab => {
-                    view_mode = match view_mode {
-                        ViewMode::Content => ViewMode::Info,
-                        ViewMode::Info | ViewMode::Help => ViewMode::Content,
-                    };
-                    let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    redraw(
-                        stdout, view_mode, scroll,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
+                KeyAction::ThemeChanged => {
+                    state.content_lines = render_content(state.current_theme, pretty)?;
+                    redraw(stdout, &state)?;
                 }
-                KeyCode::Char('i') => {
-                    if view_mode != ViewMode::Info {
-                        view_mode = ViewMode::Info;
-                        redraw(
-                            stdout, view_mode, info_scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme,
-                        )?;
+                KeyAction::Unhandled(key) => match key.code {
+                    // Raw / pretty-print toggle
+                    KeyCode::Char('r') => {
+                        pretty = !pretty;
+                        state.content_lines = render_content(state.current_theme, pretty)?;
+                        state.scroll.reset_content();
+                        redraw(stdout, &state)?;
                     }
-                }
-                KeyCode::Char('h') | KeyCode::Char('?') => {
-                    view_mode = if view_mode == ViewMode::Help {
-                        ViewMode::Content
-                    } else {
-                        ViewMode::Help
-                    };
-                    let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    redraw(
-                        stdout, view_mode, scroll,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-
-                // Theme cycling
-                KeyCode::Char('t') => {
-                    current_theme = current_theme.next();
-                    peek_theme = make_peek_theme(current_theme);
-                    content_lines = render_content(current_theme, pretty)?;
-                    info_lines = crate::info::render(&file_info, &peek_theme);
-                    help_lines = render_help_lines(&peek_theme, current_theme);
-                    let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    redraw(
-                        stdout, view_mode, scroll,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-
-                // Raw / pretty-print toggle
-                KeyCode::Char('r') => {
-                    pretty = !pretty;
-                    content_lines = render_content(current_theme, pretty)?;
-                    content_scroll = 0;
-                    redraw(
-                        stdout, view_mode, content_scroll,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-
-                // Background cycling (image/SVG viewers only)
-                KeyCode::Char('b') => {
-                    if let Some(ref bg_cell) = background {
-                        bg_cell.set(bg_cell.get().next());
-                        content_lines = render_content(current_theme, pretty)?;
-                        content_scroll = 0;
-                        redraw(
-                            stdout, view_mode, content_scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme,
-                        )?;
+                    // Background cycling (image/SVG viewers only)
+                    KeyCode::Char('b') => {
+                        if let Some(ref bg_cell) = background {
+                            bg_cell.set(bg_cell.get().next());
+                            state.content_lines = render_content(state.current_theme, pretty)?;
+                            state.scroll.reset_content();
+                            redraw(stdout, &state)?;
+                        }
                     }
-                }
-
-                // Scrolling
-                KeyCode::Up | KeyCode::Char('k') => {
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = s.saturating_sub(1);
-                    redraw(
-                        stdout, view_mode, *s,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = content_rows();
-                    let max = lines.len().saturating_sub(rows);
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = (*s + 1).min(max);
-                    redraw(
-                        stdout, view_mode, *s,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-                KeyCode::PageUp => {
-                    let rows = content_rows();
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = s.saturating_sub(rows.saturating_sub(1));
-                    redraw(
-                        stdout, view_mode, *s,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-                KeyCode::PageDown | KeyCode::Char(' ') => {
-                    let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = content_rows();
-                    let max = lines.len().saturating_sub(rows);
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = (*s + rows.saturating_sub(1)).min(max);
-                    redraw(
-                        stdout, view_mode, *s,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-                KeyCode::Home => {
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = 0;
-                    redraw(
-                        stdout, view_mode, 0,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-                KeyCode::End => {
-                    let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                    let rows = content_rows();
-                    let max = lines.len().saturating_sub(rows);
-                    let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                    *s = max;
-                    redraw(
-                        stdout, view_mode, max,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme,
-                    )?;
-                }
-
-                _ => {}
+                    _ => {}
+                },
             },
             Event::Resize(_, _) => {
                 if rerender_on_resize {
-                    content_lines = render_content(current_theme, pretty)?;
+                    state.content_lines = render_content(state.current_theme, pretty)?;
                 }
-                let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                redraw(
-                    stdout, view_mode, scroll,
-                    &content_lines, &info_lines, &help_lines,
-                    &peek_theme, current_theme,
-                )?;
+                redraw(stdout, &state)?;
             }
             _ => {}
         }
     }
 }
 
-impl ViewMode {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            ViewMode::Content => "Content",
-            ViewMode::Info => "Info",
-            ViewMode::Help => "Help",
-        }
-    }
-}
+// ---------------------------------------------------------------------------
+// Status line
+// ---------------------------------------------------------------------------
 
-fn render_status_line(
-    filename: &str,
-    mode: ViewMode,
-    theme_name: PeekThemeName,
-    theme: &PeekTheme,
-) -> String {
-    use syntect::highlighting::Color;
+fn render_status_line(filename: &str, state: &ViewerState) -> String {
+    let theme = &state.peek_theme;
 
-    // Foreground-only escape that won't reset the background
     let fg = |text: &str, color: Color| -> String {
         format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
     };
@@ -331,9 +159,9 @@ fn render_status_line(
         " {} {} {} {} {}",
         fg(filename, theme.accent),
         fg("\u{2502}", theme.muted),
-        fg(mode.label(), theme.label),
+        fg(state.view_mode.label(), theme.label),
         fg("\u{2502}", theme.muted),
-        fg(theme_name.cli_name(), theme.muted),
+        fg(state.current_theme.cli_name(), theme.muted),
     );
 
     let hints = format!(
@@ -351,236 +179,4 @@ fn render_status_line(
         bg.r, bg.g, bg.b,
         compose_status_line(&left, &hints, cols),
     )
-}
-
-/// Compose a status line from left and right parts, padding or truncating to fit `cols`.
-/// Drops hints first, then truncates left if still too wide.
-pub(crate) fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
-    let left_w = strip_ansi_width(left);
-    let hints_w = strip_ansi_width(hints);
-
-    if left_w + hints_w <= cols {
-        // Both fit — pad the gap
-        let gap = cols.saturating_sub(left_w + hints_w);
-        format!("{}{}{}", left, " ".repeat(gap), hints)
-    } else if left_w < cols {
-        // Left fits, truncate hints to fill remaining space
-        let remaining = cols.saturating_sub(left_w);
-        let truncated_hints = truncate_ansi(hints, remaining);
-        let hints_actual = strip_ansi_width(&truncated_hints);
-        let pad = cols.saturating_sub(left_w + hints_actual);
-        format!("{}{}{}", left, " ".repeat(pad), truncated_hints)
-    } else {
-        // Left alone overflows — truncate it, no hints
-        truncate_ansi(left, cols)
-    }
-}
-
-/// Count the visible character width of a string, ignoring ANSI escape sequences.
-pub(crate) fn strip_ansi_width(s: &str) -> usize {
-    let mut width = 0;
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if c == '\x1b' {
-            in_escape = true;
-        } else {
-            width += 1;
-        }
-    }
-    width
-}
-
-/// Truncate a string containing ANSI escapes to at most `max_width` visible characters.
-pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut width = 0;
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            result.push(c);
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if c == '\x1b' {
-            in_escape = true;
-            result.push(c);
-        } else {
-            if width >= max_width {
-                break;
-            }
-            result.push(c);
-            width += 1;
-        }
-    }
-    result
-}
-
-pub(crate) fn make_peek_theme(name: PeekThemeName) -> PeekTheme {
-    let syntect_theme = load_embedded_theme(name.tmtheme_source());
-    PeekTheme::from_syntect(&syntect_theme)
-}
-
-pub(crate) fn terminal_rows() -> usize {
-    terminal::size().map(|(_, h)| h as usize).unwrap_or(24)
-}
-
-pub(crate) fn current_scroll(
-    mode: ViewMode,
-    content: usize,
-    info: usize,
-    help: usize,
-) -> usize {
-    match mode {
-        ViewMode::Content => content,
-        ViewMode::Info => info,
-        ViewMode::Help => help,
-    }
-}
-
-pub(crate) fn scroll_mut<'a>(
-    mode: ViewMode,
-    content: &'a mut usize,
-    info: &'a mut usize,
-    help: &'a mut usize,
-) -> &'a mut usize {
-    match mode {
-        ViewMode::Content => content,
-        ViewMode::Info => info,
-        ViewMode::Help => help,
-    }
-}
-
-pub(crate) fn lines_for<'a>(
-    mode: ViewMode,
-    content: &'a [String],
-    info: &'a [String],
-    help: &'a [String],
-) -> &'a [String] {
-    match mode {
-        ViewMode::Content => content,
-        ViewMode::Info => info,
-        ViewMode::Help => help,
-    }
-}
-
-/// Visible rows available for content (total rows minus status line).
-pub(crate) fn content_rows() -> usize {
-    terminal_rows().saturating_sub(1)
-}
-
-pub(crate) fn draw(
-    stdout: &mut io::Stdout,
-    view_mode: ViewMode,
-    content_lines: &[String],
-    info_lines: &[String],
-    help_lines: &[String],
-    scroll: usize,
-    status: &str,
-) -> Result<()> {
-    let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
-    let rows = (total_rows as usize).saturating_sub(1); // reserve last row for status
-
-    // Reset all attributes before clearing so the clear doesn't
-    // fill the screen with a leftover background color.
-    stdout.write_all(b"\x1b[0m")?;
-    execute!(
-        stdout,
-        terminal::Clear(ClearType::All),
-        cursor::MoveTo(0, 0),
-    )?;
-
-    let lines = lines_for(view_mode, content_lines, info_lines, help_lines);
-    let start = scroll.min(lines.len());
-    let end = (start + rows).min(lines.len());
-    for (i, line) in lines[start..end].iter().enumerate() {
-        if i > 0 {
-            stdout.write_all(b"\r\n")?;
-        }
-        stdout.write_all(line.as_bytes())?;
-    }
-
-    // Reset all attributes, then draw the status line on the last row
-    stdout.write_all(b"\x1b[0m")?;
-    execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
-    stdout.write_all(status.as_bytes())?;
-
-    stdout.flush()?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Inline help renderer
-// ---------------------------------------------------------------------------
-
-const HELP_KEYS: &[(&str, &str)] = &[
-    ("q / Esc", "Quit"),
-    ("Up / k", "Scroll up"),
-    ("Down / j", "Scroll down"),
-    ("PgUp / PgDn", "Page scroll"),
-    ("Space", "Page down"),
-    ("Home / End", "Top / bottom"),
-    ("Tab", "Toggle content / file info"),
-    ("i", "File info"),
-    ("h / ?", "Toggle help"),
-    ("t", "Next theme"),
-    ("r", "Toggle raw / pretty"),
-    ("b", "Cycle background (images)"),
-];
-
-fn render_help_lines(theme: &PeekTheme, current_theme: PeekThemeName) -> Vec<String> {
-    render_help_with_keys(theme, current_theme, HELP_KEYS)
-}
-
-pub(crate) fn render_help_with_keys(
-    theme: &PeekTheme,
-    current_theme: PeekThemeName,
-    keys: &[(&str, &str)],
-) -> Vec<String> {
-    let mut lines = Vec::new();
-
-    // Section header
-    let rule = "\u{2500}".repeat(28);
-    lines.push(format!(
-        "{} {} {}",
-        theme.paint_muted("\u{2500}\u{2500}"),
-        theme.paint_heading("Keyboard Shortcuts"),
-        theme.paint_muted(&rule),
-    ));
-
-    // Key overhead for alignment (ANSI codes in paint_label)
-    let sample_painted = theme.paint_label("x");
-    let overhead = sample_painted.len() - 1;
-    let key_width = 14 + overhead;
-
-    for (key, desc) in keys {
-        lines.push(format!(
-            "  {:<width$}{}",
-            theme.paint_label(key),
-            theme.paint_muted(desc),
-            width = key_width,
-        ));
-    }
-
-    lines.push(String::new());
-
-    // Theme info
-    let rule2 = "\u{2500}".repeat(35);
-    lines.push(format!(
-        "{} {} {}",
-        theme.paint_muted("\u{2500}\u{2500}"),
-        theme.paint_heading("Theme"),
-        theme.paint_muted(&rule2),
-    ));
-    lines.push(format!(
-        "  {:<width$}{}",
-        theme.paint_label("Active"),
-        theme.paint_value(current_theme.cli_name()),
-        width = key_width,
-    ));
-
-    lines
 }

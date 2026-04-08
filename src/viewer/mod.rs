@@ -15,6 +15,7 @@ pub mod interactive;
 pub mod structured;
 mod syntax;
 mod text;
+pub(crate) mod ui;
 
 /// Closure type for theme-aware content rendering.
 /// The `bool` parameter is `pretty`: true = pretty-print structured data, false = raw.

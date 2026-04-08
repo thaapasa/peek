@@ -3,23 +3,19 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use crossterm::{
-    cursor, execute,
-    event::{self, Event, KeyCode, KeyModifiers},
-    terminal,
-};
+use crossterm::event::{self, Event, KeyCode};
+use crossterm::terminal;
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 use syntect::highlighting::Color;
 
 use crate::detect::FileType;
-use crate::theme::{PeekTheme, PeekThemeName};
+use crate::theme::PeekThemeName;
 
 use super::render;
 use super::{Background, ImageMode};
 
-use crate::viewer::interactive::{
-    ViewMode, compose_status_line, content_rows, current_scroll, draw, lines_for,
-    make_peek_theme, render_help_with_keys, scroll_mut,
+use crate::viewer::ui::{
+    KeyAction, ViewMode, ViewerState, compose_status_line, with_alternate_screen,
 };
 
 /// A single decoded animation frame with its display duration.
@@ -27,6 +23,10 @@ pub struct AnimFrame {
     pub image: DynamicImage,
     pub delay: Duration,
 }
+
+// ---------------------------------------------------------------------------
+// Frame decoding
+// ---------------------------------------------------------------------------
 
 /// Decode all frames from an animated image (GIF or WebP).
 /// Returns `None` if the file is not animated or has ≤1 frame.
@@ -118,19 +118,29 @@ fn webp_frame_count(path: &Path) -> Option<usize> {
     if count > 1 { Some(count) } else { None }
 }
 
+// ---------------------------------------------------------------------------
+// Help keys for the animation viewer
+// ---------------------------------------------------------------------------
+
 const HELP_KEYS_ANIMATED: &[(&str, &str)] = &[
     ("q / Esc", "Quit"),
     ("p", "Play / pause"),
     ("n / Right", "Next frame"),
     ("N / Left", "Previous frame"),
     ("b", "Cycle background"),
+    ("Up / Down", "Scroll (info/help)"),
+    ("Home / End", "Top / bottom"),
     ("Tab", "Toggle content / file info"),
     ("i", "File info"),
     ("h / ?", "Toggle help"),
     ("t", "Next theme"),
 ];
 
-/// Interactive animated GIF viewer with frame-rate-driven playback.
+// ---------------------------------------------------------------------------
+// Interactive animated viewer
+// ---------------------------------------------------------------------------
+
+/// Interactive animated GIF/WebP viewer with frame-rate-driven playback.
 #[allow(clippy::too_many_arguments)]
 pub fn view_animated(
     path: &Path,
@@ -142,37 +152,17 @@ pub fn view_animated(
     margin: u32,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
-    let mut stdout = io::stdout();
-
-    execute!(
-        stdout,
-        terminal::EnterAlternateScreen,
-        cursor::MoveTo(0, 0),
-        cursor::Hide,
-    )?;
-    terminal::enable_raw_mode()?;
-
-    let result = run_animation_loop(
-        &mut stdout,
-        path,
-        file_type,
-        &frames,
-        mode,
-        forced_width,
-        background,
-        margin,
-        initial_theme,
-    );
-
-    terminal::disable_raw_mode()?;
-    execute!(
-        stdout,
-        cursor::Show,
-        terminal::LeaveAlternateScreen,
-    )?;
-
-    result
+    with_alternate_screen(|stdout| {
+        run_animation_loop(
+            stdout, path, file_type, &frames,
+            mode, forced_width, background, margin, initial_theme,
+        )
+    })
 }
+
+// ---------------------------------------------------------------------------
+// Animation event loop
+// ---------------------------------------------------------------------------
 
 #[allow(clippy::too_many_arguments)]
 fn run_animation_loop(
@@ -186,254 +176,110 @@ fn run_animation_loop(
     margin: u32,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
-    let mut view_mode = ViewMode::Content;
-    let mut current_theme = initial_theme;
-    let mut peek_theme = make_peek_theme(current_theme);
     let mut playing = true;
     let mut current_frame: usize = 0;
     let frame_count = frames.len();
 
-    let filename = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("?");
+    let content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
+    let mut state = ViewerState::new(path, file_type, initial_theme, content_lines, HELP_KEYS_ANIMATED)?;
 
-    // Render initial frame
-    let mut content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
-
-    // File info and help
-    let file_info = crate::info::gather(path, file_type)?;
-    let mut info_lines = crate::info::render(&file_info, &peek_theme);
-    let mut help_lines = render_help_with_keys(&peek_theme, current_theme, HELP_KEYS_ANIMATED);
-
-    // Scroll offsets
-    let mut content_scroll: usize = 0;
-    let mut info_scroll: usize = 0;
-    let mut help_scroll: usize = 0;
+    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
 
     let redraw = |stdout: &mut io::Stdout,
-                  mode: ViewMode,
-                  scroll: usize,
-                  content: &[String],
-                  info: &[String],
-                  help: &[String],
-                  theme: &PeekTheme,
-                  theme_name: PeekThemeName,
+                  state: &ViewerState,
                   frame_idx: usize,
                   playing: bool|
      -> Result<()> {
-        let status = render_anim_status_line(
-            filename, mode, theme_name, theme, frame_idx, frame_count, playing,
-        );
-        draw(stdout, mode, content, info, help, scroll, &status)
+        let status = render_anim_status_line(filename, state, frame_idx, frame_count, playing);
+        state.draw(stdout, &status)
     };
 
-    redraw(
-        stdout, view_mode, content_scroll,
-        &content_lines, &info_lines, &help_lines,
-        &peek_theme, current_theme, current_frame, playing,
-    )?;
+    redraw(stdout, &state, current_frame, playing)?;
 
     let mut last_advance = Instant::now();
 
     loop {
-        let timeout = if playing && view_mode == ViewMode::Content {
+        let timeout = if playing && state.view_mode == ViewMode::Content {
             let elapsed = last_advance.elapsed();
-            let frame_delay = frames[current_frame].delay;
-            frame_delay.saturating_sub(elapsed)
+            frames[current_frame].delay.saturating_sub(elapsed)
         } else {
             Duration::from_secs(86400)
         };
 
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) => match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
-                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        return Ok(());
+                Event::Key(key) => match state.handle_key(key) {
+                    KeyAction::Quit => return Ok(()),
+                    KeyAction::Redraw => {
+                        redraw(stdout, &state, current_frame, playing)?;
                     }
-
-                    // Play/pause
-                    KeyCode::Char('p') => {
-                        playing = !playing;
-                        if playing {
+                    KeyAction::ThemeChanged => {
+                        // Animation content doesn't depend on theme — just redraw
+                        redraw(stdout, &state, current_frame, playing)?;
+                    }
+                    KeyAction::Unhandled(key) => match key.code {
+                        // Play/pause
+                        KeyCode::Char('p') => {
+                            playing = !playing;
+                            if playing {
+                                last_advance = Instant::now();
+                            }
+                            redraw(stdout, &state, current_frame, playing)?;
+                        }
+                        // Next frame
+                        KeyCode::Char('n') | KeyCode::Right => {
+                            current_frame = (current_frame + 1) % frame_count;
+                            state.content_lines = render_frame(
+                                &frames[current_frame], mode, forced_width, background, margin,
+                            );
                             last_advance = Instant::now();
+                            redraw(stdout, &state, current_frame, playing)?;
                         }
-                        redraw(
-                            stdout, view_mode,
-                            current_scroll(view_mode, content_scroll, info_scroll, help_scroll),
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // Next frame
-                    KeyCode::Char('n') | KeyCode::Right => {
-                        current_frame = (current_frame + 1) % frame_count;
-                        content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
-                        last_advance = Instant::now();
-                        redraw(
-                            stdout, view_mode, content_scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // Previous frame
-                    KeyCode::Char('N') | KeyCode::Left => {
-                        current_frame = (current_frame + frame_count - 1) % frame_count;
-                        content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
-                        last_advance = Instant::now();
-                        redraw(
-                            stdout, view_mode, content_scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // Background cycling
-                    KeyCode::Char('b') => {
-                        background = background.next();
-                        content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
-                        redraw(
-                            stdout, view_mode, content_scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // View switching
-                    KeyCode::Tab => {
-                        view_mode = match view_mode {
-                            ViewMode::Content => ViewMode::Info,
-                            ViewMode::Info | ViewMode::Help => ViewMode::Content,
-                        };
-                        let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                        redraw(
-                            stdout, view_mode, scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-                    KeyCode::Char('i') => {
-                        if view_mode != ViewMode::Info {
-                            view_mode = ViewMode::Info;
-                            redraw(
-                                stdout, view_mode, info_scroll,
-                                &content_lines, &info_lines, &help_lines,
-                                &peek_theme, current_theme, current_frame, playing,
-                            )?;
+                        // Previous frame
+                        KeyCode::Char('N') | KeyCode::Left => {
+                            current_frame = (current_frame + frame_count - 1) % frame_count;
+                            state.content_lines = render_frame(
+                                &frames[current_frame], mode, forced_width, background, margin,
+                            );
+                            last_advance = Instant::now();
+                            redraw(stdout, &state, current_frame, playing)?;
                         }
-                    }
-                    KeyCode::Char('h') | KeyCode::Char('?') => {
-                        view_mode = if view_mode == ViewMode::Help {
-                            ViewMode::Content
-                        } else {
-                            ViewMode::Help
-                        };
-                        let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                        redraw(
-                            stdout, view_mode, scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // Theme cycling
-                    KeyCode::Char('t') => {
-                        current_theme = current_theme.next();
-                        peek_theme = make_peek_theme(current_theme);
-                        info_lines = crate::info::render(&file_info, &peek_theme);
-                        help_lines = render_help_with_keys(&peek_theme, current_theme, HELP_KEYS_ANIMATED);
-                        let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                        redraw(
-                            stdout, view_mode, scroll,
-                            &content_lines, &info_lines, &help_lines,
-                            &peek_theme, current_theme, current_frame, playing,
-                        )?;
-                    }
-
-                    // Scrolling (for info/help views)
-                    KeyCode::Up | KeyCode::Char('k') => {
-                        if view_mode != ViewMode::Content {
-                            let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                            *s = s.saturating_sub(1);
-                            redraw(
-                                stdout, view_mode, *s,
-                                &content_lines, &info_lines, &help_lines,
-                                &peek_theme, current_theme, current_frame, playing,
-                            )?;
+                        // Background cycling
+                        KeyCode::Char('b') => {
+                            background = background.next();
+                            state.content_lines = render_frame(
+                                &frames[current_frame], mode, forced_width, background, margin,
+                            );
+                            redraw(stdout, &state, current_frame, playing)?;
                         }
-                    }
-                    KeyCode::Down | KeyCode::Char('j') => {
-                        if view_mode != ViewMode::Content {
-                            let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                            let rows = content_rows();
-                            let max = lines.len().saturating_sub(rows);
-                            let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                            *s = (*s + 1).min(max);
-                            redraw(
-                                stdout, view_mode, *s,
-                                &content_lines, &info_lines, &help_lines,
-                                &peek_theme, current_theme, current_frame, playing,
-                            )?;
-                        }
-                    }
-                    KeyCode::PageUp => {
-                        if view_mode != ViewMode::Content {
-                            let rows = content_rows();
-                            let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                            *s = s.saturating_sub(rows.saturating_sub(1));
-                            redraw(
-                                stdout, view_mode, *s,
-                                &content_lines, &info_lines, &help_lines,
-                                &peek_theme, current_theme, current_frame, playing,
-                            )?;
-                        }
-                    }
-                    KeyCode::PageDown | KeyCode::Char(' ') => {
-                        if view_mode != ViewMode::Content {
-                            let lines = lines_for(view_mode, &content_lines, &info_lines, &help_lines);
-                            let rows = content_rows();
-                            let max = lines.len().saturating_sub(rows);
-                            let s = scroll_mut(view_mode, &mut content_scroll, &mut info_scroll, &mut help_scroll);
-                            *s = (*s + rows.saturating_sub(1)).min(max);
-                            redraw(
-                                stdout, view_mode, *s,
-                                &content_lines, &info_lines, &help_lines,
-                                &peek_theme, current_theme, current_frame, playing,
-                            )?;
-                        }
-                    }
-
-                    _ => {}
+                        _ => {}
+                    },
                 },
                 Event::Resize(_, _) => {
-                    content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
-                    let scroll = current_scroll(view_mode, content_scroll, info_scroll, help_scroll);
-                    redraw(
-                        stdout, view_mode, scroll,
-                        &content_lines, &info_lines, &help_lines,
-                        &peek_theme, current_theme, current_frame, playing,
-                    )?;
+                    state.content_lines = render_frame(
+                        &frames[current_frame], mode, forced_width, background, margin,
+                    );
+                    redraw(stdout, &state, current_frame, playing)?;
                 }
                 _ => {}
             }
         } else {
             // Timeout: advance to next frame
             current_frame = (current_frame + 1) % frame_count;
-            content_lines = render_frame(&frames[current_frame], mode, forced_width, background, margin);
+            state.content_lines = render_frame(
+                &frames[current_frame], mode, forced_width, background, margin,
+            );
             last_advance = Instant::now();
-            if view_mode == ViewMode::Content {
-                redraw(
-                    stdout, view_mode, content_scroll,
-                    &content_lines, &info_lines, &help_lines,
-                    &peek_theme, current_theme, current_frame, playing,
-                )?;
+            if state.view_mode == ViewMode::Content {
+                redraw(stdout, &state, current_frame, playing)?;
             }
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Frame rendering
+// ---------------------------------------------------------------------------
 
 fn render_frame(
     frame: &AnimFrame,
@@ -465,15 +311,19 @@ fn render_frame(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Animation status line
+// ---------------------------------------------------------------------------
+
 fn render_anim_status_line(
     filename: &str,
-    mode: ViewMode,
-    theme_name: PeekThemeName,
-    theme: &PeekTheme,
+    state: &ViewerState,
     frame_idx: usize,
     frame_count: usize,
     playing: bool,
 ) -> String {
+    let theme = &state.peek_theme;
+
     let fg = |text: &str, color: Color| -> String {
         format!("\x1b[38;2;{};{};{}m{}", color.r, color.g, color.b, text)
     };
@@ -487,9 +337,9 @@ fn render_anim_status_line(
         fg("\u{2502}", theme.muted),
         fg(&frame_info, theme.label),
         fg("\u{2502}", theme.muted),
-        fg(mode.label(), theme.label),
+        fg(state.view_mode.label(), theme.label),
         fg("\u{2502}", theme.muted),
-        fg(theme_name.cli_name(), theme.muted),
+        fg(state.current_theme.cli_name(), theme.muted),
     );
 
     let hints = if playing {
