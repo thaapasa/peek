@@ -20,11 +20,11 @@ delegating common key handling to `ViewerState::handle_key()`.
 
 ## Medium Priority
 
-### 3. Home-grown XML pretty-printing
+### 3. ~~Home-grown XML pretty-printing~~ (done)
 
-`structured.rs` has hand-rolled XML indentation that doesn't handle CDATA,
-comments, or processing instructions. Since `quick-xml` is already an indirect
-dependency (via resvg), it could be used directly for proper formatting.
+Resolved: replaced hand-rolled XML indentation with `quick-xml` Reader/Writer
+which properly handles CDATA, comments, processing instructions, self-closing
+tags, and namespaces. `quick-xml` was already a direct dependency.
 
 ### 4. Parameter explosion for image rendering
 
