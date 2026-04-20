@@ -16,7 +16,10 @@ has three jobs:
 2. **`build`** — matrix of 5 targets, each built from the exact SHA from
    `prepare`:
    - `aarch64-apple-darwin` on `macos-14`
-   - `x86_64-apple-darwin` on `macos-13`
+   - `x86_64-apple-darwin` on `macos-14` (cross-compiled from aarch64 —
+     GitHub retired the free `macos-13` Intel runner, and macOS ships a
+     universal SDK so cross-compilation works out of the box with
+     `rustup target add`)
    - `x86_64-unknown-linux-gnu` on `ubuntu-24.04`
    - `aarch64-unknown-linux-gnu` on `ubuntu-24.04-arm`
    - `x86_64-pc-windows-msvc` on `windows-latest`
