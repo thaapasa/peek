@@ -248,16 +248,51 @@ fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
     Ok(sources)
 }
 
-/// Reopen fd 0 from `/dev/tty` so the interactive event loop can read keys
-/// after piped stdin has been consumed. No-op if `/dev/tty` is unavailable.
+/// Reopen fd 0 from the controlling terminal after piped stdin is consumed,
+/// so crossterm's event loop can read keystrokes. No-op if no TTY is available.
+///
+/// Uses `ttyname()` on stderr/stdout to resolve the actual device path (e.g.
+/// `/dev/ttys000`) rather than opening `/dev/tty`. On macOS, kqueue rejects
+/// `/dev/tty` with EINVAL when mio tries to register it — the magic routing
+/// device isn't pollable, but the real device node is.
+///
+/// Opened read+write because mio requires writable fds for interest
+/// registration, and crossterm uses fd 0 directly when `isatty(0)` is true.
 #[cfg(unix)]
 fn reopen_stdin_from_tty() {
     use std::os::unix::io::AsRawFd;
-    if let Ok(tty) = std::fs::File::open("/dev/tty") {
+
+    let tty_path = resolve_tty_path();
+    let open_result = tty_path
+        .as_deref()
+        .or(Some("/dev/tty"))
+        .and_then(|p| {
+            std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(p)
+                .ok()
+        });
+    if let Some(tty) = open_result {
         unsafe {
             libc::dup2(tty.as_raw_fd(), 0);
         }
     }
+}
+
+/// Resolve the controlling terminal's device path by calling `ttyname()` on
+/// stderr, then stdout. Returns `None` if neither is a TTY.
+#[cfg(unix)]
+fn resolve_tty_path() -> Option<String> {
+    for fd in [2, 1] {
+        unsafe {
+            let p = libc::ttyname(fd);
+            if !p.is_null() {
+                return Some(std::ffi::CStr::from_ptr(p).to_string_lossy().into_owned());
+            }
+        }
+    }
+    None
 }
 
 #[cfg(not(unix))]
