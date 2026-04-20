@@ -637,6 +637,20 @@ No usage, options, or theme listing is shown. Like `--help`, it respects
 **Status: Implemented.**
 
 
+## Distribution
+
+Release artifacts (prebuilt binaries) are published to GitHub Releases for
+macOS (`aarch64`, `x86_64`), Linux (`aarch64`, `x86_64`), and Windows
+(`x86_64`). A POSIX `install.sh` at the repo root fetches the right archive,
+verifies its SHA256, and installs `peek` to `$HOME/.local/bin` (or
+`$PEEK_INSTALL_DIR`). Windows users download the `.zip` manually. Releases
+are cut by dispatching `.github/workflows/release.yml`; the workflow reads
+the version from `Cargo.toml`, refuses to run if the corresponding `vX.Y.Z`
+tag already exists on `origin`, and creates+pushes the tag itself.
+
+**Status: Implemented.**
+
+
 ## Future / Optional Features
 
 ### Block Collapsing / Folding

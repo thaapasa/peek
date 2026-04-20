@@ -19,6 +19,42 @@ A modern file viewer for the terminal. Like `cat`, but it actually tries to show
 
 ## Install
 
+**macOS / Linux (recommended):**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
+```
+
+Installs the latest release into `~/.local/bin`. Override with
+`PEEK_VERSION=v0.1.0` to pin a version or `PEEK_INSTALL_DIR=/usr/local/bin`
+to install elsewhere. Supports `aarch64`/`x86_64` on both platforms. Because
+`curl` does not tag downloads with `com.apple.quarantine`, macOS runs the
+binary directly — no Gatekeeper prompt.
+
+**Manual download (macOS / Linux):**
+
+Grab the `.tar.gz` for your platform from the
+[Releases page](https://github.com/thaapasa/peek/releases), verify against
+the `.sha256` file, extract, and move `peek` onto your `PATH`. On macOS, if
+the browser quarantined the archive, clear Gatekeeper with:
+
+```sh
+xattr -d com.apple.quarantine peek
+```
+
+(or right-click → Open once in Finder).
+
+**Windows:**
+
+Download the `.zip` for `x86_64-pc-windows-msvc` from the
+[Releases page](https://github.com/thaapasa/peek/releases), extract it, and
+add the folder containing `peek.exe` to your `PATH`. Note: piping text into
+`peek.exe` on Windows renders once to stdout but does not open the
+interactive viewer (the Unix tty reopen trick has no Windows equivalent
+here yet).
+
+**From source (contributors):**
+
 ```sh
 cargo install --path .
 ```

@@ -47,6 +47,10 @@ docs/
   architecture.md      — Design, data flow, key abstractions, extension guide
   features.md          — Feature specification and status tracking
   conventions.md       — Coding conventions
+  release.md           — Release pipeline, install.sh, recovery from failed runs
+.github/workflows/
+  release.yml          — Manual-dispatch release workflow (5-target build matrix)
+install.sh             — POSIX installer for curl | sh on macOS/Linux
 ```
 
 ## Workflow
@@ -65,4 +69,5 @@ Keep documentation up to date when making changes. In particular:
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
 - **docs/features.md** — feature specification and implementation status
 - **docs/conventions.md** — coding conventions and patterns
+- **docs/release.md** — release pipeline and recovery procedures
 - **CLAUDE.md** — architecture map (if files/modules are added, moved, or removed)

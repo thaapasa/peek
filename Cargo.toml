@@ -2,8 +2,12 @@
 name = "peek"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
+authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
 description = "A modern file viewer with syntax highlighting, pretty-printing, and image rendering"
 license = "MIT"
+repository = "https://github.com/thaapasa/peek"
+homepage = "https://github.com/thaapasa/peek"
 
 [dependencies]
 # CLI framework with derive macros for self-documenting commands
