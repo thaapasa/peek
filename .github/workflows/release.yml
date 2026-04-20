@@ -16,7 +16,7 @@ jobs:
       previous_tag: ${{ steps.version.outputs.previous_tag }}
       sha: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -71,7 +71,7 @@ jobs:
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
@@ -113,7 +113,7 @@ jobs:
           "$hash  $stage.zip" | Out-File -Encoding ascii "dist/$stage.zip.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: peek-${{ matrix.target }}
           path: |
@@ -133,13 +133,13 @@ jobs:
       PREVIOUS_TAG: ${{ needs.prepare.outputs.previous_tag }}
       SHA: ${{ needs.prepare.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.sha }}
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           merge-multiple: true
@@ -176,7 +176,7 @@ jobs:
           echo "notes_path=$GITHUB_WORKSPACE/release-notes.md" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG }}
           name: peek ${{ env.TAG }}
