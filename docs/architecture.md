@@ -22,7 +22,10 @@ For the file map, see [CLAUDE.md](../CLAUDE.md). For coding rules, see
 CLI args (clap)
   |
   v
-detect::detect(path) --> FileType
+build_sources() --> Vec<InputSource>  (File paths, or buffered Stdin)
+  |
+  v
+detect::detect(source) --> FileType
   |
   v
 Registry::viewer_for(file_type) --> &dyn Viewer
@@ -32,6 +35,20 @@ Registry::viewer_for(file_type) --> &dyn Viewer
   |
   +-- Pipe? --> Viewer::render() --> pager::Output --> stdout
 ```
+
+### InputSource (`input.rs`)
+
+`InputSource` decouples "where data comes from" from "how it's displayed". The
+`File` variant holds a `PathBuf` and reads on demand; the `Stdin` variant holds
+pre-buffered bytes. All viewers take `&InputSource` and call `read_text()` or
+operate on the path (`source.path()`) — image and SVG viewers currently require
+a path and bail on stdin.
+
+When stdin is consumed (because `-` is passed or no args are given with a piped
+stdin), `main.rs` reopens fd 0 from `/dev/tty` so the interactive event loop
+can still read keystrokes. Stdin detection uses magic bytes (images, binary)
+followed by content sniffing (leading `{`/`[` → JSON, `<` → XML/SVG, `---` →
+YAML) in `detect::detect_bytes()`.
 
 ### TTY path (interactive)
 
@@ -56,7 +73,7 @@ or the built-in pager. No interactive state, no alternate screen.
 
 ```rust
 pub trait Viewer {
-    fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()>;
+    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut Output) -> Result<()>;
 }
 ```
 
@@ -131,7 +148,7 @@ The loop shares `ViewerState` with the static viewer for common key handling.
 Both event loops follow the same pattern:
 
 ```
-ViewerState::new(path, file_type, theme, content_lines, help_keys)
+ViewerState::new(source, file_type, theme, content_lines, help_keys)
   |
   v
 loop {

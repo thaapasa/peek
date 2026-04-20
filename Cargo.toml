@@ -41,6 +41,10 @@ kamadak-exif = "0.5"
 # Error handling
 anyhow = "1"
 
+# /dev/tty reopen after consuming piped stdin (Unix only)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 # Font rasterization for glyph atlas generation
 fontdue = "0.9"

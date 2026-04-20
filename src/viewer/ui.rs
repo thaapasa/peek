@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::path::Path;
 
 use anyhow::Result;
 use crossterm::{
@@ -12,7 +11,8 @@ use syntect::highlighting::Color;
 
 use crate::detect::FileType;
 use crate::info::FileInfo;
-use crate::theme::{PeekTheme, PeekThemeName, ANSI_RESET_BYTES, load_embedded_theme};
+use crate::input::InputSource;
+use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName, load_embedded_theme};
 
 // ---------------------------------------------------------------------------
 // View mode
@@ -104,14 +104,14 @@ pub(crate) struct ViewerState {
 
 impl ViewerState {
     pub(crate) fn new(
-        path: &Path,
+        source: &InputSource,
         file_type: &FileType,
         theme_name: PeekThemeName,
         content_lines: Vec<String>,
         help_keys: &'static [(&'static str, &'static str)],
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name);
-        let file_info = crate::info::gather(path, file_type)?;
+        let file_info = crate::info::gather(source, file_type)?;
         let info_lines = crate::info::render(&file_info, &peek_theme);
         let help_lines = render_help_with_keys(&peek_theme, theme_name, help_keys);
         Ok(Self {

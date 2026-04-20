@@ -1156,6 +1156,7 @@ dependencies = [
  "image",
  "infer",
  "kamadak-exif",
+ "libc",
  "minus",
  "quick-xml 0.37.5",
  "resvg",

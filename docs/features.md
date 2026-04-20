@@ -48,11 +48,23 @@ TTY → viewer, non-TTY → print).
 
 ### Input
 
-peek operates on a single file at a time. The file path is given as a positional
-argument. Reading from stdin is supported by passing `-` as the file path.
+peek accepts one or more file paths as positional arguments. Reading from stdin is
+supported: pass `-` explicitly, or pipe data in with no file arguments. Stdin content
+is auto-detected by magic bytes (images, binary) and content sniffing (JSON, YAML,
+XML/SVG); plain text falls back to `--language` for syntax highlighting.
 
-**Status: Partially implemented.** Single file works. Multiple files are supported
-sequentially. Stdin (`-`) is declared but not yet functional.
+| Scenario         | Stdin is TTY                     | Stdin is piped                    |
+|------------------|----------------------------------|-----------------------------------|
+| `peek` (no args) | Error: "no files specified"      | Read stdin, render                |
+| `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render                |
+| `peek file.rs`   | View file normally               | View file (stdin ignored)         |
+| `peek - file.rs` | Read stdin + view file           | Read stdin + view file            |
+
+After consuming piped stdin, peek reopens fd 0 from `/dev/tty` so the interactive
+viewer's keyboard input still works.
+
+**Status: Implemented** for text, source code, and structured data. Images and SVG
+from stdin are not yet supported (these still require a filesystem path).
 
 
 ## Supported File Types

@@ -1,4 +1,4 @@
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Read};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
@@ -7,9 +7,12 @@ use clap::Parser;
 mod detect;
 mod help;
 mod info;
+mod input;
 mod pager;
 mod theme;
 mod viewer;
+
+use input::InputSource;
 
 /// peek — a modern file viewer for the terminal.
 ///
@@ -19,7 +22,7 @@ mod viewer;
 #[derive(Parser, Debug)]
 #[command(name = "peek", about, long_about, disable_help_flag = true, disable_version_flag = true)]
 pub struct Args {
-    /// Files to view.
+    /// Files to view. Use `-` to read stdin.
     files: Vec<PathBuf>,
 
     /// Show themed help screen and exit
@@ -90,31 +93,28 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    if args.files.is_empty() {
-        bail!("no files specified; run `peek --help` for usage");
-    }
+    let sources = build_sources(&args)?;
 
     let is_tty = std::io::stdout().is_terminal();
     let use_pager = !args.print && is_tty;
 
     let viewers = viewer::Registry::new(&args)?;
 
-    // Collect files and their types
-    let files: Vec<_> = args
-        .files
-        .iter()
-        .map(|path| {
-            let file_type = detect::detect(path)?;
-            Ok((path.clone(), file_type))
+    // Detect file type for each source
+    let inputs: Vec<(InputSource, detect::FileType)> = sources
+        .into_iter()
+        .map(|source| {
+            let file_type = detect::detect(&source)?;
+            Ok((source, file_type))
         })
         .collect::<Result<Vec<_>>>()?;
 
-    // --info mode: show file metadata instead of content
+    // --info mode: show metadata instead of content
     if args.info {
         let mut output = pager::Output::new(&args)?;
-        for (path, file_type) in &files {
-            let file_info = info::gather(path, file_type)
-                .with_context(|| format!("failed to read info for {}", path.display()))?;
+        for (source, file_type) in &inputs {
+            let file_info = info::gather(source, file_type)
+                .with_context(|| format!("failed to read info for {}", source.name()))?;
             let lines = info::render(&file_info, viewers.peek_theme());
             for line in &lines {
                 output.write_line(line)?;
@@ -125,13 +125,13 @@ fn main() -> Result<()> {
     }
 
     if use_pager {
-        // Interactive TTY: each file gets its own interactive viewer
+        // Interactive TTY: each input gets its own interactive viewer
         // with Tab/i view switching between content and file info.
-        for (path, file_type) in &files {
+        for (source, file_type) in &inputs {
             if matches!(file_type, detect::FileType::Binary) {
                 // Binary files: print info and exit (no content to display)
-                let file_info = info::gather(path, file_type)
-                    .with_context(|| format!("failed to read info for {}", path.display()))?;
+                let file_info = info::gather(source, file_type)
+                    .with_context(|| format!("failed to read info for {}", source.name()))?;
                 let lines = info::render(&file_info, viewers.peek_theme());
                 for line in &lines {
                     println!("{line}");
@@ -140,39 +140,39 @@ fn main() -> Result<()> {
                 // Images re-render on resize for correct aspect ratio
                 viewers
                     .image_viewer()
-                    .view_interactive(path, file_type)
-                    .with_context(|| format!("failed to render {}", path.display()))?;
+                    .view_interactive(source, file_type)
+                    .with_context(|| format!("failed to render {}", source.name()))?;
             } else if matches!(file_type, detect::FileType::Svg) && !args.plain {
                 // SVGs: rasterized preview with r to toggle XML source
                 viewers
                     .svg_viewer()
-                    .view_interactive(path, file_type)
-                    .with_context(|| format!("failed to render {}", path.display()))?;
+                    .view_interactive(source, file_type)
+                    .with_context(|| format!("failed to render {}", source.name()))?;
             } else {
                 // Other files: render on demand with theme-aware re-rendering
                 let render_content = viewers
-                    .content_renderer(path, file_type)
-                    .with_context(|| format!("failed to read {}", path.display()))?;
+                    .content_renderer(source, file_type)
+                    .with_context(|| format!("failed to read {}", source.name()))?;
 
                 viewer::interactive::view_interactive(
-                    path,
+                    source,
                     file_type,
                     viewers.theme_name(),
                     false,
                     !args.raw,
                     render_content,
                 )
-                .with_context(|| format!("failed to render {}", path.display()))?;
+                .with_context(|| format!("failed to render {}", source.name()))?;
             }
         }
     } else {
         // Piped or --no-pager: direct output
         let mut output = pager::Output::new(&args)?;
-        for (path, file_type) in &files {
+        for (source, file_type) in &inputs {
             if matches!(file_type, detect::FileType::Binary) {
                 // Binary files: show file info instead of content
-                let file_info = info::gather(path, file_type)
-                    .with_context(|| format!("failed to read info for {}", path.display()))?;
+                let file_info = info::gather(source, file_type)
+                    .with_context(|| format!("failed to read info for {}", source.name()))?;
                 let lines = info::render(&file_info, viewers.peek_theme());
                 for line in &lines {
                     output.write_line(line)?;
@@ -180,12 +180,87 @@ fn main() -> Result<()> {
             } else {
                 let viewer = viewers.viewer_for(file_type);
                 viewer
-                    .render(path, file_type, &mut output)
-                    .with_context(|| format!("failed to render {}", path.display()))?;
+                    .render(source, file_type, &mut output)
+                    .with_context(|| format!("failed to render {}", source.name()))?;
             }
         }
         output.finish()?;
     }
 
     Ok(())
+}
+
+/// Decide the input sources based on args and stdin state.
+///
+/// Behavior:
+/// - `peek` with stdin TTY and no args   → error
+/// - `peek` with stdin piped, no args    → read stdin
+/// - `peek -`                            → read stdin (blocks on TTY)
+/// - `peek file.rs`                      → file, stdin ignored even if piped
+/// - `peek - file.rs`                    → stdin + file
+///
+/// After consuming piped stdin, fd 0 is reopened from `/dev/tty` so the
+/// interactive crossterm event loop can still read keystrokes.
+fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
+    let has_dash = args.files.iter().any(|p| p.as_os_str() == "-");
+    let stdin_is_tty = std::io::stdin().is_terminal();
+    let implicit_stdin = args.files.is_empty() && !stdin_is_tty;
+
+    if args.files.is_empty() && !implicit_stdin {
+        bail!("no files specified; run `peek --help` for usage");
+    }
+
+    let want_stdin = has_dash || implicit_stdin;
+
+    let stdin_data = if want_stdin {
+        let mut buf = Vec::new();
+        std::io::stdin()
+            .read_to_end(&mut buf)
+            .context("failed to read stdin")?;
+        reopen_stdin_from_tty();
+        Some(buf)
+    } else {
+        None
+    };
+
+    if args.files.is_empty() {
+        return Ok(vec![InputSource::Stdin {
+            data: stdin_data.expect("stdin requested but not read"),
+        }]);
+    }
+
+    let mut stdin_slot = stdin_data;
+    let sources = args
+        .files
+        .iter()
+        .map(|p| {
+            if p.as_os_str() == "-" {
+                // First `-` takes the data; extra `-`s get an empty buffer.
+                InputSource::Stdin {
+                    data: stdin_slot.take().unwrap_or_default(),
+                }
+            } else {
+                InputSource::File(p.clone())
+            }
+        })
+        .collect();
+
+    Ok(sources)
+}
+
+/// Reopen fd 0 from `/dev/tty` so the interactive event loop can read keys
+/// after piped stdin has been consumed. No-op if `/dev/tty` is unavailable.
+#[cfg(unix)]
+fn reopen_stdin_from_tty() {
+    use std::os::unix::io::AsRawFd;
+    if let Ok(tty) = std::fs::File::open("/dev/tty") {
+        unsafe {
+            libc::dup2(tty.as_raw_fd(), 0);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn reopen_stdin_from_tty() {
+    // TODO: Windows support via CONIN$
 }

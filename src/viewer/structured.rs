@@ -1,5 +1,3 @@
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -7,8 +5,9 @@ use syntect::easy::HighlightLines;
 use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::detect::{FileType, StructuredFormat};
+use crate::input::InputSource;
 use crate::pager::Output;
-use crate::theme::{ThemeManager, ANSI_RESET};
+use crate::theme::{ANSI_RESET, ThemeManager};
 
 use super::Viewer;
 
@@ -24,13 +23,18 @@ impl StructuredViewer {
 }
 
 impl Viewer for StructuredViewer {
-    fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()> {
+    fn render(
+        &self,
+        source: &InputSource,
+        file_type: &FileType,
+        output: &mut Output,
+    ) -> Result<()> {
         let format = match file_type {
             FileType::Structured(f) => *f,
             _ => return Ok(()),
         };
 
-        let raw = fs::read_to_string(path)?;
+        let raw = source.read_text()?;
 
         let pretty = if self.raw_mode {
             raw.clone()

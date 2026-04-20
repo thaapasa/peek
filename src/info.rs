@@ -6,6 +6,7 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::detect::{FileType, StructuredFormat};
+use crate::input::InputSource;
 use crate::theme::{PeekTheme, lerp_color};
 
 // ---------------------------------------------------------------------------
@@ -50,8 +51,15 @@ pub enum FileExtras {
 // Gather metadata
 // ---------------------------------------------------------------------------
 
-/// Gather file metadata for the given path and detected type.
-pub fn gather(path: &Path, file_type: &FileType) -> Result<FileInfo> {
+/// Gather metadata for the given input source and detected type.
+pub fn gather(source: &InputSource, file_type: &FileType) -> Result<FileInfo> {
+    match source {
+        InputSource::File(path) => gather_file(path, file_type),
+        InputSource::Stdin { data } => Ok(gather_stdin(data, file_type)),
+    }
+}
+
+fn gather_file(path: &Path, file_type: &FileType) -> Result<FileInfo> {
     let meta = fs::metadata(path)?;
     let file_name = path
         .file_name()
@@ -75,6 +83,69 @@ pub fn gather(path: &Path, file_type: &FileType) -> Result<FileInfo> {
         permissions,
         extras,
     })
+}
+
+fn gather_stdin(data: &[u8], file_type: &FileType) -> FileInfo {
+    let mime_type = infer::get(data)
+        .map(|k| k.mime_type().to_string())
+        .unwrap_or_else(|| mime_from_type_stdin(file_type));
+
+    let extras = gather_extras_stdin(data, file_type);
+
+    FileInfo {
+        file_name: "<stdin>".to_string(),
+        path: "<stdin>".to_string(),
+        size_bytes: data.len() as u64,
+        mime_type,
+        modified: None,
+        created: None,
+        permissions: None,
+        extras,
+    }
+}
+
+fn mime_from_type_stdin(file_type: &FileType) -> String {
+    match file_type {
+        FileType::Structured(fmt) => match fmt {
+            StructuredFormat::Json => "application/json",
+            StructuredFormat::Yaml => "text/yaml",
+            StructuredFormat::Toml => "application/toml",
+            StructuredFormat::Xml => "application/xml",
+        }
+        .to_string(),
+        FileType::SourceCode { .. } => "text/plain".to_string(),
+        FileType::Svg => "image/svg+xml".to_string(),
+        FileType::Image => "image/unknown".to_string(),
+        FileType::Binary => "application/octet-stream".to_string(),
+    }
+}
+
+fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
+    match file_type {
+        FileType::SourceCode { .. } | FileType::Svg => gather_text_extras_from_bytes(data),
+        FileType::Structured(fmt) => FileExtras::Structured {
+            format_name: match fmt {
+                StructuredFormat::Json => "JSON",
+                StructuredFormat::Yaml => "YAML",
+                StructuredFormat::Toml => "TOML",
+                StructuredFormat::Xml => "XML",
+            },
+        },
+        // Stdin images lack richer metadata (no dimensions without decode);
+        // Binary stays bare too.
+        FileType::Image | FileType::Binary => FileExtras::Binary,
+    }
+}
+
+fn gather_text_extras_from_bytes(data: &[u8]) -> FileExtras {
+    let Ok(content) = std::str::from_utf8(data) else {
+        return FileExtras::Binary;
+    };
+    FileExtras::Text {
+        line_count: content.lines().count(),
+        word_count: content.split_whitespace().count(),
+        char_count: content.chars().count(),
+    }
 }
 
 fn detect_mime(path: &Path) -> Option<String> {

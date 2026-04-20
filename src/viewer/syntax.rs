@@ -1,10 +1,9 @@
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
 
 use crate::detect::FileType;
+use crate::input::InputSource;
 use crate::pager::Output;
 use crate::theme::ThemeManager;
 
@@ -23,7 +22,7 @@ impl SyntaxViewer {
         }
     }
 
-    fn find_syntax_name(&self, path: &Path, file_type: &FileType) -> Option<String> {
+    fn find_syntax_name(&self, source: &InputSource, file_type: &FileType) -> Option<String> {
         // User-forced language takes priority
         if let Some(ref lang) = self.forced_language {
             return Some(lang.clone());
@@ -38,17 +37,24 @@ impl SyntaxViewer {
         }
 
         // Try the full filename (for things like Makefile, Dockerfile)
-        path.file_name()
+        source
+            .path()
+            .and_then(|p| p.file_name())
             .and_then(|n| n.to_str())
             .map(|s| s.to_string())
     }
 }
 
 impl Viewer for SyntaxViewer {
-    fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()> {
-        let content = fs::read_to_string(path)?;
+    fn render(
+        &self,
+        source: &InputSource,
+        file_type: &FileType,
+        output: &mut Output,
+    ) -> Result<()> {
+        let content = source.read_text()?;
 
-        let lines = if let Some(token) = self.find_syntax_name(path, file_type) {
+        let lines = if let Some(token) = self.find_syntax_name(source, file_type) {
             super::highlight_lines(&content, &token, &self.theme, self.theme.theme_name)?
         } else {
             content.lines().map(String::from).collect()

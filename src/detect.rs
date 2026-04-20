@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::Path;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
+
+use crate::input::InputSource;
 
 /// Detected file type, used to dispatch to the right viewer.
 #[derive(Debug, Clone)]
@@ -26,8 +28,15 @@ pub enum StructuredFormat {
     Xml,
 }
 
-/// Detect the file type by extension and magic bytes.
-pub fn detect(path: &Path) -> Result<FileType> {
+/// Detect the file type of an input source.
+pub fn detect(source: &InputSource) -> Result<FileType> {
+    match source {
+        InputSource::File(path) => detect_file(path),
+        InputSource::Stdin { data } => Ok(detect_bytes(data)),
+    }
+}
+
+fn detect_file(path: &Path) -> Result<FileType> {
     if !path.exists() {
         bail!("file not found: {}", path.display());
     }
@@ -85,4 +94,64 @@ pub fn detect(path: &Path) -> Result<FileType> {
         .map(|s| s.to_lowercase());
 
     Ok(FileType::SourceCode { syntax })
+}
+
+/// Detect the file type from an in-memory byte buffer (for stdin).
+/// Uses magic bytes for binary formats, then content sniffing for text.
+fn detect_bytes(data: &[u8]) -> FileType {
+    // Magic-byte detection
+    if let Some(kind) = infer::get(data) {
+        let mime = kind.mime_type();
+        if mime == "image/svg+xml" {
+            return FileType::Svg;
+        }
+        if mime.starts_with("image/") {
+            return FileType::Image;
+        }
+        if mime.starts_with("video/")
+            || mime.starts_with("audio/")
+            || mime.starts_with("application/zip")
+            || mime.starts_with("application/gzip")
+            || mime.starts_with("application/x-executable")
+        {
+            return FileType::Binary;
+        }
+    }
+
+    // Non-UTF-8 → binary
+    let Ok(text) = std::str::from_utf8(data) else {
+        return FileType::Binary;
+    };
+
+    // Content-based format sniffing
+    let trimmed = text.trim_start();
+    let first = trimmed.as_bytes().first().copied();
+
+    match first {
+        Some(b'{') | Some(b'[') => {
+            if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+                return FileType::Structured(StructuredFormat::Json);
+            }
+        }
+        Some(b'<') => {
+            // SVG has a distinctive root element — catch it before generic XML
+            if trimmed.contains("<svg") {
+                return FileType::Svg;
+            }
+            return FileType::Structured(StructuredFormat::Xml);
+        }
+        _ => {}
+    }
+
+    // YAML document marker or directive
+    if trimmed.starts_with("---\n")
+        || trimmed.starts_with("---\r\n")
+        || trimmed == "---"
+        || trimmed.starts_with("%YAML")
+    {
+        return FileType::Structured(StructuredFormat::Yaml);
+    }
+
+    // Plain text — the SyntaxViewer's `--language` flag can still apply
+    FileType::SourceCode { syntax: None }
 }

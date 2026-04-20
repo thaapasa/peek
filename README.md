@@ -44,6 +44,12 @@ peek icon.svg
 # Pipe output (no viewer, still highlighted)
 peek data.json | less -R
 
+# Read from stdin (auto-detects JSON/YAML/XML, or pass -l for syntax)
+echo '{"a":1}' | peek
+curl -s https://example.com/data.json | peek
+cat src/main.rs | peek -l rust
+peek -           # explicit stdin (blocks until Ctrl-D when interactive)
+
 # Force direct output on a TTY
 peek --print file.txt
 peek -p file.txt

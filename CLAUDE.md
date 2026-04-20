@@ -33,8 +33,9 @@ src/
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
-  detect.rs            — File type detection (extension + magic bytes)
+  detect.rs            — File type detection (extension + magic bytes + stdin content sniffing)
   info.rs              — File metadata gathering and themed rendering
+  input.rs             — InputSource enum (File path or buffered Stdin)
   pager.rs             — Output abstraction (pager / direct stdout)
   theme.rs             — Theme management, PeekTheme semantic colors, color blending
   help.rs              — CLI help and version screens

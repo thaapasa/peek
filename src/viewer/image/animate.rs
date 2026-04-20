@@ -7,6 +7,7 @@ use crossterm::event::{self, Event, KeyCode};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
 use crate::detect::FileType;
+use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 
 use super::render;
@@ -140,14 +141,14 @@ const HELP_KEYS_ANIMATED: &[(&str, &str)] = &[
 
 /// Interactive animated GIF/WebP viewer with frame-rate-driven playback.
 pub fn view_animated(
-    path: &Path,
+    source: &InputSource,
     file_type: &FileType,
     frames: Vec<AnimFrame>,
     config: ImageConfig,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
-        run_animation_loop(stdout, path, file_type, &frames, config, initial_theme)
+        run_animation_loop(stdout, source, file_type, &frames, config, initial_theme)
     })
 }
 
@@ -157,7 +158,7 @@ pub fn view_animated(
 
 fn run_animation_loop(
     stdout: &mut io::Stdout,
-    path: &Path,
+    source: &InputSource,
     file_type: &FileType,
     frames: &[AnimFrame],
     mut config: ImageConfig,
@@ -168,16 +169,16 @@ fn run_animation_loop(
     let frame_count = frames.len();
 
     let content_lines = render_frame(&frames[current_frame], &config);
-    let mut state = ViewerState::new(path, file_type, initial_theme, content_lines, HELP_KEYS_ANIMATED)?;
+    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, HELP_KEYS_ANIMATED)?;
 
-    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+    let name = source.name().to_string();
 
     let redraw = |stdout: &mut io::Stdout,
                   state: &ViewerState,
                   frame_idx: usize,
                   playing: bool|
      -> Result<()> {
-        let status = render_anim_status_line(filename, state, frame_idx, frame_count, playing);
+        let status = render_anim_status_line(&name, state, frame_idx, frame_count, playing);
         state.draw(stdout, &status)
     };
 
@@ -297,7 +298,7 @@ fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
 // ---------------------------------------------------------------------------
 
 fn render_anim_status_line(
-    filename: &str,
+    name: &str,
     state: &ViewerState,
     frame_idx: usize,
     frame_count: usize,
@@ -316,7 +317,7 @@ fn render_anim_status_line(
 
     render_themed_status_line(
         &[
-            (filename, theme.accent),
+            (name, theme.accent),
             (&frame_info, theme.label),
             (state.view_mode.label(), theme.label),
             (state.current_theme.cli_name(), theme.muted),

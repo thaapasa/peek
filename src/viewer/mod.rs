@@ -1,14 +1,14 @@
-use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::easy::HighlightLines;
 use syntect::util::as_24_bit_terminal_escaped;
 
-use crate::detect::{FileType, StructuredFormat};
-use crate::pager::Output;
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager, ANSI_RESET};
 use crate::Args;
+use crate::detect::{FileType, StructuredFormat};
+use crate::input::InputSource;
+use crate::pager::Output;
+use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
 
 pub mod image;
 pub mod interactive;
@@ -23,7 +23,12 @@ pub type ContentRenderer = Box<dyn Fn(PeekThemeName, bool) -> Result<Vec<String>
 
 /// Trait for all file viewers.
 pub trait Viewer {
-    fn render(&self, path: &Path, file_type: &FileType, output: &mut Output) -> Result<()>;
+    fn render(
+        &self,
+        source: &InputSource,
+        file_type: &FileType,
+        output: &mut Output,
+    ) -> Result<()>;
 }
 
 /// Highlight text content as colored terminal lines.
@@ -126,10 +131,10 @@ impl Registry {
     /// The `pretty` parameter controls whether structured files are pretty-printed.
     pub fn content_renderer(
         &self,
-        path: &Path,
+        source: &InputSource,
         file_type: &FileType,
     ) -> Result<ContentRenderer> {
-        let raw_content = std::fs::read_to_string(path)?;
+        let raw_content = source.read_text()?;
 
         // Pre-compute pretty-printed version for structured files
         let pretty_content = if !self.plain_mode {
@@ -146,7 +151,7 @@ impl Registry {
         let syntax_token = if self.plain_mode {
             None
         } else {
-            self.syntax_token_for(path, file_type)
+            self.syntax_token_for(source, file_type)
         };
 
         let tm = Rc::clone(&self.theme_manager);
@@ -165,14 +170,16 @@ impl Registry {
         }))
     }
 
-    fn syntax_token_for(&self, path: &Path, file_type: &FileType) -> Option<String> {
+    fn syntax_token_for(&self, source: &InputSource, file_type: &FileType) -> Option<String> {
         match file_type {
             FileType::SourceCode { syntax } => self
                 .forced_language
                 .clone()
                 .or_else(|| syntax.clone())
                 .or_else(|| {
-                    path.file_name()
+                    source
+                        .path()
+                        .and_then(|p| p.file_name())
                         .and_then(|n| n.to_str())
                         .map(String::from)
                 }),

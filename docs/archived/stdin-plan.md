@@ -1,17 +1,19 @@
 # Plan: Stdin Input Support
 
+> **Status: Completed 2026-04-20.** Archived for reference.
+
 ## Context
 
 peek currently requires file path arguments and has no stdin support. The goal is to allow piping content into peek (e.g., `curl ... | peek`, `cat file | peek`) with the full interactive viewer experience.
 
 ## Behavior
 
-| Scenario | Stdin is TTY | Stdin is piped |
-|----------|-------------|----------------|
-| `peek` (no args) | Error: "no files specified" | Read stdin, render |
-| `peek -` | Read stdin (blocks until Ctrl-D) | Read stdin, render |
-| `peek file.rs` | View file normally | View file normally (ignore stdin) |
-| `peek - file.rs` | Read stdin + view file | Read stdin + view file |
+| Scenario         | Stdin is TTY                     | Stdin is piped                    |
+|------------------|----------------------------------|-----------------------------------|
+| `peek` (no args) | Error: "no files specified"      | Read stdin, render                |
+| `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render                |
+| `peek file.rs`   | View file normally               | View file normally (ignore stdin) |
+| `peek - file.rs` | Read stdin + view file           | Read stdin + view file            |
 
 After reading piped stdin, reopen fd 0 from `/dev/tty` so crossterm keyboard input works normally. This enables the full interactive viewer (theme cycling, Tab to info, scrolling) for stdin content.
 
@@ -98,19 +100,19 @@ Each viewer replaces `fs::read_to_string(path)` with `source.read_text()`:
 
 ## Files Modified
 
-| File | Change |
-|------|--------|
-| `src/input.rs` | **New** — `InputSource` enum |
-| `src/main.rs` | Stdin detection, reading, fd reopen, use `InputSource` |
-| `src/detect.rs` | Accept `&InputSource`, add content-based detection |
-| `src/info.rs` | Accept `&InputSource`, handle stdin metadata |
-| `src/viewer/mod.rs` | Trait + Registry accept `&InputSource` |
-| `src/viewer/syntax.rs` | Read from source instead of path |
-| `src/viewer/structured.rs` | Read from source instead of path |
-| `src/viewer/text.rs` | Read from source instead of path |
-| `src/viewer/image/mod.rs` | Read from source (files only initially) |
-| `src/viewer/interactive.rs` | Pass source to info::gather |
-| `src/viewer/ui.rs` | Display name from source |
+| File                        | Change                                                 |
+|-----------------------------|--------------------------------------------------------|
+| `src/input.rs`              | **New** — `InputSource` enum                           |
+| `src/main.rs`               | Stdin detection, reading, fd reopen, use `InputSource` |
+| `src/detect.rs`             | Accept `&InputSource`, add content-based detection     |
+| `src/info.rs`               | Accept `&InputSource`, handle stdin metadata           |
+| `src/viewer/mod.rs`         | Trait + Registry accept `&InputSource`                 |
+| `src/viewer/syntax.rs`      | Read from source instead of path                       |
+| `src/viewer/structured.rs`  | Read from source instead of path                       |
+| `src/viewer/text.rs`        | Read from source instead of path                       |
+| `src/viewer/image/mod.rs`   | Read from source (files only initially)                |
+| `src/viewer/interactive.rs` | Pass source to info::gather                            |
+| `src/viewer/ui.rs`          | Display name from source                               |
 
 ## Scope Boundaries
 

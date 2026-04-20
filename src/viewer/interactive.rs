@@ -1,12 +1,12 @@
 use std::cell::Cell;
 use std::io;
-use std::path::Path;
 use std::rc::Rc;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 
 use crate::detect::FileType;
+use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 use crate::viewer::image::Background;
 use crate::viewer::ui::{
@@ -43,20 +43,28 @@ const HELP_KEYS: &[(&str, &str)] = &[
 /// If `rerender_on_resize` is true, content is re-rendered on terminal resize
 /// (needed for images whose output depends on terminal dimensions).
 pub fn view_interactive(
-    path: &Path,
+    source: &InputSource,
     file_type: &FileType,
     theme_name: PeekThemeName,
     rerender_on_resize: bool,
     pretty: bool,
     render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
 ) -> Result<()> {
-    view_interactive_with_bg(path, file_type, theme_name, rerender_on_resize, pretty, None, render_content)
+    view_interactive_with_bg(
+        source,
+        file_type,
+        theme_name,
+        rerender_on_resize,
+        pretty,
+        None,
+        render_content,
+    )
 }
 
 /// Interactive viewer with optional background cycling support.
 /// When `background` is `Some`, the `b` key cycles the background mode.
 pub fn view_interactive_with_bg(
-    path: &Path,
+    source: &InputSource,
     file_type: &FileType,
     theme_name: PeekThemeName,
     rerender_on_resize: bool,
@@ -66,7 +74,7 @@ pub fn view_interactive_with_bg(
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         run_event_loop(
-            stdout, path, file_type, theme_name,
+            stdout, source, file_type, theme_name,
             rerender_on_resize, pretty, background, &render_content,
         )
     })
@@ -79,7 +87,7 @@ pub fn view_interactive_with_bg(
 #[allow(clippy::too_many_arguments)]
 fn run_event_loop(
     stdout: &mut io::Stdout,
-    path: &Path,
+    source: &InputSource,
     file_type: &FileType,
     initial_theme: PeekThemeName,
     rerender_on_resize: bool,
@@ -89,12 +97,12 @@ fn run_event_loop(
 ) -> Result<()> {
     let mut pretty = initial_pretty;
     let content_lines = render_content(initial_theme, pretty)?;
-    let mut state = ViewerState::new(path, file_type, initial_theme, content_lines, HELP_KEYS)?;
+    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, HELP_KEYS)?;
 
-    let filename = path.file_name().and_then(|n| n.to_str()).unwrap_or("?");
+    let name = source.name().to_string();
 
     let redraw = |stdout: &mut io::Stdout, state: &ViewerState| -> Result<()> {
-        let status = render_status_line(filename, state);
+        let status = render_status_line(&name, state);
         state.draw(stdout, &status)
     };
 
@@ -146,11 +154,11 @@ fn run_event_loop(
 // Status line
 // ---------------------------------------------------------------------------
 
-fn render_status_line(filename: &str, state: &ViewerState) -> String {
+fn render_status_line(name: &str, state: &ViewerState) -> String {
     let theme = &state.peek_theme;
     render_themed_status_line(
         &[
-            (filename, theme.accent),
+            (name, theme.accent),
             (state.view_mode.label(), theme.label),
             (state.current_theme.cli_name(), theme.muted),
         ],
