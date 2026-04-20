@@ -131,9 +131,35 @@ fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
                 StructuredFormat::Xml => "XML",
             },
         },
-        // Stdin images lack richer metadata (no dimensions without decode);
-        // Binary stays bare too.
-        FileType::Image | FileType::Binary => FileExtras::Binary,
+        FileType::Image => gather_image_extras_from_bytes(data),
+        FileType::Binary => FileExtras::Binary,
+    }
+}
+
+fn gather_image_extras_from_bytes(data: &[u8]) -> FileExtras {
+    let img = match image::load_from_memory(data) {
+        Ok(i) => i,
+        Err(_) => return FileExtras::Binary,
+    };
+    let (width, height) = (img.width(), img.height());
+    let color_type = format!("{:?}", img.color());
+    let bit_depth =
+        (img.color().bits_per_pixel() / img.color().channel_count() as u16) as u8;
+
+    let hdr_format = detect_hdr_bytes(data);
+    let frame_count = crate::viewer::image::animate::anim_frame_count(
+        &InputSource::Stdin { data: data.to_vec() },
+    );
+    let exif = gather_exif_bytes(data);
+
+    FileExtras::Image {
+        width,
+        height,
+        color_type,
+        bit_depth,
+        hdr_format,
+        frame_count,
+        exif,
     }
 }
 
@@ -239,7 +265,9 @@ fn gather_image_extras(path: &Path) -> FileExtras {
         .unwrap_or(0) as u8;
 
     let hdr_format = detect_hdr(path);
-    let frame_count = crate::viewer::image::animate::anim_frame_count(path);
+    let frame_count = crate::viewer::image::animate::anim_frame_count(
+        &InputSource::File(path.to_path_buf()),
+    );
     let exif = gather_exif(path);
 
     FileExtras::Image {
@@ -259,13 +287,14 @@ fn detect_hdr(path: &Path) -> Option<String> {
     let mut file = fs::File::open(path).ok()?;
     let mut buf = vec![0u8; 128 * 1024];
     let n = std::io::Read::read(&mut file, &mut buf).ok()?;
-    let data = &buf[..n];
+    detect_hdr_bytes(&buf[..n])
+}
 
-    // Ultra HDR (ISO 21496-1 gain map) — used by Google, Adobe
-    if data.windows(6).any(|w| w == b"hdrgm:") {
+fn detect_hdr_bytes(data: &[u8]) -> Option<String> {
+    let slice = &data[..data.len().min(128 * 1024)];
+    if slice.windows(6).any(|w| w == b"hdrgm:") {
         return Some("Ultra HDR (gain map)".to_string());
     }
-
     None
 }
 
@@ -276,8 +305,17 @@ fn gather_exif(path: &Path) -> Vec<(String, String)> {
         Err(_) => return Vec::new(),
     };
     let mut buf_reader = std::io::BufReader::new(file);
+    exif_fields(&mut buf_reader)
+}
+
+fn gather_exif_bytes(data: &[u8]) -> Vec<(String, String)> {
+    let mut cursor = std::io::Cursor::new(data);
+    exif_fields(&mut cursor)
+}
+
+fn exif_fields<R: std::io::BufRead + std::io::Seek>(reader: &mut R) -> Vec<(String, String)> {
     let exif_reader = exif::Reader::new();
-    let exif = match exif_reader.read_from_container(&mut buf_reader) {
+    let exif = match exif_reader.read_from_container(reader) {
         Ok(e) => e,
         Err(_) => return Vec::new(),
     };

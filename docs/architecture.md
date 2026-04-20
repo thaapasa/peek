@@ -41,14 +41,16 @@ Registry::viewer_for(file_type) --> &dyn Viewer
 `InputSource` decouples "where data comes from" from "how it's displayed". The
 `File` variant holds a `PathBuf` and reads on demand; the `Stdin` variant holds
 pre-buffered bytes. All viewers take `&InputSource` and call `read_text()` or
-operate on the path (`source.path()`) — image and SVG viewers currently require
-a path and bail on stdin.
+`read_bytes()` — image, animation, and SVG viewers decode from either path or
+memory as needed.
 
 When stdin is consumed (because `-` is passed or no args are given with a piped
-stdin), `main.rs` reopens fd 0 from `/dev/tty` so the interactive event loop
-can still read keystrokes. Stdin detection uses magic bytes (images, binary)
-followed by content sniffing (leading `{`/`[` → JSON, `<` → XML/SVG, `---` →
-YAML) in `detect::detect_bytes()`.
+stdin), `main.rs` reopens fd 0 from the controlling terminal so the interactive
+event loop can still read keystrokes. The path is resolved via `ttyname()` on
+stderr/stdout rather than opening `/dev/tty` directly — macOS kqueue rejects
+`/dev/tty` with EINVAL when mio tries to register it. Stdin detection uses
+magic bytes (images, binary) followed by content sniffing (leading `{`/`[` →
+JSON, `<` → XML/SVG, `---` → YAML) in `detect::detect_bytes()`.
 
 ### TTY path (interactive)
 

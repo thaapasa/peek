@@ -1,18 +1,18 @@
-use std::path::Path;
-
 use anyhow::{Context, Result};
 use image::DynamicImage;
 
-/// Get the intrinsic dimensions of an SVG file.
-pub fn svg_dimensions(path: &Path) -> Result<(u32, u32)> {
-    let tree = load_svg(path)?;
+use crate::input::InputSource;
+
+/// Get the intrinsic dimensions of an SVG source.
+pub fn svg_dimensions(source: &InputSource) -> Result<(u32, u32)> {
+    let tree = load_svg(source)?;
     let size = tree.size();
     Ok((size.width().max(1.0) as u32, size.height().max(1.0) as u32))
 }
 
-/// Rasterize an SVG file to a bitmap at the given pixel dimensions.
-pub fn rasterize_svg(path: &Path, width: u32, height: u32) -> Result<DynamicImage> {
-    let tree = load_svg(path)?;
+/// Rasterize an SVG source to a bitmap at the given pixel dimensions.
+pub fn rasterize_svg(source: &InputSource, width: u32, height: u32) -> Result<DynamicImage> {
+    let tree = load_svg(source)?;
 
     let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
         .context("failed to create pixmap")?;
@@ -45,8 +45,8 @@ pub fn rasterize_svg(path: &Path, width: u32, height: u32) -> Result<DynamicImag
     Ok(DynamicImage::ImageRgba8(img))
 }
 
-fn load_svg(path: &Path) -> Result<resvg::usvg::Tree> {
-    let svg_data = std::fs::read(path).context("failed to read SVG file")?;
+fn load_svg(source: &InputSource) -> Result<resvg::usvg::Tree> {
+    let svg_data = source.read_bytes().context("failed to read SVG")?;
     resvg::usvg::Tree::from_data(&svg_data, &resvg::usvg::Options::default())
         .context("failed to parse SVG")
 }

@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 /// Source of input content — either a file on disk or buffered stdin.
 ///
 /// Decouples "where data comes from" from "how it's displayed".
+#[derive(Clone)]
 pub enum InputSource {
     File(PathBuf),
     Stdin { data: Vec<u8> },
@@ -20,6 +21,16 @@ impl InputSource {
             Self::Stdin { data } => {
                 String::from_utf8(data.clone()).context("stdin is not valid UTF-8")
             }
+        }
+    }
+
+    /// Full content as raw bytes.
+    pub fn read_bytes(&self) -> Result<Vec<u8>> {
+        match self {
+            Self::File(path) => {
+                fs::read(path).with_context(|| format!("failed to read {}", path.display()))
+            }
+            Self::Stdin { data } => Ok(data.clone()),
         }
     }
 

@@ -4,6 +4,7 @@ use image::{DynamicImage, GenericImageView};
 use super::clustering::fast_2_color;
 use super::glyph_atlas::{atlas_for_mode, best_glyph, GlyphBitmap, CELL_H, CELL_W};
 use super::{Background, ImageMode};
+use crate::input::InputSource;
 use crate::theme::{write_fg, write_fg_bg, ANSI_RESET};
 
 /// Terminal dimensions in characters.
@@ -265,14 +266,14 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
 /// Resizes to target resolution before compositing so that the checkerboard
 /// pattern is always aligned to the glyph grid.
 pub fn load_and_render(
-    path: &std::path::Path,
+    source: &InputSource,
     mode: ImageMode,
     forced_width: u32,
     term: TermSize,
     bg: Background,
     margin: u32,
 ) -> Result<Vec<String>> {
-    let img = image::open(path).context("failed to open image")?;
+    let img = load_image(source)?;
     let img = add_margin(img, margin);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, forced_width);
@@ -296,17 +297,27 @@ pub fn load_and_render(
     Ok(lines)
 }
 
-/// Load and render an SVG file to ASCII art lines.
+/// Load an image from a File path or buffered Stdin bytes.
+pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
+    match source {
+        InputSource::File(path) => image::open(path).context("failed to open image"),
+        InputSource::Stdin { data } => {
+            image::load_from_memory(data).context("failed to decode image from stdin")
+        }
+    }
+}
+
+/// Load and render an SVG source to ASCII art lines.
 /// Rasterizes at the exact target pixel resolution for maximum sharpness.
 pub fn load_and_render_svg(
-    path: &std::path::Path,
+    source: &InputSource,
     mode: ImageMode,
     forced_width: u32,
     term: TermSize,
     bg: Background,
     margin: u32,
 ) -> Result<Vec<String>> {
-    let (svg_w, svg_h) = super::svg::svg_dimensions(path)?;
+    let (svg_w, svg_h) = super::svg::svg_dimensions(source)?;
     // Account for margin in aspect ratio calculation
     let padded_w = svg_w + margin * 2;
     let padded_h = svg_h + margin * 2;
@@ -325,7 +336,7 @@ pub fn load_and_render_svg(
     let inner_w = px_w.saturating_sub(target_margin_x * 2).max(1);
     let inner_h = px_h.saturating_sub(target_margin_y * 2).max(1);
 
-    let inner = super::svg::rasterize_svg(path, inner_w, inner_h)?;
+    let inner = super::svg::rasterize_svg(source, inner_w, inner_h)?;
     // Place the SVG content centered in a full-size transparent canvas
     let mut canvas = image::RgbaImage::new(px_w, px_h);
     let offset_x = (px_w - inner_w) / 2;

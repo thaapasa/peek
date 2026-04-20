@@ -60,11 +60,13 @@ XML/SVG); plain text falls back to `--language` for syntax highlighting.
 | `peek file.rs`   | View file normally               | View file (stdin ignored)         |
 | `peek - file.rs` | Read stdin + view file           | Read stdin + view file            |
 
-After consuming piped stdin, peek reopens fd 0 from `/dev/tty` so the interactive
-viewer's keyboard input still works.
+After consuming piped stdin, peek reopens fd 0 from the controlling terminal
+(resolved via `ttyname()` to the real device path, not `/dev/tty`, because macOS
+kqueue can't register the latter) so the interactive viewer's keyboard input
+still works.
 
-**Status: Implemented** for text, source code, and structured data. Images and SVG
-from stdin are not yet supported (these still require a filesystem path).
+**Status: Implemented** for all viewers — text, source code, structured data,
+raster images (PNG/JPEG/WebP/…), animated images (GIF/WebP), and SVG.
 
 
 ## Supported File Types

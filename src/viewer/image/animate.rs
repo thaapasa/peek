@@ -1,5 +1,4 @@
-use std::io::{self, BufReader};
-use std::path::Path;
+use std::io::{self, BufReader, Cursor};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
@@ -27,93 +26,117 @@ pub struct AnimFrame {
 // Frame decoding
 // ---------------------------------------------------------------------------
 
+/// Animated image container format.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AnimFormat {
+    Gif,
+    Webp,
+}
+
+/// Detect GIF/WebP from either the file extension or the first magic bytes.
+fn detect_format(source: &InputSource) -> Option<AnimFormat> {
+    match source {
+        InputSource::File(path) => {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_lowercase();
+            match ext.as_str() {
+                "gif" => Some(AnimFormat::Gif),
+                "webp" => Some(AnimFormat::Webp),
+                _ => None,
+            }
+        }
+        InputSource::Stdin { data } => sniff_anim_format(data),
+    }
+}
+
+fn sniff_anim_format(data: &[u8]) -> Option<AnimFormat> {
+    if data.starts_with(b"GIF87a") || data.starts_with(b"GIF89a") {
+        Some(AnimFormat::Gif)
+    } else if data.len() >= 12 && &data[0..4] == b"RIFF" && &data[8..12] == b"WEBP" {
+        Some(AnimFormat::Webp)
+    } else {
+        None
+    }
+}
+
+/// Collect `Frame` results from an AnimationDecoder into `AnimFrame`s.
+fn collect_frames<'a, D: image::AnimationDecoder<'a>>(decoder: D) -> Result<Vec<AnimFrame>> {
+    let mut frames = Vec::new();
+    for frame_result in decoder.into_frames() {
+        let frame = frame_result.context("failed to decode frame")?;
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let ms = if denom == 0 { 100 } else { numer / denom };
+        let delay = Duration::from_millis(ms.max(20) as u64);
+        let image = DynamicImage::ImageRgba8(frame.into_buffer());
+        frames.push(AnimFrame { image, delay });
+    }
+    Ok(frames)
+}
+
 /// Decode all frames from an animated image (GIF or WebP).
-/// Returns `None` if the file is not animated or has ≤1 frame.
-pub fn decode_anim_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    match ext.as_str() {
-        "gif" => decode_gif_frames(path),
-        "webp" => decode_webp_frames(path),
-        _ => Ok(None),
-    }
-}
-
-fn decode_gif_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
-    let file = std::fs::File::open(path).context("failed to open GIF")?;
-    let decoder = image::codecs::gif::GifDecoder::new(BufReader::new(file))
-        .context("failed to decode GIF")?;
-    let frames_iter = decoder.into_frames();
-
-    let mut frames = Vec::new();
-    for frame_result in frames_iter {
-        let frame = frame_result.context("failed to decode GIF frame")?;
-        let (numer, denom) = frame.delay().numer_denom_ms();
-        let ms = if denom == 0 { 100 } else { numer / denom };
-        let delay = Duration::from_millis(ms.max(20) as u64);
-        let image = DynamicImage::ImageRgba8(frame.into_buffer());
-        frames.push(AnimFrame { image, delay });
-    }
+/// Returns `None` if the source is not an animated format or has ≤1 frame.
+pub fn decode_anim_frames(source: &InputSource) -> Result<Option<Vec<AnimFrame>>> {
+    let Some(format) = detect_format(source) else {
+        return Ok(None);
+    };
+    let frames = match (source, format) {
+        (InputSource::File(path), AnimFormat::Gif) => {
+            let reader = BufReader::new(std::fs::File::open(path).context("failed to open GIF")?);
+            collect_frames(
+                image::codecs::gif::GifDecoder::new(reader).context("failed to decode GIF")?,
+            )?
+        }
+        (InputSource::File(path), AnimFormat::Webp) => {
+            let reader = BufReader::new(std::fs::File::open(path).context("failed to open WebP")?);
+            collect_frames(
+                image::codecs::webp::WebPDecoder::new(reader).context("failed to decode WebP")?,
+            )?
+        }
+        (InputSource::Stdin { data }, AnimFormat::Gif) => {
+            let reader = Cursor::new(data.clone());
+            collect_frames(
+                image::codecs::gif::GifDecoder::new(reader).context("failed to decode GIF")?,
+            )?
+        }
+        (InputSource::Stdin { data }, AnimFormat::Webp) => {
+            let reader = Cursor::new(data.clone());
+            collect_frames(
+                image::codecs::webp::WebPDecoder::new(reader).context("failed to decode WebP")?,
+            )?
+        }
+    };
 
     if frames.len() <= 1 {
         return Ok(None);
     }
-
-    Ok(Some(frames))
-}
-
-fn decode_webp_frames(path: &Path) -> Result<Option<Vec<AnimFrame>>> {
-    let file = std::fs::File::open(path).context("failed to open WebP")?;
-    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file))
-        .context("failed to decode WebP")?;
-    let frames_iter = decoder.into_frames();
-
-    let mut frames = Vec::new();
-    for frame_result in frames_iter {
-        let frame = frame_result.context("failed to decode WebP frame")?;
-        let (numer, denom) = frame.delay().numer_denom_ms();
-        let ms = if denom == 0 { 100 } else { numer / denom };
-        let delay = Duration::from_millis(ms.max(20) as u64);
-        let image = DynamicImage::ImageRgba8(frame.into_buffer());
-        frames.push(AnimFrame { image, delay });
-    }
-
-    if frames.len() <= 1 {
-        return Ok(None);
-    }
-
     Ok(Some(frames))
 }
 
 /// Count animation frames without full pixel decoding.
-/// Returns None for non-animated files.
-pub fn anim_frame_count(path: &Path) -> Option<usize> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-    match ext.as_str() {
-        "gif" => gif_frame_count(path),
-        "webp" => webp_frame_count(path),
-        _ => None,
-    }
-}
-
-fn gif_frame_count(path: &Path) -> Option<usize> {
-    let file = std::fs::File::open(path).ok()?;
-    let decoder = image::codecs::gif::GifDecoder::new(BufReader::new(file)).ok()?;
-    let count = decoder.into_frames().count();
-    if count > 1 { Some(count) } else { None }
-}
-
-fn webp_frame_count(path: &Path) -> Option<usize> {
-    let file = std::fs::File::open(path).ok()?;
-    let decoder = image::codecs::webp::WebPDecoder::new(BufReader::new(file)).ok()?;
-    let count = decoder.into_frames().count();
+/// Returns None for non-animated sources.
+pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
+    let format = detect_format(source)?;
+    let count = match (source, format) {
+        (InputSource::File(path), AnimFormat::Gif) => {
+            let reader = BufReader::new(std::fs::File::open(path).ok()?);
+            image::codecs::gif::GifDecoder::new(reader).ok()?.into_frames().count()
+        }
+        (InputSource::File(path), AnimFormat::Webp) => {
+            let reader = BufReader::new(std::fs::File::open(path).ok()?);
+            image::codecs::webp::WebPDecoder::new(reader).ok()?.into_frames().count()
+        }
+        (InputSource::Stdin { data }, AnimFormat::Gif) => {
+            let reader = Cursor::new(data.clone());
+            image::codecs::gif::GifDecoder::new(reader).ok()?.into_frames().count()
+        }
+        (InputSource::Stdin { data }, AnimFormat::Webp) => {
+            let reader = Cursor::new(data.clone());
+            image::codecs::webp::WebPDecoder::new(reader).ok()?.into_frames().count()
+        }
+    };
     if count > 1 { Some(count) } else { None }
 }
 

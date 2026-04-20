@@ -1,8 +1,7 @@
 use std::cell::Cell;
-use std::path::Path;
 use std::rc::Rc;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 
 use crate::detect::FileType;
 use crate::input::InputSource;
@@ -93,16 +92,6 @@ pub struct ImageConfig {
     pub margin: u32,
 }
 
-/// Extract a filesystem path from an input source, bailing for stdin.
-/// Image rendering currently requires a path (animation detection and
-/// SVG rasterization both open files directly).
-fn require_path<'a>(source: &'a InputSource, kind: &str) -> Result<&'a Path> {
-    match source.path() {
-        Some(p) => Ok(p),
-        None => bail!("{kind} rendering from stdin is not yet supported"),
-    }
-}
-
 pub struct ImageViewer {
     config: ImageConfig,
     theme_name: PeekThemeName,
@@ -116,10 +105,8 @@ impl ImageViewer {
     /// Interactive image viewing with resize support.
     /// Enters alternate screen and blocks until the user quits.
     pub fn view_interactive(&self, source: &InputSource, file_type: &FileType) -> Result<()> {
-        let path = require_path(source, "image")?;
-
         // Check for animated image (GIF/WebP) — use dedicated animation viewer
-        if let Some(frames) = animate::decode_anim_frames(path)? {
+        if let Some(frames) = animate::decode_anim_frames(source)? {
             return animate::view_animated(
                 source, file_type, frames, self.config, self.theme_name,
             );
@@ -128,14 +115,14 @@ impl ImageViewer {
         let config = self.config;
         let bg = Rc::new(Cell::new(config.background));
         let bg_closure = Rc::clone(&bg);
-        let path_buf = path.to_path_buf();
+        let source_clone = source.clone();
         super::interactive::view_interactive_with_bg(
             source, file_type, self.theme_name, true, true,
             Some(bg),
             move |_theme, _pretty| {
                 let mut term = render::TermSize::detect();
                 term.rows = term.rows.saturating_sub(1);
-                render::load_and_render(&path_buf, config.mode, config.width, term, bg_closure.get(), config.margin)
+                render::load_and_render(&source_clone, config.mode, config.width, term, bg_closure.get(), config.margin)
             },
         )
     }
@@ -148,10 +135,9 @@ impl Viewer for ImageViewer {
         _file_type: &FileType,
         output: &mut Output,
     ) -> Result<()> {
-        let path = require_path(source, "image")?;
         let term = render::TermSize::detect();
         let c = &self.config;
-        let lines = render::load_and_render(path, c.mode, c.width, term, c.background, c.margin)?;
+        let lines = render::load_and_render(source, c.mode, c.width, term, c.background, c.margin)?;
         for line in &lines {
             output.write_line(line)?;
         }
@@ -177,12 +163,10 @@ impl SvgViewer {
     }
 
     pub fn view_interactive(&self, source: &InputSource, file_type: &FileType) -> Result<()> {
-        let path = require_path(source, "SVG")?;
-
         let config = self.config;
         let bg = Rc::new(Cell::new(config.background));
         let bg_closure = Rc::clone(&bg);
-        let path_buf = path.to_path_buf();
+        let source_clone = source.clone();
         let tm = Rc::clone(&self.theme_manager);
         let raw_mode = self.raw_mode;
 
@@ -198,10 +182,10 @@ impl SvgViewer {
                     // Render as ASCII art image
                     let mut term = render::TermSize::detect();
                     term.rows = term.rows.saturating_sub(1);
-                    render::load_and_render_svg(&path_buf, config.mode, config.width, term, bg_closure.get(), config.margin)
+                    render::load_and_render_svg(&source_clone, config.mode, config.width, term, bg_closure.get(), config.margin)
                 } else {
                     // Render as XML source
-                    let raw_content = std::fs::read_to_string(&path_buf)?;
+                    let raw_content = source_clone.read_text()?;
                     let content = if !raw_mode {
                         crate::viewer::structured::pretty_print(
                             &raw_content,
@@ -224,10 +208,9 @@ impl Viewer for SvgViewer {
         _file_type: &FileType,
         output: &mut Output,
     ) -> Result<()> {
-        let path = require_path(source, "SVG")?;
         let term = render::TermSize::detect();
         let c = &self.config;
-        let lines = render::load_and_render_svg(path, c.mode, c.width, term, c.background, c.margin)?;
+        let lines = render::load_and_render_svg(source, c.mode, c.width, term, c.background, c.margin)?;
         for line in &lines {
             output.write_line(line)?;
         }
