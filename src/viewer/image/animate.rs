@@ -228,6 +228,18 @@ fn run_animation_loop(
                         // Animation content doesn't depend on theme — just redraw
                         redraw(stdout, &state, current_frame, playing)?;
                     }
+                    KeyAction::SwitchToHex => {
+                        crate::viewer::hex::run_hex_loop(
+                            stdout,
+                            source,
+                            file_type,
+                            state.current_theme,
+                            0,
+                            true,
+                        )?;
+                        last_advance = Instant::now();
+                        redraw(stdout, &state, current_frame, playing)?;
+                    }
                     KeyAction::Unhandled(key) => match key.code {
                         // Play/pause
                         KeyCode::Char('p') => {

@@ -8,9 +8,10 @@ use crossterm::event::{self, Event, KeyCode};
 use crate::detect::FileType;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
+use crate::viewer::hex::run_hex_loop;
 use crate::viewer::image::Background;
 use crate::viewer::ui::{
-    KeyAction, ViewerState, render_themed_status_line, with_alternate_screen,
+    KeyAction, ViewMode, ViewerState, render_themed_status_line, with_alternate_screen,
 };
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ const HELP_KEYS: &[(&str, &str)] = &[
     ("i", "File info"),
     ("h / ?", "Toggle help"),
     ("t", "Next theme"),
+    ("x", "Hex dump mode"),
     ("r", "Toggle raw / pretty"),
     ("b", "Cycle background (images)"),
 ];
@@ -119,6 +121,19 @@ fn run_event_loop(
                     state.content_lines = render_content(state.current_theme, pretty)?;
                     redraw(stdout, &state)?;
                 }
+                KeyAction::SwitchToHex => {
+                    let line = state.scroll.get(ViewMode::Content);
+                    let offset = compute_byte_offset_for_line(source, line).unwrap_or(0);
+                    run_hex_loop(
+                        stdout,
+                        source,
+                        file_type,
+                        state.current_theme,
+                        offset,
+                        true,
+                    )?;
+                    redraw(stdout, &state)?;
+                }
                 KeyAction::Unhandled(key) => match key.code {
                     // Raw / pretty-print toggle
                     KeyCode::Char('r') => {
@@ -154,6 +169,30 @@ fn run_event_loop(
 // Status line
 // ---------------------------------------------------------------------------
 
+/// Compute the byte offset in the source corresponding to a given line index
+/// (0-based). Translates by counting newlines in the raw source bytes — so
+/// it matches displayed lines for plain-text and syntax-highlighted views,
+/// but is approximate for pretty-printed structured content.
+pub(crate) fn compute_byte_offset_for_line(
+    source: &InputSource,
+    line: usize,
+) -> Result<u64> {
+    if line == 0 {
+        return Ok(0);
+    }
+    let bytes = source.read_bytes()?;
+    let mut newlines = 0usize;
+    for (i, b) in bytes.iter().enumerate() {
+        if *b == b'\n' {
+            newlines += 1;
+            if newlines == line {
+                return Ok((i + 1) as u64);
+            }
+        }
+    }
+    Ok(bytes.len() as u64)
+}
+
 fn render_status_line(name: &str, state: &ViewerState) -> String {
     let theme = &state.peek_theme;
     render_themed_status_line(
@@ -165,4 +204,46 @@ fn render_status_line(name: &str, state: &ViewerState) -> String {
         &["h:help", "Tab:cycle", "t:theme", "q:quit"],
         theme,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stdin_source(text: &str) -> InputSource {
+        InputSource::Stdin {
+            data: text.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn byte_offset_for_first_line_is_zero() {
+        let s = stdin_source("alpha\nbeta\ngamma\n");
+        assert_eq!(compute_byte_offset_for_line(&s, 0).unwrap(), 0);
+    }
+
+    #[test]
+    fn byte_offset_after_n_newlines() {
+        let s = stdin_source("alpha\nbeta\ngamma\n");
+        // line 1 starts at byte 6 (after "alpha\n")
+        assert_eq!(compute_byte_offset_for_line(&s, 1).unwrap(), 6);
+        // line 2 starts at byte 11 (after "alpha\nbeta\n")
+        assert_eq!(compute_byte_offset_for_line(&s, 2).unwrap(), 11);
+    }
+
+    #[test]
+    fn byte_offset_past_eof_returns_len() {
+        let s = stdin_source("a\nb\nc\n");
+        let len = "a\nb\nc\n".len() as u64;
+        assert_eq!(compute_byte_offset_for_line(&s, 999).unwrap(), len);
+    }
+
+    #[test]
+    fn byte_offset_no_trailing_newline() {
+        let s = stdin_source("first\nsecond");
+        assert_eq!(compute_byte_offset_for_line(&s, 1).unwrap(), 6);
+        // line 2 doesn't exist (only one newline) → returns len
+        let len = "first\nsecond".len() as u64;
+        assert_eq!(compute_byte_offset_for_line(&s, 2).unwrap(), len);
+    }
 }

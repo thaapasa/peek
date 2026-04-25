@@ -26,6 +26,7 @@ src/
     syntax.rs          — Syntax-highlighted source code (syntect)
     structured.rs      — JSON/YAML/TOML/XML pretty-print + syntax highlight
     text.rs            — Plain text passthrough
+    hex.rs             — Hex dump viewer (streaming, terminal-width aware)
     image/
       mod.rs           — Image viewer (interactive + piped)
       render.rs        — Image → glyph-matched ASCII art with true color

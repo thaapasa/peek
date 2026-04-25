@@ -44,6 +44,12 @@ pre-buffered bytes. All viewers take `&InputSource` and call `read_text()` or
 `read_bytes()` — image, animation, and SVG viewers decode from either path or
 memory as needed.
 
+For random-access reads without loading the whole file, `InputSource` also
+exposes `open_byte_source() -> Box<dyn ByteSource>`. The hex viewer uses this
+to seek-and-read just the visible window per scroll. The `File` implementation
+holds an open `File` handle and seeks per call; the `Stdin` implementation
+slices the already-buffered bytes.
+
 When stdin is consumed (because `-` is passed or no args are given with a piped
 stdin), `main.rs` reopens fd 0 from the controlling terminal so the interactive
 event loop can still read keystrokes. The path is resolved via `ttyname()` on
@@ -95,6 +101,23 @@ Shared state for interactive viewers: view mode, theme, scroll offsets, and
 content/info/help line buffers. Provides `handle_key()` for common key
 bindings and `draw()` for screen rendering. Both `interactive.rs` and
 `animate.rs` create a `ViewerState` and layer their own keys on top.
+
+### Hex viewer (`viewer/hex.rs`)
+
+A streaming hex-dump viewer that becomes the default rendering for
+`FileType::Binary` and is reachable from any other viewer via the `x` key.
+Layout matches `hexdump -C` (`offset  hex bytes  |ASCII|`) and bytes-per-row
+is computed from terminal width (`14 + 4*bpr` columns; rounded down to a
+multiple of 8). Pipe mode honors `$COLUMNS` (≥ 24) or falls back to 16.
+
+The interactive event loop owns its own scrolling state (a `top_offset: u64`
+aligned to bytes-per-row) and reads `rows × bpr` bytes from a `ByteSource`
+per redraw. Info, Help, and theme cycling are delegated to a `ViewerState`
+with empty `content_lines`. Pressing `x` from another viewer enters hex
+positioned at the byte offset corresponding to the current top line
+(translated via `compute_byte_offset_for_line` in `interactive.rs`); pressing
+`x` again returns. When hex is the standalone default for a binary file, `x`
+is a no-op.
 
 ### ImageConfig (`viewer/image/mod.rs`)
 
@@ -171,6 +194,14 @@ loop {
 
 **Adding a viewer-specific key:** handle it in the `Unhandled` arm of that
 viewer's event loop.
+
+**Switching to hex from another viewer:** `ViewerState::handle_key()` returns
+`KeyAction::SwitchToHex` for the `x` key. Each event loop calls
+`hex::run_hex_loop(stdout, source, file_type, theme, byte_offset, true)` from
+inside its existing alternate screen, then redraws on return. The byte offset
+is computed by the caller (text/code: source-newline scan via
+`compute_byte_offset_for_line`; image/animation: 0, since position is
+meaningless for those modes).
 
 ## Adding a new file type
 

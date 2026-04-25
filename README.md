@@ -13,6 +13,7 @@ A modern file viewer for the terminal. Like `cat`, but it actually tries to show
 - **Syntax highlighting** for source code (powered by syntect/TextMate grammars)
 - **Pretty-printing** for structured data: JSON, YAML, TOML, XML — with syntax highlighting
 - **ASCII art rendering** for images with glyph-matched character mapping and true color
+- **Hex dump** for binary files — `hexdump -C` style, terminal-width aware, streamed (no full-file load); reachable from any viewer with `x`
 - **Interactive viewer** with scrolling, file info, help screen, and live theme cycling
 - **Three custom dark themes** — Islands Dark, Dark 2026, Vivid Dark
 - **True color support** — 24-bit color throughout
@@ -131,6 +132,7 @@ with `--print`, output goes directly to stdout.
 | `h` / `?`       | Toggle help                |
 | `t`             | Cycle theme                |
 | `r`             | Toggle raw / pretty        |
+| `x`             | Toggle hex dump            |
 
 ## Themes
 

@@ -10,6 +10,7 @@ use crate::input::InputSource;
 use crate::pager::Output;
 use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
 
+pub mod hex;
 pub mod image;
 pub mod interactive;
 pub mod structured;
@@ -65,6 +66,7 @@ pub struct Registry {
     image_viewer: image::ImageViewer,
     svg_viewer: image::SvgViewer,
     text_viewer: text::TextViewer,
+    hex_viewer: hex::HexViewer,
     theme_manager: Rc<ThemeManager>,
     forced_language: Option<String>,
     plain_mode: bool,
@@ -88,6 +90,7 @@ impl Registry {
             image_viewer: image::ImageViewer::new(img_config, args.theme),
             svg_viewer: image::SvgViewer::new(img_config, args.theme, Rc::clone(&theme), args.raw),
             text_viewer: text::TextViewer,
+            hex_viewer: hex::HexViewer::new(args.theme),
             theme_manager: theme,
             forced_language: args.language.clone(),
             plain_mode: args.plain,
@@ -114,7 +117,12 @@ impl Registry {
 
     pub fn viewer_for(&self, file_type: &FileType) -> &dyn Viewer {
         if self.plain_mode {
-            return &self.text_viewer;
+            // --plain: use plain text for non-binary; hex still beats failing on
+            // non-UTF-8 bytes for binary.
+            return match file_type {
+                FileType::Binary => &self.hex_viewer,
+                _ => &self.text_viewer,
+            };
         }
 
         match file_type {
@@ -122,8 +130,12 @@ impl Registry {
             FileType::Structured(_) => &self.structured_viewer,
             FileType::Image => &self.image_viewer,
             FileType::Svg => &self.svg_viewer,
-            FileType::Binary => &self.text_viewer,
+            FileType::Binary => &self.hex_viewer,
         }
+    }
+
+    pub fn hex_viewer(&self) -> &hex::HexViewer {
+        &self.hex_viewer
     }
 
     /// Build a closure that renders file content to lines for any given theme.

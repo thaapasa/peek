@@ -129,13 +129,11 @@ fn main() -> Result<()> {
         // with Tab/i view switching between content and file info.
         for (source, file_type) in &inputs {
             if matches!(file_type, detect::FileType::Binary) {
-                // Binary files: print info and exit (no content to display)
-                let file_info = info::gather(source, file_type)
-                    .with_context(|| format!("failed to read info for {}", source.name()))?;
-                let lines = info::render(&file_info, viewers.peek_theme());
-                for line in &lines {
-                    println!("{line}");
-                }
+                // Binary files: open hex viewer (also works under --plain)
+                viewers
+                    .hex_viewer()
+                    .view_interactive(source, file_type, 0, false)
+                    .with_context(|| format!("failed to render {}", source.name()))?;
             } else if matches!(file_type, detect::FileType::Image) && !args.plain {
                 // Images re-render on resize for correct aspect ratio
                 viewers
@@ -166,23 +164,14 @@ fn main() -> Result<()> {
             }
         }
     } else {
-        // Piped or --no-pager: direct output
+        // Piped or --no-pager: direct output. Binary → hex viewer (registered
+        // as the dispatch target for FileType::Binary in viewer_for).
         let mut output = pager::Output::new(&args)?;
         for (source, file_type) in &inputs {
-            if matches!(file_type, detect::FileType::Binary) {
-                // Binary files: show file info instead of content
-                let file_info = info::gather(source, file_type)
-                    .with_context(|| format!("failed to read info for {}", source.name()))?;
-                let lines = info::render(&file_info, viewers.peek_theme());
-                for line in &lines {
-                    output.write_line(line)?;
-                }
-            } else {
-                let viewer = viewers.viewer_for(file_type);
-                viewer
-                    .render(source, file_type, &mut output)
-                    .with_context(|| format!("failed to render {}", source.name()))?;
-            }
+            let viewer = viewers.viewer_for(file_type);
+            viewer
+                .render(source, file_type, &mut output)
+                .with_context(|| format!("failed to render {}", source.name()))?;
         }
         output.finish()?;
     }

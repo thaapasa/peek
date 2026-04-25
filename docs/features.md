@@ -26,7 +26,7 @@ Default print mode output by file type:
 - **Images:** ASCII art at contain ratio.
 - **SVG:** rendered preview (ASCII art).
 - **Documents:** extracted text content.
-- **Binary / unknown:** file info (type, size, metadata).
+- **Binary / unknown:** hex dump (streaming, `hexdump -C` layout, terminal-width aware).
 
 **Status: Partially implemented.** Direct stdout output works when `--print` / `-p` is
 set or stdout is not a TTY.
@@ -43,8 +43,10 @@ set or stdout is not a TTY.
   should be viewable interactively or printable to stdout.
 
 **Status: Partial.** TTY detection and `--print` / `-p` implemented. Binary files
-print info and exit by default. No content-length-based auto-selection yet (currently:
-TTY → viewer, non-TTY → print).
+default to the hex-dump viewer (interactive in TTY mode, streamed for pipes), and
+`--plain` / `-P` still uses hex for binary (since plain text would corrupt
+non-UTF-8 bytes). No content-length-based auto-selection yet (currently: TTY →
+viewer, non-TTY → print).
 
 ### Input
 
@@ -317,10 +319,30 @@ be added later with dedicated parsers on a per-format basis.
 This ensures that peek always has something useful to show for any file, even if it
 can't render the contents.
 
-**Status: Implemented (basic).** Binary files print the file info screen (MIME type,
-file size, filesystem metadata) and exit. Also available for all file types via `--info`
-flag and Tab/i in the interactive viewer. No format-specific deep metadata (archive
-listing, executable info, hex dump) yet.
+**Status: Implemented.** Binary files open in the hex-dump viewer by default
+(`hexdump -C`-style layout, terminal-width aware, streaming reads via
+`ByteSource`). The file info screen is still reachable via `Tab` / `i` from
+within hex mode and via the `--info` flag. `--plain` / `-P` still uses hex
+for binary (plain text mode cannot represent non-UTF-8 bytes). No
+format-specific deep metadata (archive listing, executable info) yet.
+
+#### Hex Dump Mode
+
+Binary files default to a hex-dump viewer that reads bytes from disk on demand
+(no full-file slurp). Layout is `hexdump -C`-compatible: an 8-digit offset, two
+hex columns of N/2 bytes separated by an extra space, then a printable-ASCII
+column between `|`s. Bytes-per-row scales with terminal width: `14 + 4*bpr`
+columns (rounded down to a multiple of 8, minimum 8). Pipe-mode output honors
+`$COLUMNS` (≥ 24) or falls back to a fixed 16 bytes per row.
+
+Hex mode is also reachable from any other viewer with the `x` key. When
+entering hex from a text/code/structured view, the top of the hex view is
+positioned at the byte offset of the visible top line (computed by counting
+newlines in the source bytes — approximate for pretty-printed structured
+content). Pressing `x` again returns to the previous viewer. When hex is
+launched directly as the default for a binary file, `x` is a no-op.
+
+**Status: Implemented.**
 
 
 ## Viewer Features
@@ -419,6 +441,7 @@ certain file types.
 | `i`       | Jump to file info screen                   |
 | `h` / `?` | Toggle help screen                         |
 | `t`       | Cycle theme                                |
+| `x`       | Toggle hex dump (no-op when hex is default)|
 
 ### Search
 

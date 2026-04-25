@@ -82,6 +82,8 @@ pub(crate) enum KeyAction {
     Redraw,
     /// Theme was cycled; caller must re-render content_lines, then redraw.
     ThemeChanged,
+    /// User pressed `x` — caller should switch into (or out of) hex mode.
+    SwitchToHex,
     /// Key not handled; caller should check viewer-specific bindings.
     Unhandled(KeyEvent),
 }
@@ -205,6 +207,9 @@ impl ViewerState {
                 *self.scroll.get_mut(self.view_mode) = self.max_scroll();
                 KeyAction::Redraw
             }
+
+            // Hex-mode toggle
+            KeyCode::Char('x') => KeyAction::SwitchToHex,
 
             _ => KeyAction::Unhandled(key),
         }
