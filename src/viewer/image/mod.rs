@@ -3,9 +3,9 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::detect::FileType;
+use crate::input::detect::FileType;
 use crate::input::InputSource;
-use crate::pager::Output;
+use crate::output::Output;
 use crate::theme::{PeekThemeName, ThemeManager};
 
 use super::Viewer;
@@ -189,7 +189,7 @@ impl SvgViewer {
                     let content = if !raw_mode {
                         crate::viewer::structured::pretty_print(
                             &raw_content,
-                            crate::detect::StructuredFormat::Xml,
+                            crate::input::detect::StructuredFormat::Xml,
                         )?
                     } else {
                         raw_content

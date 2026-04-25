@@ -7,9 +7,9 @@ use crossterm::{
     terminal,
 };
 
-use crate::detect::FileType;
+use crate::input::detect::FileType;
 use crate::input::{ByteSource, InputSource};
-use crate::pager::Output;
+use crate::output::Output;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
 
 use super::Viewer;

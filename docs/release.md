@@ -72,8 +72,8 @@ need `xattr -d com.apple.quarantine peek` (or right-click → Open once).
 
 Windows gets a `.zip` only — no install script. Piping text into
 `peek.exe` on Windows renders once to stdout but does not enter the
-interactive viewer; the Unix tty-reopen trick in `src/main.rs` has no
-Windows equivalent yet.
+interactive viewer; the Unix tty-reopen trick in `src/input/stdin.rs`
+has no Windows equivalent yet.
 
 ## Recovering from a failed release
 

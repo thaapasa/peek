@@ -18,10 +18,29 @@ No external runtime dependencies. Image rendering is built-in.
 
 ```
 src/
-  main.rs              — CLI entry point (clap), file type dispatch
+  main.rs              — CLI entry point: dispatches inputs to viewers
+  cli.rs               — Args struct (clap derive)
+  input/
+    mod.rs             — re-exports InputSource, ByteSource
+    source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait
+    detect.rs          — File type detection (extension + magic bytes + stdin sniffing)
+    stdin.rs           — Build sources from CLI args, reopen fd 0 from /dev/tty after pipe
+  output/
+    mod.rs             — re-exports Output
+    pager.rs           — Output abstraction (pager / direct stdout / buffer)
+    help.rs            — CLI help and version screens
+  info/
+    mod.rs             — FileInfo, FileExtras data types and shared permission helpers
+    gather.rs          — FileInfo collection: FS metadata, MIME, EXIF, HDR, text/image extras
+    render.rs          — Themed terminal rendering of FileInfo
+  theme.rs             — Theme management, PeekTheme semantic colors, color blending
   viewer/
     mod.rs             — Viewer trait, Registry, highlight_lines helper
-    ui.rs              — Shared viewer UI: ViewerState, ScrollState, key handling, drawing
+    ui/
+      mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
+      state.rs         — ViewMode, ScrollState, ViewerState (state, key dispatch, drawing)
+      keys.rs          — KeyAction enum + shared `b` (background-cycle) helper
+      help.rs          — Keyboard-shortcuts help screen
     interactive.rs     — Static content interactive viewer (text, code, structured data)
     syntax.rs          — Syntax-highlighted source code (syntect)
     structured.rs      — JSON/YAML/TOML/XML pretty-print + syntax highlight
@@ -34,12 +53,6 @@ src/
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
-  detect.rs            — File type detection (extension + magic bytes + stdin content sniffing)
-  info.rs              — File metadata gathering and themed rendering
-  input.rs             — InputSource enum (File path or buffered Stdin)
-  pager.rs             — Output abstraction (pager / direct stdout)
-  theme.rs             — Theme management, PeekTheme semantic colors, color blending
-  help.rs              — CLI help and version screens
 themes/
   islands-dark.tmTheme — JetBrains Islands-inspired dark theme (default)
   dark-2026.tmTheme    — VS Code Dark 2026-inspired theme

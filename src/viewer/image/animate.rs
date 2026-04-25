@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
-use crate::detect::FileType;
+use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 
@@ -13,7 +13,7 @@ use super::render;
 use super::ImageConfig;
 
 use crate::viewer::ui::{
-    KeyAction, ViewMode, ViewerState, render_themed_status_line, with_alternate_screen,
+    KeyAction, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
 };
 
 /// A single decoded animation frame with its display duration.
@@ -240,6 +240,13 @@ fn run_animation_loop(
                         last_advance = Instant::now();
                         redraw(stdout, &state, current_frame, playing)?;
                     }
+                    KeyAction::Unhandled(key) if keys::is_background_cycle(key) => {
+                        config.background = config.background.next();
+                        state.content_lines = render_frame(
+                            &frames[current_frame], &config,
+                        );
+                        redraw(stdout, &state, current_frame, playing)?;
+                    }
                     KeyAction::Unhandled(key) => match key.code {
                         // Play/pause
                         KeyCode::Char('p') => {
@@ -265,14 +272,6 @@ fn run_animation_loop(
                                 &frames[current_frame], &config,
                             );
                             last_advance = Instant::now();
-                            redraw(stdout, &state, current_frame, playing)?;
-                        }
-                        // Background cycling
-                        KeyCode::Char('b') => {
-                            config.background = config.background.next();
-                            state.content_lines = render_frame(
-                                &frames[current_frame], &config,
-                            );
                             redraw(stdout, &state, current_frame, playing)?;
                         }
                         _ => {}

@@ -4,7 +4,9 @@
 
 ## Context
 
-peek currently requires file path arguments and has no stdin support. The goal is to allow piping content into peek (e.g., `curl ... | peek`, `cat file | peek`) with the full interactive viewer experience.
+peek currently requires file path arguments and has no stdin support. The goal is to allow piping
+content into peek (e.g., `curl ... | peek`, `cat file | peek`) with the full interactive viewer
+experience.
 
 ## Behavior
 
@@ -15,7 +17,8 @@ peek currently requires file path arguments and has no stdin support. The goal i
 | `peek file.rs`   | View file normally               | View file normally (ignore stdin) |
 | `peek - file.rs` | Read stdin + view file           | Read stdin + view file            |
 
-After reading piped stdin, reopen fd 0 from `/dev/tty` so crossterm keyboard input works normally. This enables the full interactive viewer (theme cycling, Tab to info, scrolling) for stdin content.
+After reading piped stdin, reopen fd 0 from `/dev/tty` so crossterm keyboard input works normally.
+This enables the full interactive viewer (theme cycling, Tab to info, scrolling) for stdin content.
 
 ## Core Abstraction: `InputSource`
 
@@ -37,7 +40,9 @@ impl InputSource {
 }
 ```
 
-`File` variant reads from the filesystem on demand. `Stdin` variant returns the pre-buffered data. This positions well for future extensions (mmap for large files, range reads for hex dump) — the enum can grow or be replaced with a trait later.
+`File` variant reads from the filesystem on demand. `Stdin` variant returns the pre-buffered data.
+This positions well for future extensions (mmap for large files, range reads for hex dump) — the
+enum can grow or be replaced with a trait later.
 
 All downstream code that currently takes `&Path` for content access switches to `&InputSource`.
 
@@ -50,31 +55,40 @@ New module with the `InputSource` enum and its methods. Add `mod input;` to `mai
 ### Step 2: Update `src/detect.rs`
 
 Change `detect()` to accept `&InputSource` instead of `&Path`:
+
 - `File` variant: existing logic (check extension, then read for magic bytes)
-- `Stdin` variant: check magic bytes from buffer, try content-based format sniffing (starts with `{`/`[` → JSON, `---` → YAML, `<` → XML), fall back to `--language` flag or plain text
+- `Stdin` variant: check magic bytes from buffer, try content-based format sniffing (starts with
+  `{`/`[` → JSON, `---` → YAML, `<` → XML), fall back to `--language` flag or plain text
 
 The `path.exists()` check moves inside the `File` arm.
 
 ### Step 3: Update `src/info.rs`
 
 Change `gather()` to accept `&InputSource`:
+
 - `File` variant: existing logic (fs::metadata, EXIF, etc.)
-- `Stdin` variant: limited metadata — size from buffer length, line/word/char counts for text, detected type. No timestamps/permissions (display as N/A or omit).
+- `Stdin` variant: limited metadata — size from buffer length, line/word/char counts for text,
+  detected type. No timestamps/permissions (display as N/A or omit).
 
 ### Step 4: Update `src/viewer/mod.rs`
 
 Change `Viewer` trait and `Registry` methods:
+
 - `Viewer::render(&self, source: &InputSource, file_type: &FileType, output: &mut Output)`
-- `Registry::content_renderer(source: &InputSource, file_type: &FileType) -> Result<ContentRenderer>`
-- `Registry::syntax_token_for(source: &InputSource, file_type: &FileType)` — uses extension from source, falls back to `--language`
+-
+`Registry::content_renderer(source: &InputSource, file_type: &FileType) -> Result<ContentRenderer>`
+- `Registry::syntax_token_for(source: &InputSource, file_type: &FileType)` — uses extension from
+  source, falls back to `--language`
 
 ### Step 5: Update individual viewers
 
 Each viewer replaces `fs::read_to_string(path)` with `source.read_text()`:
+
 - `src/viewer/syntax.rs` — `source.read_text()?` instead of `fs::read_to_string(path)?`
 - `src/viewer/structured.rs` — same change
 - `src/viewer/text.rs` — same change
-- `src/viewer/image/mod.rs` — `source.read_bytes()?` + `image::load_from_memory()` for stdin, `image::open(path)` for files. Stretch goal: initially bail on image stdin.
+- `src/viewer/image/mod.rs` — `source.read_bytes()?` + `image::load_from_memory()` for stdin,
+  `image::open(path)` for files. Stretch goal: initially bail on image stdin.
 - `src/viewer/image/svg.rs` — similar: `source.read_bytes()?` for SVG data
 
 ### Step 6: Update `src/main.rs`
@@ -89,7 +103,8 @@ Each viewer replaces `fs::read_to_string(path)` with `source.read_text()`:
        unsafe { libc::dup2(tty.as_raw_fd(), 0); }
    }
    ```
-4. **Build inputs**: Map `args.files` to `Vec<(InputSource, FileType)>`, replacing `"-"` entries with the stdin source
+4. **Build inputs**: Map `args.files` to `Vec<(InputSource, FileType)>`, replacing `"-"` entries
+   with the stdin source
 5. **Rest of main dispatch is unchanged** — all code paths work with `&InputSource` now
 
 ### Step 7: Update docs
@@ -117,16 +132,19 @@ Each viewer replaces `fs::read_to_string(path)` with `source.read_text()`:
 ## Scope Boundaries
 
 **In scope:**
+
 - Text/code/structured data from stdin with full interactive viewer
 - Content-based format detection for stdin
 - `/dev/tty` reopen for keyboard input after consuming stdin
 
 **Stretch goals (not blocking):**
+
 - Images from stdin (`image::load_from_memory()`)
 - SVG from stdin
 - Windows support (`CONIN$` instead of `/dev/tty`)
 
 **Future (separate work):**
+
 - Lazy/streaming reads for large files (extend `InputSource` or replace with trait)
 - Hex dump viewer with range reads
 

@@ -1,8 +1,8 @@
 use anyhow::Result;
 
-use crate::detect::FileType;
+use crate::input::detect::FileType;
 use crate::input::InputSource;
-use crate::pager::Output;
+use crate::output::Output;
 
 use super::Viewer;
 

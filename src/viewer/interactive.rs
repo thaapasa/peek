@@ -5,13 +5,13 @@ use std::rc::Rc;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyCode};
 
-use crate::detect::FileType;
+use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 use crate::viewer::hex::run_hex_loop;
 use crate::viewer::image::Background;
 use crate::viewer::ui::{
-    KeyAction, ViewMode, ViewerState, render_themed_status_line, with_alternate_screen,
+    KeyAction, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
 };
 
 // ---------------------------------------------------------------------------
@@ -134,25 +134,23 @@ fn run_event_loop(
                     )?;
                     redraw(stdout, &state)?;
                 }
-                KeyAction::Unhandled(key) => match key.code {
+                KeyAction::Unhandled(key) if keys::is_background_cycle(key) => {
+                    if let Some(ref bg_cell) = background {
+                        bg_cell.set(bg_cell.get().next());
+                        state.content_lines = render_content(state.current_theme, pretty)?;
+                        state.scroll.reset_content();
+                        redraw(stdout, &state)?;
+                    }
+                }
+                KeyAction::Unhandled(key) => {
                     // Raw / pretty-print toggle
-                    KeyCode::Char('r') => {
+                    if let KeyCode::Char('r') = key.code {
                         pretty = !pretty;
                         state.content_lines = render_content(state.current_theme, pretty)?;
                         state.scroll.reset_content();
                         redraw(stdout, &state)?;
                     }
-                    // Background cycling (image/SVG viewers only)
-                    KeyCode::Char('b') => {
-                        if let Some(ref bg_cell) = background {
-                            bg_cell.set(bg_cell.get().next());
-                            state.content_lines = render_content(state.current_theme, pretty)?;
-                            state.scroll.reset_content();
-                            redraw(stdout, &state)?;
-                        }
-                    }
-                    _ => {}
-                },
+                }
             },
             Event::Resize(_, _) => {
                 if rerender_on_resize {

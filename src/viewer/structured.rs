@@ -4,9 +4,9 @@ use anyhow::Result;
 use syntect::easy::HighlightLines;
 use syntect::util::as_24_bit_terminal_escaped;
 
-use crate::detect::{FileType, StructuredFormat};
+use crate::input::detect::{FileType, StructuredFormat};
 use crate::input::InputSource;
-use crate::pager::Output;
+use crate::output::Output;
 use crate::theme::{ANSI_RESET, ThemeManager};
 
 use super::Viewer;

@@ -36,7 +36,7 @@ Registry::viewer_for(file_type) --> &dyn Viewer
   +-- Pipe? --> Viewer::render() --> pager::Output --> stdout
 ```
 
-### InputSource (`input.rs`)
+### InputSource (`input/source.rs`)
 
 `InputSource` decouples "where data comes from" from "how it's displayed". The
 `File` variant holds a `PathBuf` and reads on demand; the `Stdin` variant holds
@@ -51,12 +51,13 @@ holds an open `File` handle and seeks per call; the `Stdin` implementation
 slices the already-buffered bytes.
 
 When stdin is consumed (because `-` is passed or no args are given with a piped
-stdin), `main.rs` reopens fd 0 from the controlling terminal so the interactive
-event loop can still read keystrokes. The path is resolved via `ttyname()` on
-stderr/stdout rather than opening `/dev/tty` directly — macOS kqueue rejects
-`/dev/tty` with EINVAL when mio tries to register it. Stdin detection uses
-magic bytes (images, binary) followed by content sniffing (leading `{`/`[` →
-JSON, `<` → XML/SVG, `---` → YAML) in `detect::detect_bytes()`.
+stdin), `input/stdin.rs` reopens fd 0 from the controlling terminal so the
+interactive event loop can still read keystrokes. The path is resolved via
+`ttyname()` on stderr/stdout rather than opening `/dev/tty` directly — macOS
+kqueue rejects `/dev/tty` with EINVAL when mio tries to register it. Stdin
+detection uses magic bytes (images, binary) followed by content sniffing
+(leading `{`/`[` → JSON, `<` → XML/SVG, `---` → YAML) in
+`input::detect::detect_bytes()`.
 
 ### TTY path (interactive)
 
@@ -72,7 +73,7 @@ JSON, `<` → XML/SVG, `---` → YAML) in `detect::detect_bytes()`.
 
 ### Pipe path (direct output)
 
-`Viewer::render()` writes lines to `pager::Output`, which forwards to stdout
+`Viewer::render()` writes lines to `output::Output`, which forwards to stdout
 or the built-in pager. No interactive state, no alternate screen.
 
 ## Key abstractions
@@ -95,7 +96,7 @@ Factory that creates all viewers from CLI args and dispatches by `FileType`.
 Also builds `ContentRenderer` closures for the interactive path. Holds the
 shared `ThemeManager` via `Rc`.
 
-### ViewerState (`viewer/ui.rs`)
+### ViewerState (`viewer/ui/state.rs`)
 
 Shared state for interactive viewers: view mode, theme, scroll offsets, and
 content/info/help line buffers. Provides `handle_key()` for common key
@@ -190,7 +191,7 @@ loop {
 ```
 
 **Adding a new shared key binding:** edit `ViewerState::handle_key()` in
-`ui.rs`. Both viewers pick it up automatically.
+`viewer/ui/state.rs`. Both viewers pick it up automatically.
 
 **Adding a viewer-specific key:** handle it in the `Unhandled` arm of that
 viewer's event loop.
@@ -205,14 +206,15 @@ meaningless for those modes).
 
 ## Adding a new file type
 
-1. Add a variant to `FileType` in `detect.rs` and wire detection logic.
+1. Add a variant to `FileType` in `input/detect.rs` and wire detection logic.
 2. Create a new viewer struct implementing `Viewer` in `viewer/`.
 3. Register it in `Registry` (`viewer/mod.rs`) and add dispatch in
    `viewer_for()`.
 4. For interactive support: create a `ContentRenderer` closure in
    `content_renderer()` or add a `view_interactive()` method.
 5. Wire the new type in `main.rs`'s TTY/pipe branches.
-6. Add info gathering in `info.rs` if the type has interesting metadata.
+6. Add info gathering in `info/gather.rs` if the type has interesting metadata
+   (and themed display in `info/render.rs` for novel field types).
 
 ## Adding a new theme
 
