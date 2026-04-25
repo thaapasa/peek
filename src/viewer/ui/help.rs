@@ -1,9 +1,10 @@
+use super::keys::Action;
 use crate::theme::{PeekTheme, PeekThemeName};
 
 pub(crate) fn render_help_with_keys(
     theme: &PeekTheme,
     current_theme: PeekThemeName,
-    keys: &[(&str, &str)],
+    actions: &[(Action, &str)],
 ) -> Vec<String> {
     let mut lines = Vec::new();
 
@@ -21,10 +22,10 @@ pub(crate) fn render_help_with_keys(
     let overhead = sample_painted.len() - 1;
     let key_width = 14 + overhead;
 
-    for (key, desc) in keys {
+    for (action, desc) in actions {
         lines.push(format!(
             "  {:<width$}{}",
-            theme.paint_label(key),
+            theme.paint_label(action.label_keys()),
             theme.paint_muted(desc),
             width = key_width,
         ));

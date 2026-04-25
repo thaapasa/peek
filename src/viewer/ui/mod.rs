@@ -10,7 +10,7 @@ pub(crate) mod help;
 pub(crate) mod keys;
 pub(crate) mod state;
 
-pub(crate) use keys::KeyAction;
+pub(crate) use keys::{Action, Outcome};
 pub(crate) use state::{ViewMode, ViewerState};
 
 /// Enter the alternate screen and raw mode, run the closure, then always clean up.

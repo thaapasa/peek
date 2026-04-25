@@ -1,21 +1,155 @@
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) enum KeyAction {
-    /// User wants to quit (q, Esc, Ctrl+C).
+/// A single physical-key trigger: a `KeyCode` plus an optional Ctrl modifier.
+/// SHIFT is treated as part of the keycode (e.g. `Char('N')` already implies shift).
+#[derive(Copy, Clone)]
+pub(crate) struct Binding {
+    pub code: KeyCode,
+    pub ctrl: bool,
+}
+
+impl Binding {
+    pub const fn plain(code: KeyCode) -> Self { Self { code, ctrl: false } }
+    pub const fn ctrl(c: char) -> Self { Self { code: KeyCode::Char(c), ctrl: true } }
+
+    pub fn matches(self, key: KeyEvent) -> bool {
+        if self.code != key.code {
+            return false;
+        }
+        let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        self.ctrl == has_ctrl
+    }
+}
+
+/// Every semantic key action peek's interactive viewers can take.
+/// This enum is the single source of truth for physical keybindings.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Action {
+    /// Exit the current viewer.
     Quit,
-    /// View mode or scroll changed; caller should redraw.
-    Redraw,
-    /// Theme was cycled; caller must re-render content_lines, then redraw.
-    ThemeChanged,
-    /// User pressed `x` — caller should switch into (or out of) hex mode.
+    /// Scroll up one line.
+    ScrollUp,
+    /// Scroll down one line.
+    ScrollDown,
+    /// Page scroll up.
+    PageUp,
+    /// Page scroll down.
+    PageDown,
+    /// Jump to the top of the current view.
+    Top,
+    /// Jump to the bottom of the current view.
+    Bottom,
+    /// Jump to the file-info view.
+    SwitchInfo,
+    /// Toggle the help overlay.
+    ToggleHelp,
+    /// Cycle between the content view and the file-info view.
+    ToggleContentInfo,
+    /// Cycle to the next theme.
+    CycleTheme,
+    /// Enter hex view from another viewer (or exit, in toggle mode).
     SwitchToHex,
-    /// Key not handled; caller should check viewer-specific bindings.
-    Unhandled(KeyEvent),
+    /// Cycle the image-render background (auto/black/white/checkerboard).
+    CycleBackground,
+    /// Toggle raw / pretty rendering (text + SVG source).
+    ToggleRawSource,
+    /// Play / pause an animated image.
+    PlayPause,
+    /// Advance to the next animation frame.
+    NextFrame,
+    /// Step back to the previous animation frame.
+    PrevFrame,
 }
 
-/// Shared `b` binding for cycling the image-viewer background. Storage is
-/// viewer-specific (Cell in `interactive.rs`, owned field in `animate.rs`),
-/// so this only collapses the key-name knowledge.
-pub(crate) fn is_background_cycle(key: KeyEvent) -> bool {
-    matches!(key.code, KeyCode::Char('b'))
+impl Action {
+    /// Physical keys that trigger this action. Edit this map to rebind.
+    pub fn bindings(self) -> &'static [Binding] {
+        use KeyCode::*;
+
+        // Each constant is the static binding list for one action. Defined
+        // inside the function to keep the entire key map in one place.
+        const QUIT:           &[Binding] = &[Binding::plain(Char('q')), Binding::plain(Esc), Binding::ctrl('c')];
+        const SCROLL_UP:      &[Binding] = &[Binding::plain(Up),        Binding::plain(Char('k'))];
+        const SCROLL_DOWN:    &[Binding] = &[Binding::plain(Down),      Binding::plain(Char('j'))];
+        const PAGE_UP:        &[Binding] = &[Binding::plain(PageUp)];
+        const PAGE_DOWN:      &[Binding] = &[Binding::plain(PageDown),  Binding::plain(Char(' '))];
+        const TOP:            &[Binding] = &[Binding::plain(Home),      Binding::plain(Char('g'))];
+        const BOTTOM:         &[Binding] = &[Binding::plain(End),       Binding::plain(Char('G'))];
+        const SWITCH_INFO:    &[Binding] = &[Binding::plain(Char('i'))];
+        const TOGGLE_HELP:    &[Binding] = &[Binding::plain(Char('h')), Binding::plain(Char('?'))];
+        const TOGGLE_CI:      &[Binding] = &[Binding::plain(Tab)];
+        const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
+        const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
+        const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
+        const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
+        const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
+        const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n')), Binding::plain(Right)];
+        const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N')), Binding::plain(Left)];
+
+        match self {
+            Action::Quit              => QUIT,
+            Action::ScrollUp          => SCROLL_UP,
+            Action::ScrollDown        => SCROLL_DOWN,
+            Action::PageUp            => PAGE_UP,
+            Action::PageDown          => PAGE_DOWN,
+            Action::Top               => TOP,
+            Action::Bottom            => BOTTOM,
+            Action::SwitchInfo        => SWITCH_INFO,
+            Action::ToggleHelp        => TOGGLE_HELP,
+            Action::ToggleContentInfo => TOGGLE_CI,
+            Action::CycleTheme        => CYCLE_THEME,
+            Action::SwitchToHex       => SWITCH_HEX,
+            Action::CycleBackground   => CYCLE_BG,
+            Action::ToggleRawSource   => TOGGLE_RAW,
+            Action::PlayPause         => PLAY_PAUSE,
+            Action::NextFrame         => NEXT_FRAME,
+            Action::PrevFrame         => PREV_FRAME,
+        }
+    }
+
+    /// Human-readable label of the keys for help screens (e.g. "q / Esc").
+    pub fn label_keys(self) -> &'static str {
+        match self {
+            Action::Quit              => "q / Esc",
+            Action::ScrollUp          => "Up / k",
+            Action::ScrollDown        => "Down / j",
+            Action::PageUp            => "PgUp",
+            Action::PageDown          => "PgDn / Space",
+            Action::Top               => "Home / g",
+            Action::Bottom            => "End / G",
+            Action::SwitchInfo        => "i",
+            Action::ToggleHelp        => "h / ?",
+            Action::ToggleContentInfo => "Tab",
+            Action::CycleTheme        => "t",
+            Action::SwitchToHex       => "x",
+            Action::CycleBackground   => "b",
+            Action::ToggleRawSource   => "r",
+            Action::PlayPause         => "p",
+            Action::NextFrame         => "n / Right",
+            Action::PrevFrame         => "N / Left",
+        }
+    }
+
+    pub fn matches(self, key: KeyEvent) -> bool {
+        self.bindings().iter().any(|b| b.matches(key))
+    }
 }
+
+/// Find the first action this viewer allows whose bindings match `key`.
+/// Linear scan over a small `&'static` slice — sub-microsecond.
+pub(crate) fn dispatch(key: KeyEvent, allowed: &[(Action, &'static str)]) -> Option<Action> {
+    allowed.iter().find_map(|(a, _)| a.matches(key).then_some(*a))
+}
+
+/// Result of `ViewerState::apply` — what the event loop should do next.
+pub(crate) enum Outcome {
+    /// User wants to exit.
+    Quit,
+    /// State updated — caller should redraw the screen.
+    Redraw,
+    /// Theme cycled — caller must re-render `content_lines` then redraw.
+    RecomputeContent,
+    /// The action is not a shared one; the viewer should handle it itself.
+    Unhandled,
+}
+

@@ -2,7 +2,7 @@ use std::io::{self, BufReader, Cursor};
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
 use crate::input::detect::FileType;
@@ -13,7 +13,7 @@ use super::render;
 use super::ImageConfig;
 
 use crate::viewer::ui::{
-    KeyAction, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
+    Action, Outcome, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
 };
 
 /// A single decoded animation frame with its display duration.
@@ -144,19 +144,23 @@ pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
 // Help keys for the animation viewer
 // ---------------------------------------------------------------------------
 
-const HELP_KEYS_ANIMATED: &[(&str, &str)] = &[
-    ("q / Esc", "Quit"),
-    ("p", "Play / pause"),
-    ("n / Right", "Next frame"),
-    ("N / Left", "Previous frame"),
-    ("b", "Cycle background"),
-    ("Up / Down", "Scroll (info/help)"),
-    ("Home / End", "Top / bottom"),
-    ("Tab", "Toggle content / file info"),
-    ("i", "File info"),
-    ("h / ?", "Toggle help"),
-    ("t", "Next theme"),
+const ACTIONS: &[(Action, &str)] = &[
+    (Action::Quit,              "Quit"),
+    (Action::PlayPause,         "Play / pause"),
+    (Action::NextFrame,         "Next frame"),
+    (Action::PrevFrame,         "Previous frame"),
+    (Action::CycleBackground,   "Cycle background"),
+    (Action::ScrollUp,          "Scroll up (info/help)"),
+    (Action::ScrollDown,        "Scroll down (info/help)"),
+    (Action::Top,               "Jump to top"),
+    (Action::Bottom,            "Jump to bottom"),
+    (Action::ToggleContentInfo, "Toggle content / file info"),
+    (Action::SwitchInfo,        "File info"),
+    (Action::ToggleHelp,        "Toggle help"),
+    (Action::CycleTheme,        "Next theme"),
+    (Action::SwitchToHex,       "Hex dump mode"),
 ];
+
 
 // ---------------------------------------------------------------------------
 // Interactive animated viewer
@@ -192,7 +196,7 @@ fn run_animation_loop(
     let frame_count = frames.len();
 
     let content_lines = render_frame(&frames[current_frame], &config);
-    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, HELP_KEYS_ANIMATED)?;
+    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, ACTIONS)?;
 
     let name = source.name().to_string();
 
@@ -219,64 +223,58 @@ fn run_animation_loop(
 
         if event::poll(timeout)? {
             match event::read()? {
-                Event::Key(key) => match state.handle_key(key) {
-                    KeyAction::Quit => return Ok(()),
-                    KeyAction::Redraw => {
-                        redraw(stdout, &state, current_frame, playing)?;
-                    }
-                    KeyAction::ThemeChanged => {
-                        // Animation content doesn't depend on theme — just redraw
-                        redraw(stdout, &state, current_frame, playing)?;
-                    }
-                    KeyAction::SwitchToHex => {
-                        crate::viewer::hex::run_hex_loop(
-                            stdout,
-                            source,
-                            file_type,
-                            state.current_theme,
-                            0,
-                            true,
-                        )?;
-                        last_advance = Instant::now();
-                        redraw(stdout, &state, current_frame, playing)?;
-                    }
-                    KeyAction::Unhandled(key) if keys::is_background_cycle(key) => {
-                        config.background = config.background.next();
-                        state.content_lines = render_frame(
-                            &frames[current_frame], &config,
-                        );
-                        redraw(stdout, &state, current_frame, playing)?;
-                    }
-                    KeyAction::Unhandled(key) => match key.code {
-                        // Play/pause
-                        KeyCode::Char('p') => {
-                            playing = !playing;
-                            if playing {
+                Event::Key(key) => {
+                    let Some(action) = keys::dispatch(key, ACTIONS) else {
+                        continue;
+                    };
+                    match state.apply(action) {
+                        Outcome::Quit => return Ok(()),
+                        Outcome::Redraw => redraw(stdout, &state, current_frame, playing)?,
+                        Outcome::RecomputeContent => {
+                            // Animation frames don't depend on theme — just redraw.
+                            redraw(stdout, &state, current_frame, playing)?;
+                        }
+                        Outcome::Unhandled => match action {
+                            Action::SwitchToHex => {
+                                crate::viewer::hex::run_hex_loop(
+                                    stdout,
+                                    source,
+                                    file_type,
+                                    state.current_theme,
+                                    0,
+                                    true,
+                                )?;
                                 last_advance = Instant::now();
+                                redraw(stdout, &state, current_frame, playing)?;
                             }
-                            redraw(stdout, &state, current_frame, playing)?;
-                        }
-                        // Next frame
-                        KeyCode::Char('n') | KeyCode::Right => {
-                            current_frame = (current_frame + 1) % frame_count;
-                            state.content_lines = render_frame(
-                                &frames[current_frame], &config,
-                            );
-                            last_advance = Instant::now();
-                            redraw(stdout, &state, current_frame, playing)?;
-                        }
-                        // Previous frame
-                        KeyCode::Char('N') | KeyCode::Left => {
-                            current_frame = (current_frame + frame_count - 1) % frame_count;
-                            state.content_lines = render_frame(
-                                &frames[current_frame], &config,
-                            );
-                            last_advance = Instant::now();
-                            redraw(stdout, &state, current_frame, playing)?;
-                        }
-                        _ => {}
-                    },
-                },
+                            Action::CycleBackground => {
+                                config.background = config.background.next();
+                                state.content_lines = render_frame(&frames[current_frame], &config);
+                                redraw(stdout, &state, current_frame, playing)?;
+                            }
+                            Action::PlayPause => {
+                                playing = !playing;
+                                if playing {
+                                    last_advance = Instant::now();
+                                }
+                                redraw(stdout, &state, current_frame, playing)?;
+                            }
+                            Action::NextFrame => {
+                                current_frame = (current_frame + 1) % frame_count;
+                                state.content_lines = render_frame(&frames[current_frame], &config);
+                                last_advance = Instant::now();
+                                redraw(stdout, &state, current_frame, playing)?;
+                            }
+                            Action::PrevFrame => {
+                                current_frame = (current_frame + frame_count - 1) % frame_count;
+                                state.content_lines = render_frame(&frames[current_frame], &config);
+                                last_advance = Instant::now();
+                                redraw(stdout, &state, current_frame, playing)?;
+                            }
+                            _ => {}
+                        },
+                    }
+                }
                 Event::Resize(_, _) => {
                     state.content_lines = render_frame(
                         &frames[current_frame], &config,

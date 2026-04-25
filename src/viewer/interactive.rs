@@ -3,7 +3,7 @@ use std::io;
 use std::rc::Rc;
 
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event};
 
 use crate::input::detect::FileType;
 use crate::input::InputSource;
@@ -11,28 +11,30 @@ use crate::theme::PeekThemeName;
 use crate::viewer::hex::run_hex_loop;
 use crate::viewer::image::Background;
 use crate::viewer::ui::{
-    KeyAction, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
+    Action, Outcome, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
 };
 
 // ---------------------------------------------------------------------------
-// Help keys for the generic interactive viewer
+// Bindings for the generic interactive viewer
 // ---------------------------------------------------------------------------
 
-const HELP_KEYS: &[(&str, &str)] = &[
-    ("q / Esc", "Quit"),
-    ("Up / k", "Scroll up"),
-    ("Down / j", "Scroll down"),
-    ("PgUp / PgDn", "Page scroll"),
-    ("Space", "Page down"),
-    ("Home / End", "Top / bottom"),
-    ("Tab", "Toggle content / file info"),
-    ("i", "File info"),
-    ("h / ?", "Toggle help"),
-    ("t", "Next theme"),
-    ("x", "Hex dump mode"),
-    ("r", "Toggle raw / pretty"),
-    ("b", "Cycle background (images)"),
+const ACTIONS: &[(Action, &str)] = &[
+    (Action::Quit,              "Quit"),
+    (Action::ScrollUp,          "Scroll up"),
+    (Action::ScrollDown,        "Scroll down"),
+    (Action::PageUp,            "Page up"),
+    (Action::PageDown,          "Page down"),
+    (Action::Top,               "Jump to top"),
+    (Action::Bottom,            "Jump to bottom"),
+    (Action::ToggleContentInfo, "Toggle content / file info"),
+    (Action::SwitchInfo,        "File info"),
+    (Action::ToggleHelp,        "Toggle help"),
+    (Action::CycleTheme,        "Next theme"),
+    (Action::SwitchToHex,       "Hex dump mode"),
+    (Action::ToggleRawSource,   "Toggle raw / pretty"),
+    (Action::CycleBackground,   "Cycle background (images)"),
 ];
+
 
 // ---------------------------------------------------------------------------
 // Entry points
@@ -99,7 +101,7 @@ fn run_event_loop(
 ) -> Result<()> {
     let mut pretty = initial_pretty;
     let content_lines = render_content(initial_theme, pretty)?;
-    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, HELP_KEYS)?;
+    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, ACTIONS)?;
 
     let name = source.name().to_string();
 
@@ -112,46 +114,49 @@ fn run_event_loop(
 
     loop {
         match event::read()? {
-            Event::Key(key) => match state.handle_key(key) {
-                KeyAction::Quit => return Ok(()),
-                KeyAction::Redraw => {
-                    redraw(stdout, &state)?;
-                }
-                KeyAction::ThemeChanged => {
-                    state.content_lines = render_content(state.current_theme, pretty)?;
-                    redraw(stdout, &state)?;
-                }
-                KeyAction::SwitchToHex => {
-                    let line = state.scroll.get(ViewMode::Content);
-                    let offset = compute_byte_offset_for_line(source, line).unwrap_or(0);
-                    run_hex_loop(
-                        stdout,
-                        source,
-                        file_type,
-                        state.current_theme,
-                        offset,
-                        true,
-                    )?;
-                    redraw(stdout, &state)?;
-                }
-                KeyAction::Unhandled(key) if keys::is_background_cycle(key) => {
-                    if let Some(ref bg_cell) = background {
-                        bg_cell.set(bg_cell.get().next());
+            Event::Key(key) => {
+                let Some(action) = keys::dispatch(key, ACTIONS) else {
+                    continue;
+                };
+                match state.apply(action) {
+                    Outcome::Quit => return Ok(()),
+                    Outcome::Redraw => redraw(stdout, &state)?,
+                    Outcome::RecomputeContent => {
                         state.content_lines = render_content(state.current_theme, pretty)?;
-                        state.scroll.reset_content();
                         redraw(stdout, &state)?;
                     }
+                    Outcome::Unhandled => match action {
+                        Action::SwitchToHex => {
+                            let line = state.scroll.get(ViewMode::Content);
+                            let offset = compute_byte_offset_for_line(source, line).unwrap_or(0);
+                            run_hex_loop(
+                                stdout,
+                                source,
+                                file_type,
+                                state.current_theme,
+                                offset,
+                                true,
+                            )?;
+                            redraw(stdout, &state)?;
+                        }
+                        Action::CycleBackground => {
+                            if let Some(ref bg_cell) = background {
+                                bg_cell.set(bg_cell.get().next());
+                                state.content_lines = render_content(state.current_theme, pretty)?;
+                                state.scroll.reset_content();
+                                redraw(stdout, &state)?;
+                            }
+                        }
+                        Action::ToggleRawSource => {
+                            pretty = !pretty;
+                            state.content_lines = render_content(state.current_theme, pretty)?;
+                            state.scroll.reset_content();
+                            redraw(stdout, &state)?;
+                        }
+                        _ => {}
+                    },
                 }
-                KeyAction::Unhandled(key) => {
-                    // Raw / pretty-print toggle
-                    if let KeyCode::Char('r') = key.code {
-                        pretty = !pretty;
-                        state.content_lines = render_content(state.current_theme, pretty)?;
-                        state.scroll.reset_content();
-                        redraw(stdout, &state)?;
-                    }
-                }
-            },
+            }
             Event::Resize(_, _) => {
                 if rerender_on_resize {
                     state.content_lines = render_content(state.current_theme, pretty)?;

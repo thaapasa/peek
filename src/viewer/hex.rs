@@ -3,7 +3,7 @@ use std::io::{self, Write};
 use anyhow::Result;
 use crossterm::{
     cursor, execute,
-    event::{self, Event, KeyCode, KeyEvent, KeyModifiers},
+    event::{self, Event},
     terminal,
 };
 
@@ -14,7 +14,7 @@ use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
 
 use super::Viewer;
 use super::ui::{
-    KeyAction, ViewMode, ViewerState, content_rows, make_peek_theme,
+    Action, Outcome, ViewMode, ViewerState, content_rows, keys, make_peek_theme,
     render_themed_status_line, with_alternate_screen,
 };
 
@@ -22,34 +22,35 @@ use super::ui::{
 // Help keys
 // ---------------------------------------------------------------------------
 
-const HEX_HELP_KEYS_STANDALONE: &[(&str, &str)] = &[
-    ("q / Esc", "Quit"),
-    ("Up / k", "Scroll up"),
-    ("Down / j", "Scroll down"),
-    ("PgUp / PgDn", "Page scroll"),
-    ("Space", "Page down"),
-    ("Home / g", "Top"),
-    ("End / G", "Bottom"),
-    ("Tab", "Toggle hex / file info"),
-    ("i", "File info"),
-    ("h / ?", "Toggle help"),
-    ("t", "Next theme"),
+const ACTIONS_STANDALONE: &[(Action, &str)] = &[
+    (Action::Quit,              "Quit"),
+    (Action::ScrollUp,          "Scroll up"),
+    (Action::ScrollDown,        "Scroll down"),
+    (Action::PageUp,            "Page up"),
+    (Action::PageDown,          "Page down"),
+    (Action::Top,               "Jump to top"),
+    (Action::Bottom,            "Jump to bottom"),
+    (Action::ToggleContentInfo, "Toggle hex / file info"),
+    (Action::SwitchInfo,        "File info"),
+    (Action::ToggleHelp,        "Toggle help"),
+    (Action::CycleTheme,        "Next theme"),
 ];
 
-const HEX_HELP_KEYS_TOGGLE: &[(&str, &str)] = &[
-    ("q / Esc", "Quit"),
-    ("x", "Exit hex mode"),
-    ("Up / k", "Scroll up"),
-    ("Down / j", "Scroll down"),
-    ("PgUp / PgDn", "Page scroll"),
-    ("Space", "Page down"),
-    ("Home / g", "Top"),
-    ("End / G", "Bottom"),
-    ("Tab", "Toggle hex / file info"),
-    ("i", "File info"),
-    ("h / ?", "Toggle help"),
-    ("t", "Next theme"),
+const ACTIONS_TOGGLE: &[(Action, &str)] = &[
+    (Action::Quit,              "Quit"),
+    (Action::SwitchToHex,       "Exit hex mode"),
+    (Action::ScrollUp,          "Scroll up"),
+    (Action::ScrollDown,        "Scroll down"),
+    (Action::PageUp,            "Page up"),
+    (Action::PageDown,          "Page down"),
+    (Action::Top,               "Jump to top"),
+    (Action::Bottom,            "Jump to bottom"),
+    (Action::ToggleContentInfo, "Toggle hex / file info"),
+    (Action::SwitchInfo,        "File info"),
+    (Action::ToggleHelp,        "Toggle help"),
+    (Action::CycleTheme,        "Next theme"),
 ];
+
 
 // ---------------------------------------------------------------------------
 // HexViewer
@@ -133,15 +134,15 @@ pub(crate) fn run_hex_loop(
     let bs = source.open_byte_source()?;
     let total_len = bs.len();
 
-    let help_keys: &'static [(&str, &str)] = if return_on_x {
-        HEX_HELP_KEYS_TOGGLE
+    let actions: &'static [(Action, &str)] = if return_on_x {
+        ACTIONS_TOGGLE
     } else {
-        HEX_HELP_KEYS_STANDALONE
+        ACTIONS_STANDALONE
     };
 
-    // ViewerState reused for Info/Help/theme plumbing. Content lines are
-    // empty: we draw the hex content ourselves when view_mode == Content.
-    let mut state = ViewerState::new(source, file_type, initial_theme, Vec::new(), help_keys)?;
+    // ViewerState reused for Info/Help/theme plumbing. Content_lines is
+    // empty — we draw the hex content ourselves when view_mode == Content.
+    let mut state = ViewerState::new(source, file_type, initial_theme, Vec::new(), actions)?;
 
     let name = source.name().to_string();
 
@@ -165,32 +166,40 @@ pub(crate) fn run_hex_loop(
 
     redraw(stdout, &state, top_offset)?;
 
+    let actions: &'static [(Action, &str)] = if return_on_x {
+        ACTIONS_TOGGLE
+    } else {
+        ACTIONS_STANDALONE
+    };
+
     loop {
         match event::read()? {
             Event::Key(key) => {
-                // Content-mode scrolling is byte-based; intercept before
-                // ViewerState's line-based handling.
-                if state.view_mode == ViewMode::Content {
-                    let (cols, _) = terminal::size().unwrap_or((80, 24));
-                    let bpr = bytes_per_row(cols);
-                    if let Some(new_top) = handle_content_scroll(key, top_offset, bpr, total_len) {
-                        top_offset = new_top;
-                        redraw(stdout, &state, top_offset)?;
-                        continue;
-                    }
+                let Some(action) = keys::dispatch(key, actions) else {
+                    continue;
+                };
+
+                // Content-mode scrolling is byte-based — intercept the scroll
+                // actions and translate them into byte-offset moves before
+                // delegating other actions to ViewerState.
+                if state.view_mode == ViewMode::Content
+                    && let Some(new_top) = hex_scroll(action, top_offset, total_len)
+                {
+                    top_offset = new_top;
+                    redraw(stdout, &state, top_offset)?;
+                    continue;
                 }
-                match state.handle_key(key) {
-                    KeyAction::Quit => return Ok(()),
-                    KeyAction::Redraw | KeyAction::ThemeChanged => {
+
+                match state.apply(action) {
+                    Outcome::Quit => return Ok(()),
+                    Outcome::Redraw | Outcome::RecomputeContent => {
                         redraw(stdout, &state, top_offset)?;
                     }
-                    KeyAction::SwitchToHex => {
-                        if return_on_x {
-                            return Ok(());
-                        }
-                        // Standalone hex: x is a no-op
-                    }
-                    KeyAction::Unhandled(_) => {}
+                    Outcome::Unhandled => match action {
+                        Action::SwitchToHex if return_on_x => return Ok(()),
+                        Action::SwitchToHex => {} // standalone: x is a no-op
+                        _ => {}
+                    },
                 }
             }
             Event::Resize(_, _) => {
@@ -203,24 +212,21 @@ pub(crate) fn run_hex_loop(
     }
 }
 
-/// Translate Content-mode keys into a new top byte offset. Returns `None`
-/// if the key isn't a content-scroll key (caller should fall through to
-/// `ViewerState::handle_key`).
-fn handle_content_scroll(key: KeyEvent, top: u64, bpr: usize, total_len: u64) -> Option<u64> {
+/// Translate a scroll-class action into a new top byte offset. Returns `None`
+/// if the action isn't a content-scroll (caller falls through to `state.apply`).
+fn hex_scroll(action: Action, top: u64, total_len: u64) -> Option<u64> {
+    let (cols, _) = terminal::size().unwrap_or((80, 24));
+    let bpr = bytes_per_row(cols);
     let bpr_u = bpr as u64;
     let rows = content_rows() as u64;
     let max = max_top(total_len, bpr, content_rows());
-    let new_top = match key.code {
-        KeyCode::Up | KeyCode::Char('k') => top.saturating_sub(bpr_u),
-        KeyCode::Down | KeyCode::Char('j') => top.saturating_add(bpr_u).min(max),
-        KeyCode::PageUp => top.saturating_sub(bpr_u.saturating_mul(rows.saturating_sub(1))),
-        KeyCode::PageDown | KeyCode::Char(' ') => top
-            .saturating_add(bpr_u.saturating_mul(rows.saturating_sub(1)))
-            .min(max),
-        KeyCode::Home | KeyCode::Char('g') => 0,
-        KeyCode::End | KeyCode::Char('G') => max,
-        // Ctrl+C is handled by ViewerState (translates to Quit). Don't intercept.
-        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => return None,
+    let new_top = match action {
+        Action::ScrollUp   => top.saturating_sub(bpr_u),
+        Action::ScrollDown => top.saturating_add(bpr_u).min(max),
+        Action::PageUp     => top.saturating_sub(bpr_u.saturating_mul(rows.saturating_sub(1))),
+        Action::PageDown   => top.saturating_add(bpr_u.saturating_mul(rows.saturating_sub(1))).min(max),
+        Action::Top        => 0,
+        Action::Bottom     => max,
         _ => return None,
     };
     Some(new_top)

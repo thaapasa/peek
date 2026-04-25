@@ -3,7 +3,6 @@ use std::io::{self, Write};
 use anyhow::Result;
 use crossterm::{
     cursor, execute,
-    event::{KeyCode, KeyEvent, KeyModifiers},
     terminal::{self, ClearType},
 };
 
@@ -13,7 +12,7 @@ use crate::input::detect::FileType;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
 
 use super::help::render_help_with_keys;
-use super::keys::KeyAction;
+use super::keys::{Action, Outcome};
 use super::{content_rows, make_peek_theme};
 
 #[derive(Clone, Copy, PartialEq)]
@@ -74,7 +73,7 @@ pub(crate) struct ViewerState {
     pub help_lines: Vec<String>,
     pub scroll: ScrollState,
     file_info: FileInfo,
-    help_keys: &'static [(&'static str, &'static str)],
+    help_keys: &'static [(Action, &'static str)],
 }
 
 impl ViewerState {
@@ -83,7 +82,7 @@ impl ViewerState {
         file_type: &FileType,
         theme_name: PeekThemeName,
         content_lines: Vec<String>,
-        help_keys: &'static [(&'static str, &'static str)],
+        help_keys: &'static [(Action, &'static str)],
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name);
         let file_info = crate::info::gather(source, file_type)?;
@@ -100,92 +99,6 @@ impl ViewerState {
             file_info,
             help_keys,
         })
-    }
-
-    /// Handle a key event for shared bindings (quit, view switching, scrolling, theme).
-    pub(crate) fn handle_key(&mut self, key: KeyEvent) -> KeyAction {
-        match key.code {
-            // Quit
-            KeyCode::Char('q') | KeyCode::Esc => KeyAction::Quit,
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => KeyAction::Quit,
-
-            // View switching: Tab
-            KeyCode::Tab => {
-                self.view_mode = match self.view_mode {
-                    ViewMode::Content => ViewMode::Info,
-                    ViewMode::Info | ViewMode::Help => ViewMode::Content,
-                };
-                KeyAction::Redraw
-            }
-
-            // View switching: i
-            KeyCode::Char('i') => {
-                self.view_mode = ViewMode::Info;
-                KeyAction::Redraw
-            }
-
-            // View switching: h / ?
-            KeyCode::Char('h') | KeyCode::Char('?') => {
-                self.view_mode = if self.view_mode == ViewMode::Help {
-                    ViewMode::Content
-                } else {
-                    ViewMode::Help
-                };
-                KeyAction::Redraw
-            }
-
-            // Theme cycling
-            KeyCode::Char('t') => {
-                self.current_theme = self.current_theme.next();
-                self.peek_theme = make_peek_theme(self.current_theme);
-                self.info_lines = crate::info::render(&self.file_info, &self.peek_theme);
-                self.help_lines = render_help_with_keys(
-                    &self.peek_theme,
-                    self.current_theme,
-                    self.help_keys,
-                );
-                KeyAction::ThemeChanged
-            }
-
-            // Scrolling
-            KeyCode::Up | KeyCode::Char('k') => {
-                let s = self.scroll.get_mut(self.view_mode);
-                *s = s.saturating_sub(1);
-                KeyAction::Redraw
-            }
-            KeyCode::Down | KeyCode::Char('j') => {
-                let max = self.max_scroll();
-                let s = self.scroll.get_mut(self.view_mode);
-                *s = (*s + 1).min(max);
-                KeyAction::Redraw
-            }
-            KeyCode::PageUp => {
-                let rows = content_rows();
-                let s = self.scroll.get_mut(self.view_mode);
-                *s = s.saturating_sub(rows.saturating_sub(1));
-                KeyAction::Redraw
-            }
-            KeyCode::PageDown | KeyCode::Char(' ') => {
-                let rows = content_rows();
-                let max = self.max_scroll();
-                let s = self.scroll.get_mut(self.view_mode);
-                *s = (*s + rows.saturating_sub(1)).min(max);
-                KeyAction::Redraw
-            }
-            KeyCode::Home => {
-                *self.scroll.get_mut(self.view_mode) = 0;
-                KeyAction::Redraw
-            }
-            KeyCode::End => {
-                *self.scroll.get_mut(self.view_mode) = self.max_scroll();
-                KeyAction::Redraw
-            }
-
-            // Hex-mode toggle
-            KeyCode::Char('x') => KeyAction::SwitchToHex,
-
-            _ => KeyAction::Unhandled(key),
-        }
     }
 
     /// Lines for the current view mode.
@@ -210,6 +123,88 @@ impl ViewerState {
     /// Maximum scroll offset for the current view mode.
     fn max_scroll(&self) -> usize {
         self.current_lines().len().saturating_sub(content_rows())
+    }
+
+    // -----------------------------------------------------------------
+    // Shared action handlers — invoked by `apply()`.
+    // -----------------------------------------------------------------
+
+    fn scroll_by(&mut self, delta: isize) {
+        let max = self.max_scroll();
+        let s = self.scroll.get_mut(self.view_mode);
+        *s = if delta < 0 {
+            s.saturating_sub((-delta) as usize)
+        } else {
+            (*s + delta as usize).min(max)
+        };
+    }
+
+    fn page(&mut self, direction: isize) {
+        let step = content_rows().saturating_sub(1);
+        let max = self.max_scroll();
+        let s = self.scroll.get_mut(self.view_mode);
+        *s = if direction < 0 {
+            s.saturating_sub(step)
+        } else {
+            (*s + step).min(max)
+        };
+    }
+
+    fn jump_top(&mut self) {
+        *self.scroll.get_mut(self.view_mode) = 0;
+    }
+
+    fn jump_bottom(&mut self) {
+        *self.scroll.get_mut(self.view_mode) = self.max_scroll();
+    }
+
+    fn switch_to_info(&mut self) {
+        self.view_mode = ViewMode::Info;
+    }
+
+    fn toggle_help(&mut self) {
+        self.view_mode = if self.view_mode == ViewMode::Help {
+            ViewMode::Content
+        } else {
+            ViewMode::Help
+        };
+    }
+
+    fn toggle_content_info(&mut self) {
+        self.view_mode = match self.view_mode {
+            ViewMode::Content => ViewMode::Info,
+            ViewMode::Info | ViewMode::Help => ViewMode::Content,
+        };
+    }
+
+    fn cycle_theme(&mut self) {
+        self.current_theme = self.current_theme.next();
+        self.peek_theme = make_peek_theme(self.current_theme);
+        self.info_lines = crate::info::render(&self.file_info, &self.peek_theme);
+        self.help_lines = render_help_with_keys(
+            &self.peek_theme,
+            self.current_theme,
+            self.help_keys,
+        );
+    }
+
+    /// Apply a shared action. Returns `Outcome::Unhandled` for actions the
+    /// state layer doesn't own (viewer-specific keys like `b`, `r`, `p`).
+    pub(crate) fn apply(&mut self, action: Action) -> Outcome {
+        match action {
+            Action::Quit              => Outcome::Quit,
+            Action::ScrollUp          => { self.scroll_by(-1); Outcome::Redraw }
+            Action::ScrollDown        => { self.scroll_by(1); Outcome::Redraw }
+            Action::PageUp            => { self.page(-1); Outcome::Redraw }
+            Action::PageDown          => { self.page(1); Outcome::Redraw }
+            Action::Top               => { self.jump_top(); Outcome::Redraw }
+            Action::Bottom            => { self.jump_bottom(); Outcome::Redraw }
+            Action::SwitchInfo        => { self.switch_to_info(); Outcome::Redraw }
+            Action::ToggleHelp        => { self.toggle_help(); Outcome::Redraw }
+            Action::ToggleContentInfo => { self.toggle_content_info(); Outcome::Redraw }
+            Action::CycleTheme        => { self.cycle_theme(); Outcome::RecomputeContent }
+            _                         => Outcome::Unhandled,
+        }
     }
 }
 
