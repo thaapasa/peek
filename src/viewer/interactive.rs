@@ -112,7 +112,7 @@ fn render_status_line(name: &str, state: &ViewerState) -> String {
     segs.push((state.current_theme.cli_name(), theme.muted));
 
     let mut hints: Vec<&str> = Vec::with_capacity(5);
-    if state.active_id() == ModeId::Hex && state.return_to().is_some() {
+    if state.active_id() == ModeId::Hex && state.has_return_target() {
         hints.push("x:exit hex");
     }
     hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);

@@ -37,12 +37,25 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::ToggleRawSource, "Toggle raw / pretty / cycle primary"),
 ];
 
+/// Auxiliary modes — reachable only via dedicated keys (Tab/i, h, x),
+/// not via the `r` primary cycle. They're "hidden" in the sense the
+/// user can step into and out of them, and the back-link slot
+/// (`last_primary`) tracks where their actual work was.
+fn is_aux(id: ModeId) -> bool {
+    matches!(id, ModeId::Info | ModeId::Help | ModeId::Hex)
+}
+
 pub(crate) struct ViewerState<'a> {
     modes: Vec<Box<dyn Mode>>,
     active: usize,
-    /// Index to return to from a "toggle" mode (Info via Tab, Help, Hex).
-    /// Cleared after the toggle returns.
-    return_to: Option<usize>,
+    /// The most recent primary (non-aux) mode the user was on. Aux modes
+    /// (Info, Help, Hex) toggle back here when their dedicated key is
+    /// pressed again. Aux-to-aux transitions don't update this slot, so
+    /// the path back to "your actual work" survives any number of detours
+    /// (Hex → Info → Help → Tab still returns to the original primary).
+    /// `None` only when the stack contains no primary modes (binary
+    /// files: Hex is the default and toggling out is a no-op).
+    last_primary: Option<usize>,
     scroll: Vec<usize>,
     /// Per-mode rendered lines. `None` = needs render (lazy on first use,
     /// invalidated by theme cycles and resize).
@@ -73,10 +86,11 @@ impl<'a> ViewerState<'a> {
         let n = modes.len();
         let peek_theme = make_peek_theme(theme_name);
         let file_info = crate::info::gather(source, detected)?;
+        let last_primary = if is_aux(modes[0].id()) { None } else { Some(0) };
         Ok(Self {
             modes,
             active: 0,
-            return_to: None,
+            last_primary,
             scroll: vec![0; n],
             lines: vec![None; n],
             position: Position::Unknown,
@@ -104,8 +118,11 @@ impl<'a> ViewerState<'a> {
         self.modes[self.active].status_segments(&self.peek_theme)
     }
 
-    pub(crate) fn return_to(&self) -> Option<usize> {
-        self.return_to
+    /// Whether the active aux mode has somewhere meaningful to return to
+    /// when toggled off (used to decide whether to show "x:exit hex" etc.
+    /// in the status line).
+    pub(crate) fn has_return_target(&self) -> bool {
+        self.last_primary.is_some_and(|i| i != self.active)
     }
 
     fn mode_index(&self, id: ModeId) -> Option<usize> {
@@ -185,15 +202,15 @@ impl<'a> ViewerState<'a> {
                 Outcome::Redraw
             }
             Action::ToggleContentInfo => {
-                self.toggle_with_return(ModeId::Info);
+                self.toggle_aux(ModeId::Info);
                 Outcome::Redraw
             }
             Action::ToggleHelp => {
-                self.toggle_with_return(ModeId::Help);
+                self.toggle_aux(ModeId::Help);
                 Outcome::Redraw
             }
             Action::SwitchToHex => {
-                self.toggle_with_return(ModeId::Hex);
+                self.toggle_aux(ModeId::Hex);
                 Outcome::Redraw
             }
             Action::CycleTheme => {
@@ -215,34 +232,39 @@ impl<'a> ViewerState<'a> {
     // Mode switching helpers
     // ---------------------------------------------------------------------
 
+    /// One-way jump used by `i` (SwitchInfo): land on the target if it
+    /// exists in the stack. No back-link logic — pressing `i` from Info
+    /// is a no-op.
     fn jump_to(&mut self, target: ModeId) {
-        if let Some(idx) = self.mode_index(target)
-            && idx != self.active
-        {
-            self.return_to = Some(self.active);
+        if let Some(idx) = self.mode_index(target) {
             self.set_active(idx);
         }
     }
 
-    /// Toggle behavior shared by Tab (→ Info), `h` (→ Help), and `x` (→ Hex):
-    /// if not on `target`, jump there and remember where we came from; if on
-    /// `target`, return to the saved index.
-    fn toggle_with_return(&mut self, target: ModeId) {
+    /// Aux toggle shared by Tab (→ Info), `h` (→ Help), and `x` (→ Hex).
+    /// On the target aux mode, return to `last_primary` (the user's
+    /// "actual work"). Otherwise, enter the target aux. Aux is "hidden":
+    /// it doesn't show up in Tab cycling and you can only land on it via
+    /// its dedicated key.
+    fn toggle_aux(&mut self, target: ModeId) {
         if self.modes[self.active].id() == target {
-            if let Some(prev) = self.return_to.take() {
-                self.set_active(prev);
+            // Exit aux. Return to the last primary, or fall back to mode
+            // 0 (which is Hex itself for binary files — pressing `x`
+            // there is then a no-op, matching the old standalone-hex UX).
+            let dest = self.last_primary.unwrap_or(0);
+            if dest != self.active {
+                self.set_active(dest);
             }
         } else if let Some(idx) = self.mode_index(target) {
-            self.return_to = Some(self.active);
             self.set_active(idx);
         }
         // Target not in this stack → no-op.
     }
 
-    /// Switch the active mode index, capturing the outgoing mode's
-    /// position (if it tracks) and restoring it on the incoming mode (if
-    /// it tracks). Modes that don't track position leave `self.position`
-    /// untouched on the way out and ignore it on the way in — so e.g.
+    /// Switch the active mode index. Updates `last_primary` whenever we
+    /// land on a non-aux mode, captures the outgoing mode's position (if
+    /// it tracks) and restores it on the incoming mode (if it tracks).
+    /// Modes that don't track position leave `self.position` untouched —
     /// Hex → Info → Hex preserves the byte offset across the detour.
     fn set_active(&mut self, new_idx: usize) {
         if new_idx == self.active {
@@ -250,6 +272,9 @@ impl<'a> ViewerState<'a> {
         }
         self.capture_position();
         self.active = new_idx;
+        if !is_aux(self.modes[new_idx].id()) {
+            self.last_primary = Some(new_idx);
+        }
         self.restore_position();
     }
 
