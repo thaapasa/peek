@@ -112,10 +112,11 @@ piped viewer (syntax, structured, image, SVG, text, hex) implements this.
 ### ViewerState (`viewer/ui/state.rs`)
 
 The interactive controller: holds the mode list, the active index, a
-`return_to` slot for toggle modes, per-mode scroll offsets, a lazy
-per-mode rendered-lines cache, and a `Position` (the last known logical
-location in the source). Builds a `RenderCtx` (carrying source, detected
-file type, file info, theme) and dispatches it to the active mode.
+`last_primary` slot (the most recent non-aux mode the user was on), per-mode
+scroll offsets, a lazy per-mode rendered-lines cache, and a `Position`
+(the last known logical location in the source). Builds a `RenderCtx`
+(carrying source, detected file type, file info, theme) and dispatches
+it to the active mode.
 
 `apply()` handles global actions (scroll, theme cycle, mode switching). The
 event loop checks the active mode's `scroll()` and `handle()` before
@@ -240,12 +241,21 @@ then `state.draw()`.
 
 ### Toggle semantics: Tab, `i`, `h`, `x`
 
-`ViewerState::toggle_with_return(target_id)` is shared by Tab (Info), `h`
-(Help), and `x` (Hex). On first press it stores the current active index in
-`return_to` and switches to the target; on second press it pops `return_to`
-back. `i` (`SwitchInfo`) is a one-way jump that also stores `return_to` so
-Tab from Info still returns. If the target id isn't in the stack, the action
-is a no-op.
+Aux modes (Info, Help, Hex) are reachable only via dedicated keys — they
+don't appear in the `r` primary cycle. `ViewerState::toggle_aux(target_id)`
+is shared by Tab (Info), `h` (Help), and `x` (Hex): if the active mode
+*is* the target, return to `last_primary`; otherwise, enter the target.
+`i` (`SwitchInfo`) is a one-way jump to Info.
+
+`last_primary` is updated whenever the active mode lands on a non-aux
+mode. Aux-to-aux transitions (Hex → Info, Info → Hex) leave it alone, so
+the path back to "your actual work" survives any number of detours —
+Hex → Info → Tab returns to the original primary, not to Hex.
+
+For binary files (where the stack is `[Hex, Info, Help]` and there's no
+primary), `last_primary` stays `None`; exiting an aux falls back to mode
+0 (Hex itself), so pressing `x` from standalone hex is a no-op — matching
+the old behavior.
 
 ## Adding a new file type
 

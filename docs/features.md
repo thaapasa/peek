@@ -10,10 +10,14 @@ Full-screen interactive console view. The user must manually quit (e.g. `q`, `Es
 to exit. Supports keyboard interaction for toggling options, scrolling, searching, and
 switching between views.
 
-**Status: Partially implemented.** Interactive viewing works for all file types with
-scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i view switching (content ↔ file
-info), help screen (h/?), live theme cycling (t), and raw/pretty toggle (r) for
-structured data. No search, line numbers, or image-specific keybindings yet.
+**Status: Partially implemented.** Interactive viewing works for all file types via
+a mode-stack architecture (text/source/structured `ContentMode`, `ImageRenderMode`
+for raster + rasterized SVG, `AnimationMode` for GIF/WebP, plus universal `HexMode`
+/ `InfoMode` / `HelpMode`). Scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i
+toggle to file info, help screen (h/?), live theme cycling (t), and `r` (raw/pretty
+for structured data, primary-cycle for SVG rasterized↔XML). Image-specific keys: `b`
+cycles background. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. No
+search, line numbers, or image rendering-mode cycling yet.
 
 ### Print Mode
 
@@ -335,12 +339,20 @@ column between `|`s. Bytes-per-row scales with terminal width: `14 + 4*bpr`
 columns (rounded down to a multiple of 8, minimum 8). Pipe-mode output honors
 `$COLUMNS` (≥ 24) or falls back to a fixed 16 bytes per row.
 
-Hex mode is also reachable from any other viewer with the `x` key. When
-entering hex from a text/code/structured view, the top of the hex view is
-positioned at the byte offset of the visible top line (computed by counting
-newlines in the source bytes — approximate for pretty-printed structured
-content). Pressing `x` again returns to the previous viewer. When hex is
-launched directly as the default for a binary file, `x` is a no-op.
+Hex mode is also reachable from any other view with the `x` key. The viewer
+maintains a logical `Position` (byte offset or line index) that's captured
+on switch-out from any position-tracking mode and restored on switch-in to
+another. So entering hex from a text view positions the top at the byte
+offset corresponding to the current line (via `InputSource::line_to_byte`,
+approximate for pretty-printed structured content), and returning from hex
+to text re-aligns the line scroll. Modes that don't track position (Info,
+Help, Image preview, Animation) leave the saved position untouched, so
+detours through them preserve where you were.
+
+Pressing `x` again returns to the user's last primary mode (the most
+recent non-aux mode), regardless of how many aux detours intervened. When
+hex is launched directly as the default for a binary file, there is no
+primary to return to — `x` is a no-op there, matching the old behavior.
 
 **Status: Implemented.**
 
@@ -412,8 +424,11 @@ commands and their descriptions. Should reflect the current context (e.g. image-
 commands only shown when viewing an image).
 
 **Status: Partially implemented.** A global help screen is accessible via `h` or `?`.
-It shows keyboard shortcuts and the currently active theme. Context-specific commands
-(per file type) are not yet shown.
+It shows keyboard shortcuts and the currently active theme. The shortcut list is
+composed per file type from the union of global actions and each loaded mode's
+extras — so an SVG file's help shows the background-cycle shortcut, while a JSON
+file's doesn't. Per-active-mode filtering (showing only the currently active mode's
+extras) is not yet done.
 
 
 ## Keyboard Shortcuts
