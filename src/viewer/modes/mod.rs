@@ -67,6 +67,22 @@ pub(crate) enum Position {
     Line(usize),
 }
 
+/// Result of `Mode::handle`. `YesResetScroll` indicates that the active
+/// mode's scroll offset is no longer meaningful and should be set to 0
+/// before the redraw.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) enum Handled {
+    No,
+    Yes,
+    YesResetScroll,
+}
+
+impl Handled {
+    pub(crate) fn was_consumed(self) -> bool {
+        !matches!(self, Self::No)
+    }
+}
+
 /// Read-only context passed to `Mode::render`.
 #[allow(dead_code)]
 pub(crate) struct RenderCtx<'a> {
@@ -83,6 +99,14 @@ pub(crate) struct RenderCtx<'a> {
 pub(crate) trait Mode {
     fn id(&self) -> ModeId;
     fn label(&self) -> &str;
+
+    /// Whether this mode is auxiliary — reachable only via dedicated keys
+    /// (Tab/i, h, x), not via the `r` primary cycle. Aux modes don't show
+    /// up in `cycle_primary`, and toggling their dedicated key returns to
+    /// `last_primary`. Default `false`; Info/Help/Hex override.
+    fn is_aux(&self) -> bool {
+        false
+    }
 
     /// Produce lines for the current viewport. Streaming modes (Hex)
     /// recompute on every call; full-content modes (Info, Help) typically
@@ -120,6 +144,15 @@ pub(crate) trait Mode {
         Vec::new()
     }
 
+    /// Mode-specific hints prepended to the global hint list on the
+    /// right side of the status bar (e.g. Hex's `x:exit hex` when it
+    /// was reached from another view). `has_return_target` is true when
+    /// pressing the mode's own toggle key would land on a different
+    /// (primary) mode — for aux modes like Hex/Info/Help.
+    fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> {
+        Vec::new()
+    }
+
     /// Mode-local actions (in addition to the global set: Quit, scrolling,
     /// theme cycle, mode switching). Used both for key dispatch and the
     /// help screen. Return a `&'static` slice — modes typically expose a
@@ -128,11 +161,15 @@ pub(crate) trait Mode {
         &[]
     }
 
-    /// Handle a mode-local action declared in `extra_actions`. Return
-    /// `true` if the action was consumed (caller invalidates the cached
-    /// lines and re-renders).
-    fn handle(&mut self, _action: Action) -> bool {
-        false
+    /// Handle a mode-local action declared in `extra_actions`.
+    ///
+    /// Returns whether the action was consumed and, if so, whether the
+    /// caller should also reset this mode's scroll offset — used when
+    /// the action invalidates the meaning of the prior position (e.g.
+    /// ContentMode flipping between pretty and raw, where line N maps
+    /// to entirely different content).
+    fn handle(&mut self, _action: Action) -> Handled {
+        Handled::No
     }
 
     /// How long until this mode wants to be ticked, if at all. The event

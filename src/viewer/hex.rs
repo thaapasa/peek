@@ -72,12 +72,17 @@ pub(crate) fn bytes_per_row(term_cols: u16) -> usize {
 /// Bytes-per-row for pipe (non-TTY) output: respects $COLUMNS if set and
 /// reasonable, otherwise defaults to 16 (classic `hexdump -C`).
 pub(crate) fn pipe_bytes_per_row() -> usize {
-    if let Ok(s) = std::env::var("COLUMNS") {
-        if let Ok(n) = s.parse::<u16>() {
-            if n >= 24 {
-                return bytes_per_row(n);
-            }
-        }
+    pipe_bytes_per_row_from(std::env::var("COLUMNS").ok().as_deref())
+}
+
+/// Pure form of `pipe_bytes_per_row` — takes the column override as an
+/// argument so it's testable without touching the process environment.
+pub(crate) fn pipe_bytes_per_row_from(columns: Option<&str>) -> usize {
+    if let Some(s) = columns
+        && let Ok(n) = s.parse::<u16>()
+        && n >= 24
+    {
+        return bytes_per_row(n);
     }
     16
 }
@@ -284,26 +289,14 @@ mod tests {
     }
 
     #[test]
-    fn pipe_bytes_per_row_uses_columns_env() {
-        // SAFETY: tests run single-threaded by default within this module's scope
-        // for sequential access to env. Save/restore.
-        let prev = std::env::var("COLUMNS").ok();
-        // Unset → 16
-        unsafe { std::env::remove_var("COLUMNS") };
-        assert_eq!(pipe_bytes_per_row(), 16);
-        // Set to 132 → 24
-        unsafe { std::env::set_var("COLUMNS", "132") };
-        assert_eq!(pipe_bytes_per_row(), 24);
-        // Bogus → 16
-        unsafe { std::env::set_var("COLUMNS", "abc") };
-        assert_eq!(pipe_bytes_per_row(), 16);
+    fn pipe_bytes_per_row_from_columns_string() {
+        // None → 16
+        assert_eq!(pipe_bytes_per_row_from(None), 16);
+        // Reasonable width → bytes_per_row(132) == 24
+        assert_eq!(pipe_bytes_per_row_from(Some("132")), 24);
+        // Unparseable → 16
+        assert_eq!(pipe_bytes_per_row_from(Some("abc")), 16);
         // Too narrow → 16
-        unsafe { std::env::set_var("COLUMNS", "10") };
-        assert_eq!(pipe_bytes_per_row(), 16);
-        // Restore
-        match prev {
-            Some(v) => unsafe { std::env::set_var("COLUMNS", v) },
-            None => unsafe { std::env::remove_var("COLUMNS") },
-        }
+        assert_eq!(pipe_bytes_per_row_from(Some("10")), 16);
     }
 }

@@ -8,7 +8,7 @@ use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::PeekThemeName;
-use crate::viewer::modes::{Mode, ModeId};
+use crate::viewer::modes::Mode;
 use crate::viewer::ui::{
     Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
 };
@@ -116,10 +116,7 @@ fn render_status_line(name: &str, state: &ViewerState) -> String {
     }
     segs.push((state.current_theme.cli_name(), theme.muted));
 
-    let mut hints: Vec<&str> = Vec::with_capacity(5);
-    if state.active_id() == ModeId::Hex && state.has_return_target() {
-        hints.push("x:exit hex");
-    }
+    let mut hints: Vec<&str> = state.active_status_hints();
     hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);
 
     render_themed_status_line(&segs, &hints, theme)

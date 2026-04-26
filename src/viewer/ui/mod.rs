@@ -15,6 +15,11 @@ pub(crate) use keys::{Action, Outcome};
 pub(crate) use state::{GLOBAL_ACTIONS, ViewerState};
 
 /// Enter the alternate screen and raw mode, run the closure, then always clean up.
+///
+/// Cleanup runs via `Drop`, so a panic inside `f` still restores the
+/// terminal — without the guard, an unwinding panic would leave the
+/// user's shell in raw-mode + alternate-screen, which is unrecoverable
+/// without `reset(1)`.
 pub(crate) fn with_alternate_screen(
     f: impl FnOnce(&mut io::Stdout) -> Result<()>,
 ) -> Result<()> {
@@ -27,13 +32,17 @@ pub(crate) fn with_alternate_screen(
     )?;
     terminal::enable_raw_mode()?;
 
-    let result = f(&mut stdout);
+    let _guard = TerminalGuard;
+    f(&mut stdout)
+}
 
-    // Always clean up, even on error
-    let _ = terminal::disable_raw_mode();
-    let _ = execute!(stdout, cursor::Show, terminal::LeaveAlternateScreen);
+struct TerminalGuard;
 
-    result
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = terminal::disable_raw_mode();
+        let _ = execute!(io::stdout(), cursor::Show, terminal::LeaveAlternateScreen);
+    }
 }
 
 /// Build a themed status line from labeled segments and hint strings.

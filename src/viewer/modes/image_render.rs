@@ -1,7 +1,7 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::image::{ImageConfig, render};
@@ -84,17 +84,17 @@ impl Mode for ImageRenderMode {
         IMAGE_ACTIONS
     }
 
-    fn handle(&mut self, action: Action) -> bool {
+    fn handle(&mut self, action: Action) -> Handled {
         match action {
             Action::CycleBackground => {
                 self.config.background = self.config.background.next();
-                true
+                Handled::Yes
             }
             Action::CycleImageMode => {
                 self.config.mode = self.config.mode.next();
-                true
+                Handled::Yes
             }
-            _ => false,
+            _ => Handled::No,
         }
     }
 

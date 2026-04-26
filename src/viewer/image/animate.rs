@@ -2,7 +2,7 @@ use std::io::{BufReader, Cursor};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use image::{DynamicImage, GenericImageView};
+use image::DynamicImage;
 
 use crate::input::InputSource;
 
@@ -152,26 +152,15 @@ fn count_gif_frames<R: std::io::Read>(reader: R) -> Option<usize> {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
-    use super::glyph_atlas::{CELL_H, CELL_W};
-
     let mut term = render::TermSize::detect();
     term.rows = term.rows.saturating_sub(1);
-    let img = render::add_margin(frame.image.clone(), config.margin);
-    let (img_w, img_h) = img.dimensions();
-    let (cols, rows) = render::contain_size(img_w, img_h, term, config.width);
-
-    // Resize to target resolution before compositing so checkerboard
-    // aligns to the glyph grid.
-    let (px_w, px_h) = match config.mode {
-        super::ImageMode::Ascii => (cols, rows),
-        _ => (cols * CELL_W, rows * CELL_H),
-    };
-    let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
-    let img = render::composite_with_bg(img, config.background);
-
-    match config.mode {
-        super::ImageMode::Ascii => render::render_density(&img, cols, rows),
-        _ => render::render_block_color(&img, cols, rows, config.mode),
-    }
+    render::render_decoded(
+        frame.image.clone(),
+        config.mode,
+        config.width,
+        term,
+        config.background,
+        config.margin,
+    )
 }
 

@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use super::{Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx};
 use crate::input::detect::StructuredFormat;
 use crate::theme::ThemeManager;
 use crate::viewer::highlight_lines;
@@ -130,15 +130,18 @@ impl Mode for ContentMode {
         }
     }
 
-    fn handle(&mut self, action: Action) -> bool {
+    fn handle(&mut self, action: Action) -> Handled {
         if action == Action::ToggleRawSource
             && self.allow_pretty_toggle
             && self.pretty_target.is_some()
         {
             self.use_pretty = !self.use_pretty;
-            true
+            // Pretty line N and raw line N are unrelated content — the
+            // user's previous scroll offset would put them somewhere
+            // arbitrary in the new view. Reset to the top.
+            Handled::YesResetScroll
         } else {
-            false
+            Handled::No
         }
     }
 

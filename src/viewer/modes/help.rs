@@ -23,6 +23,10 @@ impl Mode for HelpMode {
         "Help"
     }
 
+    fn is_aux(&self) -> bool {
+        true
+    }
+
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
         Ok(render_help_with_keys(
             ctx.peek_theme,

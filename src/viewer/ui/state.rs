@@ -11,7 +11,7 @@ use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
-use crate::viewer::modes::{Mode, ModeId, Position, RenderCtx};
+use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
 use super::{content_rows, make_peek_theme};
@@ -37,13 +37,6 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::ToggleRawSource, "Toggle raw / pretty / cycle primary"),
 ];
 
-/// Auxiliary modes — reachable only via dedicated keys (Tab/i, h, x),
-/// not via the `r` primary cycle. They're "hidden" in the sense the
-/// user can step into and out of them, and the back-link slot
-/// (`last_primary`) tracks where their actual work was.
-fn is_aux(id: ModeId) -> bool {
-    matches!(id, ModeId::Info | ModeId::Help | ModeId::Hex)
-}
 
 pub(crate) struct ViewerState<'a> {
     modes: Vec<Box<dyn Mode>>,
@@ -88,7 +81,7 @@ impl<'a> ViewerState<'a> {
         let n = modes.len();
         let peek_theme = make_peek_theme(theme_name);
         let file_info = crate::info::gather(source, detected)?;
-        let last_primary = if is_aux(modes[0].id()) { None } else { Some(0) };
+        let last_primary = if modes[0].is_aux() { None } else { Some(0) };
         Ok(Self {
             modes,
             active: 0,
@@ -109,16 +102,20 @@ impl<'a> ViewerState<'a> {
     // Active mode access
     // ---------------------------------------------------------------------
 
-    pub(crate) fn active_id(&self) -> ModeId {
-        self.modes[self.active].id()
-    }
-
     pub(crate) fn active_label(&self) -> &str {
         self.modes[self.active].label()
     }
 
     pub(crate) fn active_status_segments(&self) -> Vec<(String, syntect::highlighting::Color)> {
         self.modes[self.active].status_segments(&self.peek_theme)
+    }
+
+    /// Mode-contributed hint strings for the status bar (right side).
+    /// The active mode is asked whether it has anywhere to return to,
+    /// so e.g. Hex can show `x:exit hex` only when toggling out lands
+    /// elsewhere.
+    pub(crate) fn active_status_hints(&self) -> Vec<&'static str> {
+        self.modes[self.active].status_hints(self.has_return_target())
     }
 
     /// Whether the active aux mode has somewhere meaningful to return to
@@ -156,8 +153,14 @@ impl<'a> ViewerState<'a> {
     }
 
     /// Try to consume the action via the active mode's `handle()`.
+    /// Returns whether the action was consumed; on `YesResetScroll`,
+    /// the active mode's scroll offset is also zeroed.
     pub(crate) fn try_active_handle(&mut self, action: Action) -> bool {
-        self.modes[self.active].handle(action)
+        let handled = self.modes[self.active].handle(action);
+        if handled == Handled::YesResetScroll {
+            self.scroll[self.active] = 0;
+        }
+        handled.was_consumed()
     }
 
     /// Active mode's preferred next-tick deadline, if any. Drives the
@@ -285,7 +288,7 @@ impl<'a> ViewerState<'a> {
         }
         self.capture_position();
         self.active = new_idx;
-        if !is_aux(self.modes[new_idx].id()) {
+        if !self.modes[new_idx].is_aux() {
             self.last_primary = Some(new_idx);
         }
         self.restore_position();
@@ -327,10 +330,10 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    /// Advance the active index to the next non-auxiliary mode (skipping
-    /// Info, Help, and Hex). For SVG this swaps rasterized ↔ XML; for
-    /// files with a single primary mode, this is a no-op. Used as the
-    /// fallback handler for `r` when no mode consumes it.
+    /// Advance the active index to the next primary (non-aux) mode.
+    /// For SVG this swaps rasterized ↔ XML; for files with a single
+    /// primary mode, this is a no-op. Used as the fallback handler for
+    /// `r` when no mode consumes it.
     fn cycle_primary(&mut self) {
         let n = self.modes.len();
         let mut i = self.active;
@@ -339,10 +342,7 @@ impl<'a> ViewerState<'a> {
             if i == self.active {
                 break;
             }
-            if !matches!(
-                self.modes[i].id(),
-                ModeId::Info | ModeId::Help | ModeId::Hex
-            ) {
+            if !self.modes[i].is_aux() {
                 self.set_active(i);
                 return;
             }

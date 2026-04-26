@@ -70,6 +70,7 @@ detection uses magic bytes (images, binary) followed by content sniffing
 pub(crate) trait Mode {
     fn id(&self) -> ModeId;
     fn label(&self) -> &str;
+    fn is_aux(&self) -> bool { false }
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
 
     fn owns_scroll(&self) -> bool { false }
@@ -77,14 +78,26 @@ pub(crate) trait Mode {
     fn rerender_on_resize(&self) -> bool { false }
     fn on_resize(&mut self) {}
     fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> { vec![] }
+    fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> { vec![] }
     fn extra_actions(&self) -> &'static [(Action, &'static str)] { &[] }
-    fn handle(&mut self, _action: Action) -> bool { false }
+    fn handle(&mut self, _action: Action) -> Handled { Handled::No }
     fn next_tick(&self) -> Option<Duration> { None }
     fn tick(&mut self) -> bool { false }
     fn tracks_position(&self) -> bool { false }
     fn take_warnings(&mut self) -> Vec<String> { vec![] }
 }
+
+// Result of `handle`. `YesResetScroll` zeroes the active mode's scroll
+// offset (used when an action invalidates the meaning of the prior
+// position — e.g. ContentMode flipping pretty ↔ raw).
+pub(crate) enum Handled { No, Yes, YesResetScroll }
 ```
+
+`is_aux()` marks Info / Help / Hex as auxiliary so they can be reached
+only via dedicated keys (Tab/i, h, x), are skipped by the `r` primary
+cycle, and toggle back to `last_primary`. `status_hints` lets a mode
+contribute right-side status-bar hints contextually (Hex shows
+`x:exit hex` only when it has somewhere to return to).
 
 A `Mode` is one renderable + interactive view of a file. The interactive
 viewer drives a `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x`
@@ -266,10 +279,13 @@ then `state.draw()`.
 ### Toggle semantics: Tab, `i`, `h`, `x`
 
 Aux modes (Info, Help, Hex) are reachable only via dedicated keys — they
-don't appear in the `r` primary cycle. `ViewerState::toggle_aux(target_id)`
-is shared by Tab (Info), `h` (Help), and `x` (Hex): if the active mode
-*is* the target, return to `last_primary`; otherwise, enter the target.
-`i` (`SwitchInfo`) is a one-way jump to Info.
+don't appear in the `r` primary cycle. Aux-ness is declared by the mode
+itself (`Mode::is_aux()` returns `true`), not hardcoded by `ModeId` —
+adding a new aux mode means overriding one trait method, no churn in
+`ViewerState`. `ViewerState::toggle_aux(target_id)` is shared by Tab
+(Info), `h` (Help), and `x` (Hex): if the active mode *is* the target,
+return to `last_primary`; otherwise, enter the target. `i`
+(`SwitchInfo`) is a one-way jump to Info.
 
 `last_primary` is updated whenever the active mode lands on a non-aux
 mode. Aux-to-aux transitions (Hex → Info, Info → Hex) leave it alone, so

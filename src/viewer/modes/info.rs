@@ -19,6 +19,10 @@ impl Mode for InfoMode {
         "Info"
     }
 
+    fn is_aux(&self) -> bool {
+        true
+    }
+
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
         Ok(crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts))
     }

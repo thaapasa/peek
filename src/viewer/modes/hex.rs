@@ -42,6 +42,10 @@ impl Mode for HexMode {
         &self.label
     }
 
+    fn is_aux(&self) -> bool {
+        true
+    }
+
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
         let (cols, _) = terminal::size().unwrap_or((80, 24));
         let bpr = bytes_per_row(cols);
@@ -125,5 +129,13 @@ impl Mode for HexMode {
             self.top_offset, self.total_len, pct
         );
         vec![(s, theme.muted)]
+    }
+
+    fn status_hints(&self, has_return_target: bool) -> Vec<&'static str> {
+        if has_return_target {
+            vec!["x:exit hex"]
+        } else {
+            Vec::new()
+        }
     }
 }

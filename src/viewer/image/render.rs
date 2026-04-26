@@ -268,13 +268,26 @@ pub fn load_and_render(
     bg: Background,
     margin: u32,
 ) -> Result<Vec<String>> {
-    let img = load_image(source)?;
+    Ok(render_decoded(load_image(source)?, mode, forced_width, term, bg, margin))
+}
+
+/// Render an already-decoded image. Shared by `load_and_render` and the
+/// animation loop, which holds frames in memory and shouldn't re-decode.
+///
+/// Resizes to target pixel resolution before alpha-compositing so the
+/// checkerboard pattern aligns to the glyph grid.
+pub fn render_decoded(
+    img: DynamicImage,
+    mode: ImageMode,
+    forced_width: u32,
+    term: TermSize,
+    bg: Background,
+    margin: u32,
+) -> Vec<String> {
     let img = add_margin(img, margin);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, forced_width);
 
-    // Resize to exact target pixel resolution first (preserving alpha),
-    // then composite — so checkerboard aligns to the glyph grid.
     let (px_w, px_h) = match mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
@@ -282,14 +295,12 @@ pub fn load_and_render(
     let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
     let img = composite_with_bg(img, bg);
 
-    let lines = match mode {
+    match mode {
         ImageMode::Ascii => render_density(&img, cols, rows),
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
             render_block_color(&img, cols, rows, mode)
         }
-    };
-
-    Ok(lines)
+    }
 }
 
 /// Load an image from a File path or buffered Stdin bytes.

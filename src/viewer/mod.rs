@@ -266,30 +266,45 @@ impl Registry {
     }
 
     fn syntax_token_for(&self, source: &InputSource, file_type: &FileType) -> Option<String> {
-        match file_type {
-            FileType::SourceCode { syntax } => self
-                .forced_language
-                .clone()
-                .or_else(|| syntax.clone())
-                .or_else(|| {
-                    source
-                        .path()
-                        .and_then(|p| p.file_name())
-                        .and_then(|n| n.to_str())
-                        .map(String::from)
-                }),
-            FileType::Structured(fmt) => Some(
-                match fmt {
-                    StructuredFormat::Json => "JSON",
-                    StructuredFormat::Yaml => "YAML",
-                    StructuredFormat::Toml => "TOML",
-                    StructuredFormat::Xml => "XML",
-                }
-                .to_string(),
-            ),
-            FileType::Svg => Some("XML".to_string()),
-            _ => None,
-        }
+        syntax_token_for(self.forced_language.as_deref(), source, file_type)
+    }
+}
+
+/// Resolve a syntect syntax token for a file. Priority: explicit
+/// `--language` override, then the detected `FileType` syntax hint
+/// (extension), then the bare filename (catches `Makefile`, `Dockerfile`
+/// — syntect matches these by name). Structured/SVG always map to a
+/// fixed syntax token.
+///
+/// Shared by `Registry::compose_modes` and `SyntaxViewer` so the two
+/// rendering paths agree on syntax resolution.
+pub(crate) fn syntax_token_for(
+    forced_language: Option<&str>,
+    source: &InputSource,
+    file_type: &FileType,
+) -> Option<String> {
+    match file_type {
+        FileType::SourceCode { syntax } => forced_language
+            .map(String::from)
+            .or_else(|| syntax.clone())
+            .or_else(|| {
+                source
+                    .path()
+                    .and_then(|p| p.file_name())
+                    .and_then(|n| n.to_str())
+                    .map(String::from)
+            }),
+        FileType::Structured(fmt) => Some(
+            match fmt {
+                StructuredFormat::Json => "JSON",
+                StructuredFormat::Yaml => "YAML",
+                StructuredFormat::Toml => "TOML",
+                StructuredFormat::Xml => "XML",
+            }
+            .to_string(),
+        ),
+        FileType::Svg => Some("XML".to_string()),
+        _ => None,
     }
 }
 

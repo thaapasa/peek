@@ -10,6 +10,9 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::input::mime;
 
+/// Chunk size for streaming text-extras counting.
+const TEXT_SCAN_CHUNK: usize = 64 * 1024;
+
 /// Gather metadata for the given input source and detection result.
 ///
 /// `detected.magic_mime` is reused (no re-read of the file) to build the
@@ -83,7 +86,9 @@ fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
 
 fn gather_extras_stdin(data: &Arc<[u8]>, file_type: &FileType) -> FileExtras {
     match file_type {
-        FileType::SourceCode { .. } | FileType::Svg => gather_text_extras_from_bytes(data),
+        FileType::SourceCode { .. } | FileType::Svg => {
+            gather_text_extras_streaming(&InputSource::Stdin { data: Arc::clone(data) })
+        }
         FileType::Structured(fmt) => FileExtras::Structured {
             format_name: match fmt {
                 StructuredFormat::Json => "JSON",
@@ -128,21 +133,12 @@ fn gather_image_extras_from_bytes(data: &Arc<[u8]>) -> FileExtras {
     }
 }
 
-fn gather_text_extras_from_bytes(data: &[u8]) -> FileExtras {
-    let Ok(content) = std::str::from_utf8(data) else {
-        return FileExtras::Binary;
-    };
-    FileExtras::Text {
-        line_count: content.lines().count(),
-        word_count: content.split_whitespace().count(),
-        char_count: content.chars().count(),
-    }
-}
-
 fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
     match file_type {
         FileType::Image => gather_image_extras(path),
-        FileType::SourceCode { .. } => gather_text_extras(path),
+        FileType::SourceCode { .. } | FileType::Svg => {
+            gather_text_extras_streaming(&InputSource::File(path.to_path_buf()))
+        }
         FileType::Structured(fmt) => FileExtras::Structured {
             format_name: match fmt {
                 StructuredFormat::Json => "JSON",
@@ -151,7 +147,6 @@ fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
                 StructuredFormat::Xml => "XML",
             },
         },
-        FileType::Svg => gather_text_extras(path),
         FileType::Binary => FileExtras::Binary,
     }
 }
@@ -266,19 +261,180 @@ fn exif_fields<R: std::io::BufRead + std::io::Seek>(reader: &mut R) -> Vec<(Stri
     result
 }
 
-fn gather_text_extras(path: &Path) -> FileExtras {
-    let content = match fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(_) => return FileExtras::Binary,
+/// Stream the source in 64 KB chunks and count Unicode chars, words
+/// (`split_whitespace`-equivalent), and lines (`str::lines`-equivalent)
+/// without loading the whole file. Falls back to `FileExtras::Binary`
+/// if the source isn't valid UTF-8.
+fn gather_text_extras_streaming(source: &InputSource) -> FileExtras {
+    let Ok(bs) = source.open_byte_source() else {
+        return FileExtras::Binary;
     };
+    let total = bs.len();
 
-    let line_count = content.lines().count();
-    let word_count = content.split_whitespace().count();
-    let char_count = content.chars().count();
+    let mut buf: Vec<u8> = Vec::with_capacity(TEXT_SCAN_CHUNK);
+    let mut offset: u64 = 0;
+    let mut chars = 0usize;
+    let mut words = 0usize;
+    let mut newlines = 0usize;
+    // Whether we are currently inside a run of non-whitespace chars.
+    // Carried across chunk boundaries so words split by a chunk edge
+    // aren't double-counted.
+    let mut in_word = false;
+    // Last char observed across the whole stream — used to match
+    // `str::lines()`: a final unterminated line still counts.
+    let mut last_char: Option<char> = None;
+
+    while offset < total {
+        let want = ((total - offset) as usize).min(TEXT_SCAN_CHUNK);
+        let read = match bs.read_range(offset, want) {
+            Ok(r) => r,
+            Err(_) => return FileExtras::Binary,
+        };
+        if read.is_empty() {
+            break;
+        }
+        offset += read.len() as u64;
+        buf.extend_from_slice(&read);
+
+        // Find the longest valid UTF-8 prefix; the (≤3-byte) trailing
+        // partial sequence stays in `buf` for the next chunk to complete.
+        let valid_up_to = match std::str::from_utf8(&buf) {
+            Ok(_) => buf.len(),
+            Err(e) => {
+                if e.error_len().is_some() {
+                    return FileExtras::Binary;
+                }
+                e.valid_up_to()
+            }
+        };
+
+        let s = std::str::from_utf8(&buf[..valid_up_to])
+            .expect("valid_up_to slice is valid UTF-8 by construction");
+        for ch in s.chars() {
+            chars += 1;
+            if ch == '\n' {
+                newlines += 1;
+            }
+            let is_ws = ch.is_whitespace();
+            if !is_ws && !in_word {
+                words += 1;
+                in_word = true;
+            } else if is_ws {
+                in_word = false;
+            }
+            last_char = Some(ch);
+        }
+
+        buf.drain(..valid_up_to);
+    }
+
+    // Anything left in `buf` at EOF was an incomplete trailing UTF-8
+    // sequence — i.e. truncated text. Treat as binary.
+    if !buf.is_empty() {
+        return FileExtras::Binary;
+    }
+
+    // Match `str::lines()` semantics: empty input is 0 lines; otherwise a
+    // file ending in `\n` has exactly `newlines` lines, and a file that
+    // doesn't end in `\n` adds one for the final unterminated line.
+    let line_count = match last_char {
+        None => 0,
+        Some('\n') => newlines,
+        Some(_) => newlines + 1,
+    };
 
     FileExtras::Text {
         line_count,
-        word_count,
-        char_count,
+        word_count: words,
+        char_count: chars,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn stdin_source(text: &str) -> InputSource {
+        InputSource::Stdin {
+            data: Arc::from(text.as_bytes().to_vec().into_boxed_slice()),
+        }
+    }
+
+    fn extras_text(s: &str) -> (usize, usize, usize) {
+        match gather_text_extras_streaming(&stdin_source(s)) {
+            FileExtras::Text {
+                line_count,
+                word_count,
+                char_count,
+            } => (line_count, word_count, char_count),
+            other => panic!("expected Text extras, got {:?}", std::mem::discriminant(&other)),
+        }
+    }
+
+    /// Streaming counts must match the old `str::lines/split_whitespace/chars`
+    /// counts on the same input.
+    fn assert_matches_std(s: &str) {
+        let (lines, words, chars) = extras_text(s);
+        assert_eq!(lines, s.lines().count(), "lines for {s:?}");
+        assert_eq!(words, s.split_whitespace().count(), "words for {s:?}");
+        assert_eq!(chars, s.chars().count(), "chars for {s:?}");
+    }
+
+    #[test]
+    fn empty_input() {
+        assert_matches_std("");
+    }
+
+    #[test]
+    fn unterminated_final_line() {
+        assert_matches_std("alpha\nbeta\ngamma");
+    }
+
+    #[test]
+    fn terminated_final_line() {
+        assert_matches_std("alpha\nbeta\ngamma\n");
+    }
+
+    #[test]
+    fn blank_lines() {
+        assert_matches_std("\n\n\n");
+        assert_matches_std("a\n\nb\n");
+    }
+
+    #[test]
+    fn crlf_lines() {
+        assert_matches_std("a\r\nb\r\nc\r\n");
+    }
+
+    #[test]
+    fn unicode_words_and_chars() {
+        // Mixed Unicode, multi-byte chars at potential chunk edges.
+        assert_matches_std("héllo wörld\nαβγ δεζ\n你好 世界\n");
+    }
+
+    #[test]
+    fn invalid_utf8_returns_binary() {
+        let bad = vec![0xff, 0xfe, 0xfd];
+        let src = InputSource::Stdin {
+            data: Arc::from(bad.into_boxed_slice()),
+        };
+        assert!(matches!(
+            gather_text_extras_streaming(&src),
+            FileExtras::Binary
+        ));
+    }
+
+    #[test]
+    fn truncated_utf8_returns_binary() {
+        // First two bytes of a three-byte UTF-8 sequence (e.g. start of "你"),
+        // unterminated.
+        let truncated = vec![0xe4, 0xbd];
+        let src = InputSource::Stdin {
+            data: Arc::from(truncated.into_boxed_slice()),
+        };
+        assert!(matches!(
+            gather_text_extras_streaming(&src),
+            FileExtras::Binary
+        ));
     }
 }

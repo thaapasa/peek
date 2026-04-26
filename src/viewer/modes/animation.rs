@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx};
 use crate::theme::PeekTheme;
 use crate::viewer::image::ImageConfig;
 use crate::viewer::image::animate::{AnimFrame, render_frame};
@@ -62,35 +62,35 @@ impl Mode for AnimationMode {
         ANIM_ACTIONS
     }
 
-    fn handle(&mut self, action: Action) -> bool {
+    fn handle(&mut self, action: Action) -> Handled {
         match action {
             Action::PlayPause => {
                 self.playing = !self.playing;
                 if self.playing {
                     self.last_advance = Instant::now();
                 }
-                true
+                Handled::Yes
             }
             Action::NextFrame => {
                 self.current = (self.current + 1) % self.frames.len();
                 self.last_advance = Instant::now();
-                true
+                Handled::Yes
             }
             Action::PrevFrame => {
                 let n = self.frames.len();
                 self.current = (self.current + n - 1) % n;
                 self.last_advance = Instant::now();
-                true
+                Handled::Yes
             }
             Action::CycleBackground => {
                 self.config.background = self.config.background.next();
-                true
+                Handled::Yes
             }
             Action::CycleImageMode => {
                 self.config.mode = self.config.mode.next();
-                true
+                Handled::Yes
             }
-            _ => false,
+            _ => Handled::No,
         }
     }
 
