@@ -59,32 +59,9 @@ fn main() -> Result<()> {
 
     if use_pager {
         // Interactive TTY: compose mode list per file type; one event loop.
-        // Animated images keep their dedicated frame-rate-driven loop.
+        // compose_modes handles animation detection internally, so this
+        // path is uniform across file types.
         for (source, detected) in &inputs {
-            let file_type = &detected.file_type;
-            if matches!(file_type, input::detect::FileType::Image) && !args.plain
-                && let Some(frames) =
-                    viewer::image::animate::decode_anim_frames(source).with_context(|| {
-                        format!("failed to decode animation frames for {}", source.name())
-                    })?
-            {
-                let cfg = viewer::image::ImageConfig {
-                    mode: viewer::image::ImageMode::from_str(&args.image_mode),
-                    width: args.width,
-                    background: viewer::image::Background::from_str(&args.background),
-                    margin: args.margin,
-                };
-                viewer::image::animate::view_animated(
-                    source,
-                    detected,
-                    frames,
-                    cfg,
-                    viewers.theme_name(),
-                )
-                .with_context(|| format!("failed to render {}", source.name()))?;
-                continue;
-            }
-
             let modes = viewers
                 .compose_modes(source, detected, &args)
                 .with_context(|| format!("failed to compose viewer for {}", source.name()))?;

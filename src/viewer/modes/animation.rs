@@ -43,7 +43,7 @@ impl AnimationMode {
 
 impl Mode for AnimationMode {
     fn id(&self) -> ModeId {
-        ModeId::ImageRender
+        ModeId::Animation
     }
 
     fn label(&self) -> &str {

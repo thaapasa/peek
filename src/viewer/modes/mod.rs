@@ -44,6 +44,7 @@ pub(crate) enum ModeId {
     Help,
     Hex,
     ImageRender,
+    Animation,
     StructuredSource,
 }
 

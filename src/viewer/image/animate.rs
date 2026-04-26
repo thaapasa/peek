@@ -4,11 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
-use crate::input::detect::Detected;
 use crate::input::InputSource;
-use crate::theme::PeekThemeName;
-use crate::viewer::modes::{AnimationMode, HelpMode, HexMode, InfoMode, Mode};
-use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 use super::render;
 use super::ImageConfig;
@@ -135,39 +131,6 @@ pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
         }
     };
     if count > 1 { Some(count) } else { None }
-}
-
-// ---------------------------------------------------------------------------
-// Interactive animated viewer
-// ---------------------------------------------------------------------------
-
-/// Interactive animated GIF/WebP viewer. Composes an `AnimationMode` plus
-/// the standard Hex / Info / Help auxiliaries and hands the stack to the
-/// unified event loop, which drives frame advancement via the mode's
-/// `next_tick` / `tick` hooks.
-pub fn view_animated(
-    source: &InputSource,
-    detected: &Detected,
-    frames: Vec<AnimFrame>,
-    config: ImageConfig,
-    initial_theme: PeekThemeName,
-) -> Result<()> {
-    let mut modes: Vec<Box<dyn Mode>> = Vec::new();
-    modes.push(Box::new(AnimationMode::new(frames, config)));
-    modes.push(Box::new(HexMode::new(source, 0)?));
-    modes.push(Box::new(InfoMode::new()));
-
-    let mut help_actions: Vec<(Action, &'static str)> = GLOBAL_ACTIONS.to_vec();
-    for m in &modes {
-        for (a, label) in m.extra_actions() {
-            if !help_actions.iter().any(|(b, _)| b == a) {
-                help_actions.push((*a, *label));
-            }
-        }
-    }
-    modes.push(Box::new(HelpMode::new(help_actions)));
-
-    crate::viewer::interactive::run(source, detected, initial_theme, modes)
 }
 
 // ---------------------------------------------------------------------------

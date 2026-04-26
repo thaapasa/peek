@@ -10,7 +10,7 @@ use crate::input::InputSource;
 use crate::output::Output;
 use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
-    ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode, Mode,
+    AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode, Mode,
 };
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
@@ -152,11 +152,18 @@ impl Registry {
                 }
                 FileType::Image => {
                     let cfg = self.image_config(args);
-                    modes.push(Box::new(ImageRenderMode::new(
-                        source.clone(),
-                        cfg,
-                        ImageKind::Raster,
-                    )));
+                    // Animated GIF/WebP: AnimationMode owns the frame stack
+                    // and drives ticks via the Mode trait. Static image:
+                    // ImageRenderMode renders on demand.
+                    if let Some(frames) = image::animate::decode_anim_frames(source)? {
+                        modes.push(Box::new(AnimationMode::new(frames, cfg)));
+                    } else {
+                        modes.push(Box::new(ImageRenderMode::new(
+                            source.clone(),
+                            cfg,
+                            ImageKind::Raster,
+                        )));
+                    }
                 }
                 FileType::Svg => {
                     let cfg = self.image_config(args);
