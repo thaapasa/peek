@@ -5,12 +5,10 @@ use anyhow::Result;
 
 use crate::Args;
 
-/// Output abstraction: pager, direct stdout, or in-memory buffer.
-#[allow(dead_code)]
+/// Output abstraction: pager or direct stdout.
 pub enum Output {
     Pager(minus::Pager),
     Direct(io::Stdout),
-    Buffer(Vec<String>),
 }
 
 impl Output {
@@ -34,9 +32,6 @@ impl Output {
             Output::Direct(stdout) => {
                 writeln!(stdout, "{line}")?;
             }
-            Output::Buffer(lines) => {
-                lines.push(line.to_string());
-            }
         }
         Ok(())
     }
@@ -49,14 +44,6 @@ impl Output {
             }
             Output::Direct(stdout) => {
                 write!(stdout, "{text}")?;
-            }
-            Output::Buffer(lines) => {
-                // Append to the last line or start a new one
-                if let Some(last) = lines.last_mut() {
-                    last.push_str(text);
-                } else {
-                    lines.push(text.to_string());
-                }
             }
         }
         Ok(())
@@ -71,7 +58,6 @@ impl Output {
             Output::Direct(mut stdout) => {
                 stdout.flush()?;
             }
-            Output::Buffer(_) => {}
         }
         Ok(())
     }
