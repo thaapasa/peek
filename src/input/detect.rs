@@ -1,9 +1,17 @@
 use std::fs;
+use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Result, bail};
 
 use crate::input::InputSource;
+
+/// Bytes read from the head of a file for magic-byte detection. `infer`
+/// inspects only the first few hundred bytes; 16 KB is comfortable headroom.
+const HEAD_BYTES: usize = 16 * 1024;
+
+/// Chunk size for streaming UTF-8 validation of the file body.
+const SCAN_CHUNK: usize = 64 * 1024;
 
 /// Detected file type, used to dispatch to the right viewer.
 #[derive(Debug, Clone)]
@@ -69,9 +77,14 @@ fn detect_file(path: &Path) -> Result<Detected> {
         }
     }
 
-    // Check magic bytes for images and binary files
-    let buf = fs::read(path)?;
-    let magic_mime = infer::get(&buf).map(|k| k.mime_type().to_string());
+    // Read just the head for magic-byte detection — `infer` only inspects
+    // the first few hundred bytes, so we never need the whole file.
+    let mut file = fs::File::open(path)?;
+    let mut head = vec![0u8; HEAD_BYTES];
+    let n = read_fill(&mut file, &mut head)?;
+    head.truncate(n);
+
+    let magic_mime = infer::get(&head).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
         if mime.starts_with("image/") {
             return Ok(Detected {
@@ -93,9 +106,9 @@ fn detect_file(path: &Path) -> Result<Detected> {
         }
     }
 
-    // If the file has significant non-UTF-8 content, treat as binary
-    let is_text = String::from_utf8(buf).is_ok();
-    if !is_text {
+    // Stream the file body to check for non-UTF-8 content. Reuses the head
+    // buffer as the first chunk so we don't read it twice.
+    if !is_utf8_streaming(head, &mut file)? {
         return Ok(Detected {
             file_type: FileType::Binary,
             magic_mime,
@@ -112,6 +125,51 @@ fn detect_file(path: &Path) -> Result<Detected> {
         file_type: FileType::SourceCode { syntax },
         magic_mime,
     })
+}
+
+/// Read into `buf` until full or EOF. Returns the number of bytes read.
+/// Unlike `Read::read`, this loops until the buffer is full or the source
+/// is exhausted, so partial syscall returns don't truncate the head.
+fn read_fill<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<usize> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match reader.read(&mut buf[filled..])? {
+            0 => break,
+            n => filled += n,
+        }
+    }
+    Ok(filled)
+}
+
+/// Streaming UTF-8 validation. `head` is the already-read leading chunk;
+/// the rest is pulled from `reader` in `SCAN_CHUNK`-sized pieces. The
+/// running buffer carries any incomplete trailing UTF-8 sequence (≤3 bytes)
+/// across chunk boundaries so multi-byte characters that straddle a chunk
+/// boundary are validated correctly.
+fn is_utf8_streaming<R: Read>(head: Vec<u8>, reader: &mut R) -> Result<bool> {
+    let mut buf = head;
+    let mut chunk = vec![0u8; SCAN_CHUNK];
+    loop {
+        match std::str::from_utf8(&buf) {
+            Ok(_) => buf.clear(),
+            Err(e) => {
+                if e.error_len().is_some() {
+                    // A genuine invalid sequence — not text.
+                    return Ok(false);
+                }
+                // Incomplete trailing sequence; drop everything before it
+                // and let the next chunk complete it.
+                let valid_up_to = e.valid_up_to();
+                buf.drain(..valid_up_to);
+            }
+        }
+        let n = reader.read(&mut chunk)?;
+        if n == 0 {
+            // EOF — anything still buffered is an unfinished sequence.
+            return Ok(buf.is_empty());
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
 }
 
 /// Detect the file type from an in-memory byte buffer (for stdin).

@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+/// Chunk size for streaming line/byte scans of the underlying source.
+const SCAN_CHUNK: usize = 64 * 1024;
+
 /// Source of input content — either a file on disk or buffered stdin.
 ///
 /// Decouples "where data comes from" from "how it's displayed".
@@ -57,6 +60,9 @@ impl InputSource {
     /// a line index past EOF returns the source length. Returns `None` if
     /// the source can't be read.
     ///
+    /// Streams via `open_byte_source` in 64 KB chunks so multi-GB files
+    /// don't get loaded into memory.
+    ///
     /// For pretty-printed structured content, the displayed line numbers
     /// don't correspond to source line numbers — this conversion is
     /// approximate in that case.
@@ -64,27 +70,49 @@ impl InputSource {
         if line == 0 {
             return Some(0);
         }
-        let bytes = self.read_bytes().ok()?;
-        let mut count = 0;
-        for (i, b) in bytes.iter().enumerate() {
-            if *b == b'\n' {
-                count += 1;
-                if count == line {
-                    return Some((i + 1) as u64);
+        let bs = self.open_byte_source().ok()?;
+        let total = bs.len();
+        let mut count = 0usize;
+        let mut offset: u64 = 0;
+        while offset < total {
+            let buf = bs.read_range(offset, SCAN_CHUNK).ok()?;
+            if buf.is_empty() {
+                break;
+            }
+            for (i, b) in buf.iter().enumerate() {
+                if *b == b'\n' {
+                    count += 1;
+                    if count == line {
+                        return Some(offset + (i + 1) as u64);
+                    }
                 }
             }
+            offset += buf.len() as u64;
         }
-        Some(bytes.len() as u64)
+        Some(total)
     }
 
     /// Convert a byte offset to a 0-based line index by counting `\n`
     /// bytes up to (but not including) the offset. Offset past EOF
     /// counts the total newlines in the source. Returns `None` if the
     /// source can't be read.
+    ///
+    /// Streams via `open_byte_source` in 64 KB chunks.
     pub fn byte_to_line(&self, byte: u64) -> Option<usize> {
-        let bytes = self.read_bytes().ok()?;
-        let limit = (byte as usize).min(bytes.len());
-        Some(bytes[..limit].iter().filter(|b| **b == b'\n').count())
+        let bs = self.open_byte_source().ok()?;
+        let limit = byte.min(bs.len());
+        let mut count = 0usize;
+        let mut offset: u64 = 0;
+        while offset < limit {
+            let want = ((limit - offset) as usize).min(SCAN_CHUNK);
+            let buf = bs.read_range(offset, want).ok()?;
+            if buf.is_empty() {
+                break;
+            }
+            count += buf.iter().filter(|b| **b == b'\n').count();
+            offset += buf.len() as u64;
+        }
+        Some(count)
     }
 
     /// Open a streaming byte reader. For files, holds the file handle and
