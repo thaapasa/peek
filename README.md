@@ -133,6 +133,8 @@ with `--print`, output goes directly to stdout.
 | `t`             | Cycle theme                |
 | `r`             | Toggle raw / pretty        |
 | `x`             | Toggle hex dump            |
+| `m`             | Cycle image render mode    |
+| `b`             | Cycle image background     |
 
 ## Themes
 

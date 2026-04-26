@@ -1,7 +1,9 @@
 use anyhow::Result;
+use syntect::highlighting::Color;
 
 use super::{Mode, ModeId, RenderCtx};
 use crate::input::InputSource;
+use crate::theme::PeekTheme;
 use crate::viewer::image::{Background, ImageConfig, render};
 use crate::viewer::ui::Action;
 
@@ -22,8 +24,10 @@ pub(crate) struct ImageRenderMode {
     label: &'static str,
 }
 
-const BG_CYCLE_ACTIONS: &[(Action, &str)] =
-    &[(Action::CycleBackground, "Cycle background (images)")];
+const IMAGE_ACTIONS: &[(Action, &str)] = &[
+    (Action::CycleBackground, "Cycle background (images)"),
+    (Action::CycleImageMode, "Cycle render mode (images)"),
+];
 
 impl ImageRenderMode {
     pub(crate) fn new(source: InputSource, config: ImageConfig, kind: ImageKind) -> Self {
@@ -79,15 +83,24 @@ impl Mode for ImageRenderMode {
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {
-        BG_CYCLE_ACTIONS
+        IMAGE_ACTIONS
     }
 
     fn handle(&mut self, action: Action) -> bool {
-        if action == Action::CycleBackground {
-            self.background = self.background.next();
-            true
-        } else {
-            false
+        match action {
+            Action::CycleBackground => {
+                self.background = self.background.next();
+                true
+            }
+            Action::CycleImageMode => {
+                self.config.mode = self.config.mode.next();
+                true
+            }
+            _ => false,
         }
+    }
+
+    fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
+        vec![(self.config.mode.label().to_string(), theme.label)]
     }
 }

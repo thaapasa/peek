@@ -25,6 +25,7 @@ const ANIM_ACTIONS: &[(Action, &str)] = &[
     (Action::NextFrame, "Next frame"),
     (Action::PrevFrame, "Previous frame"),
     (Action::CycleBackground, "Cycle background (images)"),
+    (Action::CycleImageMode, "Cycle render mode (images)"),
 ];
 
 impl AnimationMode {
@@ -84,6 +85,10 @@ impl Mode for AnimationMode {
                 self.config.background = self.config.background.next();
                 true
             }
+            Action::CycleImageMode => {
+                self.config.mode = self.config.mode.next();
+                true
+            }
             _ => false,
         }
     }
@@ -110,6 +115,9 @@ impl Mode for AnimationMode {
             self.frames.len(),
             play_icon
         );
-        vec![(frame_info, theme.label)]
+        vec![
+            (self.config.mode.label().to_string(), theme.label),
+            (frame_info, theme.label),
+        ]
     }
 }

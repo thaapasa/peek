@@ -43,16 +43,6 @@ impl Background {
             Self::Checkerboard => Self::Auto,
         }
     }
-
-    #[allow(dead_code)]
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Auto => "auto",
-            Self::Black => "black",
-            Self::White => "white",
-            Self::Checkerboard => "checker",
-        }
-    }
 }
 
 /// Image rendering mode.
@@ -75,6 +65,24 @@ impl ImageMode {
             "geo" => Self::Geo,
             "ascii" => Self::Ascii,
             _ => Self::Full,
+        }
+    }
+
+    pub fn next(self) -> Self {
+        match self {
+            Self::Full => Self::Block,
+            Self::Block => Self::Geo,
+            Self::Geo => Self::Ascii,
+            Self::Ascii => Self::Full,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Block => "block",
+            Self::Geo => "geo",
+            Self::Ascii => "ascii",
         }
     }
 }

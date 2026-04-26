@@ -51,6 +51,8 @@ pub(crate) enum Action {
     SwitchToHex,
     /// Cycle the image-render background (auto/black/white/checkerboard).
     CycleBackground,
+    /// Cycle the image rendering mode (full/block/geo/ascii).
+    CycleImageMode,
     /// Toggle raw / pretty rendering (text + SVG source).
     ToggleRawSource,
     /// Play / pause an animated image.
@@ -81,6 +83,7 @@ impl Action {
         const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
         const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
+        const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n')), Binding::plain(Right)];
@@ -100,6 +103,7 @@ impl Action {
             Action::CycleTheme        => CYCLE_THEME,
             Action::SwitchToHex       => SWITCH_HEX,
             Action::CycleBackground   => CYCLE_BG,
+            Action::CycleImageMode    => CYCLE_IMG_MODE,
             Action::ToggleRawSource   => TOGGLE_RAW,
             Action::PlayPause         => PLAY_PAUSE,
             Action::NextFrame         => NEXT_FRAME,
@@ -123,6 +127,7 @@ impl Action {
             Action::CycleTheme        => "t",
             Action::SwitchToHex       => "x",
             Action::CycleBackground   => "b",
+            Action::CycleImageMode    => "m",
             Action::ToggleRawSource   => "r",
             Action::PlayPause         => "p",
             Action::NextFrame         => "n / Right",

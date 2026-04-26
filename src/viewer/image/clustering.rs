@@ -151,8 +151,8 @@ mod tests {
     fn test_two_color_split() {
         let mut pixels = [[0u8, 0, 0]; 128];
         // Top half white, bottom half black
-        for i in 0..64 {
-            pixels[i] = [255, 255, 255];
+        for p in pixels.iter_mut().take(64) {
+            *p = [255, 255, 255];
         }
         let result = fast_2_color(&pixels);
         // The two colors should be clearly different

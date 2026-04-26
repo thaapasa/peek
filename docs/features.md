@@ -166,9 +166,9 @@ Rendering mode also selectable via `--image-mode` CLI option.
 
 In viewer mode, `Tab` switches between the ASCII art view and the file info screen.
 
-**Status: Partially implemented.** Four modes work with 24-bit truecolor. Interactive
-image viewer supports resize. Tab/i view switching to file info works. No `m` mode
-cycling in viewer yet (only via `--image-mode` CLI).
+**Status: Implemented.** Four modes work with 24-bit truecolor. Interactive image
+viewer supports resize. Tab/i view switching to file info works. `m` cycles between
+the four rendering modes; the active mode is shown in the status line.
 
 #### SVG
 

@@ -190,8 +190,8 @@ fn compose_glyph_on_canvas(
     // - glyph top edge = ascent - (ymin + height)
     // - glyph left edge = xmin
 
-    let glyph_top = ascent as i32 - metrics.ymin as i32 - metrics.height as i32;
-    let glyph_left = metrics.xmin as i32;
+    let glyph_top = ascent as i32 - metrics.ymin - metrics.height as i32;
+    let glyph_left = metrics.xmin;
 
     for gy in 0..metrics.height {
         for gx in 0..metrics.width {
