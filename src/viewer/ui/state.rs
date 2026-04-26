@@ -7,7 +7,7 @@ use crossterm::{
     terminal::{self, ClearType},
 };
 
-use crate::info::FileInfo;
+use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
@@ -73,6 +73,7 @@ pub(crate) struct ViewerState<'a> {
     source: &'a InputSource,
     detected: &'a Detected,
     file_info: FileInfo,
+    render_opts: RenderOptions,
 }
 
 impl<'a> ViewerState<'a> {
@@ -80,6 +81,7 @@ impl<'a> ViewerState<'a> {
         source: &'a InputSource,
         detected: &'a Detected,
         theme_name: PeekThemeName,
+        render_opts: RenderOptions,
         modes: Vec<Box<dyn Mode>>,
     ) -> Result<Self> {
         assert!(!modes.is_empty(), "ViewerState needs at least one mode");
@@ -99,6 +101,7 @@ impl<'a> ViewerState<'a> {
             source,
             detected,
             file_info,
+            render_opts,
         })
     }
 
@@ -386,6 +389,7 @@ impl<'a> ViewerState<'a> {
             file_info: &self.file_info,
             theme_name: self.current_theme,
             peek_theme: &self.peek_theme,
+            render_opts: self.render_opts,
         };
         let lines = self.modes[self.active].render(&ctx)?;
         // Drain any warnings the mode raised during render (e.g. ContentMode's

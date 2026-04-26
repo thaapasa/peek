@@ -32,6 +32,7 @@ fn main() -> Result<()> {
     let use_pager = !args.print && is_tty;
 
     let viewers = viewer::Registry::new(&args)?;
+    let render_opts = info::RenderOptions { utc: args.utc };
 
     // Detect file type (and capture magic-byte MIME) for each source.
     let inputs: Vec<(InputSource, input::detect::Detected)> = sources
@@ -48,7 +49,7 @@ fn main() -> Result<()> {
         for (source, detected) in &inputs {
             let file_info = info::gather(source, detected)
                 .with_context(|| format!("failed to read info for {}", source.name()))?;
-            let lines = info::render(&file_info, viewers.peek_theme());
+            let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
             for line in &lines {
                 output.write_line(line)?;
             }
@@ -65,7 +66,7 @@ fn main() -> Result<()> {
             let modes = viewers
                 .compose_modes(source, detected, &args)
                 .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
-            viewer::interactive::run(source, detected, viewers.theme_name(), modes)
+            viewer::interactive::run(source, detected, viewers.theme_name(), render_opts, modes)
                 .with_context(|| format!("failed to render {}", source.name()))?;
         }
     } else {

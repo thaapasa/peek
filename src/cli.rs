@@ -68,4 +68,9 @@ pub struct Args {
     /// Show file info instead of file contents
     #[arg(long)]
     pub info: bool,
+
+    /// Show timestamps in UTC (ISO 8601 with `Z` suffix) instead of
+    /// local time with offset.
+    #[arg(long)]
+    pub utc: bool,
 }

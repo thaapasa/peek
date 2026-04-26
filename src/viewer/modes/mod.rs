@@ -14,7 +14,7 @@ use std::time::Duration;
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::info::FileInfo;
+use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{PeekTheme, PeekThemeName};
@@ -75,6 +75,7 @@ pub(crate) struct RenderCtx<'a> {
     pub file_info: &'a FileInfo,
     pub theme_name: PeekThemeName,
     pub peek_theme: &'a PeekTheme,
+    pub render_opts: RenderOptions,
 }
 
 /// One renderable + interactive view of a file.

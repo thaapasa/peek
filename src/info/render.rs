@@ -6,8 +6,16 @@ use super::{FileExtras, FileInfo};
 use crate::input::mime::{MimeCategory, MimeInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
+/// Per-render options for the Info view.
+#[derive(Clone, Copy, Default)]
+pub struct RenderOptions {
+    /// When true, show timestamps in UTC (ISO 8601 `...Z`). When false
+    /// (default), show local time with `±HH:MM` offset.
+    pub utc: bool,
+}
+
 /// Render file info as themed terminal lines.
-pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
+pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<String> {
     let mut lines = Vec::new();
 
     // Section: File
@@ -25,7 +33,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
         push_field(
             &mut lines,
             "Modified",
-            &paint_timestamp(modified, theme),
+            &paint_timestamp(modified, theme, opts.utc),
             theme,
         );
     }
@@ -33,7 +41,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
         push_field(
             &mut lines,
             "Created",
-            &paint_timestamp(created, theme),
+            &paint_timestamp(created, theme, opts.utc),
             theme,
         );
     }
@@ -263,9 +271,9 @@ fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
 }
 
 /// Paint timestamp with age-based color (recent = bright, old = dim).
-fn paint_timestamp(time: SystemTime, theme: &PeekTheme) -> String {
+fn paint_timestamp(time: SystemTime, theme: &PeekTheme, utc: bool) -> String {
     let color = timestamp_color(time, theme);
-    let text = format_time(time);
+    let text = format_time(time, utc);
     theme.paint(&text, color)
 }
 
@@ -389,23 +397,61 @@ fn thousands_sep(n: u64) -> String {
     result.chars().rev().collect()
 }
 
-fn format_time(time: SystemTime) -> String {
+fn format_time(time: SystemTime, utc: bool) -> String {
     let duration = match time.duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => d,
         Err(_) => return "unknown".to_string(),
     };
+    let secs = duration.as_secs() as i64;
 
-    let secs = duration.as_secs();
+    if utc {
+        return format_iso_utc(secs);
+    }
+    // Local time on Unix; on other platforms or if libc fails, fall back to UTC.
+    #[cfg(unix)]
+    {
+        if let Some(s) = format_local_with_offset(secs) {
+            return s;
+        }
+    }
+    format_iso_utc(secs)
+}
 
-    let days = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hours = time_of_day / 3600;
-    let minutes = (time_of_day % 3600) / 60;
-    let seconds = time_of_day % 60;
-
+fn format_iso_utc(secs: i64) -> String {
+    let s = secs.max(0) as u64;
+    let days = s / 86400;
+    let tod = s % 86400;
     let (year, month, day) = days_to_date(days);
+    let hours = tod / 3600;
+    let minutes = (tod % 3600) / 60;
+    let seconds = tod % 60;
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
+}
 
-    format!("{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02}")
+#[cfg(unix)]
+fn format_local_with_offset(secs: i64) -> Option<String> {
+    // SAFETY: localtime_r writes to a caller-provided struct; we pass a
+    // zero-initialized one and check the return for null.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let t: libc::time_t = secs;
+    let result = unsafe { libc::localtime_r(&t, &mut tm) };
+    if result.is_null() {
+        return None;
+    }
+    let year = tm.tm_year as i64 + 1900;
+    let month = tm.tm_mon + 1;
+    let day = tm.tm_mday;
+    let hours = tm.tm_hour;
+    let minutes = tm.tm_min;
+    let seconds = tm.tm_sec;
+    let off = tm.tm_gmtoff;
+    let sign = if off >= 0 { '+' } else { '-' };
+    let off_abs = off.unsigned_abs();
+    let off_h = off_abs / 3600;
+    let off_m = (off_abs % 3600) / 60;
+    Some(format!(
+        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02} {sign}{off_h:02}:{off_m:02}"
+    ))
 }
 
 /// Convert days since Unix epoch to (year, month, day).

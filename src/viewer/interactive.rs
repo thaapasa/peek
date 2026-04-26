@@ -4,6 +4,7 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::{self, Event};
 
+use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::PeekThemeName;
@@ -25,9 +26,12 @@ pub fn run(
     source: &InputSource,
     detected: &Detected,
     theme_name: PeekThemeName,
+    render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    with_alternate_screen(|stdout| event_loop(stdout, source, detected, theme_name, modes))
+    with_alternate_screen(|stdout| {
+        event_loop(stdout, source, detected, theme_name, render_opts, modes)
+    })
 }
 
 fn event_loop(
@@ -35,9 +39,10 @@ fn event_loop(
     source: &InputSource,
     detected: &Detected,
     theme_name: PeekThemeName,
+    render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let mut state = ViewerState::new(source, detected, theme_name, modes)?;
+    let mut state = ViewerState::new(source, detected, theme_name, render_opts, modes)?;
     let name = source.name().to_string();
 
     redraw(stdout, &mut state, &name)?;

@@ -7,7 +7,7 @@ mod gather;
 mod render;
 
 pub use gather::gather;
-pub use render::render;
+pub use render::{render, RenderOptions};
 
 /// Collected file metadata.
 pub struct FileInfo {
