@@ -1183,6 +1183,7 @@ dependencies = [
  "syntect",
  "toml",
  "two-face",
+ "unicode-width",
 ]
 
 [[package]]

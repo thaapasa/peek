@@ -3,6 +3,7 @@ use std::io;
 use anyhow::Result;
 use crossterm::{cursor, execute, terminal};
 use syntect::highlighting::Color;
+use unicode_width::UnicodeWidthChar;
 
 use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
 
@@ -85,7 +86,9 @@ fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
     }
 }
 
-/// Count the visible character width of a string, ignoring ANSI escape sequences.
+/// Count the visible terminal-column width of a string, ignoring ANSI
+/// escape sequences. CJK and emoji are treated as 2 cols; combining marks
+/// as 0 cols (per `unicode-width`).
 pub(crate) fn strip_ansi_width(s: &str) -> usize {
     let mut width = 0;
     let mut in_escape = false;
@@ -97,13 +100,15 @@ pub(crate) fn strip_ansi_width(s: &str) -> usize {
         } else if c == '\x1b' {
             in_escape = true;
         } else {
-            width += 1;
+            width += UnicodeWidthChar::width(c).unwrap_or(0);
         }
     }
     width
 }
 
-/// Truncate a string containing ANSI escapes to at most `max_width` visible characters.
+/// Truncate a string containing ANSI escapes to at most `max_width`
+/// visible terminal columns. A wide character (e.g. CJK) that wouldn't
+/// fit completely is dropped rather than split.
 pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
     let mut result = String::with_capacity(s.len());
     let mut width = 0;
@@ -118,11 +123,12 @@ pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
             in_escape = true;
             result.push(c);
         } else {
-            if width >= max_width {
+            let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+            if width + cw > max_width {
                 break;
             }
             result.push(c);
-            width += 1;
+            width += cw;
         }
     }
     result
