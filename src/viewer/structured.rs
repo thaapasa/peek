@@ -36,24 +36,33 @@ impl Viewer for StructuredViewer {
 
         let raw = source.read_text()?;
 
+        // On parse failure fall back to the raw source (and warn on stderr)
+        // rather than aborting the whole viewer — same behavior the
+        // interactive ContentMode now has.
         let pretty = if self.raw_mode {
             raw.clone()
         } else {
-            match format {
-                StructuredFormat::Json => pretty_json(&raw)?,
-                StructuredFormat::Yaml => pretty_yaml(&raw)?,
-                StructuredFormat::Toml => pretty_toml(&raw)?,
-                StructuredFormat::Xml => pretty_xml(&raw)?,
+            let result = match format {
+                StructuredFormat::Json => pretty_json(&raw),
+                StructuredFormat::Yaml => pretty_yaml(&raw),
+                StructuredFormat::Toml => pretty_toml(&raw),
+                StructuredFormat::Xml => pretty_xml(&raw),
+            };
+            match result {
+                Ok(s) => s,
+                Err(e) => {
+                    eprintln!(
+                        "warning: {} parse failed for {} ({e}); showing raw source",
+                        format_label(format),
+                        source.name(),
+                    );
+                    raw.clone()
+                }
             }
         };
 
         // Syntax-highlight the pretty-printed output
-        let syntax_name = match format {
-            StructuredFormat::Json => "JSON",
-            StructuredFormat::Yaml => "YAML",
-            StructuredFormat::Toml => "TOML",
-            StructuredFormat::Xml => "XML",
-        };
+        let syntax_name = format_label(format);
 
         let syntax = self
             .theme
@@ -70,6 +79,17 @@ impl Viewer for StructuredViewer {
         }
 
         Ok(())
+    }
+}
+
+/// Display name for a structured format — also serves as the syntect
+/// syntax token (`"JSON"`, `"YAML"`, etc.).
+fn format_label(format: StructuredFormat) -> &'static str {
+    match format {
+        StructuredFormat::Json => "JSON",
+        StructuredFormat::Yaml => "YAML",
+        StructuredFormat::Toml => "TOML",
+        StructuredFormat::Xml => "XML",
     }
 }
 

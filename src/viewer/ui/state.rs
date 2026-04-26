@@ -229,7 +229,15 @@ impl<'a> ViewerState<'a> {
                 self.cycle_primary();
                 Outcome::Redraw
             }
-            _ => Outcome::Unhandled,
+            // Mode-local actions: routed via the mode's own `handle` before
+            // we get here. Listed explicitly so adding a new Action variant
+            // forces a non-exhaustive-match compile error in this function
+            // and a deliberate decision about which side handles it.
+            Action::PlayPause
+            | Action::NextFrame
+            | Action::PrevFrame
+            | Action::CycleBackground
+            | Action::CycleImageMode => Outcome::Unhandled,
         }
     }
 
