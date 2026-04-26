@@ -9,6 +9,8 @@
 //! larger migration is in progress; the rest of the viewers still go
 //! through `ViewMode` in `ui/state.rs`.
 
+use std::time::Duration;
+
 use anyhow::Result;
 use syntect::highlighting::Color;
 
@@ -18,12 +20,18 @@ use crate::input::detect::Detected;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
 
+mod animation;
+mod content;
 mod help;
 mod hex;
+mod image_render;
 mod info;
 
+pub(crate) use animation::AnimationMode;
+pub(crate) use content::ContentMode;
 pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;
+pub(crate) use image_render::{ImageKind, ImageRenderMode};
 pub(crate) use info::InfoMode;
 
 /// Stable identifier for a mode. Used to look up modes in a stack and
@@ -80,9 +88,44 @@ pub(crate) trait Mode {
         false
     }
 
+    /// Hook called on a terminal resize event before re-rendering.
+    /// Modes that maintain layout-dependent state (e.g. Hex's byte-aligned
+    /// top offset) update it here.
+    fn on_resize(&mut self) {}
+
     /// Status-line segments contributed by this mode, inserted between
     /// the mode label and the theme-name segment.
     fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> {
         Vec::new()
+    }
+
+    /// Mode-local actions (in addition to the global set: Quit, scrolling,
+    /// theme cycle, mode switching). Used both for key dispatch and the
+    /// help screen. Return a `&'static` slice — modes typically expose a
+    /// fixed set, even if some are no-ops in some configurations.
+    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+        &[]
+    }
+
+    /// Handle a mode-local action declared in `extra_actions`. Return
+    /// `true` if the action was consumed (caller invalidates the cached
+    /// lines and re-renders).
+    fn handle(&mut self, _action: Action) -> bool {
+        false
+    }
+
+    /// How long until this mode wants to be ticked, if at all. The event
+    /// loop uses this to drive `event::poll` with a timeout instead of
+    /// blocking. `None` (the default) means "block until input arrives".
+    fn next_tick(&self) -> Option<Duration> {
+        None
+    }
+
+    /// Advance internal time-driven state (e.g. animation frame). Called
+    /// when `event::poll` times out on the duration returned by
+    /// `next_tick`. Return `true` if the mode's content changed and
+    /// should be re-rendered.
+    fn tick(&mut self) -> bool {
+        false
     }
 }

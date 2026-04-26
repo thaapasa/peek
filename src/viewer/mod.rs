@@ -5,10 +5,14 @@ use syntect::easy::HighlightLines;
 use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::Args;
-use crate::input::detect::{FileType, StructuredFormat};
+use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::input::InputSource;
 use crate::output::Output;
 use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
+use crate::viewer::modes::{
+    ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode, Mode,
+};
+use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 pub mod hex;
 pub mod image;
@@ -19,11 +23,9 @@ mod syntax;
 mod text;
 pub(crate) mod ui;
 
-/// Closure type for theme-aware content rendering.
-/// The `bool` parameter is `pretty`: true = pretty-print structured data, false = raw.
-pub type ContentRenderer = Box<dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>>;
-
-/// Trait for all file viewers.
+/// Trait for non-interactive (piped output) file viewers. Each Viewer
+/// renders the whole file to an `Output` in one shot — distinct from the
+/// interactive `Mode` system, which drives a TTY event loop.
 pub trait Viewer {
     fn render(
         &self,
@@ -88,8 +90,8 @@ impl Registry {
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
             structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme), args.raw),
-            image_viewer: image::ImageViewer::new(img_config, args.theme),
-            svg_viewer: image::SvgViewer::new(img_config, args.theme, Rc::clone(&theme), args.raw),
+            image_viewer: image::ImageViewer::new(img_config),
+            svg_viewer: image::SvgViewer::new(img_config),
             text_viewer: text::TextViewer,
             hex_viewer: hex::HexViewer::new(args.theme),
             theme_manager: theme,
@@ -98,14 +100,6 @@ impl Registry {
             theme_name: args.theme,
             peek_theme,
         })
-    }
-
-    pub fn image_viewer(&self) -> &image::ImageViewer {
-        &self.image_viewer
-    }
-
-    pub fn svg_viewer(&self) -> &image::SvgViewer {
-        &self.svg_viewer
     }
 
     pub fn theme_name(&self) -> PeekThemeName {
@@ -135,52 +129,130 @@ impl Registry {
         }
     }
 
-    pub fn hex_viewer(&self) -> &hex::HexViewer {
-        &self.hex_viewer
+    /// Compose the interactive view-mode list for a given file type. Always
+    /// appends Hex, Info, and Help so every file gets those views; other
+    /// modes are file-type specific.
+    ///
+    /// The non-interactive (piped) path uses `viewer_for` instead.
+    pub fn compose_modes(
+        &self,
+        source: &InputSource,
+        detected: &Detected,
+        args: &Args,
+    ) -> Result<Vec<Box<dyn Mode>>> {
+        let file_type = &detected.file_type;
+        let mut modes: Vec<Box<dyn Mode>> = Vec::new();
+
+        if self.plain_mode {
+            modes.push(self.text_content_mode(source, file_type, args)?);
+        } else {
+            match file_type {
+                FileType::SourceCode { .. } | FileType::Structured(_) => {
+                    modes.push(self.text_content_mode(source, file_type, args)?);
+                }
+                FileType::Image => {
+                    let cfg = self.image_config(args);
+                    modes.push(Box::new(ImageRenderMode::new(
+                        source.clone(),
+                        cfg,
+                        ImageKind::Raster,
+                    )));
+                }
+                FileType::Svg => {
+                    let cfg = self.image_config(args);
+                    modes.push(Box::new(ImageRenderMode::new(
+                        source.clone(),
+                        cfg,
+                        ImageKind::Svg,
+                    )));
+                    // Pair the rasterized SVG with its XML source view.
+                    modes.push(self.text_content_mode(source, file_type, args)?);
+                }
+                FileType::Binary => {
+                    // Default view for binary IS hex; HexMode is appended
+                    // below in the always-present block.
+                }
+            }
+        }
+
+        // Hex/Info/Help are universal — every file gets these views.
+        modes.push(Box::new(HexMode::new(source, 0)?));
+        modes.push(Box::new(InfoMode::new()));
+
+        // Help action union: globals + every preceding mode's extras,
+        // deduped. Help itself contributes nothing new.
+        let mut help_actions: Vec<(Action, &'static str)> = GLOBAL_ACTIONS.to_vec();
+        for m in &modes {
+            for (a, label) in m.extra_actions() {
+                if !help_actions.iter().any(|(b, _)| b == a) {
+                    help_actions.push((*a, *label));
+                }
+            }
+        }
+        modes.push(Box::new(HelpMode::new(help_actions)));
+
+        Ok(modes)
     }
 
-    /// Build a closure that renders file content to lines for any given theme.
-    /// Used by the interactive viewer for theme-aware re-rendering.
-    /// The `pretty` parameter controls whether structured files are pretty-printed.
-    pub fn content_renderer(
+    /// Build a `ContentMode` for text-based file types: source code,
+    /// structured (with pre-computed pretty-print), plain text, or SVG XML.
+    fn text_content_mode(
         &self,
         source: &InputSource,
         file_type: &FileType,
-    ) -> Result<ContentRenderer> {
-        let raw_content = source.read_text()?;
+        args: &Args,
+    ) -> Result<Box<dyn Mode>> {
+        let raw = source.read_text()?;
 
-        // Pre-compute pretty-printed version for structured files
-        let pretty_content = if !self.plain_mode {
-            if let FileType::Structured(fmt) = file_type {
-                Some(structured::pretty_print(&raw_content, *fmt)?)
-            } else {
-                None
+        let pretty = if !self.plain_mode {
+            match file_type {
+                FileType::Structured(fmt) => Some(structured::pretty_print(&raw, *fmt)?),
+                FileType::Svg => Some(structured::pretty_print(&raw, StructuredFormat::Xml)?),
+                _ => None,
             }
         } else {
             None
         };
 
-        // Determine syntax token for highlighting
         let syntax_token = if self.plain_mode {
             None
         } else {
             self.syntax_token_for(source, file_type)
         };
 
-        let tm = Rc::clone(&self.theme_manager);
+        // Pretty-print is the default whenever it's available; --raw flips
+        // structured/SVG views back to the raw source.
+        let initial_use_pretty = pretty.is_some() && !args.raw;
 
-        Ok(Box::new(move |theme_name, pretty| {
-            let content = if pretty {
-                pretty_content.as_deref().unwrap_or(&raw_content)
-            } else {
-                &raw_content
-            };
-            if let Some(ref token) = syntax_token {
-                highlight_lines(content, token, &tm, theme_name)
-            } else {
-                Ok(content.lines().map(String::from).collect())
-            }
-        }))
+        // Structured files expose `r` as a pretty/raw toggle. SVG XML
+        // doesn't — there `r` should fall through to cycle_primary so the
+        // user can flip rasterized ↔ XML. Source/text have no pretty form.
+        let allow_pretty_toggle = matches!(file_type, FileType::Structured(_));
+
+        let label: &'static str = match file_type {
+            FileType::SourceCode { .. } => "Source",
+            FileType::Svg => "Source",
+            _ => "Content",
+        };
+
+        Ok(Box::new(ContentMode::new(
+            raw,
+            pretty,
+            syntax_token,
+            Rc::clone(&self.theme_manager),
+            initial_use_pretty,
+            allow_pretty_toggle,
+            label,
+        )))
+    }
+
+    fn image_config(&self, args: &Args) -> image::ImageConfig {
+        image::ImageConfig {
+            mode: image::ImageMode::from_str(&args.image_mode),
+            width: args.width,
+            background: image::Background::from_str(&args.background),
+            margin: args.margin,
+        }
     }
 
     fn syntax_token_for(&self, source: &InputSource, file_type: &FileType) -> Option<String> {

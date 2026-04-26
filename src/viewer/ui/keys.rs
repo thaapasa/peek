@@ -147,9 +147,7 @@ pub(crate) enum Outcome {
     Quit,
     /// State updated — caller should redraw the screen.
     Redraw,
-    /// Theme cycled — caller must re-render `content_lines` then redraw.
-    RecomputeContent,
-    /// The action is not a shared one; the viewer should handle it itself.
+    /// The action is not a global one; the active mode should handle it.
     Unhandled,
 }
 

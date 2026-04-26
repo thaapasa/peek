@@ -11,7 +11,7 @@ pub(crate) mod keys;
 pub(crate) mod state;
 
 pub(crate) use keys::{Action, Outcome};
-pub(crate) use state::{ViewMode, ViewerState};
+pub(crate) use state::{GLOBAL_ACTIONS, ViewerState};
 
 /// Enter the alternate screen and raw mode, run the closure, then always clean up.
 pub(crate) fn with_alternate_screen(

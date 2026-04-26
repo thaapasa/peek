@@ -31,12 +31,6 @@ impl HexMode {
         })
     }
 
-    /// Re-align the top offset to the current terminal width. Call after
-    /// a terminal resize event before re-rendering.
-    pub(crate) fn realign_to_terminal(&mut self) {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        self.top_offset = align_down(self.top_offset, bytes_per_row(cols));
-    }
 }
 
 impl Mode for HexMode {
@@ -93,6 +87,11 @@ impl Mode for HexMode {
 
     fn rerender_on_resize(&self) -> bool {
         true
+    }
+
+    fn on_resize(&mut self) {
+        let (cols, _) = terminal::size().unwrap_or((80, 24));
+        self.top_offset = align_down(self.top_offset, bytes_per_row(cols));
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

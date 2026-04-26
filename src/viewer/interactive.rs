@@ -1,252 +1,121 @@
-use std::cell::Cell;
 use std::io;
-use std::rc::Rc;
+use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::{self, Event};
 
-use crate::input::detect::Detected;
 use crate::input::InputSource;
+use crate::input::detect::Detected;
 use crate::theme::PeekThemeName;
-use crate::viewer::hex::run_hex_loop;
-use crate::viewer::image::Background;
+use crate::viewer::modes::{Mode, ModeId};
 use crate::viewer::ui::{
-    Action, Outcome, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
+    Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
 };
 
-// ---------------------------------------------------------------------------
-// Bindings for the generic interactive viewer
-// ---------------------------------------------------------------------------
-
-const ACTIONS: &[(Action, &str)] = &[
-    (Action::Quit,              "Quit"),
-    (Action::ScrollUp,          "Scroll up"),
-    (Action::ScrollDown,        "Scroll down"),
-    (Action::PageUp,            "Page up"),
-    (Action::PageDown,          "Page down"),
-    (Action::Top,               "Jump to top"),
-    (Action::Bottom,            "Jump to bottom"),
-    (Action::ToggleContentInfo, "Toggle content / file info"),
-    (Action::SwitchInfo,        "File info"),
-    (Action::ToggleHelp,        "Toggle help"),
-    (Action::CycleTheme,        "Next theme"),
-    (Action::SwitchToHex,       "Hex dump mode"),
-    (Action::ToggleRawSource,   "Toggle raw / pretty"),
-    (Action::CycleBackground,   "Cycle background (images)"),
-];
-
-
-// ---------------------------------------------------------------------------
-// Entry points
-// ---------------------------------------------------------------------------
-
-/// Generic interactive viewer with alternate screen, scrolling, event loop,
-/// Tab/i view switching, theme cycling, and help screen.
+/// Run the interactive viewer for a given list of view modes.
 ///
-/// `render_content` produces the content lines for a given theme.
-/// If `rerender_on_resize` is true, content is re-rendered on terminal resize
-/// (needed for images whose output depends on terminal dimensions).
-pub fn view_interactive(
+/// Enters the alternate screen, drives the event loop, and routes key
+/// events through the active mode's scroll/handle dispatch before falling
+/// through to global actions.
+///
+/// Modes are owned for the duration of the call. The first mode in the
+/// list is the initial active view; `Tab`, `i`, `h`, `x` switch among
+/// modes by id (Info, Help, Hex).
+pub fn run(
     source: &InputSource,
     detected: &Detected,
     theme_name: PeekThemeName,
-    rerender_on_resize: bool,
-    pretty: bool,
-    render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
+    modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    view_interactive_with_bg(
-        source,
-        detected,
-        theme_name,
-        rerender_on_resize,
-        pretty,
-        None,
-        render_content,
-    )
+    with_alternate_screen(|stdout| event_loop(stdout, source, detected, theme_name, modes))
 }
 
-/// Interactive viewer with optional background cycling support.
-/// When `background` is `Some`, the `b` key cycles the background mode.
-pub fn view_interactive_with_bg(
-    source: &InputSource,
-    detected: &Detected,
-    theme_name: PeekThemeName,
-    rerender_on_resize: bool,
-    pretty: bool,
-    background: Option<Rc<Cell<Background>>>,
-    render_content: impl Fn(PeekThemeName, bool) -> Result<Vec<String>>,
-) -> Result<()> {
-    with_alternate_screen(|stdout| {
-        run_event_loop(
-            stdout, source, detected, theme_name,
-            rerender_on_resize, pretty, background, &render_content,
-        )
-    })
-}
-
-// ---------------------------------------------------------------------------
-// Event loop
-// ---------------------------------------------------------------------------
-
-#[allow(clippy::too_many_arguments)]
-fn run_event_loop(
+fn event_loop(
     stdout: &mut io::Stdout,
     source: &InputSource,
     detected: &Detected,
-    initial_theme: PeekThemeName,
-    rerender_on_resize: bool,
-    initial_pretty: bool,
-    background: Option<Rc<Cell<Background>>>,
-    render_content: &dyn Fn(PeekThemeName, bool) -> Result<Vec<String>>,
+    theme_name: PeekThemeName,
+    modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let mut pretty = initial_pretty;
-    let content_lines = render_content(initial_theme, pretty)?;
-    let mut state = ViewerState::new(source, detected, initial_theme, content_lines, ACTIONS)?;
-
+    let mut state = ViewerState::new(source, detected, theme_name, modes)?;
     let name = source.name().to_string();
 
-    let redraw = |stdout: &mut io::Stdout, state: &ViewerState| -> Result<()> {
-        let status = render_status_line(&name, state);
-        state.draw(stdout, &status)
-    };
-
-    redraw(stdout, &state)?;
+    redraw(stdout, &mut state, &name)?;
 
     loop {
+        // Timer-driven modes (Animation) wake the loop with a deadline;
+        // everything else uses a long block.
+        let timeout = state
+            .active_next_tick()
+            .unwrap_or(Duration::from_secs(86_400));
+        if !event::poll(timeout)? {
+            // Timeout: tick the active mode (e.g. advance animation frame).
+            if state.tick_active() {
+                state.invalidate_active();
+                redraw(stdout, &mut state, &name)?;
+            }
+            continue;
+        }
+
         match event::read()? {
             Event::Key(key) => {
-                let Some(action) = keys::dispatch(key, ACTIONS) else {
+                let Some(action) = state.dispatch_key(key) else {
                     continue;
                 };
+
+                // 1. Active mode's scroll handler (byte-based for hex etc.).
+                if state.try_active_scroll(action) {
+                    state.invalidate_active();
+                    redraw(stdout, &mut state, &name)?;
+                    continue;
+                }
+
+                // 2. Active mode's local handler (toggle pretty, cycle bg, etc.).
+                if state.try_active_handle(action) {
+                    state.invalidate_active();
+                    redraw(stdout, &mut state, &name)?;
+                    continue;
+                }
+
+                // 3. Global dispatch (scroll-by-line, mode switching, theme).
                 match state.apply(action) {
                     Outcome::Quit => return Ok(()),
-                    Outcome::Redraw => redraw(stdout, &state)?,
-                    Outcome::RecomputeContent => {
-                        state.content_lines = render_content(state.current_theme, pretty)?;
-                        redraw(stdout, &state)?;
-                    }
-                    Outcome::Unhandled => match action {
-                        Action::SwitchToHex => {
-                            let line = state.scroll.get(ViewMode::Content);
-                            let offset = compute_byte_offset_for_line(source, line).unwrap_or(0);
-                            run_hex_loop(
-                                stdout,
-                                source,
-                                detected,
-                                state.current_theme,
-                                offset,
-                                true,
-                            )?;
-                            redraw(stdout, &state)?;
-                        }
-                        Action::CycleBackground => {
-                            if let Some(ref bg_cell) = background {
-                                bg_cell.set(bg_cell.get().next());
-                                state.content_lines = render_content(state.current_theme, pretty)?;
-                                state.scroll.reset_content();
-                                redraw(stdout, &state)?;
-                            }
-                        }
-                        Action::ToggleRawSource => {
-                            pretty = !pretty;
-                            state.content_lines = render_content(state.current_theme, pretty)?;
-                            state.scroll.reset_content();
-                            redraw(stdout, &state)?;
-                        }
-                        _ => {}
-                    },
+                    Outcome::Redraw => redraw(stdout, &mut state, &name)?,
+                    Outcome::Unhandled => {}
                 }
             }
             Event::Resize(_, _) => {
-                if rerender_on_resize {
-                    state.content_lines = render_content(state.current_theme, pretty)?;
-                }
-                redraw(stdout, &state)?;
+                state.handle_resize();
+                redraw(stdout, &mut state, &name)?;
             }
             _ => {}
         }
     }
 }
 
-// ---------------------------------------------------------------------------
-// Status line
-// ---------------------------------------------------------------------------
-
-/// Compute the byte offset in the source corresponding to a given line index
-/// (0-based). Translates by counting newlines in the raw source bytes — so
-/// it matches displayed lines for plain-text and syntax-highlighted views,
-/// but is approximate for pretty-printed structured content.
-pub(crate) fn compute_byte_offset_for_line(
-    source: &InputSource,
-    line: usize,
-) -> Result<u64> {
-    if line == 0 {
-        return Ok(0);
-    }
-    let bytes = source.read_bytes()?;
-    let mut newlines = 0usize;
-    for (i, b) in bytes.iter().enumerate() {
-        if *b == b'\n' {
-            newlines += 1;
-            if newlines == line {
-                return Ok((i + 1) as u64);
-            }
-        }
-    }
-    Ok(bytes.len() as u64)
+fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Result<()> {
+    state.ensure_active_rendered()?;
+    let status = render_status_line(name, state);
+    state.draw(stdout, &status)
 }
 
 fn render_status_line(name: &str, state: &ViewerState) -> String {
     let theme = &state.peek_theme;
-    render_themed_status_line(
-        &[
-            (name, theme.accent),
-            (state.view_mode.label(), theme.label),
-            (state.current_theme.cli_name(), theme.muted),
-        ],
-        &["h:help", "Tab:cycle", "t:theme", "q:quit"],
-        theme,
-    )
-}
+    let mode_label: &str = state.active_label();
+    let mode_segs = state.active_status_segments();
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn stdin_source(text: &str) -> InputSource {
-        InputSource::Stdin {
-            data: text.as_bytes().to_vec(),
-        }
+    let mut segs: Vec<(&str, syntect::highlighting::Color)> =
+        vec![(name, theme.accent), (mode_label, theme.label)];
+    for (s, c) in &mode_segs {
+        segs.push((s.as_str(), *c));
     }
+    segs.push((state.current_theme.cli_name(), theme.muted));
 
-    #[test]
-    fn byte_offset_for_first_line_is_zero() {
-        let s = stdin_source("alpha\nbeta\ngamma\n");
-        assert_eq!(compute_byte_offset_for_line(&s, 0).unwrap(), 0);
+    let mut hints: Vec<&str> = Vec::with_capacity(5);
+    if state.active_id() == ModeId::Hex && state.return_to().is_some() {
+        hints.push("x:exit hex");
     }
+    hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);
 
-    #[test]
-    fn byte_offset_after_n_newlines() {
-        let s = stdin_source("alpha\nbeta\ngamma\n");
-        // line 1 starts at byte 6 (after "alpha\n")
-        assert_eq!(compute_byte_offset_for_line(&s, 1).unwrap(), 6);
-        // line 2 starts at byte 11 (after "alpha\nbeta\n")
-        assert_eq!(compute_byte_offset_for_line(&s, 2).unwrap(), 11);
-    }
-
-    #[test]
-    fn byte_offset_past_eof_returns_len() {
-        let s = stdin_source("a\nb\nc\n");
-        let len = "a\nb\nc\n".len() as u64;
-        assert_eq!(compute_byte_offset_for_line(&s, 999).unwrap(), len);
-    }
-
-    #[test]
-    fn byte_offset_no_trailing_newline() {
-        let s = stdin_source("first\nsecond");
-        assert_eq!(compute_byte_offset_for_line(&s, 1).unwrap(), 6);
-        // line 2 doesn't exist (only one newline) → returns len
-        let len = "first\nsecond".len() as u64;
-        assert_eq!(compute_byte_offset_for_line(&s, 2).unwrap(), len);
-    }
+    render_themed_status_line(&segs, &hints, theme)
 }

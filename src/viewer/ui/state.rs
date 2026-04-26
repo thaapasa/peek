@@ -1,8 +1,9 @@
 use std::io::{self, Write};
+use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
-    cursor, execute,
+    cursor, event::KeyEvent, execute,
     terminal::{self, ClearType},
 };
 
@@ -10,73 +11,49 @@ use crate::info::FileInfo;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
-use crate::viewer::modes::{HelpMode, InfoMode, Mode, RenderCtx};
+use crate::viewer::modes::{Mode, ModeId, RenderCtx};
 
-use super::keys::{Action, Outcome};
+use super::keys::{self, Action, Outcome};
 use super::{content_rows, make_peek_theme};
 
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) enum ViewMode {
-    Content,
-    Info,
-    Help,
-}
-
-impl ViewMode {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            ViewMode::Content => "Content",
-            ViewMode::Info => "Info",
-            ViewMode::Help => "Help",
-        }
-    }
-}
-
-pub(crate) struct ScrollState {
-    content: usize,
-    info: usize,
-    help: usize,
-}
-
-impl ScrollState {
-    fn new() -> Self {
-        Self { content: 0, info: 0, help: 0 }
-    }
-
-    pub(crate) fn get(&self, mode: ViewMode) -> usize {
-        match mode {
-            ViewMode::Content => self.content,
-            ViewMode::Info => self.info,
-            ViewMode::Help => self.help,
-        }
-    }
-
-    pub(crate) fn get_mut(&mut self, mode: ViewMode) -> &mut usize {
-        match mode {
-            ViewMode::Content => &mut self.content,
-            ViewMode::Info => &mut self.info,
-            ViewMode::Help => &mut self.help,
-        }
-    }
-
-    pub(crate) fn reset_content(&mut self) {
-        self.content = 0;
-    }
-}
+/// Global actions that work in every mode (unless the mode shadows the
+/// key via its own `extra_actions`). Used for both key dispatch and the
+/// help screen.
+pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
+    (Action::Quit, "Quit"),
+    (Action::ScrollUp, "Scroll up"),
+    (Action::ScrollDown, "Scroll down"),
+    (Action::PageUp, "Page up"),
+    (Action::PageDown, "Page down"),
+    (Action::Top, "Jump to top"),
+    (Action::Bottom, "Jump to bottom"),
+    (Action::ToggleContentInfo, "Toggle content / file info"),
+    (Action::SwitchInfo, "File info"),
+    (Action::ToggleHelp, "Toggle help"),
+    (Action::SwitchToHex, "Hex dump mode"),
+    (Action::CycleTheme, "Next theme"),
+    // `r` is dispatched globally so modes that don't handle it locally
+    // fall through to `cycle_primary` (e.g. SVG rasterized → XML view).
+    (Action::ToggleRawSource, "Toggle raw / pretty / cycle primary"),
+];
 
 pub(crate) struct ViewerState<'a> {
-    pub view_mode: ViewMode,
+    modes: Vec<Box<dyn Mode>>,
+    active: usize,
+    /// Index to return to from a "toggle" mode (Info via Tab, Help, Hex).
+    /// Cleared after the toggle returns.
+    return_to: Option<usize>,
+    scroll: Vec<usize>,
+    /// Per-mode rendered lines. `None` = needs render (lazy on first use,
+    /// invalidated by theme cycles and resize).
+    lines: Vec<Option<Vec<String>>>,
+
     pub current_theme: PeekThemeName,
     pub peek_theme: PeekTheme,
-    pub content_lines: Vec<String>,
-    pub info_lines: Vec<String>,
-    pub help_lines: Vec<String>,
-    pub scroll: ScrollState,
+
     source: &'a InputSource,
     detected: &'a Detected,
     file_info: FileInfo,
-    info_mode: InfoMode,
-    help_mode: HelpMode,
 }
 
 impl<'a> ViewerState<'a> {
@@ -84,76 +61,274 @@ impl<'a> ViewerState<'a> {
         source: &'a InputSource,
         detected: &'a Detected,
         theme_name: PeekThemeName,
-        content_lines: Vec<String>,
-        help_keys: &'static [(Action, &'static str)],
+        modes: Vec<Box<dyn Mode>>,
     ) -> Result<Self> {
+        assert!(!modes.is_empty(), "ViewerState needs at least one mode");
+        let n = modes.len();
         let peek_theme = make_peek_theme(theme_name);
         let file_info = crate::info::gather(source, detected)?;
-        let mut info_mode = InfoMode::new();
-        let mut help_mode = HelpMode::new(help_keys);
-        let info_lines = render_mode(
-            &mut info_mode,
-            source,
-            detected,
-            &file_info,
-            theme_name,
-            &peek_theme,
-        )?;
-        let help_lines = render_mode(
-            &mut help_mode,
-            source,
-            detected,
-            &file_info,
-            theme_name,
-            &peek_theme,
-        )?;
         Ok(Self {
-            view_mode: ViewMode::Content,
+            modes,
+            active: 0,
+            return_to: None,
+            scroll: vec![0; n],
+            lines: vec![None; n],
             current_theme: theme_name,
             peek_theme,
-            content_lines,
-            info_lines,
-            help_lines,
-            scroll: ScrollState::new(),
             source,
             detected,
             file_info,
-            info_mode,
-            help_mode,
         })
     }
 
-    /// Lines for the current view mode.
-    pub(crate) fn current_lines(&self) -> &[String] {
-        match self.view_mode {
-            ViewMode::Content => &self.content_lines,
-            ViewMode::Info => &self.info_lines,
-            ViewMode::Help => &self.help_lines,
+    // ---------------------------------------------------------------------
+    // Active mode access
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn active_id(&self) -> ModeId {
+        self.modes[self.active].id()
+    }
+
+    pub(crate) fn active_label(&self) -> &str {
+        self.modes[self.active].label()
+    }
+
+    pub(crate) fn active_status_segments(&self) -> Vec<(String, syntect::highlighting::Color)> {
+        self.modes[self.active].status_segments(&self.peek_theme)
+    }
+
+    pub(crate) fn return_to(&self) -> Option<usize> {
+        self.return_to
+    }
+
+    fn mode_index(&self, id: ModeId) -> Option<usize> {
+        self.modes.iter().position(|m| m.id() == id)
+    }
+
+    // ---------------------------------------------------------------------
+    // Key dispatch
+    // ---------------------------------------------------------------------
+
+    /// Resolve a key event to an `Action`. Active mode's extras win over
+    /// globals on conflict (none today, but keeps the dispatcher honest).
+    pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
+        let extras = self.modes[self.active].extra_actions();
+        keys::dispatch(key, extras).or_else(|| keys::dispatch(key, GLOBAL_ACTIONS))
+    }
+
+    /// Try to consume the action via the active mode's scroll handler.
+    /// Returns `true` if consumed (caller invalidates and re-renders).
+    pub(crate) fn try_active_scroll(&mut self, action: Action) -> bool {
+        let m = &mut self.modes[self.active];
+        if !m.owns_scroll() {
+            return false;
+        }
+        m.scroll(action)
+    }
+
+    /// Try to consume the action via the active mode's `handle()`.
+    pub(crate) fn try_active_handle(&mut self, action: Action) -> bool {
+        self.modes[self.active].handle(action)
+    }
+
+    /// Active mode's preferred next-tick deadline, if any. Drives the
+    /// event-loop timeout for animation-style modes.
+    pub(crate) fn active_next_tick(&self) -> Option<Duration> {
+        self.modes[self.active].next_tick()
+    }
+
+    /// Tick the active mode; returns `true` when its content changed.
+    pub(crate) fn tick_active(&mut self) -> bool {
+        self.modes[self.active].tick()
+    }
+
+    // ---------------------------------------------------------------------
+    // Globals — apply() handles everything not consumed by the active mode
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn apply(&mut self, action: Action) -> Outcome {
+        match action {
+            Action::Quit => Outcome::Quit,
+            Action::ScrollUp => {
+                self.scroll_by(-1);
+                Outcome::Redraw
+            }
+            Action::ScrollDown => {
+                self.scroll_by(1);
+                Outcome::Redraw
+            }
+            Action::PageUp => {
+                self.page(-1);
+                Outcome::Redraw
+            }
+            Action::PageDown => {
+                self.page(1);
+                Outcome::Redraw
+            }
+            Action::Top => {
+                self.scroll[self.active] = 0;
+                Outcome::Redraw
+            }
+            Action::Bottom => {
+                self.scroll[self.active] = self.max_scroll();
+                Outcome::Redraw
+            }
+            Action::SwitchInfo => {
+                self.jump_to(ModeId::Info);
+                Outcome::Redraw
+            }
+            Action::ToggleContentInfo => {
+                self.toggle_with_return(ModeId::Info);
+                Outcome::Redraw
+            }
+            Action::ToggleHelp => {
+                self.toggle_with_return(ModeId::Help);
+                Outcome::Redraw
+            }
+            Action::SwitchToHex => {
+                self.toggle_with_return(ModeId::Hex);
+                Outcome::Redraw
+            }
+            Action::CycleTheme => {
+                self.cycle_theme();
+                Outcome::Redraw
+            }
+            Action::ToggleRawSource => {
+                // Active mode declined `r` — cycle to the next primary mode
+                // (skipping Info/Help/Hex). For SVG, this swaps rasterized
+                // ↔ XML view; for files with one primary, no-op.
+                self.cycle_primary();
+                Outcome::Redraw
+            }
+            _ => Outcome::Unhandled,
         }
     }
 
-    /// Current scroll offset for the active view mode.
-    pub(crate) fn current_scroll(&self) -> usize {
-        self.scroll.get(self.view_mode)
+    // ---------------------------------------------------------------------
+    // Mode switching helpers
+    // ---------------------------------------------------------------------
+
+    fn jump_to(&mut self, target: ModeId) {
+        if let Some(idx) = self.mode_index(target)
+            && idx != self.active
+        {
+            self.return_to = Some(self.active);
+            self.active = idx;
+        }
     }
 
-    /// Draw the screen with a caller-provided status line string.
-    pub(crate) fn draw(&self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
-        draw_screen(stdout, self.current_lines(), self.current_scroll(), status)
+    /// Toggle behavior shared by Tab (→ Info), `h` (→ Help), and `x` (→ Hex):
+    /// if not on `target`, jump there and remember where we came from; if on
+    /// `target`, return to the saved index.
+    fn toggle_with_return(&mut self, target: ModeId) {
+        if self.modes[self.active].id() == target {
+            if let Some(prev) = self.return_to.take() {
+                self.active = prev;
+            }
+        } else if let Some(idx) = self.mode_index(target) {
+            self.return_to = Some(self.active);
+            self.active = idx;
+        }
+        // Target not in this stack → no-op.
     }
 
-    /// Maximum scroll offset for the current view mode.
+    /// Advance the active index to the next non-auxiliary mode (skipping
+    /// Info, Help, and Hex). For SVG this swaps rasterized ↔ XML; for
+    /// files with a single primary mode, this is a no-op. Used as the
+    /// fallback handler for `r` when no mode consumes it.
+    fn cycle_primary(&mut self) {
+        let n = self.modes.len();
+        let mut i = self.active;
+        for _ in 0..n {
+            i = (i + 1) % n;
+            if i == self.active {
+                break;
+            }
+            if !matches!(
+                self.modes[i].id(),
+                ModeId::Info | ModeId::Help | ModeId::Hex
+            ) {
+                self.active = i;
+                return;
+            }
+        }
+    }
+
+    fn cycle_theme(&mut self) {
+        self.current_theme = self.current_theme.next();
+        self.peek_theme = make_peek_theme(self.current_theme);
+        // All themed lines are stale.
+        for slot in &mut self.lines {
+            *slot = None;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Resize
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn handle_resize(&mut self) {
+        for (i, m) in self.modes.iter_mut().enumerate() {
+            m.on_resize();
+            if m.rerender_on_resize() {
+                self.lines[i] = None;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Rendering
+    // ---------------------------------------------------------------------
+
+    /// Ensure the active mode's lines are rendered (lazy). Called before
+    /// each draw.
+    pub(crate) fn ensure_active_rendered(&mut self) -> Result<()> {
+        if self.lines[self.active].is_none() {
+            let lines = self.render_active()?;
+            self.lines[self.active] = Some(lines);
+        }
+        Ok(())
+    }
+
+    /// Mark the active mode's lines as stale so the next draw re-renders.
+    pub(crate) fn invalidate_active(&mut self) {
+        self.lines[self.active] = None;
+    }
+
+    fn render_active(&mut self) -> Result<Vec<String>> {
+        let ctx = RenderCtx {
+            source: self.source,
+            detected: self.detected,
+            file_info: &self.file_info,
+            theme_name: self.current_theme,
+            peek_theme: &self.peek_theme,
+        };
+        self.modes[self.active].render(&ctx)
+    }
+
+    fn current_lines(&self) -> &[String] {
+        self.lines[self.active].as_deref().unwrap_or(&[])
+    }
+
+    fn current_scroll(&self) -> usize {
+        self.scroll[self.active]
+    }
+
+    // ---------------------------------------------------------------------
+    // Line scrolling (used when active mode does NOT own scroll)
+    // ---------------------------------------------------------------------
+
     fn max_scroll(&self) -> usize {
-        self.current_lines().len().saturating_sub(content_rows())
+        let len = self.lines[self.active].as_deref().map_or(0, |l| l.len());
+        len.saturating_sub(content_rows())
     }
-
-    // -----------------------------------------------------------------
-    // Shared action handlers — invoked by `apply()`.
-    // -----------------------------------------------------------------
 
     fn scroll_by(&mut self, delta: isize) {
+        if self.modes[self.active].owns_scroll() {
+            return;
+        }
         let max = self.max_scroll();
-        let s = self.scroll.get_mut(self.view_mode);
+        let s = &mut self.scroll[self.active];
         *s = if delta < 0 {
             s.saturating_sub((-delta) as usize)
         } else {
@@ -162,9 +337,12 @@ impl<'a> ViewerState<'a> {
     }
 
     fn page(&mut self, direction: isize) {
+        if self.modes[self.active].owns_scroll() {
+            return;
+        }
         let step = content_rows().saturating_sub(1);
         let max = self.max_scroll();
-        let s = self.scroll.get_mut(self.view_mode);
+        let s = &mut self.scroll[self.active];
         *s = if direction < 0 {
             s.saturating_sub(step)
         } else {
@@ -172,102 +350,14 @@ impl<'a> ViewerState<'a> {
         };
     }
 
-    fn jump_top(&mut self) {
-        *self.scroll.get_mut(self.view_mode) = 0;
+    // ---------------------------------------------------------------------
+    // Drawing
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn draw(&self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
+        draw_screen(stdout, self.current_lines(), self.current_scroll(), status)
     }
 
-    fn jump_bottom(&mut self) {
-        *self.scroll.get_mut(self.view_mode) = self.max_scroll();
-    }
-
-    fn switch_to_info(&mut self) {
-        self.view_mode = ViewMode::Info;
-    }
-
-    fn toggle_help(&mut self) {
-        self.view_mode = if self.view_mode == ViewMode::Help {
-            ViewMode::Content
-        } else {
-            ViewMode::Help
-        };
-    }
-
-    fn toggle_content_info(&mut self) {
-        self.view_mode = match self.view_mode {
-            ViewMode::Content => ViewMode::Info,
-            ViewMode::Info | ViewMode::Help => ViewMode::Content,
-        };
-    }
-
-    fn cycle_theme(&mut self) {
-        self.current_theme = self.current_theme.next();
-        self.peek_theme = make_peek_theme(self.current_theme);
-        let ctx = RenderCtx {
-            source: self.source,
-            detected: self.detected,
-            file_info: &self.file_info,
-            theme_name: self.current_theme,
-            peek_theme: &self.peek_theme,
-        };
-        if let Ok(lines) = self.info_mode.render(&ctx) {
-            self.info_lines = lines;
-        }
-        if let Ok(lines) = self.help_mode.render(&ctx) {
-            self.help_lines = lines;
-        }
-    }
-
-    /// Build a `RenderCtx` for this viewer's current state — used by
-    /// external event loops (e.g. the hex loop) that drive a `Mode`
-    /// outside of `ViewerState`'s own owned modes.
-    pub(crate) fn render_ctx(&self) -> RenderCtx<'_> {
-        RenderCtx {
-            source: self.source,
-            detected: self.detected,
-            file_info: &self.file_info,
-            theme_name: self.current_theme,
-            peek_theme: &self.peek_theme,
-        }
-    }
-
-    /// Apply a shared action. Returns `Outcome::Unhandled` for actions the
-    /// state layer doesn't own (viewer-specific keys like `b`, `r`, `p`).
-    pub(crate) fn apply(&mut self, action: Action) -> Outcome {
-        match action {
-            Action::Quit              => Outcome::Quit,
-            Action::ScrollUp          => { self.scroll_by(-1); Outcome::Redraw }
-            Action::ScrollDown        => { self.scroll_by(1); Outcome::Redraw }
-            Action::PageUp            => { self.page(-1); Outcome::Redraw }
-            Action::PageDown          => { self.page(1); Outcome::Redraw }
-            Action::Top               => { self.jump_top(); Outcome::Redraw }
-            Action::Bottom            => { self.jump_bottom(); Outcome::Redraw }
-            Action::SwitchInfo        => { self.switch_to_info(); Outcome::Redraw }
-            Action::ToggleHelp        => { self.toggle_help(); Outcome::Redraw }
-            Action::ToggleContentInfo => { self.toggle_content_info(); Outcome::Redraw }
-            Action::CycleTheme        => { self.cycle_theme(); Outcome::RecomputeContent }
-            _                         => Outcome::Unhandled,
-        }
-    }
-}
-
-/// Build a `RenderCtx` and ask the mode to render. Helper that keeps the
-/// borrow scope tight so `ViewerState`'s fields can be mutably split.
-fn render_mode(
-    mode: &mut dyn Mode,
-    source: &InputSource,
-    detected: &Detected,
-    file_info: &FileInfo,
-    theme_name: PeekThemeName,
-    peek_theme: &PeekTheme,
-) -> Result<Vec<String>> {
-    let ctx = RenderCtx {
-        source,
-        detected,
-        file_info,
-        theme_name,
-        peek_theme,
-    };
-    mode.render(&ctx)
 }
 
 /// Render the screen: clear, draw visible lines, draw status bar on last row.
@@ -280,14 +370,10 @@ fn draw_screen(
     let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
     let rows = (total_rows as usize).saturating_sub(1);
 
-    // Reset all attributes before clearing so the clear doesn't
-    // fill the screen with a leftover background color.
+    // Reset all attributes before clearing so the clear doesn't fill the
+    // screen with a leftover background color.
     stdout.write_all(ANSI_RESET_BYTES)?;
-    execute!(
-        stdout,
-        terminal::Clear(ClearType::All),
-        cursor::MoveTo(0, 0),
-    )?;
+    execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0),)?;
 
     let start = scroll.min(lines.len());
     let end = (start + rows).min(lines.len());
@@ -298,7 +384,7 @@ fn draw_screen(
         stdout.write_all(line.as_bytes())?;
     }
 
-    // Reset all attributes, then draw the status line on the last row
+    // Reset all attributes, then draw the status line on the last row.
     stdout.write_all(ANSI_RESET_BYTES)?;
     execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
     stdout.write_all(status.as_bytes())?;

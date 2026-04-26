@@ -1,12 +1,8 @@
-use std::cell::Cell;
-use std::rc::Rc;
-
 use anyhow::Result;
 
-use crate::input::detect::{Detected, FileType};
+use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::output::Output;
-use crate::theme::{PeekThemeName, ThemeManager};
 
 use super::Viewer;
 
@@ -94,37 +90,11 @@ pub struct ImageConfig {
 
 pub struct ImageViewer {
     config: ImageConfig,
-    theme_name: PeekThemeName,
 }
 
 impl ImageViewer {
-    pub fn new(config: ImageConfig, theme_name: PeekThemeName) -> Self {
-        Self { config, theme_name }
-    }
-
-    /// Interactive image viewing with resize support.
-    /// Enters alternate screen and blocks until the user quits.
-    pub fn view_interactive(&self, source: &InputSource, detected: &Detected) -> Result<()> {
-        // Check for animated image (GIF/WebP) — use dedicated animation viewer
-        if let Some(frames) = animate::decode_anim_frames(source)? {
-            return animate::view_animated(
-                source, detected, frames, self.config, self.theme_name,
-            );
-        }
-
-        let config = self.config;
-        let bg = Rc::new(Cell::new(config.background));
-        let bg_closure = Rc::clone(&bg);
-        let source_clone = source.clone();
-        super::interactive::view_interactive_with_bg(
-            source, detected, self.theme_name, true, true,
-            Some(bg),
-            move |_theme, _pretty| {
-                let mut term = render::TermSize::detect();
-                term.rows = term.rows.saturating_sub(1);
-                render::load_and_render(&source_clone, config.mode, config.width, term, bg_closure.get(), config.margin)
-            },
-        )
+    pub fn new(config: ImageConfig) -> Self {
+        Self { config }
     }
 }
 
@@ -147,57 +117,11 @@ impl Viewer for ImageViewer {
 
 pub struct SvgViewer {
     config: ImageConfig,
-    theme_name: PeekThemeName,
-    theme_manager: Rc<ThemeManager>,
-    raw_mode: bool,
 }
 
 impl SvgViewer {
-    pub fn new(
-        config: ImageConfig,
-        theme_name: PeekThemeName,
-        theme_manager: Rc<ThemeManager>,
-        raw_mode: bool,
-    ) -> Self {
-        Self { config, theme_name, theme_manager, raw_mode }
-    }
-
-    pub fn view_interactive(&self, source: &InputSource, detected: &Detected) -> Result<()> {
-        let config = self.config;
-        let bg = Rc::new(Cell::new(config.background));
-        let bg_closure = Rc::clone(&bg);
-        let source_clone = source.clone();
-        let tm = Rc::clone(&self.theme_manager);
-        let raw_mode = self.raw_mode;
-
-        super::interactive::view_interactive_with_bg(
-            source,
-            detected,
-            self.theme_name,
-            true,
-            true, // start with pretty=true (image preview)
-            Some(bg),
-            move |theme_name, pretty| {
-                if pretty {
-                    // Render as ASCII art image
-                    let mut term = render::TermSize::detect();
-                    term.rows = term.rows.saturating_sub(1);
-                    render::load_and_render_svg(&source_clone, config.mode, config.width, term, bg_closure.get(), config.margin)
-                } else {
-                    // Render as XML source
-                    let raw_content = source_clone.read_text()?;
-                    let content = if !raw_mode {
-                        crate::viewer::structured::pretty_print(
-                            &raw_content,
-                            crate::input::detect::StructuredFormat::Xml,
-                        )?
-                    } else {
-                        raw_content
-                    };
-                    super::highlight_lines(&content, "XML", &tm, theme_name)
-                }
-            },
-        )
+    pub fn new(config: ImageConfig) -> Self {
+        Self { config }
     }
 }
 

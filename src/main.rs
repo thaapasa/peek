@@ -58,44 +58,38 @@ fn main() -> Result<()> {
     }
 
     if use_pager {
-        // Interactive TTY: each input gets its own interactive viewer
-        // with Tab/i view switching between content and file info.
+        // Interactive TTY: compose mode list per file type; one event loop.
+        // Animated images keep their dedicated frame-rate-driven loop.
         for (source, detected) in &inputs {
             let file_type = &detected.file_type;
-            if matches!(file_type, input::detect::FileType::Binary) {
-                // Binary files: open hex viewer (also works under --plain)
-                viewers
-                    .hex_viewer()
-                    .view_interactive(source, detected, 0, false)
-                    .with_context(|| format!("failed to render {}", source.name()))?;
-            } else if matches!(file_type, input::detect::FileType::Image) && !args.plain {
-                // Images re-render on resize for correct aspect ratio
-                viewers
-                    .image_viewer()
-                    .view_interactive(source, detected)
-                    .with_context(|| format!("failed to render {}", source.name()))?;
-            } else if matches!(file_type, input::detect::FileType::Svg) && !args.plain {
-                // SVGs: rasterized preview with r to toggle XML source
-                viewers
-                    .svg_viewer()
-                    .view_interactive(source, detected)
-                    .with_context(|| format!("failed to render {}", source.name()))?;
-            } else {
-                // Other files: render on demand with theme-aware re-rendering
-                let render_content = viewers
-                    .content_renderer(source, file_type)
-                    .with_context(|| format!("failed to read {}", source.name()))?;
-
-                viewer::interactive::view_interactive(
+            if matches!(file_type, input::detect::FileType::Image) && !args.plain
+                && let Some(frames) =
+                    viewer::image::animate::decode_anim_frames(source).with_context(|| {
+                        format!("failed to decode animation frames for {}", source.name())
+                    })?
+            {
+                let cfg = viewer::image::ImageConfig {
+                    mode: viewer::image::ImageMode::from_str(&args.image_mode),
+                    width: args.width,
+                    background: viewer::image::Background::from_str(&args.background),
+                    margin: args.margin,
+                };
+                viewer::image::animate::view_animated(
                     source,
                     detected,
+                    frames,
+                    cfg,
                     viewers.theme_name(),
-                    false,
-                    !args.raw,
-                    render_content,
                 )
                 .with_context(|| format!("failed to render {}", source.name()))?;
+                continue;
             }
+
+            let modes = viewers
+                .compose_modes(source, detected, &args)
+                .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
+            viewer::interactive::run(source, detected, viewers.theme_name(), modes)
+                .with_context(|| format!("failed to render {}", source.name()))?;
         }
     } else {
         // Piped or --no-pager: direct output. Binary → hex viewer (registered

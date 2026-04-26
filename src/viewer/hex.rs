@@ -1,57 +1,20 @@
-use std::io;
-
 use anyhow::Result;
-use crossterm::event::{self, Event};
 
-use crate::input::detect::{Detected, FileType};
+use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::output::Output;
 use crate::theme::{PeekTheme, PeekThemeName};
 
 use super::Viewer;
-use super::modes::{HexMode, Mode};
-use super::ui::{
-    Action, Outcome, ViewMode, ViewerState, keys, make_peek_theme,
-    render_themed_status_line, with_alternate_screen,
-};
+use super::ui::make_peek_theme;
 
 // ---------------------------------------------------------------------------
-// Help keys
+// HexViewer (non-interactive / piped output)
 // ---------------------------------------------------------------------------
-
-const ACTIONS_STANDALONE: &[(Action, &str)] = &[
-    (Action::Quit,              "Quit"),
-    (Action::ScrollUp,          "Scroll up"),
-    (Action::ScrollDown,        "Scroll down"),
-    (Action::PageUp,            "Page up"),
-    (Action::PageDown,          "Page down"),
-    (Action::Top,               "Jump to top"),
-    (Action::Bottom,            "Jump to bottom"),
-    (Action::ToggleContentInfo, "Toggle hex / file info"),
-    (Action::SwitchInfo,        "File info"),
-    (Action::ToggleHelp,        "Toggle help"),
-    (Action::CycleTheme,        "Next theme"),
-];
-
-const ACTIONS_TOGGLE: &[(Action, &str)] = &[
-    (Action::Quit,              "Quit"),
-    (Action::SwitchToHex,       "Exit hex mode"),
-    (Action::ScrollUp,          "Scroll up"),
-    (Action::ScrollDown,        "Scroll down"),
-    (Action::PageUp,            "Page up"),
-    (Action::PageDown,          "Page down"),
-    (Action::Top,               "Jump to top"),
-    (Action::Bottom,            "Jump to bottom"),
-    (Action::ToggleContentInfo, "Toggle hex / file info"),
-    (Action::SwitchInfo,        "File info"),
-    (Action::ToggleHelp,        "Toggle help"),
-    (Action::CycleTheme,        "Next theme"),
-];
-
-
-// ---------------------------------------------------------------------------
-// HexViewer
-// ---------------------------------------------------------------------------
+//
+// Interactive hex viewing now goes through `modes::HexMode` and the unified
+// event loop in `viewer::interactive`. This file keeps only the piped-output
+// `Viewer` impl plus the shared layout/format helpers (re-used by `HexMode`).
 
 pub struct HexViewer {
     theme_name: PeekThemeName,
@@ -60,29 +23,6 @@ pub struct HexViewer {
 impl HexViewer {
     pub fn new(theme_name: PeekThemeName) -> Self {
         Self { theme_name }
-    }
-
-    /// Standalone interactive entry: enters its own alternate screen.
-    /// `return_on_x = true` means the `x` key exits hex back to the caller;
-    /// `false` means `x` is a no-op (e.g., when hex is the default-for-binary
-    /// view with no underlying viewer to return to).
-    pub fn view_interactive(
-        &self,
-        source: &InputSource,
-        detected: &Detected,
-        start_offset: u64,
-        return_on_x: bool,
-    ) -> Result<()> {
-        with_alternate_screen(|stdout| {
-            run_hex_loop(
-                stdout,
-                source,
-                detected,
-                self.theme_name,
-                start_offset,
-                return_on_x,
-            )
-        })
     }
 }
 
@@ -115,124 +55,7 @@ impl Viewer for HexViewer {
 }
 
 // ---------------------------------------------------------------------------
-// Interactive event loop (callable from inside an existing alt screen)
-// ---------------------------------------------------------------------------
-
-/// Run the hex-viewer event loop. Caller must already have entered the
-/// alternate screen + raw mode (e.g., via `with_alternate_screen`).
-///
-/// Drives a `HexMode` for the Content view; reuses `ViewerState` for the
-/// Info/Help views, theme cycling, and key dispatch.
-pub(crate) fn run_hex_loop(
-    stdout: &mut io::Stdout,
-    source: &InputSource,
-    detected: &Detected,
-    initial_theme: PeekThemeName,
-    start_offset: u64,
-    return_on_x: bool,
-) -> Result<()> {
-    let actions: &'static [(Action, &str)] = if return_on_x {
-        ACTIONS_TOGGLE
-    } else {
-        ACTIONS_STANDALONE
-    };
-
-    let mut hex_mode = HexMode::new(source, start_offset)?;
-    let mut state = ViewerState::new(source, detected, initial_theme, Vec::new(), actions)?;
-    state.content_lines = hex_mode.render(&state.render_ctx())?;
-
-    let name = source.name().to_string();
-    let draw = |stdout: &mut io::Stdout, state: &ViewerState, hex_mode: &HexMode| -> Result<()> {
-        let status = render_status_line(&name, state, hex_mode, return_on_x);
-        state.draw(stdout, &status)
-    };
-
-    draw(stdout, &state, &hex_mode)?;
-
-    loop {
-        match event::read()? {
-            Event::Key(key) => {
-                let Some(action) = keys::dispatch(key, actions) else {
-                    continue;
-                };
-
-                // Hex owns Content-mode scrolling (byte-based, not line-based).
-                if state.view_mode == ViewMode::Content
-                    && hex_mode.owns_scroll()
-                    && hex_mode.scroll(action)
-                {
-                    state.content_lines = hex_mode.render(&state.render_ctx())?;
-                    draw(stdout, &state, &hex_mode)?;
-                    continue;
-                }
-
-                match state.apply(action) {
-                    Outcome::Quit => return Ok(()),
-                    Outcome::Redraw => draw(stdout, &state, &hex_mode)?,
-                    Outcome::RecomputeContent => {
-                        // Theme cycle: hex content_lines are themed bytes —
-                        // re-render so colors match the new theme.
-                        state.content_lines = hex_mode.render(&state.render_ctx())?;
-                        draw(stdout, &state, &hex_mode)?;
-                    }
-                    Outcome::Unhandled => {
-                        if action == Action::SwitchToHex && return_on_x {
-                            return Ok(());
-                        }
-                    }
-                }
-            }
-            Event::Resize(_, _) => {
-                if hex_mode.rerender_on_resize() {
-                    hex_mode.realign_to_terminal();
-                    state.content_lines = hex_mode.render(&state.render_ctx())?;
-                }
-                draw(stdout, &state, &hex_mode)?;
-            }
-            _ => {}
-        }
-    }
-}
-
-fn render_status_line(
-    name: &str,
-    state: &ViewerState,
-    hex_mode: &HexMode,
-    return_on_x: bool,
-) -> String {
-    let theme = &state.peek_theme;
-    let mode_label: &str = if state.view_mode == ViewMode::Content {
-        hex_mode.label()
-    } else {
-        state.view_mode.label()
-    };
-
-    let hex_segs: Vec<(String, syntect::highlighting::Color)> =
-        if state.view_mode == ViewMode::Content {
-            hex_mode.status_segments(theme)
-        } else {
-            Vec::new()
-        };
-
-    let mut segments: Vec<(&str, syntect::highlighting::Color)> = vec![
-        (name, theme.accent),
-        (mode_label, theme.label),
-    ];
-    for (s, c) in &hex_segs {
-        segments.push((s.as_str(), *c));
-    }
-    segments.push((state.current_theme.cli_name(), theme.muted));
-
-    let hints: Vec<&str> = if return_on_x {
-        vec!["x:exit hex", "h:help", "t:theme", "q:quit"]
-    } else {
-        vec!["h:help", "t:theme", "q:quit"]
-    };
-    render_themed_status_line(&segments, &hints, theme)
-}
-
-// ---------------------------------------------------------------------------
-// Layout helpers
+// Layout helpers (shared with `modes::HexMode`)
 // ---------------------------------------------------------------------------
 
 /// Compute bytes-per-row for a given terminal width. Formula:

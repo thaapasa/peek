@@ -1,20 +1,17 @@
-use std::io::{self, BufReader, Cursor};
-use std::time::{Duration, Instant};
+use std::io::{BufReader, Cursor};
+use std::time::Duration;
 
 use anyhow::{Context, Result};
-use crossterm::event::{self, Event};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
 use crate::input::detect::Detected;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
+use crate::viewer::modes::{AnimationMode, HelpMode, HexMode, InfoMode, Mode};
+use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 use super::render;
 use super::ImageConfig;
-
-use crate::viewer::ui::{
-    Action, Outcome, ViewMode, ViewerState, keys, render_themed_status_line, with_alternate_screen,
-};
 
 /// A single decoded animation frame with its display duration.
 pub struct AnimFrame {
@@ -141,32 +138,13 @@ pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
 }
 
 // ---------------------------------------------------------------------------
-// Help keys for the animation viewer
-// ---------------------------------------------------------------------------
-
-const ACTIONS: &[(Action, &str)] = &[
-    (Action::Quit,              "Quit"),
-    (Action::PlayPause,         "Play / pause"),
-    (Action::NextFrame,         "Next frame"),
-    (Action::PrevFrame,         "Previous frame"),
-    (Action::CycleBackground,   "Cycle background"),
-    (Action::ScrollUp,          "Scroll up (info/help)"),
-    (Action::ScrollDown,        "Scroll down (info/help)"),
-    (Action::Top,               "Jump to top"),
-    (Action::Bottom,            "Jump to bottom"),
-    (Action::ToggleContentInfo, "Toggle content / file info"),
-    (Action::SwitchInfo,        "File info"),
-    (Action::ToggleHelp,        "Toggle help"),
-    (Action::CycleTheme,        "Next theme"),
-    (Action::SwitchToHex,       "Hex dump mode"),
-];
-
-
-// ---------------------------------------------------------------------------
 // Interactive animated viewer
 // ---------------------------------------------------------------------------
 
-/// Interactive animated GIF/WebP viewer with frame-rate-driven playback.
+/// Interactive animated GIF/WebP viewer. Composes an `AnimationMode` plus
+/// the standard Hex / Info / Help auxiliaries and hands the stack to the
+/// unified event loop, which drives frame advancement via the mode's
+/// `next_tick` / `tick` hooks.
 pub fn view_animated(
     source: &InputSource,
     detected: &Detected,
@@ -174,134 +152,29 @@ pub fn view_animated(
     config: ImageConfig,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
-    with_alternate_screen(|stdout| {
-        run_animation_loop(stdout, source, detected, &frames, config, initial_theme)
-    })
-}
+    let mut modes: Vec<Box<dyn Mode>> = Vec::new();
+    modes.push(Box::new(AnimationMode::new(frames, config)));
+    modes.push(Box::new(HexMode::new(source, 0)?));
+    modes.push(Box::new(InfoMode::new()));
 
-// ---------------------------------------------------------------------------
-// Animation event loop
-// ---------------------------------------------------------------------------
-
-fn run_animation_loop(
-    stdout: &mut io::Stdout,
-    source: &InputSource,
-    detected: &Detected,
-    frames: &[AnimFrame],
-    mut config: ImageConfig,
-    initial_theme: PeekThemeName,
-) -> Result<()> {
-    let mut playing = true;
-    let mut current_frame: usize = 0;
-    let frame_count = frames.len();
-
-    let content_lines = render_frame(&frames[current_frame], &config);
-    let mut state = ViewerState::new(source, detected, initial_theme, content_lines, ACTIONS)?;
-
-    let name = source.name().to_string();
-
-    let redraw = |stdout: &mut io::Stdout,
-                  state: &ViewerState,
-                  frame_idx: usize,
-                  playing: bool|
-     -> Result<()> {
-        let status = render_anim_status_line(&name, state, frame_idx, frame_count, playing);
-        state.draw(stdout, &status)
-    };
-
-    redraw(stdout, &state, current_frame, playing)?;
-
-    let mut last_advance = Instant::now();
-
-    loop {
-        let timeout = if playing && state.view_mode == ViewMode::Content {
-            let elapsed = last_advance.elapsed();
-            frames[current_frame].delay.saturating_sub(elapsed)
-        } else {
-            Duration::from_secs(86400)
-        };
-
-        if event::poll(timeout)? {
-            match event::read()? {
-                Event::Key(key) => {
-                    let Some(action) = keys::dispatch(key, ACTIONS) else {
-                        continue;
-                    };
-                    match state.apply(action) {
-                        Outcome::Quit => return Ok(()),
-                        Outcome::Redraw => redraw(stdout, &state, current_frame, playing)?,
-                        Outcome::RecomputeContent => {
-                            // Animation frames don't depend on theme — just redraw.
-                            redraw(stdout, &state, current_frame, playing)?;
-                        }
-                        Outcome::Unhandled => match action {
-                            Action::SwitchToHex => {
-                                crate::viewer::hex::run_hex_loop(
-                                    stdout,
-                                    source,
-                                    detected,
-                                    state.current_theme,
-                                    0,
-                                    true,
-                                )?;
-                                last_advance = Instant::now();
-                                redraw(stdout, &state, current_frame, playing)?;
-                            }
-                            Action::CycleBackground => {
-                                config.background = config.background.next();
-                                state.content_lines = render_frame(&frames[current_frame], &config);
-                                redraw(stdout, &state, current_frame, playing)?;
-                            }
-                            Action::PlayPause => {
-                                playing = !playing;
-                                if playing {
-                                    last_advance = Instant::now();
-                                }
-                                redraw(stdout, &state, current_frame, playing)?;
-                            }
-                            Action::NextFrame => {
-                                current_frame = (current_frame + 1) % frame_count;
-                                state.content_lines = render_frame(&frames[current_frame], &config);
-                                last_advance = Instant::now();
-                                redraw(stdout, &state, current_frame, playing)?;
-                            }
-                            Action::PrevFrame => {
-                                current_frame = (current_frame + frame_count - 1) % frame_count;
-                                state.content_lines = render_frame(&frames[current_frame], &config);
-                                last_advance = Instant::now();
-                                redraw(stdout, &state, current_frame, playing)?;
-                            }
-                            _ => {}
-                        },
-                    }
-                }
-                Event::Resize(_, _) => {
-                    state.content_lines = render_frame(
-                        &frames[current_frame], &config,
-                    );
-                    redraw(stdout, &state, current_frame, playing)?;
-                }
-                _ => {}
-            }
-        } else {
-            // Timeout: advance to next frame
-            current_frame = (current_frame + 1) % frame_count;
-            state.content_lines = render_frame(
-                &frames[current_frame], &config,
-            );
-            last_advance = Instant::now();
-            if state.view_mode == ViewMode::Content {
-                redraw(stdout, &state, current_frame, playing)?;
+    let mut help_actions: Vec<(Action, &'static str)> = GLOBAL_ACTIONS.to_vec();
+    for m in &modes {
+        for (a, label) in m.extra_actions() {
+            if !help_actions.iter().any(|(b, _)| b == a) {
+                help_actions.push((*a, *label));
             }
         }
     }
+    modes.push(Box::new(HelpMode::new(help_actions)));
+
+    crate::viewer::interactive::run(source, detected, initial_theme, modes)
 }
 
 // ---------------------------------------------------------------------------
-// Frame rendering
+// Frame rendering (shared with `modes::AnimationMode`)
 // ---------------------------------------------------------------------------
 
-fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
+pub(crate) fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
     use super::glyph_atlas::{CELL_H, CELL_W};
 
     let mut term = render::TermSize::detect();
@@ -325,36 +198,3 @@ fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Animation status line
-// ---------------------------------------------------------------------------
-
-fn render_anim_status_line(
-    name: &str,
-    state: &ViewerState,
-    frame_idx: usize,
-    frame_count: usize,
-    playing: bool,
-) -> String {
-    let theme = &state.peek_theme;
-
-    let play_icon = if playing { "\u{25b6}" } else { "\u{23f8}" };
-    let frame_info = format!("Frame {}/{} {}", frame_idx + 1, frame_count, play_icon);
-
-    let hints: &[&str] = if playing {
-        &["h:help", "p:pause", "b:bg", "q:quit"]
-    } else {
-        &["h:help", "p:play", "n/N:step", "b:bg", "q:quit"]
-    };
-
-    render_themed_status_line(
-        &[
-            (name, theme.accent),
-            (&frame_info, theme.label),
-            (state.view_mode.label(), theme.label),
-            (state.current_theme.cli_name(), theme.muted),
-        ],
-        hints,
-        theme,
-    )
-}

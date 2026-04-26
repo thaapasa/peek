@@ -35,21 +35,29 @@ src/
     render.rs          — Themed terminal rendering of FileInfo
   theme.rs             — Theme management, PeekTheme semantic colors, color blending
   viewer/
-    mod.rs             — Viewer trait, Registry, highlight_lines helper
+    mod.rs             — Viewer trait (piped output), Registry, compose_modes, highlight_lines
+    interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
+    modes/
+      mod.rs           — Mode trait, ModeId, RenderCtx (the interactive abstraction)
+      content.rs       — ContentMode: text / syntax / structured / SVG XML source
+      hex.rs           — HexMode: byte-offset-scrolled hex dump
+      image_render.rs  — ImageRenderMode: raster + rasterized SVG
+      animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
+      info.rs          — InfoMode: file metadata view
+      help.rs          — HelpMode: keyboard-shortcut listing
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
-      state.rs         — ViewMode, ScrollState, ViewerState (state, key dispatch, drawing)
-      keys.rs          — KeyAction enum + shared `b` (background-cycle) helper
-      help.rs          — Keyboard-shortcuts help screen
-    interactive.rs     — Static content interactive viewer (text, code, structured data)
-    syntax.rs          — Syntax-highlighted source code (syntect)
-    structured.rs      — JSON/YAML/TOML/XML pretty-print + syntax highlight
-    text.rs            — Plain text passthrough
-    hex.rs             — Hex dump viewer (streaming, terminal-width aware)
+      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
+      keys.rs          — Action enum (centralized keybindings), Outcome
+      help.rs          — Keyboard-shortcut help screen renderer
+    syntax.rs          — Piped-output syntax-highlighted source code (Viewer impl)
+    structured.rs      — JSON/YAML/TOML/XML pretty-print + Viewer impl for piped output
+    text.rs            — Plain text Viewer impl for piped output
+    hex.rs             — Hex dump Viewer impl for piped output + shared layout helpers
     image/
-      mod.rs           — Image viewer (interactive + piped)
+      mod.rs           — ImageViewer / SvgViewer: piped-output Viewer impls; ImageConfig
       render.rs        — Image → glyph-matched ASCII art with true color
-      animate.rs       — Animated GIF/WebP playback with frame-rate-driven event loop
+      animate.rs       — Frame decoding + viewer entry that composes AnimationMode
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
