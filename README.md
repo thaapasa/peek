@@ -110,6 +110,9 @@ peek --margin 20 icon.svg
 
 # Show file metadata (includes EXIF for images)
 peek --info photo.jpg
+
+# Show timestamps in UTC instead of local time + offset
+peek --info --utc photo.jpg
 ```
 
 ## Interactive Viewer

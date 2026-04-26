@@ -27,7 +27,7 @@ src/
     stdin.rs           — Build sources from CLI args, reopen fd 0 from /dev/tty after pipe
   output/
     mod.rs             — re-exports Output
-    pager.rs           — Output abstraction (pager / direct stdout / buffer)
+    pager.rs           — Output abstraction (pager / direct stdout)
     help.rs            — CLI help and version screens
   info/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
@@ -57,7 +57,7 @@ src/
     image/
       mod.rs           — ImageViewer / SvgViewer: piped-output Viewer impls; ImageConfig
       render.rs        — Image → glyph-matched ASCII art with true color
-      animate.rs       — Frame decoding + viewer entry that composes AnimationMode
+      animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
       svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering

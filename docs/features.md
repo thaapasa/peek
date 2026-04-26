@@ -610,6 +610,7 @@ Current and planned CLI options:
 | `--width`        |       | Image rendering width in characters             | Implemented  |
 | `--image-mode`   |       | Image rendering mode                            | Implemented  |
 | `--info`         |       | Show file info instead of contents              | Implemented  |
+| `--utc`          |       | Show timestamps in UTC (default: local + offset)| Implemented  |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | Implemented |
 | `--margin`       |       | Image margin in transparent pixels              | Implemented  |
 | `--line-numbers` |       | Enable/disable line numbers                     | Planned      |

@@ -81,6 +81,8 @@ pub(crate) trait Mode {
     fn handle(&mut self, _action: Action) -> bool { false }
     fn next_tick(&self) -> Option<Duration> { None }
     fn tick(&mut self) -> bool { false }
+    fn tracks_position(&self) -> bool { false }
+    fn take_warnings(&mut self) -> Vec<String> { vec![] }
 }
 ```
 
@@ -130,11 +132,16 @@ outgoing mode and pushed to the incoming mode on every active-mode change.
 Modes that override `tracks_position()` participate; the rest pass it
 through untouched, so detours through Info / Help / Image / Animation
 preserve where you were in the file. Conversion lives on `InputSource`
-(`byte_to_line`, `line_to_byte` — newline scan over the source bytes).
+(`byte_to_line`, `line_to_byte` — chunked 64 KB streaming scan via
+`open_byte_source`, never a whole-file load).
+
 Pretty-printed structured content has more lines than the raw source, so
-Line ↔ Byte conversion is approximate for those views; PDF-style modes
-that need exact mapping will eventually carry their own line-to-source-byte
-table inside the mode.
+the displayed line index has no meaningful relation to source bytes.
+`ContentMode` opts out of position tracking when pretty mode is active
+(`tracks_position()` returns `!use_pretty`) — switching from pretty
+Content to Hex preserves whichever byte Hex was previously on instead of
+synthesizing a wrong one. PDF-style modes that need exact mapping will
+eventually carry their own line-to-source-byte table inside the mode.
 
 ### Registry (`viewer/mod.rs`)
 
@@ -157,15 +164,32 @@ columns; rounded to a multiple of 8), `align_down`, `max_top`, `format_row`,
 handles ScrollUp/Down/PageUp/Down/Top/Bottom byte-wise via `scroll()`.
 `on_resize()` re-aligns `top_offset` to the new column count.
 
+### ContentMode (`viewer/modes/content.rs`)
+
+Holds the eagerly-loaded raw text plus a lazy pretty-print slot. The
+pretty-print only runs the first time the user lands on pretty mode — for
+files where the user opens with `--raw` or never toggles, the parse never
+happens. On parse failure ContentMode caches the `Err`, falls back to the
+raw view, and queues a one-shot warning via `take_warnings()`.
+`ViewerState` polls `take_warnings()` after each render and merges new
+entries into `FileInfo.warnings`, invalidating InfoMode's cached lines so
+the next `i` view shows the new warning alongside any extension-mismatch
+notices.
+
 ### Animation (`viewer/modes/animation.rs` + `viewer/image/animate.rs`)
 
-`viewer/image/animate.rs` decodes GIF/WebP frames up front (`decode_anim_frames`)
-and exports `render_frame` for use by the mode. `AnimationMode` owns the
-frame list, `current` index, `playing` flag, `last_advance` instant, and an
-`ImageConfig`. It drives the unified event loop's timeout via `next_tick()`
-(returns the remaining duration until the next frame, or `None` when paused
-or when the user navigates to Info/Help/Hex). When the loop's `event::poll`
-times out, it calls `tick()`, which advances `current` and signals a redraw.
+`viewer/image/animate.rs` decodes GIF/WebP frames up front (`decode_anim_frames`),
+counts frames cheaply via `anim_frame_count` (header-only via the `gif`
+crate; WebP has no equivalent and returns `None`), and exports
+`render_frame` for use by the mode. The composition decision —
+`AnimationMode` for animated images, `ImageRenderMode` for static — lives
+inside `Registry::compose_modes`, so `main.rs` has one uniform interactive
+path across file types. `AnimationMode` owns the frame list, `current`
+index, `playing` flag, `last_advance` instant, and an `ImageConfig`. It
+drives the unified event loop's timeout via `next_tick()` (returns the
+remaining duration until the next frame, or `None` when paused or when the
+user navigates to Info/Help/Hex). When the loop's `event::poll` times out,
+it calls `tick()`, which advances `current` and signals a redraw.
 
 ### ImageConfig (`viewer/image/mod.rs`)
 
