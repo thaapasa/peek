@@ -16,8 +16,8 @@ for raster + rasterized SVG, `AnimationMode` for GIF/WebP, plus universal `HexMo
 / `InfoMode` / `HelpMode`). Scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i
 toggle to file info, help screen (h/?), live theme cycling (t), and `r` (raw/pretty
 for structured data, primary-cycle for SVG rasterized↔XML). Image-specific keys: `b`
-cycles background. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. No
-search, line numbers, or image rendering-mode cycling yet.
+cycles background, `m` cycles render mode (full/block/geo/ascii). Animation: `p`
+play/pause, `n`/`N` and Left/Right step frames. No search or line numbers yet.
 
 ### Print Mode
 
