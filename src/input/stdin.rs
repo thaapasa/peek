@@ -1,4 +1,5 @@
 use std::io::{IsTerminal, Read};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 
@@ -27,13 +28,13 @@ pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
     // No files + non-TTY stdin → read stdin implicitly.
     let want_stdin = has_dash || args.files.is_empty();
 
-    let stdin_data = if want_stdin {
+    let stdin_data: Option<Arc<[u8]>> = if want_stdin {
         let mut buf = Vec::new();
         std::io::stdin()
             .read_to_end(&mut buf)
             .context("failed to read stdin")?;
         reopen_stdin_from_tty();
-        Some(buf)
+        Some(Arc::from(buf.into_boxed_slice()))
     } else {
         None
     };
@@ -52,7 +53,7 @@ pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
             if p.as_os_str() == "-" {
                 // First `-` takes the data; extra `-`s get an empty buffer.
                 InputSource::Stdin {
-                    data: stdin_slot.take().unwrap_or_default(),
+                    data: stdin_slot.take().unwrap_or_else(|| Arc::from(Vec::new().into_boxed_slice())),
                 }
             } else {
                 InputSource::File(p.clone())

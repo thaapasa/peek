@@ -2,7 +2,7 @@ use std::io::{BufReader, Cursor};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use image::{AnimationDecoder, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView};
 
 use crate::input::InputSource;
 
@@ -108,28 +108,42 @@ pub fn decode_anim_frames(source: &InputSource) -> Result<Option<Vec<AnimFrame>>
     Ok(Some(frames))
 }
 
-/// Count animation frames without full pixel decoding.
-/// Returns None for non-animated sources.
+/// Count animation frames without decoding pixels.
+///
+/// GIF: walks the block stream via `gif::Decoder::next_frame_info`,
+/// which parses each frame's header but skips the LZW-compressed pixel
+/// data. Cheap even on huge animations.
+///
+/// WebP: `image-webp` exposes no header-only iteration, so for WebP we
+/// return `None` rather than full-decode every frame on every Info-view
+/// render. The count is asymmetric on purpose — the slow path was worse.
+///
+/// Returns `None` for non-animated sources, single-frame sources, or
+/// when format-specific header iteration isn't available.
 pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
-    let format = detect_format(source)?;
-    let count = match (source, format) {
-        (InputSource::File(path), AnimFormat::Gif) => {
-            let reader = BufReader::new(std::fs::File::open(path).ok()?);
-            image::codecs::gif::GifDecoder::new(reader).ok()?.into_frames().count()
-        }
-        (InputSource::File(path), AnimFormat::Webp) => {
-            let reader = BufReader::new(std::fs::File::open(path).ok()?);
-            image::codecs::webp::WebPDecoder::new(reader).ok()?.into_frames().count()
-        }
-        (InputSource::Stdin { data }, AnimFormat::Gif) => {
-            let reader = Cursor::new(data.clone());
-            image::codecs::gif::GifDecoder::new(reader).ok()?.into_frames().count()
-        }
-        (InputSource::Stdin { data }, AnimFormat::Webp) => {
-            let reader = Cursor::new(data.clone());
-            image::codecs::webp::WebPDecoder::new(reader).ok()?.into_frames().count()
-        }
-    };
+    match detect_format(source)? {
+        AnimFormat::Gif => match source {
+            InputSource::File(path) => {
+                let reader = BufReader::new(std::fs::File::open(path).ok()?);
+                count_gif_frames(reader)
+            }
+            InputSource::Stdin { data } => count_gif_frames(Cursor::new(data.clone())),
+        },
+        AnimFormat::Webp => None,
+    }
+}
+
+/// Step through a GIF reader's frame headers. `next_frame_info` reads each
+/// frame's image descriptor but skips the pixel payload — orders of
+/// magnitude faster than full decoding for the count alone.
+fn count_gif_frames<R: std::io::Read>(reader: R) -> Option<usize> {
+    let mut decoder = gif::DecodeOptions::new()
+        .read_info(reader)
+        .ok()?;
+    let mut count = 0usize;
+    while decoder.next_frame_info().ok()?.is_some() {
+        count += 1;
+    }
     if count > 1 { Some(count) } else { None }
 }
 

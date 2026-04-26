@@ -1169,6 +1169,7 @@ dependencies = [
  "clap",
  "crossterm 0.28.1",
  "fontdue",
+ "gif 0.14.1",
  "image",
  "infer",
  "kamadak-exif",

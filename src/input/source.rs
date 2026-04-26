@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
@@ -11,10 +12,14 @@ const SCAN_CHUNK: usize = 64 * 1024;
 /// Source of input content — either a file on disk or buffered stdin.
 ///
 /// Decouples "where data comes from" from "how it's displayed".
+///
+/// Stdin holds an `Arc<[u8]>` so cloning the source — which happens once
+/// per mode in the stack and at every `open_byte_source` call — is a
+/// pointer copy rather than a buffer duplication.
 #[derive(Clone)]
 pub enum InputSource {
     File(PathBuf),
-    Stdin { data: Vec<u8> },
+    Stdin { data: Arc<[u8]> },
 }
 
 impl InputSource {
@@ -23,9 +28,9 @@ impl InputSource {
         match self {
             Self::File(path) => fs::read_to_string(path)
                 .with_context(|| format!("failed to read {}", path.display())),
-            Self::Stdin { data } => {
-                String::from_utf8(data.clone()).context("stdin is not valid UTF-8")
-            }
+            Self::Stdin { data } => std::str::from_utf8(data)
+                .map(|s| s.to_owned())
+                .context("stdin is not valid UTF-8"),
         }
     }
 
@@ -35,7 +40,7 @@ impl InputSource {
             Self::File(path) => {
                 fs::read(path).with_context(|| format!("failed to read {}", path.display()))
             }
-            Self::Stdin { data } => Ok(data.clone()),
+            Self::Stdin { data } => Ok(data.to_vec()),
         }
     }
 
@@ -116,11 +121,11 @@ impl InputSource {
     }
 
     /// Open a streaming byte reader. For files, holds the file handle and
-    /// seeks per read. For stdin, slices the already-buffered bytes.
+    /// seeks per read. For stdin, shares the already-buffered bytes via Arc.
     pub fn open_byte_source(&self) -> Result<Box<dyn ByteSource>> {
         match self {
             Self::File(path) => Ok(Box::new(FileByteSource::open(path)?)),
-            Self::Stdin { data } => Ok(Box::new(SliceByteSource::new(data.clone()))),
+            Self::Stdin { data } => Ok(Box::new(SliceByteSource::new(Arc::clone(data)))),
         }
     }
 }
@@ -191,11 +196,11 @@ impl ByteSource for FileByteSource {
 }
 
 pub struct SliceByteSource {
-    data: Vec<u8>,
+    data: Arc<[u8]>,
 }
 
 impl SliceByteSource {
-    pub fn new(data: Vec<u8>) -> Self {
+    pub fn new(data: Arc<[u8]>) -> Self {
         Self { data }
     }
 }
@@ -273,35 +278,39 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
+    fn arc_bytes(b: &[u8]) -> Arc<[u8]> {
+        Arc::from(b.to_vec().into_boxed_slice())
+    }
+
     #[test]
     fn slice_byte_source_full_read() {
-        let bs = SliceByteSource::new(b"abcdefghij".to_vec());
+        let bs = SliceByteSource::new(arc_bytes(b"abcdefghij"));
         assert_eq!(bs.len(), 10);
         assert_eq!(bs.read_range(0, 10).unwrap(), b"abcdefghij");
     }
 
     #[test]
     fn slice_byte_source_partial_eof() {
-        let bs = SliceByteSource::new(b"abcdefghij".to_vec());
+        let bs = SliceByteSource::new(arc_bytes(b"abcdefghij"));
         assert_eq!(bs.read_range(7, 100).unwrap(), b"hij");
     }
 
     #[test]
     fn slice_byte_source_offset_past_eof() {
-        let bs = SliceByteSource::new(b"abc".to_vec());
+        let bs = SliceByteSource::new(arc_bytes(b"abc"));
         assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
     }
 
     #[test]
     fn slice_byte_source_empty() {
-        let bs = SliceByteSource::new(Vec::new());
+        let bs = SliceByteSource::new(arc_bytes(&[]));
         assert_eq!(bs.len(), 0);
         assert_eq!(bs.read_range(0, 10).unwrap(), Vec::<u8>::new());
     }
 
     fn stdin_source(text: &str) -> InputSource {
         InputSource::Stdin {
-            data: text.as_bytes().to_vec(),
+            data: arc_bytes(text.as_bytes()),
         }
     }
 

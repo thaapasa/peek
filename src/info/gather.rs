@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::Result;
 use image::ImageDecoder;
@@ -51,7 +52,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
     })
 }
 
-fn gather_stdin(data: &[u8], detected: &Detected) -> FileInfo {
+fn gather_stdin(data: &Arc<[u8]>, detected: &Detected) -> FileInfo {
     let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
     let warnings = collect_warnings(None, detected);
     let extras = gather_extras_stdin(data, &detected.file_type);
@@ -80,7 +81,7 @@ fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
     warnings
 }
 
-fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
+fn gather_extras_stdin(data: &Arc<[u8]>, file_type: &FileType) -> FileExtras {
     match file_type {
         FileType::SourceCode { .. } | FileType::Svg => gather_text_extras_from_bytes(data),
         FileType::Structured(fmt) => FileExtras::Structured {
@@ -96,8 +97,8 @@ fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
     }
 }
 
-fn gather_image_extras_from_bytes(data: &[u8]) -> FileExtras {
-    let decoder = match image::ImageReader::new(std::io::Cursor::new(data))
+fn gather_image_extras_from_bytes(data: &Arc<[u8]>) -> FileExtras {
+    let decoder = match image::ImageReader::new(std::io::Cursor::new(data.as_ref()))
         .with_guessed_format()
         .ok()
         .and_then(|r| r.into_decoder().ok())
@@ -112,7 +113,7 @@ fn gather_image_extras_from_bytes(data: &[u8]) -> FileExtras {
 
     let hdr_format = detect_hdr_bytes(data);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
-        &InputSource::Stdin { data: data.to_vec() },
+        &InputSource::Stdin { data: Arc::clone(data) },
     );
     let exif = gather_exif_bytes(data);
 
