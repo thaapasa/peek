@@ -90,11 +90,16 @@ impl Mode for ContentMode {
         }
     }
 
-    /// ContentMode tracks position in line units; it doesn't own its
-    /// scroll, so `position()` and `set_position()` use the trait
-    /// defaults — `ViewerState` reads/writes the line via its own
-    /// `scroll[active]` slot.
+    /// ContentMode tracks position in line units when showing raw —
+    /// the line index then corresponds 1:1 to source lines, so a
+    /// switch to Hex (and back) lands on the right byte.
+    ///
+    /// In pretty mode the line index has no relation to source bytes
+    /// (e.g. pretty-printed JSON line 50 may correspond to source byte
+    /// 200 or 20000). Tracking would lie, so we opt out: switching
+    /// from pretty Content to Hex preserves whatever position Hex
+    /// previously had instead of synthesizing a wrong one.
     fn tracks_position(&self) -> bool {
-        true
+        !self.use_pretty
     }
 }
