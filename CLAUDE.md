@@ -79,6 +79,22 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 
 - **Do not commit unless explicitly asked.** The user decides when and what to commit.
 
+## Collaboration
+
+The project's three north stars:
+
+1. **Architecture is clean, robust, and maintainable.** New abstractions earn their place by reducing total surface area or making extension easier. Modules have clear, narrow responsibilities. The dispatcher in `main.rs` should stay short — file-type-specific logic lives in `compose_modes` and the modes themselves.
+2. **Stream, don't load.** The viewer should handle multi-GB files comfortably. Prefer `InputSource::open_byte_source()` for random-access reads (HexMode does this) or chunked iteration over `read_bytes()` / `read_text()`, which load the whole file into memory. Whole-file reads are acceptable only when the feature genuinely needs them (full-file pretty-print of structured data, image decode) — never as a casual default.
+3. **Keep cognitive load low.** What matters here is how much a reader has to track to understand a piece of code — branches, scattered state, layers of indirection, concerns tangled together. Abstractions can *reduce* that load (a well-named trait lets you stop thinking about mechanism) or *add* to it (chasing through four files to follow one operation). Inlining can do either too — sometimes everything-visible is the right call, sometimes it's a 200-line function with three concerns mixed in. The test is what the next reader has to hold in their head; type count, line count, and call-site count are not the test.
+
+Be a critical collaborator, not an order-taker. Push back when a proposed change would:
+
+- **Deteriorate architecture quality** — leak abstractions, blur module boundaries, conflate orthogonal concerns (e.g. mixing piped-output and interactive paths), or re-introduce a `match file_type` chain that `compose_modes` was meant to eliminate.
+- **Add cognitive load without payoff** — deep branching, state scattered across structs that has to be kept in sync by hand, mechanism that leaks through several call sites instead of being hidden behind one, layers of indirection that don't earn the click-through cost, hypothetical-future abstractions whose concept isn't real yet. Whether the fix is a new abstraction, inlining what's there, or restructuring is the judgment call.
+- **Worsen performance** — redundant re-renders, extra allocations on hot paths, full-file reads where streaming or seeking would do, eager work that should be lazy.
+
+Surface the trade-off concretely and propose an alternative — the user wants help finding the best path, not the path of least resistance.
+
 ## Conventions
 
 See [docs/conventions.md](docs/conventions.md) for coding conventions.
