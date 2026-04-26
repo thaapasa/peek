@@ -10,8 +10,8 @@ use crate::info::FileInfo;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
+use crate::viewer::modes::{HelpMode, InfoMode, Mode, RenderCtx};
 
-use super::help::render_help_with_keys;
 use super::keys::{Action, Outcome};
 use super::{content_rows, make_peek_theme};
 
@@ -64,7 +64,7 @@ impl ScrollState {
     }
 }
 
-pub(crate) struct ViewerState {
+pub(crate) struct ViewerState<'a> {
     pub view_mode: ViewMode,
     pub current_theme: PeekThemeName,
     pub peek_theme: PeekTheme,
@@ -72,22 +72,41 @@ pub(crate) struct ViewerState {
     pub info_lines: Vec<String>,
     pub help_lines: Vec<String>,
     pub scroll: ScrollState,
+    source: &'a InputSource,
+    detected: &'a Detected,
     file_info: FileInfo,
-    help_keys: &'static [(Action, &'static str)],
+    info_mode: InfoMode,
+    help_mode: HelpMode,
 }
 
-impl ViewerState {
+impl<'a> ViewerState<'a> {
     pub(crate) fn new(
-        source: &InputSource,
-        detected: &Detected,
+        source: &'a InputSource,
+        detected: &'a Detected,
         theme_name: PeekThemeName,
         content_lines: Vec<String>,
         help_keys: &'static [(Action, &'static str)],
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name);
         let file_info = crate::info::gather(source, detected)?;
-        let info_lines = crate::info::render(&file_info, &peek_theme);
-        let help_lines = render_help_with_keys(&peek_theme, theme_name, help_keys);
+        let mut info_mode = InfoMode::new();
+        let mut help_mode = HelpMode::new(help_keys);
+        let info_lines = render_mode(
+            &mut info_mode,
+            source,
+            detected,
+            &file_info,
+            theme_name,
+            &peek_theme,
+        )?;
+        let help_lines = render_mode(
+            &mut help_mode,
+            source,
+            detected,
+            &file_info,
+            theme_name,
+            &peek_theme,
+        )?;
         Ok(Self {
             view_mode: ViewMode::Content,
             current_theme: theme_name,
@@ -96,8 +115,11 @@ impl ViewerState {
             info_lines,
             help_lines,
             scroll: ScrollState::new(),
+            source,
+            detected,
             file_info,
-            help_keys,
+            info_mode,
+            help_mode,
         })
     }
 
@@ -180,12 +202,32 @@ impl ViewerState {
     fn cycle_theme(&mut self) {
         self.current_theme = self.current_theme.next();
         self.peek_theme = make_peek_theme(self.current_theme);
-        self.info_lines = crate::info::render(&self.file_info, &self.peek_theme);
-        self.help_lines = render_help_with_keys(
-            &self.peek_theme,
-            self.current_theme,
-            self.help_keys,
-        );
+        let ctx = RenderCtx {
+            source: self.source,
+            detected: self.detected,
+            file_info: &self.file_info,
+            theme_name: self.current_theme,
+            peek_theme: &self.peek_theme,
+        };
+        if let Ok(lines) = self.info_mode.render(&ctx) {
+            self.info_lines = lines;
+        }
+        if let Ok(lines) = self.help_mode.render(&ctx) {
+            self.help_lines = lines;
+        }
+    }
+
+    /// Build a `RenderCtx` for this viewer's current state — used by
+    /// external event loops (e.g. the hex loop) that drive a `Mode`
+    /// outside of `ViewerState`'s own owned modes.
+    pub(crate) fn render_ctx(&self) -> RenderCtx<'_> {
+        RenderCtx {
+            source: self.source,
+            detected: self.detected,
+            file_info: &self.file_info,
+            theme_name: self.current_theme,
+            peek_theme: &self.peek_theme,
+        }
     }
 
     /// Apply a shared action. Returns `Outcome::Unhandled` for actions the
@@ -206,6 +248,26 @@ impl ViewerState {
             _                         => Outcome::Unhandled,
         }
     }
+}
+
+/// Build a `RenderCtx` and ask the mode to render. Helper that keeps the
+/// borrow scope tight so `ViewerState`'s fields can be mutably split.
+fn render_mode(
+    mode: &mut dyn Mode,
+    source: &InputSource,
+    detected: &Detected,
+    file_info: &FileInfo,
+    theme_name: PeekThemeName,
+    peek_theme: &PeekTheme,
+) -> Result<Vec<String>> {
+    let ctx = RenderCtx {
+        source,
+        detected,
+        file_info,
+        theme_name,
+        peek_theme,
+    };
+    mode.render(&ctx)
 }
 
 /// Render the screen: clear, draw visible lines, draw status bar on last row.

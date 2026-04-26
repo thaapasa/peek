@@ -1,20 +1,17 @@
-use std::io::{self, Write};
+use std::io;
 
 use anyhow::Result;
-use crossterm::{
-    cursor, execute,
-    event::{self, Event},
-    terminal,
-};
+use crossterm::event::{self, Event};
 
 use crate::input::detect::{Detected, FileType};
-use crate::input::{ByteSource, InputSource};
+use crate::input::InputSource;
 use crate::output::Output;
-use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
+use crate::theme::{PeekTheme, PeekThemeName};
 
 use super::Viewer;
+use super::modes::{HexMode, Mode};
 use super::ui::{
-    Action, Outcome, ViewMode, ViewerState, content_rows, keys, make_peek_theme,
+    Action, Outcome, ViewMode, ViewerState, keys, make_peek_theme,
     render_themed_status_line, with_alternate_screen,
 };
 
@@ -123,6 +120,9 @@ impl Viewer for HexViewer {
 
 /// Run the hex-viewer event loop. Caller must already have entered the
 /// alternate screen + raw mode (e.g., via `with_alternate_screen`).
+///
+/// Drives a `HexMode` for the Content view; reuses `ViewerState` for the
+/// Info/Help views, theme cycling, and key dispatch.
 pub(crate) fn run_hex_loop(
     stdout: &mut io::Stdout,
     source: &InputSource,
@@ -131,46 +131,23 @@ pub(crate) fn run_hex_loop(
     start_offset: u64,
     return_on_x: bool,
 ) -> Result<()> {
-    let bs = source.open_byte_source()?;
-    let total_len = bs.len();
-
     let actions: &'static [(Action, &str)] = if return_on_x {
         ACTIONS_TOGGLE
     } else {
         ACTIONS_STANDALONE
     };
 
-    // ViewerState reused for Info/Help/theme plumbing. Content_lines is
-    // empty — we draw the hex content ourselves when view_mode == Content.
+    let mut hex_mode = HexMode::new(source, start_offset)?;
     let mut state = ViewerState::new(source, detected, initial_theme, Vec::new(), actions)?;
+    state.content_lines = hex_mode.render(&state.render_ctx())?;
 
     let name = source.name().to_string();
-
-    let mut top_offset = {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        align_down(start_offset, bytes_per_row(cols))
+    let draw = |stdout: &mut io::Stdout, state: &ViewerState, hex_mode: &HexMode| -> Result<()> {
+        let status = render_status_line(&name, state, hex_mode, return_on_x);
+        state.draw(stdout, &status)
     };
 
-    let redraw =
-        |stdout: &mut io::Stdout, state: &ViewerState, top_offset: u64| -> Result<()> {
-            let (cols, _) = terminal::size().unwrap_or((80, 24));
-            let bpr = bytes_per_row(cols);
-            let status = render_status_line(&name, state, top_offset, total_len, return_on_x);
-            if state.view_mode == ViewMode::Content {
-                draw_hex(stdout, &*bs, top_offset, bpr, &state.peek_theme, &status)?;
-            } else {
-                state.draw(stdout, &status)?;
-            }
-            Ok(())
-        };
-
-    redraw(stdout, &state, top_offset)?;
-
-    let actions: &'static [(Action, &str)] = if return_on_x {
-        ACTIONS_TOGGLE
-    } else {
-        ACTIONS_STANDALONE
-    };
+    draw(stdout, &state, &hex_mode)?;
 
     loop {
         match event::read()? {
@@ -179,126 +156,72 @@ pub(crate) fn run_hex_loop(
                     continue;
                 };
 
-                // Content-mode scrolling is byte-based — intercept the scroll
-                // actions and translate them into byte-offset moves before
-                // delegating other actions to ViewerState.
+                // Hex owns Content-mode scrolling (byte-based, not line-based).
                 if state.view_mode == ViewMode::Content
-                    && let Some(new_top) = hex_scroll(action, top_offset, total_len)
+                    && hex_mode.owns_scroll()
+                    && hex_mode.scroll(action)
                 {
-                    top_offset = new_top;
-                    redraw(stdout, &state, top_offset)?;
+                    state.content_lines = hex_mode.render(&state.render_ctx())?;
+                    draw(stdout, &state, &hex_mode)?;
                     continue;
                 }
 
                 match state.apply(action) {
                     Outcome::Quit => return Ok(()),
-                    Outcome::Redraw | Outcome::RecomputeContent => {
-                        redraw(stdout, &state, top_offset)?;
+                    Outcome::Redraw => draw(stdout, &state, &hex_mode)?,
+                    Outcome::RecomputeContent => {
+                        // Theme cycle: hex content_lines are themed bytes —
+                        // re-render so colors match the new theme.
+                        state.content_lines = hex_mode.render(&state.render_ctx())?;
+                        draw(stdout, &state, &hex_mode)?;
                     }
-                    Outcome::Unhandled => match action {
-                        Action::SwitchToHex if return_on_x => return Ok(()),
-                        Action::SwitchToHex => {} // standalone: x is a no-op
-                        _ => {}
-                    },
+                    Outcome::Unhandled => {
+                        if action == Action::SwitchToHex && return_on_x {
+                            return Ok(());
+                        }
+                    }
                 }
             }
             Event::Resize(_, _) => {
-                let (cols, _) = terminal::size().unwrap_or((80, 24));
-                top_offset = align_down(top_offset, bytes_per_row(cols));
-                redraw(stdout, &state, top_offset)?;
+                if hex_mode.rerender_on_resize() {
+                    hex_mode.realign_to_terminal();
+                    state.content_lines = hex_mode.render(&state.render_ctx())?;
+                }
+                draw(stdout, &state, &hex_mode)?;
             }
             _ => {}
         }
     }
 }
 
-/// Translate a scroll-class action into a new top byte offset. Returns `None`
-/// if the action isn't a content-scroll (caller falls through to `state.apply`).
-fn hex_scroll(action: Action, top: u64, total_len: u64) -> Option<u64> {
-    let (cols, _) = terminal::size().unwrap_or((80, 24));
-    let bpr = bytes_per_row(cols);
-    let bpr_u = bpr as u64;
-    let rows = content_rows() as u64;
-    let max = max_top(total_len, bpr, content_rows());
-    let new_top = match action {
-        Action::ScrollUp   => top.saturating_sub(bpr_u),
-        Action::ScrollDown => top.saturating_add(bpr_u).min(max),
-        Action::PageUp     => top.saturating_sub(bpr_u.saturating_mul(rows.saturating_sub(1))),
-        Action::PageDown   => top.saturating_add(bpr_u.saturating_mul(rows.saturating_sub(1))).min(max),
-        Action::Top        => 0,
-        Action::Bottom     => max,
-        _ => return None,
-    };
-    Some(new_top)
-}
-
-// ---------------------------------------------------------------------------
-// Drawing
-// ---------------------------------------------------------------------------
-
-fn draw_hex(
-    stdout: &mut io::Stdout,
-    bs: &dyn ByteSource,
-    top_offset: u64,
-    bpr: usize,
-    theme: &PeekTheme,
-    status: &str,
-) -> Result<()> {
-    let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
-    let rows = (total_rows as usize).saturating_sub(1);
-
-    stdout.write_all(ANSI_RESET_BYTES)?;
-    execute!(
-        stdout,
-        terminal::Clear(terminal::ClearType::All),
-        cursor::MoveTo(0, 0),
-    )?;
-
-    let want = rows * bpr;
-    let buf = bs.read_range(top_offset, want)?;
-
-    for (i, row) in buf.chunks(bpr).enumerate() {
-        if i > 0 {
-            stdout.write_all(b"\r\n")?;
-        }
-        let row_off = top_offset + (i * bpr) as u64;
-        let line = format_row(theme, row_off, row, bpr);
-        stdout.write_all(line.as_bytes())?;
-    }
-
-    stdout.write_all(ANSI_RESET_BYTES)?;
-    execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
-    stdout.write_all(status.as_bytes())?;
-
-    stdout.flush()?;
-    Ok(())
-}
-
 fn render_status_line(
     name: &str,
     state: &ViewerState,
-    top_offset: u64,
-    total_len: u64,
+    hex_mode: &HexMode,
     return_on_x: bool,
 ) -> String {
     let theme = &state.peek_theme;
-    let pct = if total_len > 0 {
-        (top_offset * 100 / total_len).min(100)
-    } else {
-        0
-    };
-    let offset_str = format!("0x{:08x} / 0x{:08x} ({}%)", top_offset, total_len, pct);
-    let mode_label = if state.view_mode == ViewMode::Content {
-        "hex"
+    let mode_label: &str = if state.view_mode == ViewMode::Content {
+        hex_mode.label()
     } else {
         state.view_mode.label()
     };
-    let segments: Vec<(&str, _)> = vec![
+
+    let hex_segs: Vec<(String, syntect::highlighting::Color)> =
+        if state.view_mode == ViewMode::Content {
+            hex_mode.status_segments(theme)
+        } else {
+            Vec::new()
+        };
+
+    let mut segments: Vec<(&str, syntect::highlighting::Color)> = vec![
         (name, theme.accent),
         (mode_label, theme.label),
-        (offset_str.as_str(), theme.muted),
-        (state.current_theme.cli_name(), theme.muted),
     ];
+    for (s, c) in &hex_segs {
+        segments.push((s.as_str(), *c));
+    }
+    segments.push((state.current_theme.cli_name(), theme.muted));
 
     let hints: Vec<&str> = if return_on_x {
         vec!["x:exit hex", "h:help", "t:theme", "q:quit"]

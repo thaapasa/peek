@@ -13,6 +13,7 @@ use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
 pub mod hex;
 pub mod image;
 pub mod interactive;
+pub(crate) mod modes;
 pub mod structured;
 mod syntax;
 mod text;
