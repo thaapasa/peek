@@ -47,6 +47,25 @@ pub(crate) enum ModeId {
     StructuredSource,
 }
 
+/// A logical position within the source, expressed in whichever unit the
+/// active mode tracks. When switching between modes that track position,
+/// the outgoing mode's position is captured here and the incoming mode
+/// converts it to its own unit (via `InputSource::byte_to_line` /
+/// `line_to_byte` for plain text — extension point for PDF/DOCX, where
+/// the mode may consult its own line-to-source-byte map).
+///
+/// Modes that don't track position (Info, Help, Image, Animation) leave
+/// this value untouched on switch, so e.g. Hex → Info → Hex preserves
+/// the byte offset.
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum Position {
+    /// No anchor recorded yet (fresh viewer, or no tracking mode has
+    /// been active). `set_position(Unknown)` is a no-op.
+    Unknown,
+    Byte(u64),
+    Line(usize),
+}
+
 /// Read-only context passed to `Mode::render`.
 #[allow(dead_code)]
 pub(crate) struct RenderCtx<'a> {
@@ -128,4 +147,29 @@ pub(crate) trait Mode {
     fn tick(&mut self) -> bool {
         false
     }
+
+    /// Whether this mode participates in position tracking — i.e. when
+    /// switching away its `position()` is captured, and when switching
+    /// in its `set_position` is invoked. Default `false` for views like
+    /// Info, Help, Image preview, and Animation that have no meaningful
+    /// notion of "where in the file" and should pass through any saved
+    /// position untouched.
+    fn tracks_position(&self) -> bool {
+        false
+    }
+
+    /// The mode's current logical position within the source. Called on
+    /// switch-out for modes that override `tracks_position`. Modes that
+    /// own their scroll (Hex) report it directly; line-scrolled modes
+    /// (Content) leave this `Unknown` and let `ViewerState` substitute
+    /// `Position::Line(scroll_offset)` from its own per-mode scroll.
+    fn position(&self) -> Position {
+        Position::Unknown
+    }
+
+    /// Adjust internal state so the mode lands on `pos`. Called on
+    /// switch-in for modes that override `tracks_position`. The mode is
+    /// free to consult `source` for unit conversions it can't do alone
+    /// (e.g. Hex's `Line → Byte` via `source.line_to_byte`).
+    fn set_position(&mut self, _pos: Position, _source: &InputSource) {}
 }

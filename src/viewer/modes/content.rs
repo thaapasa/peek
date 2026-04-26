@@ -89,4 +89,12 @@ impl Mode for ContentMode {
             false
         }
     }
+
+    /// ContentMode tracks position in line units; it doesn't own its
+    /// scroll, so `position()` and `set_position()` use the trait
+    /// defaults — `ViewerState` reads/writes the line via its own
+    /// `scroll[active]` slot.
+    fn tracks_position(&self) -> bool {
+        true
+    }
 }

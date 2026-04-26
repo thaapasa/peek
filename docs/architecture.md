@@ -112,14 +112,28 @@ piped viewer (syntax, structured, image, SVG, text, hex) implements this.
 ### ViewerState (`viewer/ui/state.rs`)
 
 The interactive controller: holds the mode list, the active index, a
-`return_to` slot for toggle modes, per-mode scroll offsets, and a lazy
-per-mode rendered-lines cache. Builds a `RenderCtx` (carrying source,
-detected file type, file info, theme) and dispatches it to the active mode.
+`return_to` slot for toggle modes, per-mode scroll offsets, a lazy
+per-mode rendered-lines cache, and a `Position` (the last known logical
+location in the source). Builds a `RenderCtx` (carrying source, detected
+file type, file info, theme) and dispatches it to the active mode.
 
 `apply()` handles global actions (scroll, theme cycle, mode switching). The
 event loop checks the active mode's `scroll()` and `handle()` before
 falling through to globals; this keeps mode-local actions (`r` raw/pretty,
 `b` background) cleanly scoped.
+
+### Position tracking
+
+`Position` (`Unknown` / `Byte(u64)` / `Line(usize)`) is captured from the
+outgoing mode and pushed to the incoming mode on every active-mode change.
+Modes that override `tracks_position()` participate; the rest pass it
+through untouched, so detours through Info / Help / Image / Animation
+preserve where you were in the file. Conversion lives on `InputSource`
+(`byte_to_line`, `line_to_byte` — newline scan over the source bytes).
+Pretty-printed structured content has more lines than the raw source, so
+Line ↔ Byte conversion is approximate for those views; PDF-style modes
+that need exact mapping will eventually carry their own line-to-source-byte
+table inside the mode.
 
 ### Registry (`viewer/mod.rs`)
 

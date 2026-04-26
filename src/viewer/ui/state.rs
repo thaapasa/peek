@@ -11,7 +11,7 @@ use crate::info::FileInfo;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
-use crate::viewer::modes::{Mode, ModeId, RenderCtx};
+use crate::viewer::modes::{Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
 use super::{content_rows, make_peek_theme};
@@ -48,6 +48,12 @@ pub(crate) struct ViewerState<'a> {
     /// invalidated by theme cycles and resize).
     lines: Vec<Option<Vec<String>>>,
 
+    /// Last known logical position in the source. Captured from any
+    /// position-tracking mode on switch-out and pushed to the next one
+    /// on switch-in. Modes that opt out (Info/Help/Image/Animation)
+    /// pass it through unchanged.
+    position: Position,
+
     pub current_theme: PeekThemeName,
     pub peek_theme: PeekTheme,
 
@@ -73,6 +79,7 @@ impl<'a> ViewerState<'a> {
             return_to: None,
             scroll: vec![0; n],
             lines: vec![None; n],
+            position: Position::Unknown,
             current_theme: theme_name,
             peek_theme,
             source,
@@ -213,7 +220,7 @@ impl<'a> ViewerState<'a> {
             && idx != self.active
         {
             self.return_to = Some(self.active);
-            self.active = idx;
+            self.set_active(idx);
         }
     }
 
@@ -223,13 +230,63 @@ impl<'a> ViewerState<'a> {
     fn toggle_with_return(&mut self, target: ModeId) {
         if self.modes[self.active].id() == target {
             if let Some(prev) = self.return_to.take() {
-                self.active = prev;
+                self.set_active(prev);
             }
         } else if let Some(idx) = self.mode_index(target) {
             self.return_to = Some(self.active);
-            self.active = idx;
+            self.set_active(idx);
         }
         // Target not in this stack → no-op.
+    }
+
+    /// Switch the active mode index, capturing the outgoing mode's
+    /// position (if it tracks) and restoring it on the incoming mode (if
+    /// it tracks). Modes that don't track position leave `self.position`
+    /// untouched on the way out and ignore it on the way in — so e.g.
+    /// Hex → Info → Hex preserves the byte offset across the detour.
+    fn set_active(&mut self, new_idx: usize) {
+        if new_idx == self.active {
+            return;
+        }
+        self.capture_position();
+        self.active = new_idx;
+        self.restore_position();
+    }
+
+    fn capture_position(&mut self) {
+        let mode = &self.modes[self.active];
+        if !mode.tracks_position() {
+            return;
+        }
+        let pos = if mode.owns_scroll() {
+            mode.position()
+        } else {
+            // Line-scrolled mode: the top visible line is the position.
+            Position::Line(self.scroll[self.active])
+        };
+        if !matches!(pos, Position::Unknown) {
+            self.position = pos;
+        }
+    }
+
+    fn restore_position(&mut self) {
+        let mode = &mut self.modes[self.active];
+        if !mode.tracks_position() {
+            return;
+        }
+        if mode.owns_scroll() {
+            mode.set_position(self.position, self.source);
+            return;
+        }
+        // Line-scrolled mode: convert to line and seed scroll[active].
+        let line = match self.position {
+            Position::Line(l) => Some(l),
+            Position::Byte(b) => self.source.byte_to_line(b),
+            Position::Unknown => None,
+        };
+        if let Some(l) = line {
+            self.scroll[self.active] = l;
+        }
     }
 
     /// Advance the active index to the next non-auxiliary mode (skipping
@@ -248,7 +305,7 @@ impl<'a> ViewerState<'a> {
                 self.modes[i].id(),
                 ModeId::Info | ModeId::Help | ModeId::Hex
             ) {
-                self.active = i;
+                self.set_active(i);
                 return;
             }
         }

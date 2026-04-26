@@ -52,6 +52,41 @@ impl InputSource {
         }
     }
 
+    /// Convert a 0-based line index to the byte offset where that line
+    /// starts. Counts `\n` bytes in the source. Line 0 always starts at 0;
+    /// a line index past EOF returns the source length. Returns `None` if
+    /// the source can't be read.
+    ///
+    /// For pretty-printed structured content, the displayed line numbers
+    /// don't correspond to source line numbers — this conversion is
+    /// approximate in that case.
+    pub fn line_to_byte(&self, line: usize) -> Option<u64> {
+        if line == 0 {
+            return Some(0);
+        }
+        let bytes = self.read_bytes().ok()?;
+        let mut count = 0;
+        for (i, b) in bytes.iter().enumerate() {
+            if *b == b'\n' {
+                count += 1;
+                if count == line {
+                    return Some((i + 1) as u64);
+                }
+            }
+        }
+        Some(bytes.len() as u64)
+    }
+
+    /// Convert a byte offset to a 0-based line index by counting `\n`
+    /// bytes up to (but not including) the offset. Offset past EOF
+    /// counts the total newlines in the source. Returns `None` if the
+    /// source can't be read.
+    pub fn byte_to_line(&self, byte: u64) -> Option<usize> {
+        let bytes = self.read_bytes().ok()?;
+        let limit = (byte as usize).min(bytes.len());
+        Some(bytes[..limit].iter().filter(|b| **b == b'\n').count())
+    }
+
     /// Open a streaming byte reader. For files, holds the file handle and
     /// seeks per read. For stdin, slices the already-buffered bytes.
     pub fn open_byte_source(&self) -> Result<Box<dyn ByteSource>> {
@@ -234,5 +269,58 @@ mod tests {
         let bs = SliceByteSource::new(Vec::new());
         assert_eq!(bs.len(), 0);
         assert_eq!(bs.read_range(0, 10).unwrap(), Vec::<u8>::new());
+    }
+
+    fn stdin_source(text: &str) -> InputSource {
+        InputSource::Stdin {
+            data: text.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn line_to_byte_first_line_is_zero() {
+        let s = stdin_source("alpha\nbeta\ngamma\n");
+        assert_eq!(s.line_to_byte(0), Some(0));
+    }
+
+    #[test]
+    fn line_to_byte_after_n_newlines() {
+        let s = stdin_source("alpha\nbeta\ngamma\n");
+        // line 1 starts at byte 6 (after "alpha\n")
+        assert_eq!(s.line_to_byte(1), Some(6));
+        // line 2 starts at byte 11 (after "alpha\nbeta\n")
+        assert_eq!(s.line_to_byte(2), Some(11));
+    }
+
+    #[test]
+    fn line_to_byte_past_eof_returns_len() {
+        let s = stdin_source("a\nb\nc\n");
+        let len = "a\nb\nc\n".len() as u64;
+        assert_eq!(s.line_to_byte(999), Some(len));
+    }
+
+    #[test]
+    fn line_to_byte_no_trailing_newline() {
+        let s = stdin_source("first\nsecond");
+        assert_eq!(s.line_to_byte(1), Some(6));
+        // line 2 doesn't exist (only one newline) → returns len
+        let len = "first\nsecond".len() as u64;
+        assert_eq!(s.line_to_byte(2), Some(len));
+    }
+
+    #[test]
+    fn byte_to_line_round_trips_with_line_to_byte() {
+        let s = stdin_source("alpha\nbeta\ngamma\ndelta\n");
+        for line in 0..4 {
+            let byte = s.line_to_byte(line).unwrap();
+            assert_eq!(s.byte_to_line(byte), Some(line), "round trip failed at line {line}");
+        }
+    }
+
+    #[test]
+    fn byte_to_line_past_eof_counts_total_newlines() {
+        let s = stdin_source("a\nb\nc\n");
+        // 3 newlines in the source; offset past end should report all of them.
+        assert_eq!(s.byte_to_line(999), Some(3));
     }
 }

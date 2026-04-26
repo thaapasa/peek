@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::terminal;
 use syntect::highlighting::Color;
 
-use super::{Mode, ModeId, RenderCtx};
+use super::{Mode, ModeId, Position, RenderCtx};
 use crate::input::{ByteSource, InputSource};
 use crate::theme::PeekTheme;
 use crate::viewer::hex::{
@@ -92,6 +92,26 @@ impl Mode for HexMode {
     fn on_resize(&mut self) {
         let (cols, _) = terminal::size().unwrap_or((80, 24));
         self.top_offset = align_down(self.top_offset, bytes_per_row(cols));
+    }
+
+    fn tracks_position(&self) -> bool {
+        true
+    }
+
+    fn position(&self) -> Position {
+        Position::Byte(self.top_offset)
+    }
+
+    fn set_position(&mut self, pos: Position, source: &InputSource) {
+        let byte = match pos {
+            Position::Byte(b) => Some(b),
+            Position::Line(l) => source.line_to_byte(l),
+            Position::Unknown => None,
+        };
+        if let Some(b) = byte {
+            let (cols, _) = terminal::size().unwrap_or((80, 24));
+            self.top_offset = align_down(b, bytes_per_row(cols));
+        }
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
