@@ -164,14 +164,9 @@ pub fn add_margin(img: DynamicImage, margin: u32) -> DynamicImage {
         return img;
     }
     let (w, h) = img.dimensions();
-    let new_w = w + margin * 2;
-    let new_h = h + margin * 2;
-    let mut canvas = image::RgbaImage::new(new_w, new_h);
-    // Canvas is initialized to [0,0,0,0] (fully transparent)
-    let rgba = img.to_rgba8();
-    for (x, y, pixel) in rgba.enumerate_pixels() {
-        canvas.put_pixel(x + margin, y + margin, *pixel);
-    }
+    // Canvas is initialized to [0,0,0,0] (fully transparent).
+    let mut canvas = image::RgbaImage::new(w + margin * 2, h + margin * 2);
+    image::imageops::overlay(&mut canvas, &img.to_rgba8(), margin as i64, margin as i64);
     DynamicImage::ImageRgba8(canvas)
 }
 

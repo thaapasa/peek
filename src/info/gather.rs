@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
+use image::ImageDecoder;
 
 use super::{FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
@@ -96,14 +97,18 @@ fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
 }
 
 fn gather_image_extras_from_bytes(data: &[u8]) -> FileExtras {
-    let img = match image::load_from_memory(data) {
-        Ok(i) => i,
-        Err(_) => return FileExtras::Binary,
+    let decoder = match image::ImageReader::new(std::io::Cursor::new(data))
+        .with_guessed_format()
+        .ok()
+        .and_then(|r| r.into_decoder().ok())
+    {
+        Some(d) => d,
+        None => return FileExtras::Binary,
     };
-    let (width, height) = (img.width(), img.height());
-    let color_type = format!("{:?}", img.color());
-    let bit_depth =
-        (img.color().bits_per_pixel() / img.color().channel_count() as u16) as u8;
+    let (width, height) = decoder.dimensions();
+    let ct = decoder.color_type();
+    let color_type = format!("{ct:?}");
+    let bit_depth = (ct.bits_per_pixel() / ct.channel_count() as u16) as u8;
 
     let hdr_format = detect_hdr_bytes(data);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
@@ -151,20 +156,21 @@ fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
 }
 
 fn gather_image_extras(path: &Path) -> FileExtras {
-    let (width, height) = match image::image_dimensions(path) {
-        Ok(dims) => dims,
-        Err(_) => return FileExtras::Binary,
+    // ImageReader::open + into_decoder gives dimensions and color type
+    // from the file's header without doing a full pixel decode — much
+    // cheaper for large RAW/HEIC/etc.
+    let decoder = match image::ImageReader::open(path)
+        .ok()
+        .and_then(|r| r.with_guessed_format().ok())
+        .and_then(|r| r.into_decoder().ok())
+    {
+        Some(d) => d,
+        None => return FileExtras::Binary,
     };
-
-    let img = image::open(path);
-    let color_type = img
-        .as_ref()
-        .map(|i| format!("{:?}", i.color()))
-        .unwrap_or_else(|_| "unknown".to_string());
-    let bit_depth = img
-        .as_ref()
-        .map(|i| i.color().bits_per_pixel() / i.color().channel_count() as u16)
-        .unwrap_or(0) as u8;
+    let (width, height) = decoder.dimensions();
+    let ct = decoder.color_type();
+    let color_type = format!("{ct:?}");
+    let bit_depth = (ct.bits_per_pixel() / ct.channel_count() as u16) as u8;
 
     let hdr_format = detect_hdr(path);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
