@@ -33,20 +33,20 @@ fn main() -> Result<()> {
 
     let viewers = viewer::Registry::new(&args)?;
 
-    // Detect file type for each source
-    let inputs: Vec<(InputSource, input::detect::FileType)> = sources
+    // Detect file type (and capture magic-byte MIME) for each source.
+    let inputs: Vec<(InputSource, input::detect::Detected)> = sources
         .into_iter()
         .map(|source| {
-            let file_type = input::detect::detect(&source)?;
-            Ok((source, file_type))
+            let detected = input::detect::detect(&source)?;
+            Ok((source, detected))
         })
         .collect::<Result<Vec<_>>>()?;
 
     // --info mode: show metadata instead of content
     if args.info {
         let mut output = output::Output::new(&args)?;
-        for (source, file_type) in &inputs {
-            let file_info = info::gather(source, file_type)
+        for (source, detected) in &inputs {
+            let file_info = info::gather(source, detected)
                 .with_context(|| format!("failed to read info for {}", source.name()))?;
             let lines = info::render(&file_info, viewers.peek_theme());
             for line in &lines {
@@ -60,24 +60,25 @@ fn main() -> Result<()> {
     if use_pager {
         // Interactive TTY: each input gets its own interactive viewer
         // with Tab/i view switching between content and file info.
-        for (source, file_type) in &inputs {
+        for (source, detected) in &inputs {
+            let file_type = &detected.file_type;
             if matches!(file_type, input::detect::FileType::Binary) {
                 // Binary files: open hex viewer (also works under --plain)
                 viewers
                     .hex_viewer()
-                    .view_interactive(source, file_type, 0, false)
+                    .view_interactive(source, detected, 0, false)
                     .with_context(|| format!("failed to render {}", source.name()))?;
             } else if matches!(file_type, input::detect::FileType::Image) && !args.plain {
                 // Images re-render on resize for correct aspect ratio
                 viewers
                     .image_viewer()
-                    .view_interactive(source, file_type)
+                    .view_interactive(source, detected)
                     .with_context(|| format!("failed to render {}", source.name()))?;
             } else if matches!(file_type, input::detect::FileType::Svg) && !args.plain {
                 // SVGs: rasterized preview with r to toggle XML source
                 viewers
                     .svg_viewer()
-                    .view_interactive(source, file_type)
+                    .view_interactive(source, detected)
                     .with_context(|| format!("failed to render {}", source.name()))?;
             } else {
                 // Other files: render on demand with theme-aware re-rendering
@@ -87,7 +88,7 @@ fn main() -> Result<()> {
 
                 viewer::interactive::view_interactive(
                     source,
-                    file_type,
+                    detected,
                     viewers.theme_name(),
                     false,
                     !args.raw,
@@ -100,7 +101,8 @@ fn main() -> Result<()> {
         // Piped or --no-pager: direct output. Binary → hex viewer (registered
         // as the dispatch target for FileType::Binary in viewer_for).
         let mut output = output::Output::new(&args)?;
-        for (source, file_type) in &inputs {
+        for (source, detected) in &inputs {
+            let file_type = &detected.file_type;
             let viewer = viewers.viewer_for(file_type);
             viewer
                 .render(source, file_type, &mut output)

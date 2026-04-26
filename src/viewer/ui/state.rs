@@ -8,7 +8,7 @@ use crossterm::{
 
 use crate::info::FileInfo;
 use crate::input::InputSource;
-use crate::input::detect::FileType;
+use crate::input::detect::Detected;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
 
 use super::help::render_help_with_keys;
@@ -79,13 +79,13 @@ pub(crate) struct ViewerState {
 impl ViewerState {
     pub(crate) fn new(
         source: &InputSource,
-        file_type: &FileType,
+        detected: &Detected,
         theme_name: PeekThemeName,
         content_lines: Vec<String>,
         help_keys: &'static [(Action, &'static str)],
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name);
-        let file_info = crate::info::gather(source, file_type)?;
+        let file_info = crate::info::gather(source, detected)?;
         let info_lines = crate::info::render(&file_info, &peek_theme);
         let help_lines = render_help_with_keys(&peek_theme, theme_name, help_keys);
         Ok(Self {

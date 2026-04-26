@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use crossterm::event::{self, Event};
 use image::{AnimationDecoder, DynamicImage, GenericImageView};
 
-use crate::input::detect::FileType;
+use crate::input::detect::Detected;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 
@@ -169,13 +169,13 @@ const ACTIONS: &[(Action, &str)] = &[
 /// Interactive animated GIF/WebP viewer with frame-rate-driven playback.
 pub fn view_animated(
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     frames: Vec<AnimFrame>,
     config: ImageConfig,
     initial_theme: PeekThemeName,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
-        run_animation_loop(stdout, source, file_type, &frames, config, initial_theme)
+        run_animation_loop(stdout, source, detected, &frames, config, initial_theme)
     })
 }
 
@@ -186,7 +186,7 @@ pub fn view_animated(
 fn run_animation_loop(
     stdout: &mut io::Stdout,
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     frames: &[AnimFrame],
     mut config: ImageConfig,
     initial_theme: PeekThemeName,
@@ -196,7 +196,7 @@ fn run_animation_loop(
     let frame_count = frames.len();
 
     let content_lines = render_frame(&frames[current_frame], &config);
-    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, ACTIONS)?;
+    let mut state = ViewerState::new(source, detected, initial_theme, content_lines, ACTIONS)?;
 
     let name = source.name().to_string();
 
@@ -239,7 +239,7 @@ fn run_animation_loop(
                                 crate::viewer::hex::run_hex_loop(
                                     stdout,
                                     source,
-                                    file_type,
+                                    detected,
                                     state.current_theme,
                                     0,
                                     true,

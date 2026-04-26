@@ -3,6 +3,7 @@ use std::time::SystemTime;
 use syntect::highlighting::Color;
 
 use super::{FileExtras, FileInfo};
+use crate::input::mime::{MimeCategory, MimeInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
 /// Render file info as themed terminal lines.
@@ -19,7 +20,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
         &paint_size(info.size_bytes, theme),
         theme,
     );
-    push_field(&mut lines, "MIME", &theme.paint_value(&info.mime_type), theme);
+    push_mime_field(&mut lines, &info.mimes, theme);
     if let Some(modified) = info.modified {
         push_field(
             &mut lines,
@@ -128,7 +129,52 @@ pub fn render(info: &FileInfo, theme: &PeekTheme) -> Vec<String> {
         FileExtras::Binary => {}
     }
 
+    if !info.warnings.is_empty() {
+        lines.push(String::new());
+        push_section_header(&mut lines, "Warnings", theme);
+        for w in &info.warnings {
+            push_field(&mut lines, "Warning", &theme.paint(w, theme.warning), theme);
+        }
+    }
+
     lines
+}
+
+/// Render the MIME field as one or more lines: first line aligned with the
+/// label, subsequent lines indented to the value column. Each entry shows
+/// its MIME string plus a muted "(convention)"/"(vendor)"/etc. marker when
+/// the type isn't formally registered.
+fn push_mime_field(lines: &mut Vec<String>, mimes: &[MimeInfo], theme: &PeekTheme) {
+    if mimes.is_empty() {
+        return;
+    }
+    for (i, info) in mimes.iter().enumerate() {
+        let painted = paint_mime(info, theme);
+        if i == 0 {
+            push_field(lines, "MIME", &painted, theme);
+        } else {
+            // Indent to align with the value column on the first line.
+            lines.push(format!("  {}{}", " ".repeat(LABEL_WIDTH), painted));
+        }
+    }
+}
+
+fn paint_mime(info: &MimeInfo, theme: &PeekTheme) -> String {
+    let value_color = match info.category {
+        MimeCategory::Registered => theme.value,
+        // Vendor types are still IANA-registered; show in value color too.
+        MimeCategory::Vendor => theme.value,
+        // Conventional / experimental / personal use a softer color to signal
+        // they're not formally standardized.
+        MimeCategory::Convention | MimeCategory::Experimental | MimeCategory::Personal => {
+            lerp_color(theme.value, theme.muted, 0.3)
+        }
+    };
+    let main = theme.paint(&info.mime, value_color);
+    match info.category.marker() {
+        Some(marker) => format!("{} {}", main, theme.paint_muted(marker)),
+        None => main,
+    }
 }
 
 const LABEL_WIDTH: usize = 14;

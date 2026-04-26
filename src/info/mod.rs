@@ -1,6 +1,8 @@
 use std::fs;
 use std::time::SystemTime;
 
+use crate::input::mime::MimeInfo;
+
 mod gather;
 mod render;
 
@@ -12,7 +14,13 @@ pub struct FileInfo {
     pub file_name: String,
     pub path: String,
     pub size_bytes: u64,
-    pub mime_type: String,
+    /// MIME types associated with this file, in display order. May contain
+    /// the magic-byte type, the registered fallback for the format, and the
+    /// extension-based convention (deduplicated).
+    pub mimes: Vec<MimeInfo>,
+    /// User-facing warnings (e.g. extension/MIME mismatch). Empty in the
+    /// common case.
+    pub warnings: Vec<String>,
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
     pub permissions: Option<String>,

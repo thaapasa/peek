@@ -7,7 +7,7 @@ use crossterm::{
     terminal,
 };
 
-use crate::input::detect::FileType;
+use crate::input::detect::{Detected, FileType};
 use crate::input::{ByteSource, InputSource};
 use crate::output::Output;
 use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
@@ -72,7 +72,7 @@ impl HexViewer {
     pub fn view_interactive(
         &self,
         source: &InputSource,
-        file_type: &FileType,
+        detected: &Detected,
         start_offset: u64,
         return_on_x: bool,
     ) -> Result<()> {
@@ -80,7 +80,7 @@ impl HexViewer {
             run_hex_loop(
                 stdout,
                 source,
-                file_type,
+                detected,
                 self.theme_name,
                 start_offset,
                 return_on_x,
@@ -126,7 +126,7 @@ impl Viewer for HexViewer {
 pub(crate) fn run_hex_loop(
     stdout: &mut io::Stdout,
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     initial_theme: PeekThemeName,
     start_offset: u64,
     return_on_x: bool,
@@ -142,7 +142,7 @@ pub(crate) fn run_hex_loop(
 
     // ViewerState reused for Info/Help/theme plumbing. Content_lines is
     // empty — we draw the hex content ourselves when view_mode == Content.
-    let mut state = ViewerState::new(source, file_type, initial_theme, Vec::new(), actions)?;
+    let mut state = ViewerState::new(source, detected, initial_theme, Vec::new(), actions)?;
 
     let name = source.name().to_string();
 

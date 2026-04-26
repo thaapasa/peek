@@ -5,7 +5,7 @@ use std::rc::Rc;
 use anyhow::Result;
 use crossterm::event::{self, Event};
 
-use crate::input::detect::FileType;
+use crate::input::detect::Detected;
 use crate::input::InputSource;
 use crate::theme::PeekThemeName;
 use crate::viewer::hex::run_hex_loop;
@@ -48,7 +48,7 @@ const ACTIONS: &[(Action, &str)] = &[
 /// (needed for images whose output depends on terminal dimensions).
 pub fn view_interactive(
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     theme_name: PeekThemeName,
     rerender_on_resize: bool,
     pretty: bool,
@@ -56,7 +56,7 @@ pub fn view_interactive(
 ) -> Result<()> {
     view_interactive_with_bg(
         source,
-        file_type,
+        detected,
         theme_name,
         rerender_on_resize,
         pretty,
@@ -69,7 +69,7 @@ pub fn view_interactive(
 /// When `background` is `Some`, the `b` key cycles the background mode.
 pub fn view_interactive_with_bg(
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     theme_name: PeekThemeName,
     rerender_on_resize: bool,
     pretty: bool,
@@ -78,7 +78,7 @@ pub fn view_interactive_with_bg(
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         run_event_loop(
-            stdout, source, file_type, theme_name,
+            stdout, source, detected, theme_name,
             rerender_on_resize, pretty, background, &render_content,
         )
     })
@@ -92,7 +92,7 @@ pub fn view_interactive_with_bg(
 fn run_event_loop(
     stdout: &mut io::Stdout,
     source: &InputSource,
-    file_type: &FileType,
+    detected: &Detected,
     initial_theme: PeekThemeName,
     rerender_on_resize: bool,
     initial_pretty: bool,
@@ -101,7 +101,7 @@ fn run_event_loop(
 ) -> Result<()> {
     let mut pretty = initial_pretty;
     let content_lines = render_content(initial_theme, pretty)?;
-    let mut state = ViewerState::new(source, file_type, initial_theme, content_lines, ACTIONS)?;
+    let mut state = ViewerState::new(source, detected, initial_theme, content_lines, ACTIONS)?;
 
     let name = source.name().to_string();
 
@@ -132,7 +132,7 @@ fn run_event_loop(
                             run_hex_loop(
                                 stdout,
                                 source,
-                                file_type,
+                                detected,
                                 state.current_theme,
                                 offset,
                                 true,

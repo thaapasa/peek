@@ -5,17 +5,21 @@ use anyhow::Result;
 
 use super::{FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
-use crate::input::detect::{FileType, StructuredFormat};
+use crate::input::detect::{Detected, FileType, StructuredFormat};
+use crate::input::mime;
 
-/// Gather metadata for the given input source and detected type.
-pub fn gather(source: &InputSource, file_type: &FileType) -> Result<FileInfo> {
+/// Gather metadata for the given input source and detection result.
+///
+/// `detected.magic_mime` is reused (no re-read of the file) to build the
+/// MIME list and to detect extension/content mismatches.
+pub fn gather(source: &InputSource, detected: &Detected) -> Result<FileInfo> {
     match source {
-        InputSource::File(path) => gather_file(path, file_type),
-        InputSource::Stdin { data } => Ok(gather_stdin(data, file_type)),
+        InputSource::File(path) => gather_file(path, detected),
+        InputSource::Stdin { data } => Ok(gather_stdin(data, detected)),
     }
 }
 
-fn gather_file(path: &Path, file_type: &FileType) -> Result<FileInfo> {
+fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
     let meta = fs::metadata(path)?;
     let file_name = path
         .file_name()
@@ -23,17 +27,22 @@ fn gather_file(path: &Path, file_type: &FileType) -> Result<FileInfo> {
         .unwrap_or_default();
     let display_path = path.to_string_lossy().into_owned();
 
-    // MIME type: try magic bytes first, fall back to extension-based detection
-    let mime_type = detect_mime(path).unwrap_or_else(|| mime_from_type(file_type, path));
+    let mimes = mime::mimes_for_path(
+        &detected.file_type,
+        Some(path),
+        detected.magic_mime.as_deref(),
+    );
+    let warnings = collect_warnings(Some(path), detected);
 
     let permissions = format_permissions_from_meta(&meta);
-    let extras = gather_extras(path, file_type);
+    let extras = gather_extras(path, &detected.file_type);
 
     Ok(FileInfo {
         file_name,
         path: display_path,
         size_bytes: meta.len(),
-        mime_type,
+        mimes,
+        warnings,
         modified: meta.modified().ok(),
         created: meta.created().ok(),
         permissions,
@@ -41,18 +50,17 @@ fn gather_file(path: &Path, file_type: &FileType) -> Result<FileInfo> {
     })
 }
 
-fn gather_stdin(data: &[u8], file_type: &FileType) -> FileInfo {
-    let mime_type = infer::get(data)
-        .map(|k| k.mime_type().to_string())
-        .unwrap_or_else(|| mime_from_type_stdin(file_type));
-
-    let extras = gather_extras_stdin(data, file_type);
+fn gather_stdin(data: &[u8], detected: &Detected) -> FileInfo {
+    let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
+    let warnings = collect_warnings(None, detected);
+    let extras = gather_extras_stdin(data, &detected.file_type);
 
     FileInfo {
         file_name: "<stdin>".to_string(),
         path: "<stdin>".to_string(),
         size_bytes: data.len() as u64,
-        mime_type,
+        mimes,
+        warnings,
         modified: None,
         created: None,
         permissions: None,
@@ -60,20 +68,15 @@ fn gather_stdin(data: &[u8], file_type: &FileType) -> FileInfo {
     }
 }
 
-fn mime_from_type_stdin(file_type: &FileType) -> String {
-    match file_type {
-        FileType::Structured(fmt) => match fmt {
-            StructuredFormat::Json => "application/json",
-            StructuredFormat::Yaml => "text/yaml",
-            StructuredFormat::Toml => "application/toml",
-            StructuredFormat::Xml => "application/xml",
-        }
-        .to_string(),
-        FileType::SourceCode { .. } => "text/plain".to_string(),
-        FileType::Svg => "image/svg+xml".to_string(),
-        FileType::Image => "image/unknown".to_string(),
-        FileType::Binary => "application/octet-stream".to_string(),
+/// Build the warnings list. Currently: extension-mismatch only (file path).
+fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
+    let mut warnings = Vec::new();
+    if let Some(p) = path
+        && let Some(w) = mime::extension_mismatch(p, detected.magic_mime.as_deref())
+    {
+        warnings.push(w);
     }
+    warnings
 }
 
 fn gather_extras_stdin(data: &[u8], file_type: &FileType) -> FileExtras {
@@ -127,63 +130,6 @@ fn gather_text_extras_from_bytes(data: &[u8]) -> FileExtras {
         line_count: content.lines().count(),
         word_count: content.split_whitespace().count(),
         char_count: content.chars().count(),
-    }
-}
-
-fn detect_mime(path: &Path) -> Option<String> {
-    let mut file = fs::File::open(path).ok()?;
-    let mut buf = [0u8; 8192];
-    let n = std::io::Read::read(&mut file, &mut buf).ok()?;
-    let kind = infer::get(&buf[..n])?;
-    Some(kind.mime_type().to_string())
-}
-
-fn mime_from_type(file_type: &FileType, path: &Path) -> String {
-    match file_type {
-        FileType::Image => {
-            let ext = path
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("");
-            match ext {
-                "png" => "image/png",
-                "jpg" | "jpeg" => "image/jpeg",
-                "gif" => "image/gif",
-                "webp" => "image/webp",
-                "bmp" => "image/bmp",
-                "svg" => "image/svg+xml",
-                "ico" => "image/x-icon",
-                "tiff" | "tif" => "image/tiff",
-                _ => "image/unknown",
-            }
-            .to_string()
-        }
-        FileType::Structured(fmt) => match fmt {
-            StructuredFormat::Json => "application/json",
-            StructuredFormat::Yaml => "text/yaml",
-            StructuredFormat::Toml => "application/toml",
-            StructuredFormat::Xml => "application/xml",
-        }
-        .to_string(),
-        FileType::SourceCode { syntax } => {
-            let ext = syntax
-                .as_deref()
-                .or_else(|| path.extension().and_then(|e| e.to_str()))
-                .unwrap_or("");
-            // Use IANA-registered types where they exist (RFC 6648: no x- prefixes).
-            // Languages without registered types fall back to text/plain.
-            match ext {
-                "js" | "mjs" | "cjs" => "text/javascript",
-                "css" => "text/css",
-                "html" | "htm" => "text/html",
-                "md" | "markdown" => "text/markdown",
-                "sql" => "application/sql",
-                _ => "text/plain",
-            }
-            .to_string()
-        }
-        FileType::Svg => "image/svg+xml".to_string(),
-        FileType::Binary => "application/octet-stream".to_string(),
     }
 }
 
