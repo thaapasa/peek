@@ -202,7 +202,10 @@ impl Registry {
     }
 
     /// Build a `ContentMode` for text-based file types: source code,
-    /// structured (with pre-computed pretty-print), plain text, or SVG XML.
+    /// structured (lazy pretty-print), plain text, or SVG XML.
+    ///
+    /// Raw text is loaded eagerly here; pretty-print is deferred to the
+    /// first time pretty view is rendered (see `ContentMode::ensure_pretty`).
     fn text_content_mode(
         &self,
         source: &InputSource,
@@ -211,10 +214,10 @@ impl Registry {
     ) -> Result<Box<dyn Mode>> {
         let raw = source.read_text()?;
 
-        let pretty = if !self.plain_mode {
+        let pretty_target = if !self.plain_mode {
             match file_type {
-                FileType::Structured(fmt) => Some(structured::pretty_print(&raw, *fmt)?),
-                FileType::Svg => Some(structured::pretty_print(&raw, StructuredFormat::Xml)?),
+                FileType::Structured(fmt) => Some(*fmt),
+                FileType::Svg => Some(StructuredFormat::Xml),
                 _ => None,
             }
         } else {
@@ -229,7 +232,7 @@ impl Registry {
 
         // Pretty-print is the default whenever it's available; --raw flips
         // structured/SVG views back to the raw source.
-        let initial_use_pretty = pretty.is_some() && !args.raw;
+        let initial_use_pretty = pretty_target.is_some() && !args.raw;
 
         // Structured files expose `r` as a pretty/raw toggle. SVG XML
         // doesn't — there `r` should fall through to cycle_primary so the
@@ -244,7 +247,7 @@ impl Registry {
 
         Ok(Box::new(ContentMode::new(
             raw,
-            pretty,
+            pretty_target,
             syntax_token,
             Rc::clone(&self.theme_manager),
             initial_use_pretty,

@@ -173,4 +173,11 @@ pub(crate) trait Mode {
     /// free to consult `source` for unit conversions it can't do alone
     /// (e.g. Hex's `Line → Byte` via `source.line_to_byte`).
     fn set_position(&mut self, _pos: Position, _source: &InputSource) {}
+
+    /// Drain any warnings the mode produced during recent renders.
+    /// `ViewerState` polls this after each render and merges the result
+    /// into `FileInfo.warnings` so InfoMode picks them up. Default empty.
+    fn take_warnings(&mut self) -> Vec<String> {
+        Vec::new()
+    }
 }

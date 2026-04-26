@@ -387,7 +387,19 @@ impl<'a> ViewerState<'a> {
             theme_name: self.current_theme,
             peek_theme: &self.peek_theme,
         };
-        self.modes[self.active].render(&ctx)
+        let lines = self.modes[self.active].render(&ctx)?;
+        // Drain any warnings the mode raised during render (e.g. ContentMode's
+        // lazy pretty-print failure) and merge into FileInfo so InfoMode
+        // surfaces them. Invalidate Info's cache when new warnings arrived
+        // so it re-renders with the updated list.
+        let new_warnings = self.modes[self.active].take_warnings();
+        if !new_warnings.is_empty() {
+            self.file_info.warnings.extend(new_warnings);
+            if let Some(idx) = self.mode_index(ModeId::Info) {
+                self.lines[idx] = None;
+            }
+        }
+        Ok(lines)
     }
 
     fn current_lines(&self) -> &[String] {
