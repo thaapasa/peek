@@ -43,6 +43,12 @@ pub struct GlyphMatch {
 ///
 /// Uses Hamming distance (XOR + popcount). Also checks the inverted bitmap
 /// (swap fg/bg) for free, since inverted_distance = 128 - normal_distance.
+///
+/// Ties are broken in favor of the non-inverted match, so we don't emit
+/// redundant fg/bg swap escapes when the same visual could be produced
+/// without one. Empty glyphs (bits == 0) never participate in the inverted
+/// path — an inverted space is visually identical to the full-block glyph
+/// elsewhere in the atlas, just with extra ANSI bytes.
 pub fn best_glyph(cell_bits: u128, atlas: &[GlyphBitmap]) -> GlyphMatch {
     let mut best_ch = ' ';
     let mut best_dist = u32::MAX;
@@ -51,15 +57,22 @@ pub fn best_glyph(cell_bits: u128, atlas: &[GlyphBitmap]) -> GlyphMatch {
     for glyph in atlas {
         let xor = cell_bits ^ glyph.bits;
         let dist_normal = xor.count_ones();
-        let dist_inverted = 128 - dist_normal;
+        let dist_inverted = if glyph.bits == 0 {
+            u32::MAX
+        } else {
+            128 - dist_normal
+        };
 
-        if dist_normal <= dist_inverted {
-            if dist_normal < best_dist {
-                best_dist = dist_normal;
-                best_ch = glyph.ch;
-                best_inverted = false;
-            }
-        } else if dist_inverted < best_dist {
+        // Non-inverted candidate: replace on strict improvement, OR on tie
+        // when the current best is inverted (tie-break to non-inverted).
+        if dist_normal < best_dist || (dist_normal == best_dist && best_inverted) {
+            best_dist = dist_normal;
+            best_ch = glyph.ch;
+            best_inverted = false;
+        }
+        // Inverted candidate: only replace on strict improvement, never on
+        // tie — preserves any non-inverted match at the same distance.
+        if dist_inverted < best_dist {
             best_dist = dist_inverted;
             best_ch = glyph.ch;
             best_inverted = true;

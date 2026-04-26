@@ -4,7 +4,7 @@ use syntect::highlighting::Color;
 use super::{Mode, ModeId, RenderCtx};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
-use crate::viewer::image::{Background, ImageConfig, render};
+use crate::viewer::image::{ImageConfig, render};
 use crate::viewer::ui::Action;
 
 #[derive(Copy, Clone)]
@@ -19,7 +19,6 @@ pub(crate) enum ImageKind {
 pub(crate) struct ImageRenderMode {
     source: InputSource,
     config: ImageConfig,
-    background: Background,
     kind: ImageKind,
     label: &'static str,
 }
@@ -37,7 +36,6 @@ impl ImageRenderMode {
         };
         Self {
             source,
-            background: config.background,
             config,
             kind,
             label,
@@ -64,7 +62,7 @@ impl Mode for ImageRenderMode {
                 c.mode,
                 c.width,
                 term,
-                self.background,
+                c.background,
                 c.margin,
             ),
             ImageKind::Svg => render::load_and_render_svg(
@@ -72,7 +70,7 @@ impl Mode for ImageRenderMode {
                 c.mode,
                 c.width,
                 term,
-                self.background,
+                c.background,
                 c.margin,
             ),
         }
@@ -89,7 +87,7 @@ impl Mode for ImageRenderMode {
     fn handle(&mut self, action: Action) -> bool {
         match action {
             Action::CycleBackground => {
-                self.background = self.background.next();
+                self.config.background = self.config.background.next();
                 true
             }
             Action::CycleImageMode => {

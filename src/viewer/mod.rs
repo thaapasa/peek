@@ -294,7 +294,6 @@ fn fallback_syntax_token(ext: &str) -> Option<&'static str> {
         "h" => Some("C++"),
         "hpp" | "hxx" => Some("C++"),
         "cxx" | "cc" => Some("C++"),
-        "dockerfile" | "Dockerfile" => Some("Dockerfile"),
         _ => None,
     }
 }

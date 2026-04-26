@@ -31,7 +31,7 @@ impl Viewer for StructuredViewer {
     ) -> Result<()> {
         let format = match file_type {
             FileType::Structured(f) => *f,
-            _ => return Ok(()),
+            _ => unreachable!("registry only routes Structured here"),
         };
 
         let raw = source.read_text()?;
@@ -104,8 +104,10 @@ fn pretty_xml(raw: &str) -> Result<String> {
     use quick_xml::reader::Reader;
     use quick_xml::writer::Writer;
 
+    // Don't trim text content — for HTML/XHTML this would collapse <pre>
+    // blocks and inline whitespace between tags. We keep the document
+    // semantically intact at the cost of a slightly less compact output.
     let mut reader = Reader::from_str(raw);
-    reader.config_mut().trim_text(true);
     let mut writer = Writer::new_with_indent(Cursor::new(Vec::new()), b' ', 2);
 
     loop {

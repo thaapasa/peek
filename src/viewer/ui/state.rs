@@ -133,11 +133,13 @@ impl<'a> ViewerState<'a> {
     // Key dispatch
     // ---------------------------------------------------------------------
 
-    /// Resolve a key event to an `Action`. Active mode's extras win over
-    /// globals on conflict (none today, but keeps the dispatcher honest).
+    /// Resolve a key event to an `Action`. Globals always win on conflict
+    /// so a mode's extras can never accidentally shadow `Quit`, scrolling,
+    /// theme cycle, etc. (No mode shadows today, but the order makes the
+    /// invariant structural.)
     pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
         let extras = self.modes[self.active].extra_actions();
-        keys::dispatch(key, extras).or_else(|| keys::dispatch(key, GLOBAL_ACTIONS))
+        keys::dispatch(key, GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
     }
 
     /// Try to consume the action via the active mode's scroll handler.

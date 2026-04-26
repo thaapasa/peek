@@ -19,13 +19,13 @@ use crate::input::InputSource;
 pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
     let has_dash = args.files.iter().any(|p| p.as_os_str() == "-");
     let stdin_is_tty = std::io::stdin().is_terminal();
-    let implicit_stdin = args.files.is_empty() && !stdin_is_tty;
 
-    if args.files.is_empty() && !implicit_stdin {
+    if args.files.is_empty() && stdin_is_tty {
         bail!("no files specified; run `peek --help` for usage");
     }
 
-    let want_stdin = has_dash || implicit_stdin;
+    // No files + non-TTY stdin → read stdin implicitly.
+    let want_stdin = has_dash || args.files.is_empty();
 
     let stdin_data = if want_stdin {
         let mut buf = Vec::new();
@@ -69,7 +69,10 @@ pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
 /// Uses `ttyname()` on stderr/stdout to resolve the actual device path (e.g.
 /// `/dev/ttys000`) rather than opening `/dev/tty`. On macOS, kqueue rejects
 /// `/dev/tty` with EINVAL when mio tries to register it — the magic routing
-/// device isn't pollable, but the real device node is.
+/// device isn't pollable, but the real device node is. If `ttyname` returns
+/// nothing for both stderr and stdout, we skip the reopen entirely rather
+/// than fall back to `/dev/tty` (which is broken on macOS and unnecessary
+/// elsewhere — the resolved path is what works).
 ///
 /// Opened read+write because mio requires writable fds for interest
 /// registration, and crossterm uses fd 0 directly when `isatty(0)` is true.
@@ -77,21 +80,18 @@ pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
 fn reopen_stdin_from_tty() {
     use std::os::unix::io::AsRawFd;
 
-    let tty_path = resolve_tty_path();
-    let open_result = tty_path
-        .as_deref()
-        .or(Some("/dev/tty"))
-        .and_then(|p| {
-            std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(p)
-                .ok()
-        });
-    if let Some(tty) = open_result {
-        unsafe {
-            libc::dup2(tty.as_raw_fd(), 0);
-        }
+    let Some(tty_path) = resolve_tty_path() else {
+        return;
+    };
+    let Ok(tty) = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&tty_path)
+    else {
+        return;
+    };
+    unsafe {
+        libc::dup2(tty.as_raw_fd(), 0);
     }
 }
 

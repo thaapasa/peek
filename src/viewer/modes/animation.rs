@@ -30,6 +30,7 @@ const ANIM_ACTIONS: &[(Action, &str)] = &[
 
 impl AnimationMode {
     pub(crate) fn new(frames: Vec<AnimFrame>, config: ImageConfig) -> Self {
+        assert!(!frames.is_empty(), "AnimationMode requires \u{2265}1 frame");
         Self {
             frames,
             current: 0,
