@@ -16,27 +16,14 @@ const LOGO: &[&str] = &[
     concat!(r"/_/  any file v", env!("CARGO_PKG_VERSION")),
 ];
 
-pub fn render_version(theme_manager: &ThemeManager) -> Result<()> {
-    let pt = theme_manager.peek_theme();
+pub fn render_version() -> Result<()> {
     let mut out = io::stdout();
-
-    // Logo with gradient
-    let logo_width = LOGO.iter().map(|l| l.len()).max().unwrap_or(0);
-    for line in LOGO {
-        render_gradient_line(&mut out, line, logo_width, pt)?;
-        writeln!(out)?;
-    }
-    writeln!(out)?;
-
-    // Version
-    writeln!(out, "{}", pt.paint_heading(&format!("peek v{VERSION}")))?;
-    writeln!(out, "{}", pt.paint(DESCRIPTION, pt.foreground))?;
-
+    writeln!(out, "peek {VERSION}")?;
     out.flush()?;
     Ok(())
 }
 
-pub fn render_help(theme_manager: &ThemeManager) -> Result<()> {
+pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
     let pt = theme_manager.peek_theme();
     let mut out = io::stdout();
 
@@ -68,12 +55,15 @@ pub fn render_help(theme_manager: &ThemeManager) -> Result<()> {
     writeln!(out, "{}", pt.paint_heading("OPTIONS"))?;
     let cmd = crate::Args::command();
     for arg in cmd.get_arguments() {
+        if short && arg.is_hide_short_help_set() {
+            continue;
+        }
         let long = arg.get_long();
-        let short = arg.get_short();
+        let short_flag = arg.get_short();
         let help_text = arg.get_help().map(|h| h.to_string()).unwrap_or_default();
 
         // Build the flag string
-        let flag = match (short, long) {
+        let flag = match (short_flag, long) {
             (Some(s), Some(l)) => format!("-{s}, --{l}"),
             (None, Some(l)) => format!("    --{l}"),
             (Some(s), None) => format!("-{s}"),
@@ -104,23 +94,33 @@ pub fn render_help(theme_manager: &ThemeManager) -> Result<()> {
     }
     writeln!(out)?;
 
-    // Themes
-    writeln!(out, "{}", pt.paint_heading("THEMES"))?;
-    for variant in <PeekThemeName as clap::ValueEnum>::value_variants() {
-        let name = variant.cli_name();
-        let desc = variant.help_text();
-        let marker = if *variant == theme_manager.theme_name {
-            " (active)"
-        } else {
-            ""
-        };
+    if short {
         writeln!(
             out,
-            "  {}  {}{}",
-            pt.paint_value(&format!("{name:<24}")),
-            pt.paint_muted(desc),
-            pt.paint_accent(marker),
+            "{} {} {}",
+            pt.paint_muted("Run"),
+            pt.paint_label("peek --help"),
+            pt.paint_muted("to see all options."),
         )?;
+    } else {
+        // Themes
+        writeln!(out, "{}", pt.paint_heading("THEMES"))?;
+        for variant in <PeekThemeName as clap::ValueEnum>::value_variants() {
+            let name = variant.cli_name();
+            let desc = variant.help_text();
+            let marker = if *variant == theme_manager.theme_name {
+                " (active)"
+            } else {
+                ""
+            };
+            writeln!(
+                out,
+                "  {}  {}{}",
+                pt.paint_value(&format!("{name:<24}")),
+                pt.paint_muted(desc),
+                pt.paint_accent(marker),
+            )?;
+        }
     }
 
     out.flush()?;

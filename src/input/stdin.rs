@@ -1,15 +1,15 @@
-use std::io::{IsTerminal, Read};
+use std::io::Read;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 
 use crate::Args;
 use crate::input::InputSource;
 
 /// Decide the input sources based on args and stdin state.
 ///
-/// Behavior:
-/// - `peek` with stdin TTY and no args   → error
+/// Behavior (the no-args + TTY case is handled in `main.rs`, which shows
+/// the help screen before this function is called):
 /// - `peek` with stdin piped, no args    → read stdin
 /// - `peek -`                            → read stdin (blocks on TTY)
 /// - `peek file.rs`                      → file, stdin ignored even if piped
@@ -19,11 +19,6 @@ use crate::input::InputSource;
 /// interactive crossterm event loop can still read keystrokes.
 pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
     let has_dash = args.files.iter().any(|p| p.as_os_str() == "-");
-    let stdin_is_tty = std::io::stdin().is_terminal();
-
-    if args.files.is_empty() && stdin_is_tty {
-        bail!("no files specified; run `peek --help` for usage");
-    }
 
     // No files + non-TTY stdin → read stdin implicitly.
     let want_stdin = has_dash || args.files.is_empty();

@@ -16,13 +16,15 @@ use input::InputSource;
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if args.help || args.version {
+    if args.version {
+        output::help::render_version()?;
+        return Ok(());
+    }
+    // No args + interactive stdin → show short help instead of erroring.
+    let no_input = args.files.is_empty() && std::io::stdin().is_terminal();
+    if args.short_help || args.help || no_input {
         let theme_manager = theme::ThemeManager::new(args.theme, args.color);
-        if args.help {
-            output::help::render_help(&theme_manager)?;
-        } else {
-            output::help::render_version(&theme_manager)?;
-        }
+        output::help::render_help(&theme_manager, !args.help)?;
         return Ok(());
     }
 
