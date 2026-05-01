@@ -209,11 +209,17 @@ it calls `tick()`, which advances `current` and signals a redraw.
 Bundles image rendering parameters (mode, width, background, margin) into a
 single struct passed through the image pipeline.
 
-### PeekTheme (`theme.rs`)
+### PeekTheme (`theme/`)
 
-Semantic color roles derived from syntect `.tmTheme` files. All colored output
-goes through `PeekTheme::paint()`. Color interpolation via `lerp_color()` for
-continuous scales (file size, age, resolution).
+The `theme` module is split by concern: `name.rs` holds `PeekThemeName` and
+the embedded `.tmTheme` data, `color_mode.rs` holds `ColorMode` and the
+RGB→palette conversion helpers, `peek_theme.rs` holds the `PeekTheme` struct
+and its paint helpers (plus `lerp_color`), and `manager.rs` holds
+`ThemeManager` (shared `SyntaxSet`/`ThemeSet` + the active `PeekTheme`).
+
+Semantic color roles are derived from syntect `.tmTheme` files. All colored
+output goes through `PeekTheme::paint()`. Color interpolation via
+`lerp_color()` for continuous scales (file size, age, resolution).
 
 `PeekTheme` carries a `ColorMode` (`TrueColor`/`Ansi256`/`Ansi16`/`Grayscale`/
 `Plain`) that owns the conversion from RGB to the on-the-wire escape form.
@@ -340,7 +346,7 @@ touching `main.rs` or the event loop.
 ## Adding a new theme
 
 1. Create a `.tmTheme` file in `themes/`.
-2. Add a `PeekThemeName` variant in `theme.rs`.
+2. Add a `PeekThemeName` variant in `theme/name.rs`.
 3. Wire: `include_str!()`, `cli_name()`, `tmtheme_source()`, `next()`,
    `help_text()`.
 4. `PeekTheme` semantic roles derive automatically from the syntect theme.

@@ -33,7 +33,12 @@ src/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
     gather.rs          — FileInfo collection: FS metadata, MIME, EXIF, HDR, text/image extras
     render.rs          — Themed terminal rendering of FileInfo
-  theme.rs             — Theme management, PeekTheme semantic colors, color blending
+  theme/
+    mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
+    name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme
+    color_mode.rs      — ColorMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
+    peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
+    manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   viewer/
     mod.rs             — Viewer trait (piped output), Registry, compose_modes, highlight_lines
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
