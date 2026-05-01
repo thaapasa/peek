@@ -178,7 +178,7 @@ mod tests {
     use crate::theme::{PeekThemeName, load_embedded_theme};
 
     fn test_theme() -> PeekTheme {
-        let t = load_embedded_theme(PeekThemeName::IslandsDark.tmtheme_source());
+        let t = load_embedded_theme(PeekThemeName::IdeaDark.tmtheme_source());
         PeekTheme::from_syntect(&t)
     }
 

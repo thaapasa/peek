@@ -69,9 +69,8 @@ src/
 themes/
   idea-dark.tmTheme           — JetBrains IDEA default Dark theme (default)
   vscode-dark-modern.tmTheme  — VS Code Dark Modern theme
-  islands-dark.tmTheme        — JetBrains Islands-inspired dark theme
-  dark-2026.tmTheme           — VS Code Dark 2026-inspired theme
-  vivid-dark.tmTheme          — High-contrast vivid dark theme
+  vscode-dark-2026.tmTheme    — VS Code Dark 2026 theme
+  vscode-monokai.tmTheme      — VS Code Monokai theme
 docs/
   architecture.md      — Design, data flow, key abstractions, extension guide
   features.md          — Feature specification and status tracking

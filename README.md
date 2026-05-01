@@ -100,7 +100,7 @@ peek --plain file.txt
 peek -P file.txt
 
 # Choose a theme
-peek --theme vivid-dark src/main.rs
+peek --theme vscode-dark-modern src/main.rs
 
 # Choose a color encoding (truecolor / 256 / 16 / grayscale / plain)
 peek --color 256 src/main.rs
@@ -146,15 +146,14 @@ with `--print`, output goes directly to stdout.
 
 ## Themes
 
-Five custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
+Four custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
 
 | Theme                | Description                               |
 |----------------------|-------------------------------------------|
 | `idea-dark`          | JetBrains IDEA default Dark (default)     |
 | `vscode-dark-modern` | VS Code Dark Modern                       |
-| `islands-dark`       | JetBrains Islands-inspired dark           |
-| `dark-2026`          | VS Code Dark 2026-inspired                |
-| `vivid-dark`         | High-contrast with vivid colors           |
+| `vscode-dark-2026`   | VS Code Dark 2026                         |
+| `vscode-monokai`     | VS Code Monokai                           |
 
 Press `t` in the interactive viewer to cycle between themes live.
 

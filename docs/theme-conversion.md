@@ -86,11 +86,19 @@ VS Code themes have two relevant top-level keys:
   | `editor.background`                             | `background`       |
   | `editor.foreground`                             | `foreground`       |
   | `editorCursor.foreground` (or `foreground`)     | `caret`            |
-  | `editor.selectionBackground` (or `#264F78`)     | `selection`        |
+  | `statusBar.background` (NOT `editor.selectionBackground`) | `selection` |
   | `editor.lineHighlightBackground` (or `#282828`) | `lineHighlight`    |
   | `editorLineNumber.foreground`                   | `gutterForeground` |
   | `editor.findMatchBackground`                    | `findHighlight`    |
   | `focusBorder` / `textLink.foreground`           | `accent`           |
+
+  **Don't use `editor.selectionBackground` for `selection`.** peek uses the
+  `selection` color *only* as the status-bar background. VS Code's
+  `editor.selectionBackground` typically carries an alpha channel (e.g.
+  `#878b9180`, `#276782dd`) and is meant to be drawn translucently over the
+  editor — when the alpha is stripped you get a too-bright color that gives
+  poor contrast for status-bar text. `statusBar.background` is what VS Code
+  uses for its own status bar and works correctly without alpha.
 
 - `tokenColors` — array of `{ scope, settings: { foreground, fontStyle } }`.
   Drop these into tmTheme almost 1:1. `scope` can be a string or array; tmTheme

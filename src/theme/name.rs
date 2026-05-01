@@ -10,9 +10,9 @@ use syntect::highlighting::{Theme, ThemeSet};
 const THEME_IDEA_DARK: &str = include_str!("../../themes/idea-dark.tmTheme");
 const THEME_VSCODE_DARK_MODERN: &str =
     include_str!("../../themes/vscode-dark-modern.tmTheme");
-const THEME_ISLANDS_DARK: &str = include_str!("../../themes/islands-dark.tmTheme");
-const THEME_DARK_2026: &str = include_str!("../../themes/dark-2026.tmTheme");
-const THEME_VIVID_DARK: &str = include_str!("../../themes/vivid-dark.tmTheme");
+const THEME_VSCODE_DARK_2026: &str =
+    include_str!("../../themes/vscode-dark-2026.tmTheme");
+const THEME_VSCODE_MONOKAI: &str = include_str!("../../themes/vscode-monokai.tmTheme");
 
 /// Supported built-in themes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -20,9 +20,8 @@ pub enum PeekThemeName {
     #[default]
     IdeaDark,
     VscodeDarkModern,
-    IslandsDark,
-    Dark2026,
-    VividDark,
+    VscodeDark2026,
+    VscodeMonokai,
 }
 
 impl PeekThemeName {
@@ -31,9 +30,8 @@ impl PeekThemeName {
         match self {
             Self::IdeaDark => "idea-dark",
             Self::VscodeDarkModern => "vscode-dark-modern",
-            Self::IslandsDark => "islands-dark",
-            Self::Dark2026 => "dark-2026",
-            Self::VividDark => "vivid-dark",
+            Self::VscodeDark2026 => "vscode-dark-2026",
+            Self::VscodeMonokai => "vscode-monokai",
         }
     }
 
@@ -42,9 +40,8 @@ impl PeekThemeName {
         match self {
             Self::IdeaDark => THEME_IDEA_DARK,
             Self::VscodeDarkModern => THEME_VSCODE_DARK_MODERN,
-            Self::IslandsDark => THEME_ISLANDS_DARK,
-            Self::Dark2026 => THEME_DARK_2026,
-            Self::VividDark => THEME_VIVID_DARK,
+            Self::VscodeDark2026 => THEME_VSCODE_DARK_2026,
+            Self::VscodeMonokai => THEME_VSCODE_MONOKAI,
         }
     }
 
@@ -52,10 +49,9 @@ impl PeekThemeName {
     pub fn next(self) -> Self {
         match self {
             Self::IdeaDark => Self::VscodeDarkModern,
-            Self::VscodeDarkModern => Self::IslandsDark,
-            Self::IslandsDark => Self::Dark2026,
-            Self::Dark2026 => Self::VividDark,
-            Self::VividDark => Self::IdeaDark,
+            Self::VscodeDarkModern => Self::VscodeDark2026,
+            Self::VscodeDark2026 => Self::VscodeMonokai,
+            Self::VscodeMonokai => Self::IdeaDark,
         }
     }
 
@@ -63,9 +59,8 @@ impl PeekThemeName {
         match self {
             Self::IdeaDark => "JetBrains IDEA default Dark theme",
             Self::VscodeDarkModern => "VS Code Dark Modern theme",
-            Self::IslandsDark => "JetBrains Islands-inspired dark theme",
-            Self::Dark2026 => "VS Code Dark 2026-inspired theme",
-            Self::VividDark => "High-contrast dark theme with vivid colors",
+            Self::VscodeDark2026 => "VS Code Dark 2026 theme",
+            Self::VscodeMonokai => "VS Code Monokai theme",
         }
     }
 }
@@ -81,9 +76,8 @@ impl clap::ValueEnum for PeekThemeName {
         &[
             Self::IdeaDark,
             Self::VscodeDarkModern,
-            Self::IslandsDark,
-            Self::Dark2026,
-            Self::VividDark,
+            Self::VscodeDark2026,
+            Self::VscodeMonokai,
         ]
     }
 
