@@ -73,6 +73,7 @@ pub struct AnimationStats {
     pub loop_count: Option<LoopCount>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum LoopCount {
     Infinite,
     Finite(u32),

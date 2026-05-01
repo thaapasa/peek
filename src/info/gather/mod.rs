@@ -32,6 +32,9 @@ mod svg;
 mod text;
 mod xmp;
 
+#[cfg(test)]
+mod tests;
+
 /// Gather metadata for the given input source and detection result.
 ///
 /// `detected.magic_mime` is reused (no re-read of the file) to build the
