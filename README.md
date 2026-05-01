@@ -102,6 +102,10 @@ peek -P file.txt
 # Choose a theme
 peek --theme vivid-dark src/main.rs
 
+# Choose a color encoding (truecolor / 256 / 16 / grayscale / plain)
+peek --color 256 src/main.rs
+peek -C plain src/main.rs   # strip all ANSI escapes
+
 # Image with white background (auto/black/white/checkerboard)
 peek --background white logo.png
 
@@ -134,6 +138,7 @@ with `--print`, output goes directly to stdout.
 | `i`             | File info                  |
 | `h` / `?`       | Toggle help                |
 | `t`             | Cycle theme                |
+| `c`             | Cycle color mode           |
 | `r`             | Toggle raw / pretty        |
 | `x`             | Toggle hex dump            |
 | `m`             | Cycle image render mode    |
@@ -150,6 +155,22 @@ Three custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
 | `vivid-dark`   | High-contrast with vivid colors           |
 
 Press `t` in the interactive viewer to cycle between themes live.
+
+## Color Modes
+
+The output color encoding is controlled by `--color` (`-C`) or the `PEEK_COLOR`
+env var. All paint helpers route through a single `ColorMode` so callers always
+hand off truecolor RGB and the mode decides the on-the-wire form.
+
+| Mode        | Encoding                                       |
+|-------------|------------------------------------------------|
+| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default      |
+| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)       |
+| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`)  |
+| `grayscale` | 24-bit luminance only — preserves shading      |
+| `plain`     | no escapes — strip all color from the output   |
+
+Press `c` in the interactive viewer to cycle through them live.
 
 ## Supported File Types
 
@@ -180,6 +201,7 @@ more. Rendered using glyph-matched character selection with two-color clustering
 | Variable     | Description               | Default        |
 |--------------|---------------------------|----------------|
 | `PEEK_THEME` | Syntax highlighting theme | `islands-dark` |
+| `PEEK_COLOR` | Output color encoding     | `truecolor`    |
 
 ## Test Files
 

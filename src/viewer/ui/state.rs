@@ -10,7 +10,7 @@ use crossterm::{
 use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::theme::{ANSI_RESET_BYTES, PeekTheme, PeekThemeName};
+use crate::theme::{ColorMode, PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
@@ -32,6 +32,7 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::ToggleHelp, "Toggle help"),
     (Action::SwitchToHex, "Hex dump mode"),
     (Action::CycleTheme, "Next theme"),
+    (Action::CycleColorMode, "Next color mode"),
     // `r` is dispatched globally so modes that don't handle it locally
     // fall through to `cycle_primary` (e.g. SVG rasterized → XML view).
     (Action::ToggleRawSource, "Toggle raw / pretty / cycle primary"),
@@ -74,12 +75,13 @@ impl<'a> ViewerState<'a> {
         source: &'a InputSource,
         detected: &'a Detected,
         theme_name: PeekThemeName,
+        color_mode: ColorMode,
         render_opts: RenderOptions,
         modes: Vec<Box<dyn Mode>>,
     ) -> Result<Self> {
         assert!(!modes.is_empty(), "ViewerState needs at least one mode");
         let n = modes.len();
-        let peek_theme = make_peek_theme(theme_name);
+        let peek_theme = make_peek_theme(theme_name, color_mode);
         let file_info = crate::info::gather(source, detected)?;
         let last_primary = if modes[0].is_aux() { None } else { Some(0) };
         Ok(Self {
@@ -225,6 +227,10 @@ impl<'a> ViewerState<'a> {
                 self.cycle_theme();
                 Outcome::Redraw
             }
+            Action::CycleColorMode => {
+                self.cycle_color_mode();
+                Outcome::Redraw
+            }
             Action::ToggleRawSource => {
                 // Active mode declined `r` — cycle to the next primary mode
                 // (skipping Info/Help/Hex). For SVG, this swaps rasterized
@@ -351,8 +357,18 @@ impl<'a> ViewerState<'a> {
 
     fn cycle_theme(&mut self) {
         self.current_theme = self.current_theme.next();
-        self.peek_theme = make_peek_theme(self.current_theme);
+        self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.color_mode);
         // All themed lines are stale.
+        for slot in &mut self.lines {
+            *slot = None;
+        }
+    }
+
+    fn cycle_color_mode(&mut self) {
+        self.peek_theme.color_mode = self.peek_theme.color_mode.next();
+        // Every cached line embeds escape sequences keyed to the previous
+        // mode — invalidate them all so the next draw re-paints in the new
+        // encoding.
         for slot in &mut self.lines {
             *slot = None;
         }
@@ -463,7 +479,13 @@ impl<'a> ViewerState<'a> {
     // ---------------------------------------------------------------------
 
     pub(crate) fn draw(&self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
-        draw_screen(stdout, self.current_lines(), self.current_scroll(), status)
+        draw_screen(
+            stdout,
+            self.current_lines(),
+            self.current_scroll(),
+            status,
+            self.peek_theme.color_mode.reset_bytes(),
+        )
     }
 
 }
@@ -474,13 +496,15 @@ fn draw_screen(
     lines: &[String],
     scroll: usize,
     status: &str,
+    reset_bytes: &[u8],
 ) -> Result<()> {
     let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
     let rows = (total_rows as usize).saturating_sub(1);
 
     // Reset all attributes before clearing so the clear doesn't fill the
-    // screen with a leftover background color.
-    stdout.write_all(ANSI_RESET_BYTES)?;
+    // screen with a leftover background color. (Empty in Plain mode —
+    // there's nothing to reset.)
+    stdout.write_all(reset_bytes)?;
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0),)?;
 
     let start = scroll.min(lines.len());
@@ -493,7 +517,7 @@ fn draw_screen(
     }
 
     // Reset all attributes, then draw the status line on the last row.
-    stdout.write_all(ANSI_RESET_BYTES)?;
+    stdout.write_all(reset_bytes)?;
     execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
     stdout.write_all(status.as_bytes())?;
 

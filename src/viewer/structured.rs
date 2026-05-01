@@ -2,14 +2,13 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::easy::HighlightLines;
-use syntect::util::as_24_bit_terminal_escaped;
 
 use crate::input::detect::{FileType, StructuredFormat};
 use crate::input::InputSource;
 use crate::output::Output;
-use crate::theme::{ANSI_RESET, ThemeManager};
+use crate::theme::ThemeManager;
 
-use super::Viewer;
+use super::{ranges_to_escaped, Viewer};
 
 pub struct StructuredViewer {
     theme: Rc<ThemeManager>,
@@ -72,10 +71,10 @@ impl Viewer for StructuredViewer {
         let theme = self.theme.theme();
         let mut highlighter = HighlightLines::new(syntax, theme);
 
+        let color_mode = self.theme.color_mode();
         for line in pretty.lines() {
             let ranges = highlighter.highlight_line(line, &self.theme.syntax_set)?;
-            let escaped = as_24_bit_terminal_escaped(&ranges, false);
-            output.write_line(&format!("{escaped}{ANSI_RESET}"))?;
+            output.write_line(&ranges_to_escaped(&ranges, color_mode))?;
         }
 
         Ok(())

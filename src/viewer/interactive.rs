@@ -7,7 +7,7 @@ use crossterm::event::{self, Event};
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::theme::PeekThemeName;
+use crate::theme::{ColorMode, PeekThemeName};
 use crate::viewer::modes::Mode;
 use crate::viewer::ui::{
     Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
@@ -26,11 +26,12 @@ pub fn run(
     source: &InputSource,
     detected: &Detected,
     theme_name: PeekThemeName,
+    color_mode: ColorMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
-        event_loop(stdout, source, detected, theme_name, render_opts, modes)
+        event_loop(stdout, source, detected, theme_name, color_mode, render_opts, modes)
     })
 }
 
@@ -39,10 +40,11 @@ fn event_loop(
     source: &InputSource,
     detected: &Detected,
     theme_name: PeekThemeName,
+    color_mode: ColorMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let mut state = ViewerState::new(source, detected, theme_name, render_opts, modes)?;
+    let mut state = ViewerState::new(source, detected, theme_name, color_mode, render_opts, modes)?;
     let name = source.name().to_string();
 
     redraw(stdout, &mut state, &name)?;
@@ -115,6 +117,11 @@ fn render_status_line(name: &str, state: &ViewerState) -> String {
         segs.push((s.as_str(), *c));
     }
     segs.push((state.current_theme.cli_name(), theme.muted));
+    // Only surface color mode when it's been changed off the default —
+    // keeps the status line uncluttered for the common case.
+    if theme.color_mode != ColorMode::default() {
+        segs.push((theme.color_mode.cli_name(), theme.muted));
+    }
 
     let mut hints: Vec<&str> = state.active_status_hints();
     hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);

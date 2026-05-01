@@ -3,10 +3,9 @@ use anyhow::Result;
 use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::output::Output;
-use crate::theme::{PeekTheme, PeekThemeName};
+use crate::theme::PeekTheme;
 
 use super::Viewer;
-use super::ui::make_peek_theme;
 
 // ---------------------------------------------------------------------------
 // HexViewer (non-interactive / piped output)
@@ -17,12 +16,12 @@ use super::ui::make_peek_theme;
 // `Viewer` impl plus the shared layout/format helpers (re-used by `HexMode`).
 
 pub struct HexViewer {
-    theme_name: PeekThemeName,
+    theme: PeekTheme,
 }
 
 impl HexViewer {
-    pub fn new(theme_name: PeekThemeName) -> Self {
-        Self { theme_name }
+    pub fn new(theme: PeekTheme) -> Self {
+        Self { theme }
     }
 }
 
@@ -35,7 +34,7 @@ impl Viewer for HexViewer {
     ) -> Result<()> {
         let bs = source.open_byte_source()?;
         let bpr = pipe_bytes_per_row();
-        let theme = make_peek_theme(self.theme_name);
+        let theme = &self.theme;
         let len = bs.len();
         let chunk_bytes = bpr * 256; // ~4 KB chunks for typical bpr
         let mut offset: u64 = 0;
@@ -46,7 +45,7 @@ impl Viewer for HexViewer {
             }
             for (i, row) in buf.chunks(bpr).enumerate() {
                 let row_off = offset + (i * bpr) as u64;
-                output.write_line(&format_row(&theme, row_off, row, bpr))?;
+                output.write_line(&format_row(theme, row_off, row, bpr))?;
             }
             offset += buf.len() as u64;
         }
@@ -176,7 +175,7 @@ fn byte_color(theme: &PeekTheme, b: u8) -> syntect::highlighting::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::load_embedded_theme;
+    use crate::theme::{PeekThemeName, load_embedded_theme};
 
     fn test_theme() -> PeekTheme {
         let t = load_embedded_theme(PeekThemeName::IslandsDark.tmtheme_source());

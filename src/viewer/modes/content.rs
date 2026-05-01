@@ -116,7 +116,13 @@ impl Mode for ContentMode {
             &self.raw
         };
         if let Some(ref token) = self.syntax_token {
-            highlight_lines(content, token, &self.theme_manager, ctx.theme_name)
+            highlight_lines(
+                content,
+                token,
+                &self.theme_manager,
+                ctx.theme_name,
+                ctx.peek_theme.color_mode,
+            )
         } else {
             Ok(content.lines().map(String::from).collect())
         }

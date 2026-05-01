@@ -154,13 +154,6 @@ fn count_gif_frames<R: std::io::Read>(reader: R) -> Option<usize> {
 pub(crate) fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
     let mut term = render::TermSize::detect();
     term.rows = term.rows.saturating_sub(1);
-    render::render_decoded(
-        frame.image.clone(),
-        config.mode,
-        config.width,
-        term,
-        config.background,
-        config.margin,
-    )
+    render::render_decoded(frame.image.clone(), config, term)
 }
 

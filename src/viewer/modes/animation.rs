@@ -50,7 +50,9 @@ impl Mode for AnimationMode {
         "Animation"
     }
 
-    fn render(&mut self, _ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
+        // ColorMode can change between renders (interactive cycle).
+        self.config.color_mode = ctx.peek_theme.color_mode;
         Ok(render_frame(&self.frames[self.current], &self.config))
     }
 

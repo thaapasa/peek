@@ -52,27 +52,15 @@ impl Mode for ImageRenderMode {
         self.label
     }
 
-    fn render(&mut self, _ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
         let mut term = render::TermSize::detect();
         term.rows = term.rows.saturating_sub(1);
-        let c = &self.config;
+        // ColorMode is interactive-cyclable, so read it from the live ctx
+        // rather than the stale copy captured at construction time.
+        self.config.color_mode = ctx.peek_theme.color_mode;
         match self.kind {
-            ImageKind::Raster => render::load_and_render(
-                &self.source,
-                c.mode,
-                c.width,
-                term,
-                c.background,
-                c.margin,
-            ),
-            ImageKind::Svg => render::load_and_render_svg(
-                &self.source,
-                c.mode,
-                c.width,
-                term,
-                c.background,
-                c.margin,
-            ),
+            ImageKind::Raster => render::load_and_render(&self.source, &self.config, term),
+            ImageKind::Svg => render::load_and_render_svg(&self.source, &self.config, term),
         }
     }
 

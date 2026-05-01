@@ -35,7 +35,13 @@ impl Viewer for SyntaxViewer {
         let lines = if let Some(token) =
             syntax_token_for(self.forced_language.as_deref(), source, file_type)
         {
-            super::highlight_lines(&content, &token, &self.theme, self.theme.theme_name)?
+            super::highlight_lines(
+                &content,
+                &token,
+                &self.theme,
+                self.theme.theme_name,
+                self.theme.color_mode(),
+            )?
         } else {
             content.lines().map(String::from).collect()
         };

@@ -361,6 +361,30 @@ primary to return to — `x` is a no-op there, matching the old behavior.
 
 Cross-cutting features available in viewer mode regardless of file type.
 
+### Color Modes
+
+The output color encoding is selected via `--color` (`-C`) or the `PEEK_COLOR`
+env var. Five modes are supported:
+
+| Mode        | Encoding                                       |
+|-------------|------------------------------------------------|
+| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default      |
+| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)       |
+| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`)  |
+| `grayscale` | 24-bit luminance only — preserves shading      |
+| `plain`     | no escapes — strip all color from the output   |
+
+`c` cycles between modes in the interactive viewer; the cache of rendered
+lines is invalidated on each cycle so the whole UI repaints in the new
+encoding.
+
+**Status: Implemented.** All callers paint in truecolor RGB; the
+`ColorMode` enum on `PeekTheme` owns the conversion and is the single
+point where the encoding is decided. Image rendering routes the same
+way via `ColorMode::write_fg` / `write_fg_bg`. Plain mode emits the
+text content with zero ANSI escapes (including no SGR resets), which
+makes piped output safe to compose with other tools.
+
 ### File Info Screen
 
 A metadata view available for all files, accessible via `Tab` (cycles between content
@@ -456,6 +480,7 @@ certain file types.
 | `i`       | Jump to file info screen                   |
 | `h` / `?` | Toggle help screen                         |
 | `t`       | Cycle theme                                |
+| `c`       | Cycle output color mode                    |
 | `x`       | Toggle hex dump (no-op when hex is default)|
 
 ### Search

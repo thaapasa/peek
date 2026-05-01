@@ -45,6 +45,16 @@ pub struct Args {
     )]
     pub theme: theme::PeekThemeName,
 
+    /// Output color encoding (truecolor / 256 / 16 / grayscale / plain)
+    #[arg(
+        short = 'C',
+        long,
+        env = "PEEK_COLOR",
+        default_value_t = theme::ColorMode::TrueColor,
+        value_enum,
+    )]
+    pub color: theme::ColorMode,
+
     /// Force a specific language for syntax highlighting (skip auto-detection)
     #[arg(short, long)]
     pub language: Option<String>,

@@ -3,9 +3,9 @@ use image::{DynamicImage, GenericImageView};
 
 use super::clustering::fast_2_color;
 use super::glyph_atlas::{atlas_for_mode, best_glyph, GlyphBitmap, CELL_H, CELL_W};
-use super::{Background, ImageMode};
+use super::{Background, ImageConfig, ImageMode};
 use crate::input::InputSource;
-use crate::theme::{write_fg, write_fg_bg, ANSI_RESET};
+use crate::theme::ColorMode;
 
 /// Terminal dimensions in characters.
 #[derive(Debug, Clone, Copy)]
@@ -64,6 +64,7 @@ pub fn render_block_color(
     term_cols: u32,
     term_rows: u32,
     mode: ImageMode,
+    color_mode: ColorMode,
 ) -> Vec<String> {
     let px_w = term_cols * CELL_W;
     let px_h = term_rows * CELL_H;
@@ -110,10 +111,10 @@ pub fn render_block_color(
                 (cluster.color_a, cluster.color_b)
             };
 
-            write_fg_bg(&mut line, fg, bg, glyph_match.ch);
+            color_mode.write_fg_bg(&mut line, fg, bg, glyph_match.ch);
         }
 
-        line.push_str(ANSI_RESET);
+        line.push_str(color_mode.reset());
         lines.push(line);
     }
 
@@ -122,7 +123,12 @@ pub fn render_block_color(
 
 /// Render an image using the legacy density-ramp algorithm.
 /// Returns a vector of ANSI-colored lines.
-pub fn render_density(img: &DynamicImage, term_cols: u32, term_rows: u32) -> Vec<String> {
+pub fn render_density(
+    img: &DynamicImage,
+    term_cols: u32,
+    term_rows: u32,
+    color_mode: ColorMode,
+) -> Vec<String> {
     const DENSITY_RAMP: &[u8] =
         b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 
@@ -149,9 +155,9 @@ pub fn render_density(img: &DynamicImage, term_cols: u32, term_rows: u32) -> Vec
             let idx = ((luma / 255.0) * (ramp_len - 1) as f64) as usize;
             let ch = DENSITY_RAMP[idx.min(ramp_len - 1)] as char;
 
-            write_fg(&mut line, r, g, b, ch);
+            color_mode.write_fg(&mut line, [r, g, b], ch);
         }
-        line.push_str(ANSI_RESET);
+        line.push_str(color_mode.reset());
         lines.push(line);
     }
 
@@ -262,13 +268,10 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
 /// pattern is always aligned to the glyph grid.
 pub fn load_and_render(
     source: &InputSource,
-    mode: ImageMode,
-    forced_width: u32,
+    config: &ImageConfig,
     term: TermSize,
-    bg: Background,
-    margin: u32,
 ) -> Result<Vec<String>> {
-    Ok(render_decoded(load_image(source)?, mode, forced_width, term, bg, margin))
+    Ok(render_decoded(load_image(source)?, config, term))
 }
 
 /// Render an already-decoded image. Shared by `load_and_render` and the
@@ -278,27 +281,24 @@ pub fn load_and_render(
 /// checkerboard pattern aligns to the glyph grid.
 pub fn render_decoded(
     img: DynamicImage,
-    mode: ImageMode,
-    forced_width: u32,
+    config: &ImageConfig,
     term: TermSize,
-    bg: Background,
-    margin: u32,
 ) -> Vec<String> {
-    let img = add_margin(img, margin);
+    let img = add_margin(img, config.margin);
     let (img_w, img_h) = img.dimensions();
-    let (cols, rows) = contain_size(img_w, img_h, term, forced_width);
+    let (cols, rows) = contain_size(img_w, img_h, term, config.width);
 
-    let (px_w, px_h) = match mode {
+    let (px_w, px_h) = match config.mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
     let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
-    let img = composite_with_bg(img, bg);
+    let img = composite_with_bg(img, config.background);
 
-    match mode {
-        ImageMode::Ascii => render_density(&img, cols, rows),
+    match config.mode {
+        ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
-            render_block_color(&img, cols, rows, mode)
+            render_block_color(&img, cols, rows, config.mode, config.color_mode)
         }
     }
 }
@@ -317,21 +317,19 @@ pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
 /// Rasterizes at the exact target pixel resolution for maximum sharpness.
 pub fn load_and_render_svg(
     source: &InputSource,
-    mode: ImageMode,
-    forced_width: u32,
+    config: &ImageConfig,
     term: TermSize,
-    bg: Background,
-    margin: u32,
 ) -> Result<Vec<String>> {
     let (svg_w, svg_h) = super::svg::svg_dimensions(source)?;
+    let margin = config.margin;
     // Account for margin in aspect ratio calculation
     let padded_w = svg_w + margin * 2;
     let padded_h = svg_h + margin * 2;
-    let (cols, rows) = contain_size(padded_w, padded_h, term, forced_width);
+    let (cols, rows) = contain_size(padded_w, padded_h, term, config.width);
 
     // Compute target pixel size, then rasterize SVG into the inner area
     // (target minus margin) so that adding margin reaches exact target size.
-    let (px_w, px_h) = match mode {
+    let (px_w, px_h) = match config.mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
@@ -349,11 +347,11 @@ pub fn load_and_render_svg(
     let offset_y = (px_h - inner_h) / 2;
     image::imageops::overlay(&mut canvas, &inner.to_rgba8(), offset_x as i64, offset_y as i64);
     let img = DynamicImage::ImageRgba8(canvas);
-    let img = composite_with_bg(img, bg);
+    let img = composite_with_bg(img, config.background);
 
-    let lines = match mode {
-        ImageMode::Ascii => render_density(&img, cols, rows),
-        _ => render_block_color(&img, cols, rows, mode),
+    let lines = match config.mode {
+        ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
+        _ => render_block_color(&img, cols, rows, config.mode, config.color_mode),
     };
 
     Ok(lines)

@@ -47,6 +47,12 @@ pub(crate) fn render_help_with_keys(
         theme.paint_value(current_theme.cli_name()),
         width = key_width,
     ));
+    lines.push(format!(
+        "  {:<width$}{}",
+        theme.paint_label("Color mode"),
+        theme.paint_value(theme.color_mode.cli_name()),
+        width = key_width,
+    ));
 
     lines
 }

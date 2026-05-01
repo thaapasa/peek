@@ -17,7 +17,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     if args.help || args.version {
-        let theme_manager = theme::ThemeManager::new(args.theme);
+        let theme_manager = theme::ThemeManager::new(args.theme, args.color);
         if args.help {
             output::help::render_help(&theme_manager)?;
         } else {
@@ -66,8 +66,15 @@ fn main() -> Result<()> {
             let modes = viewers
                 .compose_modes(source, detected, &args)
                 .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
-            viewer::interactive::run(source, detected, viewers.theme_name(), render_opts, modes)
-                .with_context(|| format!("failed to render {}", source.name()))?;
+            viewer::interactive::run(
+                source,
+                detected,
+                viewers.theme_name(),
+                args.color,
+                render_opts,
+                modes,
+            )
+            .with_context(|| format!("failed to render {}", source.name()))?;
         }
     } else {
         // Piped or --no-pager: direct output. Binary → hex viewer (registered

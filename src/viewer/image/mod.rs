@@ -3,6 +3,7 @@ use anyhow::Result;
 use crate::input::detect::FileType;
 use crate::input::InputSource;
 use crate::output::Output;
+use crate::theme::ColorMode;
 
 use super::Viewer;
 
@@ -94,6 +95,7 @@ pub struct ImageConfig {
     pub width: u32,
     pub background: Background,
     pub margin: u32,
+    pub color_mode: ColorMode,
 }
 
 pub struct ImageViewer {
@@ -114,8 +116,7 @@ impl Viewer for ImageViewer {
         output: &mut Output,
     ) -> Result<()> {
         let term = render::TermSize::detect();
-        let c = &self.config;
-        let lines = render::load_and_render(source, c.mode, c.width, term, c.background, c.margin)?;
+        let lines = render::load_and_render(source, &self.config, term)?;
         for line in &lines {
             output.write_line(line)?;
         }
@@ -141,8 +142,7 @@ impl Viewer for SvgViewer {
         output: &mut Output,
     ) -> Result<()> {
         let term = render::TermSize::detect();
-        let c = &self.config;
-        let lines = render::load_and_render_svg(source, c.mode, c.width, term, c.background, c.margin)?;
+        let lines = render::load_and_render_svg(source, &self.config, term)?;
         for line in &lines {
             output.write_line(line)?;
         }

@@ -47,6 +47,8 @@ pub(crate) enum Action {
     ToggleContentInfo,
     /// Cycle to the next theme.
     CycleTheme,
+    /// Cycle the output color mode (truecolor → 256 → 16 → grayscale → plain).
+    CycleColorMode,
     /// Enter hex view from another viewer (or exit, in toggle mode).
     SwitchToHex,
     /// Cycle the image-render background (auto/black/white/checkerboard).
@@ -81,6 +83,7 @@ impl Action {
         const TOGGLE_HELP:    &[Binding] = &[Binding::plain(Char('h')), Binding::plain(Char('?'))];
         const TOGGLE_CI:      &[Binding] = &[Binding::plain(Tab)];
         const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
+        const CYCLE_COLOR:    &[Binding] = &[Binding::plain(Char('c'))];
         const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
         const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
@@ -101,6 +104,7 @@ impl Action {
             Action::ToggleHelp        => TOGGLE_HELP,
             Action::ToggleContentInfo => TOGGLE_CI,
             Action::CycleTheme        => CYCLE_THEME,
+            Action::CycleColorMode    => CYCLE_COLOR,
             Action::SwitchToHex       => SWITCH_HEX,
             Action::CycleBackground   => CYCLE_BG,
             Action::CycleImageMode    => CYCLE_IMG_MODE,
@@ -125,6 +129,7 @@ impl Action {
             Action::ToggleHelp        => "h / ?",
             Action::ToggleContentInfo => "Tab",
             Action::CycleTheme        => "t",
+            Action::CycleColorMode    => "c",
             Action::SwitchToHex       => "x",
             Action::CycleBackground   => "b",
             Action::CycleImageMode    => "m",

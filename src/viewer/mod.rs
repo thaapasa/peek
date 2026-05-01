@@ -2,13 +2,13 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::easy::HighlightLines;
-use syntect::util::as_24_bit_terminal_escaped;
+use syntect::highlighting::Style;
 
 use crate::Args;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::input::InputSource;
 use crate::output::Output;
-use crate::theme::{ANSI_RESET, PeekTheme, PeekThemeName, ThemeManager};
+use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
     AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode, Mode,
 };
@@ -41,6 +41,7 @@ pub fn highlight_lines(
     syntax_token: &str,
     tm: &ThemeManager,
     theme_name: PeekThemeName,
+    color_mode: ColorMode,
 ) -> Result<Vec<String>> {
     let syntax = tm
         .syntax_set
@@ -56,10 +57,22 @@ pub fn highlight_lines(
     let mut lines = Vec::new();
     for line in content.lines() {
         let ranges = hl.highlight_line(line, &tm.syntax_set)?;
-        let escaped = as_24_bit_terminal_escaped(&ranges, false);
-        lines.push(format!("{escaped}{ANSI_RESET}"));
+        lines.push(ranges_to_escaped(&ranges, color_mode));
     }
     Ok(lines)
+}
+
+/// Walk syntect's `(Style, &str)` ranges and emit one line of text with
+/// colors encoded according to `color_mode`. Replaces syntect's
+/// `as_24_bit_terminal_escaped`, which is hardcoded to 24-bit output.
+pub(crate) fn ranges_to_escaped(ranges: &[(Style, &str)], color_mode: ColorMode) -> String {
+    let mut out = String::new();
+    for (style, text) in ranges {
+        out.push_str(&color_mode.fg_seq(style.foreground));
+        out.push_str(text);
+    }
+    out.push_str(color_mode.reset());
+    out
 }
 
 /// Registry of viewers, dispatches by file type.
@@ -79,13 +92,14 @@ pub struct Registry {
 
 impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
-        let theme = Rc::new(ThemeManager::new(args.theme));
+        let theme = Rc::new(ThemeManager::new(args.theme, args.color));
         let peek_theme = theme.peek_theme().clone();
         let img_config = image::ImageConfig {
             mode: image::ImageMode::from_str(&args.image_mode),
             width: args.width,
             background: image::Background::from_str(&args.background),
             margin: args.margin,
+            color_mode: args.color,
         };
         Ok(Self {
             syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
@@ -93,7 +107,7 @@ impl Registry {
             image_viewer: image::ImageViewer::new(img_config),
             svg_viewer: image::SvgViewer::new(img_config),
             text_viewer: text::TextViewer,
-            hex_viewer: hex::HexViewer::new(args.theme),
+            hex_viewer: hex::HexViewer::new(peek_theme.clone()),
             theme_manager: theme,
             forced_language: args.language.clone(),
             plain_mode: args.plain,
@@ -262,6 +276,7 @@ impl Registry {
             width: args.width,
             background: image::Background::from_str(&args.background),
             margin: args.margin,
+            color_mode: args.color,
         }
     }
 

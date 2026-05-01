@@ -215,6 +215,19 @@ Semantic color roles derived from syntect `.tmTheme` files. All colored output
 goes through `PeekTheme::paint()`. Color interpolation via `lerp_color()` for
 continuous scales (file size, age, resolution).
 
+`PeekTheme` carries a `ColorMode` (`TrueColor`/`Ansi256`/`Ansi16`/`Grayscale`/
+`Plain`) that owns the conversion from RGB to the on-the-wire escape form.
+Callers always paint with truecolor RGB — the mode decides whether to emit
+24-bit, 256-palette, 16-base, luminance-only, or no escape at all. Image
+rendering uses the same single point of conversion via `ColorMode::write_fg`
+and `write_fg_bg`. The mode is set from `--color` (or `PEEK_COLOR`) and is
+cyclable in the interactive viewer with `c`; cycling invalidates every
+mode's line cache so the whole UI repaints in the new encoding.
+
+The shared escape walker for syntect's `LineRanges` is `viewer::ranges_to_escaped`
+— it replaces `as_24_bit_terminal_escaped` (which is hardcoded to 24-bit)
+with one routed through `ColorMode::fg_seq`.
+
 ## Image rendering pipeline
 
 ```
