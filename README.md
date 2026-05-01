@@ -8,17 +8,21 @@
 /_/ a file previewer
 ```
 
-A modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the file.
+A modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the
+file.
 
-peek is a **single-file** viewer: it takes one path (or stdin), not a list. If you want to view several files, run peek once per file.
+peek is a **single-file** viewer: it takes one path (or stdin), not a list. If you want to view
+several files, run peek once per file.
 
 - **Syntax highlighting** for source code (powered by syntect/TextMate grammars)
 - **Pretty-printing** for structured data: JSON, YAML, TOML, XML — with syntax highlighting
 - **ASCII art rendering** for images with glyph-matched character mapping and true color
-- **Hex dump** for binary files — `hexdump -C` style, terminal-width aware, streamed (no full-file load); reachable from any viewer with `x`
+- **Hex dump** for binary files — `hexdump -C` style, terminal-width aware, streamed (no full-file
+  load); reachable from any viewer with `x`
 - **Interactive viewer** with scrolling, file info, help screen, and live theme cycling
-- **Three custom dark themes** — Islands Dark, Dark 2026, Vivid Dark
-- **True color support** — 24-bit color throughout
+- **Four custom dark themes** — JetBrains IDEA Dark (default), VS Code Dark Modern, VS Code Dark
+  2026, and VS Code Monokai
+- **True color support** — 24-bit color throughout, with graceful fallback to 256/16/grayscale/plain
 
 ## Install
 
@@ -128,37 +132,46 @@ with `--print`, output goes directly to stdout.
 
 ### Keyboard Shortcuts
 
-| Key             | Action                     |
-|-----------------|----------------------------|
-| `q` / `Esc`     | Quit                       |
-| `Up` / `k`      | Scroll up                  |
-| `Down` / `j`    | Scroll down                |
-| `PgUp` / `PgDn` | Page scroll                |
-| `Space`         | Page down                  |
-| `Home` / `End`  | Top / bottom               |
-| `Tab`           | Toggle content / file info |
-| `i`             | File info                  |
-| `h` / `?`       | Toggle help                |
-| `t`             | Cycle theme                |
-| `c`             | Cycle color mode           |
-| `r`             | Toggle raw / pretty        |
-| `x`             | Toggle hex dump            |
-| `a`             | About / status screen      |
-| `m`             | Cycle image render mode    |
-| `b`             | Cycle image background     |
+| Key                  | Action                     |
+|----------------------|----------------------------|
+| `q` / `Esc`          | Quit                       |
+| `Up` / `k`           | Scroll up                  |
+| `Down` / `j`         | Scroll down                |
+| `PgUp`               | Page up                    |
+| `PgDn` / `Space`     | Page down                  |
+| `Home` / `g`         | Top                        |
+| `End` / `G`          | Bottom                     |
+| `Tab`                | Cycle content / file info  |
+| `i`                  | File info                  |
+| `h` / `?`            | Toggle help                |
+| `t`                  | Cycle theme                |
+| `c`                  | Cycle color mode           |
+| `r`                  | Toggle raw / pretty        |
+| `x`                  | Toggle hex dump            |
+| `a`                  | About / status screen      |
+| `m`                  | Cycle image render mode    |
+| `b`                  | Cycle image background     |
+| `p`                  | Play / pause animation     |
+| `n` / `Right`        | Next animation frame       |
+| `N` / `Left`         | Previous animation frame   |
+
+Source of truth: [`src/viewer/ui/keys.rs`](src/viewer/ui/keys.rs).
 
 ## Themes
 
 Four custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
 
-| Theme                | Description                               |
-|----------------------|-------------------------------------------|
-| `idea-dark`          | JetBrains IDEA default Dark (default)     |
-| `vscode-dark-modern` | VS Code Dark Modern                       |
-| `vscode-dark-2026`   | VS Code Dark 2026                         |
-| `vscode-monokai`     | VS Code Monokai                           |
+| Theme                | Description                           |
+|----------------------|---------------------------------------|
+| `idea-dark`          | JetBrains IDEA default Dark (default) |
+| `vscode-dark-modern` | VS Code Dark Modern                   |
+| `vscode-dark-2026`   | VS Code Dark 2026                     |
+| `vscode-monokai`     | VS Code Monokai                       |
 
 Press `t` in the interactive viewer to cycle between themes live.
+
+Theme list and CLI names live in [`src/theme/name.rs`](src/theme/name.rs); the `.tmTheme`
+sources are under [`themes/`](themes/).
 
 ## Color Modes
 
@@ -166,15 +179,17 @@ The output color encoding is controlled by `--color` (`-C`) or the `PEEK_COLOR`
 env var. All paint helpers route through a single `ColorMode` so callers always
 hand off truecolor RGB and the mode decides the on-the-wire form.
 
-| Mode        | Encoding                                       |
-|-------------|------------------------------------------------|
-| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default      |
-| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)       |
-| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`)  |
-| `grayscale` | 24-bit luminance only — preserves shading      |
-| `plain`     | no escapes — strip all color from the output   |
+| Mode        | Encoding                                      |
+|-------------|-----------------------------------------------|
+| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default     |
+| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)      |
+| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`) |
+| `grayscale` | 24-bit luminance only — preserves shading     |
+| `plain`     | no escapes — strip all color from the output  |
 
 Press `c` in the interactive viewer to cycle through them live.
+
+Encoding logic and CLI names: [`src/theme/color_mode.rs`](src/theme/color_mode.rs).
 
 ## Supported File Types
 
@@ -186,26 +201,29 @@ Markdown, and many more.
 
 ### Pretty-printing
 
-| Format | Extensions                        |
-|--------|-----------------------------------|
-| JSON   | `.json`, `.geojson`, `.jsonl`     |
-| YAML   | `.yaml`, `.yml`                   |
-| TOML   | `.toml`                           |
-| XML    | `.xml`, `.svg`, `.html`, `.xhtml` |
+| Format | Extensions                                  |
+|--------|---------------------------------------------|
+| JSON   | `.json`, `.geojson`, `.jsonl`               |
+| YAML   | `.yaml`, `.yml`                             |
+| TOML   | `.toml`                                     |
+| XML    | `.xml`, `.svg`, `.html`, `.xhtml`, `.plist` |
+
+Extension → format mapping: [`src/input/detect.rs`](src/input/detect.rs).
 
 ### Image rendering
 
 All formats supported by the `image` crate: PNG, JPEG, GIF, BMP, TIFF, WebP, ICO, and
 more. Rendered using glyph-matched character selection with two-color clustering and
 24-bit ANSI color. Multiple rendering modes available via `--image-mode`:
-`full`, `block`, `geo`, `ascii`.
+`full`, `block`, `geo`, `ascii`. Mode definitions and glyph sets live in
+[`src/viewer/image/mod.rs`](src/viewer/image/mod.rs).
 
 ## Configuration
 
-| Variable     | Description               | Default        |
-|--------------|---------------------------|----------------|
-| `PEEK_THEME` | Syntax highlighting theme | `idea-dark`    |
-| `PEEK_COLOR` | Output color encoding     | `truecolor`    |
+| Variable     | Description               | Default     |
+|--------------|---------------------------|-------------|
+| `PEEK_THEME` | Syntax highlighting theme | `idea-dark` |
+| `PEEK_COLOR` | Output color encoding     | `truecolor` |
 
 ## Test Files
 
