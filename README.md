@@ -141,6 +141,7 @@ with `--print`, output goes directly to stdout.
 | `c`             | Cycle color mode           |
 | `r`             | Toggle raw / pretty        |
 | `x`             | Toggle hex dump            |
+| `a`             | About / status screen      |
 | `m`             | Cycle image render mode    |
 | `b`             | Cycle image background     |
 

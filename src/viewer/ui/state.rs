@@ -31,6 +31,7 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::SwitchInfo, "File info"),
     (Action::ToggleHelp, "Toggle help"),
     (Action::SwitchToHex, "Hex dump mode"),
+    (Action::SwitchToAbout, "About / status screen"),
     (Action::CycleTheme, "Next theme"),
     (Action::CycleColorMode, "Next color mode"),
     // `r` is dispatched globally so modes that don't handle it locally
@@ -221,6 +222,10 @@ impl<'a> ViewerState<'a> {
             }
             Action::SwitchToHex => {
                 self.toggle_aux(ModeId::Hex);
+                Outcome::Redraw
+            }
+            Action::SwitchToAbout => {
+                self.toggle_aux(ModeId::About);
                 Outcome::Redraw
             }
             Action::CycleTheme => {

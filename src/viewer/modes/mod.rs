@@ -20,6 +20,7 @@ use crate::input::detect::Detected;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
 
+mod about;
 mod animation;
 mod content;
 mod help;
@@ -27,6 +28,7 @@ mod hex;
 mod image_render;
 mod info;
 
+pub(crate) use about::AboutMode;
 pub(crate) use animation::AnimationMode;
 pub(crate) use content::ContentMode;
 pub(crate) use help::HelpMode;
@@ -46,6 +48,7 @@ pub(crate) enum ModeId {
     ImageRender,
     Animation,
     StructuredSource,
+    About,
 }
 
 /// A logical position within the source, expressed in whichever unit the

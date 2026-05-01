@@ -10,7 +10,8 @@ use crate::input::InputSource;
 use crate::output::Output;
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
-    AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode, Mode,
+    AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
+    Mode,
 };
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
@@ -196,9 +197,10 @@ impl Registry {
             }
         }
 
-        // Hex/Info/Help are universal — every file gets these views.
+        // Hex/Info/Help/About are universal — every file gets these views.
         modes.push(Box::new(HexMode::new(source, 0)?));
         modes.push(Box::new(InfoMode::new()));
+        modes.push(Box::new(AboutMode::new()));
 
         // Help action union: globals + every preceding mode's extras,
         // deduped. Help itself contributes nothing new.

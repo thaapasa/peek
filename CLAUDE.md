@@ -50,6 +50,7 @@ src/
       animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
+      about.rs         — AboutMode: logo, version, palette swatches, tips
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache

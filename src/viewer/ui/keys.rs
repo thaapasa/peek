@@ -51,6 +51,8 @@ pub(crate) enum Action {
     CycleColorMode,
     /// Enter hex view from another viewer (or exit, in toggle mode).
     SwitchToHex,
+    /// Toggle the about / status screen.
+    SwitchToAbout,
     /// Cycle the image-render background (auto/black/white/checkerboard).
     CycleBackground,
     /// Cycle the image rendering mode (full/block/geo/ascii).
@@ -85,6 +87,7 @@ impl Action {
         const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
         const CYCLE_COLOR:    &[Binding] = &[Binding::plain(Char('c'))];
         const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
+        const SWITCH_ABOUT:   &[Binding] = &[Binding::plain(Char('a'))];
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
         const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
@@ -106,6 +109,7 @@ impl Action {
             Action::CycleTheme        => CYCLE_THEME,
             Action::CycleColorMode    => CYCLE_COLOR,
             Action::SwitchToHex       => SWITCH_HEX,
+            Action::SwitchToAbout     => SWITCH_ABOUT,
             Action::CycleBackground   => CYCLE_BG,
             Action::CycleImageMode    => CYCLE_IMG_MODE,
             Action::ToggleRawSource   => TOGGLE_RAW,
@@ -131,6 +135,7 @@ impl Action {
             Action::CycleTheme        => "t",
             Action::CycleColorMode    => "c",
             Action::SwitchToHex       => "x",
+            Action::SwitchToAbout     => "a",
             Action::CycleBackground   => "b",
             Action::CycleImageMode    => "m",
             Action::ToggleRawSource   => "r",

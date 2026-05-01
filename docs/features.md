@@ -482,6 +482,7 @@ certain file types.
 | `t`       | Cycle theme                                |
 | `c`       | Cycle output color mode                    |
 | `x`       | Toggle hex dump (no-op when hex is default)|
+| `a`       | Toggle about / status screen               |
 
 ### Search
 
