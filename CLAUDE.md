@@ -35,7 +35,17 @@ src/
     help.rs            — CLI help and version screens
   info/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
-    gather.rs          — FileInfo collection: FS metadata, MIME, EXIF, HDR, text/image extras
+    gather/            — FileInfo collection, split per general file type
+      mod.rs           — Per-source dispatch (gather() entry point)
+      image.rs         — Image extras: dimensions, color, ICC, HDR
+      exif.rs          — EXIF field extraction
+      xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
+      animation.rs     — GIF/WebP animation stats (frames, duration, loop)
+      text.rs          — Streaming text stats + BOM-based encoding
+      structured.rs    — JSON/YAML/TOML/XML stats (depth, counts, XML root/ns)
+      svg.rs           — SVG-specific extras (viewBox, element counts, security)
+      binary.rs        — Friendly format label from magic-byte MIME
+      tests.rs         — Fixture-based tests against test-images / test-data
     render.rs          — Themed terminal rendering of FileInfo
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
@@ -66,10 +76,12 @@ src/
     text.rs            — Plain text Viewer impl for piped output
     hex.rs             — Hex dump Viewer impl for piped output + shared layout helpers
     image/
-      mod.rs           — ImageViewer / SvgViewer: piped-output Viewer impls; ImageConfig
+      mod.rs           — Module wiring + Background / ImageConfig generic types
+      mode.rs          — ImageMode enum (full/block/geo/ascii palette selection)
+      viewer.rs        — ImageViewer: piped-output Viewer impl for raster images
+      svg.rs           — SVG rasterization (resvg) + SvgViewer piped-output impl
       render.rs        — Image → glyph-matched ASCII art with true color
       animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
-      svg.rs           — SVG rasterization via resvg
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
 themes/

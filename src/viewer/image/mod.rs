@@ -1,8 +1,12 @@
-use anyhow::Result;
+//! Image and SVG viewers plus their shared rendering pipeline.
+//!
+//! - [`ImageViewer`] / [`SvgViewer`] are the piped-output [`Viewer`]
+//!   implementations (one per format).
+//! - [`render`], [`animate`], [`clustering`], [`glyph_atlas`] make up the
+//!   shared rasterization → ASCII-art pipeline.
+//! - [`ImageConfig`] / [`ImageMode`] / [`Background`] configure that
+//!   pipeline; they're shared with the interactive image modes too.
 
-use crate::input::InputSource;
-use crate::input::detect::FileType;
-use crate::output::Output;
 use crate::theme::ColorMode;
 
 use super::Viewer;
@@ -10,8 +14,14 @@ use super::Viewer;
 pub(crate) mod animate;
 mod clustering;
 mod glyph_atlas;
+mod mode;
 pub mod render;
 mod svg;
+mod viewer;
+
+pub use mode::ImageMode;
+pub use svg::SvgViewer;
+pub use viewer::ImageViewer;
 
 /// Background mode for transparency compositing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,48 +56,6 @@ impl Background {
     }
 }
 
-/// Image rendering mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImageMode {
-    /// All glyphs: ASCII + block elements
-    Full,
-    /// Unicode block/quadrant elements + curated ASCII subset
-    Block,
-    /// Unicode block/quadrant elements + line segments (/\|-_) only
-    Geo,
-    /// Legacy density-ramp renderer (brightness-based, foreground only)
-    Ascii,
-}
-
-impl ImageMode {
-    pub fn from_str(s: &str) -> Self {
-        match s {
-            "block" => Self::Block,
-            "geo" => Self::Geo,
-            "ascii" => Self::Ascii,
-            _ => Self::Full,
-        }
-    }
-
-    pub fn next(self) -> Self {
-        match self {
-            Self::Full => Self::Block,
-            Self::Block => Self::Geo,
-            Self::Geo => Self::Ascii,
-            Self::Ascii => Self::Full,
-        }
-    }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Full => "full",
-            Self::Block => "block",
-            Self::Geo => "geo",
-            Self::Ascii => "ascii",
-        }
-    }
-}
-
 /// Shared configuration for image rendering (mode, size, background, margin).
 #[derive(Debug, Clone, Copy)]
 pub struct ImageConfig {
@@ -96,56 +64,4 @@ pub struct ImageConfig {
     pub background: Background,
     pub margin: u32,
     pub color_mode: ColorMode,
-}
-
-pub struct ImageViewer {
-    config: ImageConfig,
-}
-
-impl ImageViewer {
-    pub fn new(config: ImageConfig) -> Self {
-        Self { config }
-    }
-}
-
-impl Viewer for ImageViewer {
-    fn render(
-        &self,
-        source: &InputSource,
-        _file_type: &FileType,
-        output: &mut Output,
-    ) -> Result<()> {
-        let term = render::TermSize::detect();
-        let lines = render::load_and_render(source, &self.config, term)?;
-        for line in &lines {
-            output.write_line(line)?;
-        }
-        Ok(())
-    }
-}
-
-pub struct SvgViewer {
-    config: ImageConfig,
-}
-
-impl SvgViewer {
-    pub fn new(config: ImageConfig) -> Self {
-        Self { config }
-    }
-}
-
-impl Viewer for SvgViewer {
-    fn render(
-        &self,
-        source: &InputSource,
-        _file_type: &FileType,
-        output: &mut Output,
-    ) -> Result<()> {
-        let term = render::TermSize::detect();
-        let lines = render::load_and_render_svg(source, &self.config, term)?;
-        for line in &lines {
-            output.write_line(line)?;
-        }
-        Ok(())
-    }
 }

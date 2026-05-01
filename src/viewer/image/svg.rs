@@ -2,6 +2,40 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 
 use crate::input::InputSource;
+use crate::input::detect::FileType;
+use crate::output::Output;
+
+use super::Viewer;
+use super::{ImageConfig, render};
+
+/// Piped-output viewer for SVG sources. Rasterizes the SVG and runs the
+/// resulting bitmap through the same ASCII-art pipeline as
+/// [`super::ImageViewer`].
+pub struct SvgViewer {
+    config: ImageConfig,
+}
+
+impl SvgViewer {
+    pub fn new(config: ImageConfig) -> Self {
+        Self { config }
+    }
+}
+
+impl Viewer for SvgViewer {
+    fn render(
+        &self,
+        source: &InputSource,
+        _file_type: &FileType,
+        output: &mut Output,
+    ) -> Result<()> {
+        let term = render::TermSize::detect();
+        let lines = render::load_and_render_svg(source, &self.config, term)?;
+        for line in &lines {
+            output.write_line(line)?;
+        }
+        Ok(())
+    }
+}
 
 /// Get the intrinsic dimensions of an SVG source.
 pub fn svg_dimensions(source: &InputSource) -> Result<(u32, u32)> {
