@@ -641,25 +641,25 @@ else.
 
 Current and planned CLI options:
 
-| Option           | Short | Description                                     | Status       |
-|------------------|-------|-------------------------------------------------|--------------|
-| `--help`         | `-h`  | Show help screen and exit (short / long forms)  | Implemented  |
-| `--version`      | `-V`  | Show version info and exit                      | Implemented  |
-| `--viewer`       | `-v`  | Force viewer mode                               | Planned      |
-| `--print`        | `-p`  | Force print mode (direct stdout)                | Implemented  |
-| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing | Implemented  |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)        | Implemented  |
-| `--theme`        | `-t`  | Syntax highlighting theme                       | Implemented  |
-| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain) | Implemented |
-| `--language`     | `-l`  | Force syntax language                           | Implemented  |
-| `--width`        |       | Image rendering width in characters             | Implemented  |
-| `--image-mode`   |       | Image rendering mode                            | Implemented  |
-| `--info`         |       | Show file info instead of contents              | Implemented  |
-| `--utc`          |       | Show timestamps in UTC (default: local + offset)| Implemented  |
-| `--background`   |       | Image transparency background (auto/black/white/checkerboard) | Implemented |
-| `--margin`       |       | Image margin in transparent pixels              | Implemented  |
-| `--line-numbers` |       | Enable/disable line numbers                     | Planned      |
-| `--sizing`       |       | Image sizing mode                               | Planned      |
+| Option           | Short | Description                                                   | Status       |
+|------------------|-------|---------------------------------------------------------------|--------------|
+| `--help`         | `-h`  | Show help screen and exit (short / long forms)                | Implemented  |
+| `--version`      | `-V`  | Show version info and exit                                    | Implemented  |
+| `--viewer`       | `-v`  | Force viewer mode                                             | Planned      |
+| `--print`        | `-p`  | Force print mode (direct stdout)                              | Implemented  |
+| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing               | Implemented  |
+| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      | Implemented  |
+| `--theme`        | `-t`  | Syntax highlighting theme                                     | Implemented  |
+| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)      | Implemented  |
+| `--language`     | `-l`  | Force syntax language                                         | Implemented  |
+| `--width`        |       | Image rendering width in characters                           | Implemented  |
+| `--image-mode`   |       | Image rendering mode                                          | Implemented  |
+| `--info`         |       | Show file info instead of contents                            | Implemented  |
+| `--utc`          |       | Show timestamps in UTC (default: local + offset)              | Implemented  |
+| `--background`   |       | Image transparency background (auto/black/white/checkerboard) | Implemented  |
+| `--margin`       |       | Image margin in transparent pixels                            | Implemented  |
+| `--line-numbers` |       | Enable/disable line numbers                                   | Planned      |
+| `--sizing`       |       | Image sizing mode                                             | Planned      |
 
 `--plain` and `--raw` are orthogonal: `--raw` preserves the original file structure
 (no pretty-printing) but still applies colors and font styles. `--plain` disables all

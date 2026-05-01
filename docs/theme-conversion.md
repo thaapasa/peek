@@ -81,16 +81,16 @@ VS Code themes have two relevant top-level keys:
 
 - `colors` — UI palette. Map these to global settings:
  
-  | VS Code key                                     | tmTheme global     |
-  |-------------------------------------------------|--------------------|
-  | `editor.background`                             | `background`       |
-  | `editor.foreground`                             | `foreground`       |
-  | `editorCursor.foreground` (or `foreground`)     | `caret`            |
-  | `statusBar.background` (NOT `editor.selectionBackground`) | `selection` |
-  | `editor.lineHighlightBackground` (or `#282828`) | `lineHighlight`    |
-  | `editorLineNumber.foreground`                   | `gutterForeground` |
-  | `editor.findMatchBackground`                    | `findHighlight`    |
-  | `focusBorder` / `textLink.foreground`           | `accent`           |
+  | VS Code key                                               | tmTheme global     |
+  |-----------------------------------------------------------|--------------------|
+  | `editor.background`                                       | `background`       |
+  | `editor.foreground`                                       | `foreground`       |
+  | `editorCursor.foreground` (or `foreground`)               | `caret`            |
+  | `statusBar.background` (NOT `editor.selectionBackground`) | `selection`        |
+  | `editor.lineHighlightBackground` (or `#282828`)           | `lineHighlight`    |
+  | `editorLineNumber.foreground`                             | `gutterForeground` |
+  | `editor.findMatchBackground`                              | `findHighlight`    |
+  | `focusBorder` / `textLink.foreground`                     | `accent`           |
 
   **Don't use `editor.selectionBackground` for `selection`.** peek uses the
   `selection` color *only* as the status-bar background. VS Code's
