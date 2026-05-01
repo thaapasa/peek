@@ -531,8 +531,9 @@ is the authoritative in-app reference.
 
 - Themes are selected via `--theme` CLI option or `PEEK_THEME` environment variable.
 - Default theme: `idea-dark`.
-- Four custom embedded themes in `.tmTheme` format, compiled into the binary:
+- Five custom embedded themes in `.tmTheme` format, compiled into the binary:
   - **idea-dark** — JetBrains IDEA default Dark theme (default)
+  - **vscode-dark-modern** — VS Code Dark Modern theme
   - **islands-dark** — JetBrains Islands-inspired dark theme
   - **dark-2026** — VS Code Dark 2026-inspired theme
   - **vivid-dark** — High-contrast dark theme with vivid colors
