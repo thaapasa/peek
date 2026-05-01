@@ -146,11 +146,12 @@ with `--print`, output goes directly to stdout.
 
 ## Themes
 
-Three custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
+Four custom embedded themes, selectable via `--theme` or `PEEK_THEME` env var:
 
 | Theme          | Description                               |
 |----------------|-------------------------------------------|
-| `islands-dark` | JetBrains Islands-inspired dark (default) |
+| `idea-dark`    | JetBrains IDEA default Dark (default)     |
+| `islands-dark` | JetBrains Islands-inspired dark           |
 | `dark-2026`    | VS Code Dark 2026-inspired                |
 | `vivid-dark`   | High-contrast with vivid colors           |
 
@@ -200,7 +201,7 @@ more. Rendered using glyph-matched character selection with two-color clustering
 
 | Variable     | Description               | Default        |
 |--------------|---------------------------|----------------|
-| `PEEK_THEME` | Syntax highlighting theme | `islands-dark` |
+| `PEEK_THEME` | Syntax highlighting theme | `idea-dark`    |
 | `PEEK_COLOR` | Output color encoding     | `truecolor`    |
 
 ## Test Files

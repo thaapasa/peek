@@ -67,7 +67,8 @@ src/
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
 themes/
-  islands-dark.tmTheme — JetBrains Islands-inspired dark theme (default)
+  idea-dark.tmTheme    — JetBrains IDEA default Dark theme (default)
+  islands-dark.tmTheme — JetBrains Islands-inspired dark theme
   dark-2026.tmTheme    — VS Code Dark 2026-inspired theme
   vivid-dark.tmTheme   — High-contrast vivid dark theme
 docs/

@@ -530,9 +530,10 @@ is the authoritative in-app reference.
 ### Theme Selection
 
 - Themes are selected via `--theme` CLI option or `PEEK_THEME` environment variable.
-- Default theme: `islands-dark`.
-- Three custom embedded themes in `.tmTheme` format, compiled into the binary:
-  - **islands-dark** — JetBrains Islands-inspired dark theme (default)
+- Default theme: `idea-dark`.
+- Four custom embedded themes in `.tmTheme` format, compiled into the binary:
+  - **idea-dark** — JetBrains IDEA default Dark theme (default)
+  - **islands-dark** — JetBrains Islands-inspired dark theme
   - **dark-2026** — VS Code Dark 2026-inspired theme
   - **vivid-dark** — High-contrast dark theme with vivid colors
 - Themes can be cycled live in the interactive viewer with `t`.
