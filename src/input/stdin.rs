@@ -6,57 +6,33 @@ use anyhow::{Context, Result};
 use crate::Args;
 use crate::input::InputSource;
 
-/// Decide the input sources based on args and stdin state.
+/// Decide the input source based on args and stdin state.
 ///
-/// Behavior (the no-args + TTY case is handled in `main.rs`, which shows
-/// the help screen before this function is called):
-/// - `peek` with stdin piped, no args    → read stdin
-/// - `peek -`                            → read stdin (blocks on TTY)
-/// - `peek file.rs`                      → file, stdin ignored even if piped
-/// - `peek - file.rs`                    → stdin + file
+/// peek is a single-file viewer; the no-args + TTY case is handled in
+/// `main.rs` (shows the help screen before this is called).
+///
+/// - `peek` with stdin piped, no args → read stdin
+/// - `peek -`                         → read stdin (blocks on TTY)
+/// - `peek file.rs`                   → file, stdin ignored even if piped
 ///
 /// After consuming piped stdin, fd 0 is reopened from `/dev/tty` so the
 /// interactive crossterm event loop can still read keystrokes.
-pub fn build_sources(args: &Args) -> Result<Vec<InputSource>> {
-    let has_dash = args.files.iter().any(|p| p.as_os_str() == "-");
+pub fn build_source(args: &Args) -> Result<InputSource> {
+    let is_dash = args.file.as_ref().is_some_and(|p| p.as_os_str() == "-");
+    let want_stdin = is_dash || args.file.is_none();
 
-    // No files + non-TTY stdin → read stdin implicitly.
-    let want_stdin = has_dash || args.files.is_empty();
-
-    let stdin_data: Option<Arc<[u8]>> = if want_stdin {
+    if want_stdin {
         let mut buf = Vec::new();
         std::io::stdin()
             .read_to_end(&mut buf)
             .context("failed to read stdin")?;
         reopen_stdin_from_tty();
-        Some(Arc::from(buf.into_boxed_slice()))
-    } else {
-        None
-    };
-
-    if args.files.is_empty() {
-        return Ok(vec![InputSource::Stdin {
-            data: stdin_data.expect("stdin requested but not read"),
-        }]);
+        return Ok(InputSource::Stdin {
+            data: Arc::from(buf.into_boxed_slice()),
+        });
     }
 
-    let mut stdin_slot = stdin_data;
-    let sources = args
-        .files
-        .iter()
-        .map(|p| {
-            if p.as_os_str() == "-" {
-                // First `-` takes the data; extra `-`s get an empty buffer.
-                InputSource::Stdin {
-                    data: stdin_slot.take().unwrap_or_else(|| Arc::from(Vec::new().into_boxed_slice())),
-                }
-            } else {
-                InputSource::File(p.clone())
-            }
-        })
-        .collect();
-
-    Ok(sources)
+    Ok(InputSource::File(args.file.clone().expect("file present")))
 }
 
 /// Reopen fd 0 from the controlling terminal after piped stdin is consumed,

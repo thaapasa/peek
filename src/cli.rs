@@ -9,11 +9,13 @@ use crate::theme;
 /// View any file with automatic syntax highlighting, structured data
 /// pretty-printing, and ASCII art image rendering. Works like `less`
 /// by default on interactive terminals.
+///
+/// peek is a single-file viewer: it takes one path (or stdin), not a list.
 #[derive(Parser, Debug)]
 #[command(name = "peek", about, long_about, disable_help_flag = true, disable_version_flag = true)]
 pub struct Args {
-    /// Files to view. Use `-` to read stdin.
-    pub files: Vec<PathBuf>,
+    /// File to view. Use `-` to read stdin.
+    pub file: Option<PathBuf>,
 
     /// Show concise help (logo and common options)
     #[arg(short = 'h', hide_short_help = true)]
@@ -55,7 +57,7 @@ pub struct Args {
         short = 'C',
         long,
         env = "PEEK_COLOR",
-        default_value_t = theme::ColorMode::TrueColor,
+        default_value_t = theme::ColorMode::default(),
         value_enum,
         hide_short_help = true,
     )]

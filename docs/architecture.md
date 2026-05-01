@@ -6,14 +6,17 @@ For the file map, see [CLAUDE.md](../CLAUDE.md). For coding rules, see
 
 ## Design principles
 
-1. **Zero runtime dependencies.** Everything is compiled in — themes, glyph
+1. **Single-file viewer.** peek takes one path (or stdin) and shows it. No
+   batch mode, no file list, no `cat`-style concatenation. A reader at the
+   level of `less`, not a stream concatenator like `cat`.
+2. **Zero runtime dependencies.** Everything is compiled in — themes, glyph
    bitmaps, syntax definitions. No config files, no downloads, no setup.
-2. **Two output paths.** TTY gets an interactive viewer (alternate screen,
+3. **Two output paths.** TTY gets an interactive viewer (alternate screen,
    scrolling, key bindings). Pipe gets plain streamed output. Same rendering
    logic, different output targets.
-3. **Theme-aware everything.** All colored output uses `PeekTheme` semantic
+4. **Theme-aware everything.** All colored output uses `PeekTheme` semantic
    roles. Switching themes re-renders the entire view without re-reading files.
-4. **Compose modes, not viewers.** New file types compose a list of view modes
+5. **Compose modes, not viewers.** New file types compose a list of view modes
    (text-extract, render-preview, hex, info, …) and hand it to one event
    loop, instead of forking a new interactive viewer per type.
 
@@ -23,7 +26,7 @@ For the file map, see [CLAUDE.md](../CLAUDE.md). For coding rules, see
 CLI args (clap)
   |
   v
-build_sources() --> Vec<InputSource>  (File paths, or buffered Stdin)
+build_source() --> InputSource  (File path, or buffered Stdin)
   |
   v
 detect::detect(source) --> FileType

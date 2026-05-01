@@ -10,6 +10,8 @@
 
 A modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the file.
 
+peek is a **single-file** viewer: it takes one path (or stdin), not a list. If you want to view several files, run peek once per file.
+
 - **Syntax highlighting** for source code (powered by syntect/TextMate grammars)
 - **Pretty-printing** for structured data: JSON, YAML, TOML, XML — with syntax highlighting
 - **ASCII art rendering** for images with glyph-matched character mapping and true color

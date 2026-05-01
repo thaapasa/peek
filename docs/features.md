@@ -54,17 +54,22 @@ viewer, non-TTY → print).
 
 ### Input
 
-peek accepts one or more file paths as positional arguments. Reading from stdin is
-supported: pass `-` explicitly, or pipe data in with no file arguments. Stdin content
-is auto-detected by magic bytes (images, binary) and content sniffing (JSON, YAML,
-XML/SVG); plain text falls back to `--language` for syntax highlighting.
+peek is a **single-file viewer**: it accepts at most one positional argument.
+Reading from stdin is supported: pass `-` explicitly, or pipe data in with no
+file argument. Stdin content is auto-detected by magic bytes (images, binary)
+and content sniffing (JSON, YAML, XML/SVG); plain text falls back to
+`--language` for syntax highlighting.
 
-| Scenario         | Stdin is TTY                     | Stdin is piped                    |
-|------------------|----------------------------------|-----------------------------------|
-| `peek` (no args) | Error: "no files specified"      | Read stdin, render                |
-| `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render                |
-| `peek file.rs`   | View file normally               | View file (stdin ignored)         |
-| `peek - file.rs` | Read stdin + view file           | Read stdin + view file            |
+To view several files, run peek once per file. There is no `cat`-style batch
+mode — concatenating images, structured data, and binary files into one
+output stream rarely produces a useful result, and the interactive viewer is
+built around a single file at a time.
+
+| Scenario         | Stdin is TTY                     | Stdin is piped            |
+|------------------|----------------------------------|---------------------------|
+| `peek` (no args) | Show short help                  | Read stdin, render        |
+| `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render        |
+| `peek file.rs`   | View file normally               | View file (stdin ignored) |
 
 After consuming piped stdin, peek reopens fd 0 from the controlling terminal
 (resolved via `ttyname()` to the real device path, not `/dev/tty`, because macOS

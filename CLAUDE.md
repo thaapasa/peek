@@ -2,6 +2,10 @@
 
 Modern terminal file viewer with syntax highlighting, structured data pretty-printing, and image rendering.
 
+**Single-file viewer.** peek takes one path (or stdin) and shows it. No batch
+mode, no file list, no `cat`-style concatenation — those use cases are served
+by other tools.
+
 ## Build & Run
 
 ```sh
@@ -24,7 +28,7 @@ src/
     mod.rs             — re-exports InputSource, ByteSource
     source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait
     detect.rs          — File type detection (extension + magic bytes + stdin sniffing)
-    stdin.rs           — Build sources from CLI args, reopen fd 0 from /dev/tty after pipe
+    stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   output/
     mod.rs             — re-exports Output
     pager.rs           — Output abstraction (pager / direct stdout)
