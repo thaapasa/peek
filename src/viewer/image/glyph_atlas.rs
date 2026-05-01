@@ -192,7 +192,7 @@ const fn shade(n: u32) -> u128 {
     let mut bits: u128 = 0;
     let mut i = 0u32;
     while i < 128 {
-        if i % n == 0 {
+        if i.is_multiple_of(n) {
             bits |= 1u128 << i;
         }
         i += 1;
