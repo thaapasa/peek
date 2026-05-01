@@ -36,18 +36,100 @@ pub enum FileExtras {
         color_type: String,
         bit_depth: u8,
         hdr_format: Option<String>,
-        frame_count: Option<usize>,
+        icc_profile: Option<String>,
+        animation: Option<AnimationStats>,
         exif: Vec<(String, String)>,
+        xmp: Vec<(String, String)>,
     },
-    Text {
-        line_count: usize,
-        word_count: usize,
-        char_count: usize,
+    Text(TextStats),
+    Svg {
+        text: TextStats,
+        view_box: Option<String>,
+        declared_width: Option<String>,
+        declared_height: Option<String>,
+        path_count: usize,
+        group_count: usize,
+        rect_count: usize,
+        circle_count: usize,
+        text_count: usize,
+        has_script: bool,
+        has_external_href: bool,
     },
     Structured {
         format_name: &'static str,
+        stats: Option<StructuredStats>,
     },
-    Binary,
+    Binary {
+        format: Option<String>,
+    },
+}
+
+/// Animation playback stats. Counts/durations may be `None` when the format
+/// requires full decoding to compute (WebP) — the cheap header-walk path is
+/// only available for GIF.
+pub struct AnimationStats {
+    pub frame_count: Option<usize>,
+    pub total_duration_ms: Option<u64>,
+    pub loop_count: Option<LoopCount>,
+}
+
+pub enum LoopCount {
+    Infinite,
+    Finite(u32),
+}
+
+pub struct TextStats {
+    pub line_count: usize,
+    pub word_count: usize,
+    pub char_count: usize,
+    pub blank_lines: usize,
+    pub longest_line_chars: usize,
+    pub line_endings: LineEndings,
+    pub indent_style: Option<IndentStyle>,
+    pub encoding: Encoding,
+    pub shebang: Option<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LineEndings {
+    None,
+    Lf,
+    Crlf,
+    Cr,
+    Mixed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum IndentStyle {
+    Tabs,
+    Spaces(u8),
+    Mixed,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Encoding {
+    Utf8,
+    Utf8Bom,
+    Utf16Le,
+    Utf16Be,
+}
+
+pub struct StructuredStats {
+    pub top_level_kind: TopLevelKind,
+    pub top_level_count: usize,
+    pub max_depth: usize,
+    pub total_nodes: usize,
+    pub xml_root: Option<String>,
+    pub xml_namespaces: Vec<String>,
+}
+
+pub enum TopLevelKind {
+    Object,
+    Array,
+    Scalar,
+    Table,
+    MultiDoc(usize),
+    Document,
 }
 
 #[cfg(unix)]

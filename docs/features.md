@@ -398,21 +398,31 @@ view and info screen) or `i` (jump directly to info). Contains details such as:
 
 - **General:** file name, file size (exact byte count and human-readable, e.g.
   `59,521,024 bytes (56.74 MiB)`), MIME type, file permissions, timestamps
-- **Images:** dimensions/resolution, color mode, bit depth per pixel, EXIF data
-- **Documents/text:** line count, word count, character count, encoding
-- **Structured data:** key count, nesting depth, schema summary
+- **Images:** dimensions, megapixels, color mode, bit depth, ICC profile, HDR
+  detection, animation stats, EXIF, XMP
+- **Documents/text:** line/word/char counts, blank lines, longest line, line
+  endings, indent style, encoding, shebang
+- **Structured data:** top-level kind, key/element count, max nesting depth,
+  total node count, XML root + namespaces
+- **SVG:** viewBox, declared dimensions, element counts (paths, groups, rects,
+  circles, text), script/external-href flags, plus source text stats
+- **Binary:** detected format from magic (Mach-O, ELF, PE, ZIP, SQLite, etc.)
 
 Also available in print mode via a CLI flag (e.g. `--info`).
 
-**Status: Partially implemented.** Basic file info (name, path, size, MIME, timestamps,
-permissions) works for all file types via `--info` flag and Tab/i in the interactive
-viewer. Image extras (dimensions, color type, bit depth, HDR detection, EXIF metadata)
-and text extras (line/word/char counts) are included. Info screen uses semantic coloring
-(age-based timestamps, size-based colors, per-character permission coloring). HDR
-detection scans for Ultra HDR gain map markers. EXIF extraction covers camera
-make/model, lens, exposure, aperture, ISO, focal length, flash, white balance, date
-taken, GPS coordinates, artist, and copyright. Not yet implemented: structured data key
-count/nesting depth, schema summary.
+**Status: Implemented.** Available for all supported file types via the `--info`
+flag and Tab/`i` in the interactive viewer. Info screen uses semantic coloring
+(age-based timestamps, size-based colors, per-character permission coloring).
+HDR detection scans for Ultra HDR gain map markers. EXIF extraction covers
+camera make/model, lens, orientation, resolution/DPI, exposure, aperture, ISO,
+focal length, flash, white balance, date taken, GPS coordinates, artist, and
+copyright. ICC profile name is parsed from the embedded profile's `desc` /
+`mluc` tag. Animation stats (frame count, total duration, average FPS, loop
+count) come from header-walking GIF chunks and parsing WebP RIFF ANIM/ANMF
+chunks. XMP metadata is scraped from the head bytes for Dublin Core / XMP
+fields (title, subject, description, creator, rights, rating, label).
+Structured-data stats are computed by parsing the document. Text stats are
+computed in a single streaming pass that also detects BOM-based encoding.
 
 ### Text Search
 

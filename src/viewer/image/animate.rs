@@ -128,46 +128,6 @@ pub fn decode_anim_frames(
     Ok(Some(frames))
 }
 
-/// Count animation frames without decoding pixels.
-///
-/// GIF: walks the block stream via `gif::Decoder::next_frame_info`,
-/// which parses each frame's header but skips the LZW-compressed pixel
-/// data. Cheap even on huge animations.
-///
-/// WebP: `image-webp` exposes no header-only iteration, so for WebP we
-/// return `None` rather than full-decode every frame on every Info-view
-/// render. The count is asymmetric on purpose — the slow path was worse.
-///
-/// Returns `None` for non-animated sources, single-frame sources, or
-/// when format-specific header iteration isn't available.
-///
-/// `magic_mime` is the upstream-detected MIME and short-circuits the
-/// format check when set.
-pub fn anim_frame_count(source: &InputSource, magic_mime: Option<&str>) -> Option<usize> {
-    match detect_format(source, magic_mime)? {
-        AnimFormat::Gif => match source {
-            InputSource::File(path) => {
-                let reader = BufReader::new(std::fs::File::open(path).ok()?);
-                count_gif_frames(reader)
-            }
-            InputSource::Stdin { data } => count_gif_frames(Cursor::new(data.clone())),
-        },
-        AnimFormat::Webp => None,
-    }
-}
-
-/// Step through a GIF reader's frame headers. `next_frame_info` reads each
-/// frame's image descriptor but skips the pixel payload — orders of
-/// magnitude faster than full decoding for the count alone.
-fn count_gif_frames<R: std::io::Read>(reader: R) -> Option<usize> {
-    let mut decoder = gif::DecodeOptions::new().read_info(reader).ok()?;
-    let mut count = 0usize;
-    while decoder.next_frame_info().ok()?.is_some() {
-        count += 1;
-    }
-    if count > 1 { Some(count) } else { None }
-}
-
 // ---------------------------------------------------------------------------
 // Frame rendering (shared with `modes::AnimationMode`)
 // ---------------------------------------------------------------------------

@@ -3,7 +3,10 @@ use std::time::SystemTime;
 use syntect::highlighting::Color;
 
 use super::time::format_time;
-use super::{FileExtras, FileInfo};
+use super::{
+    AnimationStats, Encoding, FileExtras, FileInfo, IndentStyle, LineEndings, LoopCount,
+    StructuredStats, TextStats, TopLevelKind,
+};
 use crate::input::mime::{MimeCategory, MimeInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
@@ -68,8 +71,10 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
             color_type,
             bit_depth,
             hdr_format,
-            frame_count,
+            icc_profile,
+            animation,
             exif,
+            xmp,
         } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Image", theme);
@@ -77,6 +82,12 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
                 &mut lines,
                 "Dimensions",
                 &paint_dimensions(*width, *height, theme),
+                theme,
+            );
+            push_field(
+                &mut lines,
+                "Megapixels",
+                &paint_megapixels(*width, *height, theme),
                 theme,
             );
             push_field(&mut lines, "Color", &theme.paint_value(color_type), theme);
@@ -88,16 +99,14 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
                     theme,
                 );
             }
+            if let Some(icc) = icc_profile {
+                push_field(&mut lines, "ICC Profile", &theme.paint_value(icc), theme);
+            }
             if let Some(hdr) = hdr_format {
                 push_field(&mut lines, "HDR", &theme.paint_accent(hdr), theme);
             }
-            if let Some(count) = frame_count {
-                push_field(
-                    &mut lines,
-                    "Frames",
-                    &theme.paint_value(&format!("{count} (animated)")),
-                    theme,
-                );
+            if let Some(anim) = animation {
+                push_animation(&mut lines, anim, theme);
             }
 
             if !exif.is_empty() {
@@ -107,30 +116,95 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
                     push_field(&mut lines, label, &theme.paint_value(value), theme);
                 }
             }
+
+            if !xmp.is_empty() {
+                lines.push(String::new());
+                push_section_header(&mut lines, "XMP", theme);
+                for (label, value) in xmp {
+                    push_field(&mut lines, label, &theme.paint_value(value), theme);
+                }
+            }
         }
-        FileExtras::Text {
-            line_count,
-            word_count,
-            char_count,
-        } => {
+        FileExtras::Text(stats) => {
             lines.push(String::new());
             push_section_header(&mut lines, "Content", theme);
-            push_field(&mut lines, "Lines", &paint_count(*line_count, theme), theme);
-            push_field(&mut lines, "Words", &paint_count(*word_count, theme), theme);
-            push_field(
-                &mut lines,
-                "Characters",
-                &paint_count(*char_count, theme),
-                theme,
-            );
-            push_field(&mut lines, "Encoding", &theme.paint_muted("UTF-8"), theme);
+            push_text_stats(&mut lines, stats, theme);
         }
-        FileExtras::Structured { format_name } => {
+        FileExtras::Svg {
+            text,
+            view_box,
+            declared_width,
+            declared_height,
+            path_count,
+            group_count,
+            rect_count,
+            circle_count,
+            text_count,
+            has_script,
+            has_external_href,
+        } => {
+            lines.push(String::new());
+            push_section_header(&mut lines, "SVG", theme);
+            if let Some(vb) = view_box {
+                push_field(&mut lines, "viewBox", &theme.paint_value(vb), theme);
+            }
+            if let Some(w) = declared_width {
+                push_field(&mut lines, "Width", &theme.paint_value(w), theme);
+            }
+            if let Some(h) = declared_height {
+                push_field(&mut lines, "Height", &theme.paint_value(h), theme);
+            }
+            if *path_count > 0 {
+                push_field(&mut lines, "Paths", &paint_count(*path_count, theme), theme);
+            }
+            if *group_count > 0 {
+                push_field(&mut lines, "Groups", &paint_count(*group_count, theme), theme);
+            }
+            if *rect_count > 0 {
+                push_field(&mut lines, "Rects", &paint_count(*rect_count, theme), theme);
+            }
+            if *circle_count > 0 {
+                push_field(&mut lines, "Circles", &paint_count(*circle_count, theme), theme);
+            }
+            if *text_count > 0 {
+                push_field(&mut lines, "Text Elems", &paint_count(*text_count, theme), theme);
+            }
+            if *has_script {
+                push_field(
+                    &mut lines,
+                    "Script",
+                    &theme.paint(" yes", theme.warning),
+                    theme,
+                );
+            }
+            if *has_external_href {
+                push_field(
+                    &mut lines,
+                    "External ref",
+                    &theme.paint(" yes", theme.warning),
+                    theme,
+                );
+            }
+
+            lines.push(String::new());
+            push_section_header(&mut lines, "Source", theme);
+            push_text_stats(&mut lines, text, theme);
+        }
+        FileExtras::Structured { format_name, stats } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Format", theme);
             push_field(&mut lines, "Type", &theme.paint_accent(format_name), theme);
+            if let Some(stats) = stats {
+                push_structured_stats(&mut lines, stats, theme);
+            }
         }
-        FileExtras::Binary => {}
+        FileExtras::Binary { format } => {
+            if let Some(fmt) = format {
+                lines.push(String::new());
+                push_section_header(&mut lines, "Format", theme);
+                push_field(&mut lines, "Type", &theme.paint_value(fmt), theme);
+            }
+        }
     }
 
     if !info.warnings.is_empty() {
@@ -408,4 +482,182 @@ fn thousands_sep(n: u64) -> String {
         result.push(ch);
     }
     result.chars().rev().collect()
+}
+
+fn paint_megapixels(width: u32, height: u32, theme: &PeekTheme) -> String {
+    let mp = (width as f64 * height as f64) / 1_000_000.0;
+    let text = if mp < 1.0 {
+        format!("{mp:.2} MP")
+    } else {
+        format!("{mp:.1} MP")
+    };
+    theme.paint(&text, theme.value)
+}
+
+fn push_animation(lines: &mut Vec<String>, anim: &AnimationStats, theme: &PeekTheme) {
+    if let Some(count) = anim.frame_count {
+        push_field(
+            lines,
+            "Frames",
+            &theme.paint_value(&format!("{count} (animated)")),
+            theme,
+        );
+    }
+    if let Some(ms) = anim.total_duration_ms {
+        let secs = ms as f64 / 1000.0;
+        let label = if secs < 60.0 {
+            format!("{secs:.2} s")
+        } else {
+            let mins = (secs / 60.0).floor();
+            let rem = secs - mins * 60.0;
+            format!("{mins:.0}m {rem:.2}s")
+        };
+        push_field(lines, "Duration", &theme.paint_value(&label), theme);
+        if let Some(count) = anim.frame_count
+            && ms > 0
+        {
+            let fps = count as f64 / (ms as f64 / 1000.0);
+            push_field(
+                lines,
+                "Avg FPS",
+                &theme.paint_muted(&format!("{fps:.1}")),
+                theme,
+            );
+        }
+    }
+    if let Some(loops) = &anim.loop_count {
+        let text = match loops {
+            LoopCount::Infinite => "infinite".to_string(),
+            LoopCount::Finite(0) => "infinite".to_string(),
+            LoopCount::Finite(1) => "play once".to_string(),
+            LoopCount::Finite(n) => format!("{n} times"),
+        };
+        push_field(lines, "Loop", &theme.paint_value(&text), theme);
+    }
+}
+
+fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
+    push_field(lines, "Lines", &paint_count(stats.line_count, theme), theme);
+    if stats.blank_lines > 0 {
+        push_field(
+            lines,
+            "Blank Lines",
+            &paint_count(stats.blank_lines, theme),
+            theme,
+        );
+    }
+    push_field(lines, "Words", &paint_count(stats.word_count, theme), theme);
+    push_field(
+        lines,
+        "Characters",
+        &paint_count(stats.char_count, theme),
+        theme,
+    );
+    if stats.longest_line_chars > 0 {
+        push_field(
+            lines,
+            "Longest Line",
+            &paint_count(stats.longest_line_chars, theme),
+            theme,
+        );
+    }
+    push_field(
+        lines,
+        "Line Endings",
+        &theme.paint_value(line_endings_label(stats.line_endings)),
+        theme,
+    );
+    if let Some(indent) = stats.indent_style {
+        push_field(
+            lines,
+            "Indent",
+            &theme.paint_value(&indent_label(indent)),
+            theme,
+        );
+    }
+    push_field(
+        lines,
+        "Encoding",
+        &theme.paint_muted(encoding_label(stats.encoding)),
+        theme,
+    );
+    if let Some(shebang) = &stats.shebang {
+        push_field(lines, "Shebang", &theme.paint_value(shebang), theme);
+    }
+}
+
+fn line_endings_label(le: LineEndings) -> &'static str {
+    match le {
+        LineEndings::None => "none",
+        LineEndings::Lf => "LF (\\n)",
+        LineEndings::Crlf => "CRLF (\\r\\n)",
+        LineEndings::Cr => "CR (\\r)",
+        LineEndings::Mixed => "mixed",
+    }
+}
+
+fn indent_label(style: IndentStyle) -> String {
+    match style {
+        IndentStyle::Tabs => "tabs".to_string(),
+        IndentStyle::Spaces(n) => format!("{n} spaces"),
+        IndentStyle::Mixed => "mixed".to_string(),
+    }
+}
+
+fn encoding_label(enc: Encoding) -> &'static str {
+    match enc {
+        Encoding::Utf8 => "UTF-8",
+        Encoding::Utf8Bom => "UTF-8 (BOM)",
+        Encoding::Utf16Le => "UTF-16 LE",
+        Encoding::Utf16Be => "UTF-16 BE",
+    }
+}
+
+fn push_structured_stats(lines: &mut Vec<String>, stats: &StructuredStats, theme: &PeekTheme) {
+    let (kind_label, count_label) = match &stats.top_level_kind {
+        TopLevelKind::Object => ("Object", "Keys"),
+        TopLevelKind::Array => ("Array", "Items"),
+        TopLevelKind::Scalar => ("Scalar", "Items"),
+        TopLevelKind::Table => ("Table", "Keys"),
+        TopLevelKind::MultiDoc(_) => ("Multi-doc", "Top-level"),
+        TopLevelKind::Document => ("Document", "Top-level"),
+    };
+    let kind_text = match &stats.top_level_kind {
+        TopLevelKind::MultiDoc(n) => format!("Multi-doc ({n})"),
+        _ => kind_label.to_string(),
+    };
+    push_field(lines, "Top-level", &theme.paint_value(&kind_text), theme);
+    if stats.top_level_count > 0 {
+        push_field(
+            lines,
+            count_label,
+            &paint_count(stats.top_level_count, theme),
+            theme,
+        );
+    }
+    if stats.max_depth > 0 {
+        push_field(
+            lines,
+            "Max Depth",
+            &paint_count(stats.max_depth, theme),
+            theme,
+        );
+    }
+    if stats.total_nodes > 0 {
+        push_field(
+            lines,
+            "Total Nodes",
+            &paint_count(stats.total_nodes, theme),
+            theme,
+        );
+    }
+    if let Some(root) = &stats.xml_root {
+        push_field(lines, "Root Element", &theme.paint_accent(root), theme);
+    }
+    if !stats.xml_namespaces.is_empty() {
+        for (i, ns) in stats.xml_namespaces.iter().enumerate() {
+            let label = if i == 0 { "Namespaces" } else { "" };
+            push_field(lines, label, &theme.paint_muted(ns), theme);
+        }
+    }
 }
