@@ -20,6 +20,24 @@ in the same change-set:
   loading the full file
 - `Mode::is_aux()` and `Mode::status_hints()` replace hardcoded
   `ModeId` matches in `ViewerState` / `interactive`
+- B5 — `compose_status_line` / `strip_ansi_width` / `truncate_ansi` now
+  covered by unit tests in `viewer/ui/mod.rs` (fits, hints-truncated,
+  left-truncated, CJK widths, trailing-escape preservation)
+- C3 — `format_unix_permissions` now emits `ls -l`-style output: type
+  prefix (`-` / `d` / `l` / `b` / `c` / `p` / `s`) and setuid/setgid/
+  sticky overlays (`s` / `S` / `t` / `T`). `paint_permissions`
+  accommodates the new chars and 10-char layout.
+- C2 — `decode_anim_frames` and `anim_frame_count` now accept the
+  upstream `magic_mime`; they short-circuit to the matching `AnimFormat`
+  when it's `image/gif` / `image/webp`, skipping the redundant
+  extension/sniff path used pre-fix.
+- B2 — `--info` is now an unconditionally non-paginated path. New
+  `Output::direct()` constructor; main's `--info` branch uses it.
+  Architectural framing: `--info` is a fixed-size summary; if you
+  want to scroll it, use the interactive viewer's Info mode. (The
+  original "press q on a tiny info screen" papercut was a non-issue
+  — minus's static-mode short-circuits when content fits — but
+  `--info` shouldn't be paginated regardless.)
 
 Everything below is what's left.
 
@@ -171,29 +189,6 @@ bigger project (resvg's animation API surface is limited).
 
 ---
 
-### B2. `Output::Pager` is allocated for `--info` on a TTY even though
-the output is tiny
-
-**Severity:** trivial — wastes a `minus::Pager` instance for the ~30
-lines of an info screen, and forces the user to press `q` to dismiss
-content that fits on one screen.
-
-**Where:**
-- `output/pager.rs:14-23` — `Output::new` decides based on
-  `!print && stdout().is_terminal()`, identical logic to
-  `main.rs:32`'s `use_pager` decision
-- `main.rs:48` — `--info` path always goes through `Output::new`
-
-**Suggested approach:** for the `--info` path, check the line count
-first. If it's ≤ terminal rows, use `Output::Direct`; otherwise pager.
-Or expose a `PagerMode { Always, Never, Auto(usize) }` to `Output::new`
-and let the caller decide. Either way also dedupes the "should I
-pager?" decision.
-
-**Effort:** ~30 minutes.
-
----
-
 ### B3. `is_terminal()` is checked twice in two locations
 
 **Severity:** trivial duplication. Currently:
@@ -223,24 +218,6 @@ same value also lives in `SyntaxViewer.forced_language`.
 pass `args.language.as_deref()` directly to `syntax_token_for`.
 
 **Effort:** ~5 minutes.
-
----
-
-### B5. `compose_status_line` truncation has no tests
-
-**Severity:** low — non-trivial logic that's evolved over time and is
-the kind of thing that drifts silently.
-
-**Where:** `viewer/ui/mod.rs:71-87` (`compose_status_line`,
-`strip_ansi_width`, `truncate_ansi`).
-
-**Suggested approach:** add unit tests covering: fits-on-screen
-(padding right), hints-don't-fit (drop hints, pad), left-doesn't-fit
-(truncate left), wide-character handling (CJK), trailing escape
-sequence preserved by `truncate_ansi`. Most of those are 3-line tests
-each.
-
-**Effort:** ~30 minutes for a comfortable test suite.
 
 ---
 
@@ -281,43 +258,6 @@ into a caller-owned buffer. `format_row` then builds one `String` per
 row.
 
 **Effort:** ~30 minutes if you also want a microbenchmark.
-
----
-
-### C2. `detect_format` for animation re-reads file head ignoring
-already-detected MIME
-
-**Severity:** trivial — `detect::detect_file` already ran `infer::get`
-and stored `magic_mime`. `detect_format` (in
-`viewer/image/animate.rs`) repeats the work via path extension or
-re-sniffing stdin bytes.
-
-**Where:** `viewer/image/animate.rs:30-56`
-
-**Suggested approach:** plumb `magic_mime` through to
-`decode_anim_frames` / `anim_frame_count`, skip the re-detection when
-the MIME is already `image/gif` / `image/webp`.
-
-**Effort:** ~15 minutes (signature change, two call sites).
-
----
-
-### C3. `format_unix_permissions` skips type and special bits
-
-**Severity:** minor feature gap — info view shows `rwxr-xr--` but
-never the leading `-`/`d`/`l` or setuid/setgid/sticky markers. Anyone
-using `--info` on a directory or symlink gets less info than `ls -l`.
-
-**Where:** `info/mod.rs:69-87`
-
-**Suggested approach:** prepend the file-type indicator (`d`, `l`,
-`-`) by inspecting `meta.file_type()`, and overlay setuid/setgid/sticky
-bits on the existing rwx triplets (`s` / `S` / `t` / `T` like
-`ls -l`). The existing `paint_permissions` code in
-`info/render.rs:317-334` already handles per-character coloring, just
-extend the color match.
-
-**Effort:** ~30 minutes.
 
 ---
 

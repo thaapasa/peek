@@ -40,7 +40,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
     let warnings = collect_warnings(Some(path), detected);
 
     let permissions = format_permissions_from_meta(&meta);
-    let extras = gather_extras(path, &detected.file_type);
+    let extras = gather_extras(path, &detected.file_type, detected.magic_mime.as_deref());
 
     Ok(FileInfo {
         file_name,
@@ -58,7 +58,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
 fn gather_stdin(data: &Arc<[u8]>, detected: &Detected) -> FileInfo {
     let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
     let warnings = collect_warnings(None, detected);
-    let extras = gather_extras_stdin(data, &detected.file_type);
+    let extras = gather_extras_stdin(data, &detected.file_type, detected.magic_mime.as_deref());
 
     FileInfo {
         file_name: "<stdin>".to_string(),
@@ -84,7 +84,11 @@ fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
     warnings
 }
 
-fn gather_extras_stdin(data: &Arc<[u8]>, file_type: &FileType) -> FileExtras {
+fn gather_extras_stdin(
+    data: &Arc<[u8]>,
+    file_type: &FileType,
+    magic_mime: Option<&str>,
+) -> FileExtras {
     match file_type {
         FileType::SourceCode { .. } | FileType::Svg => {
             gather_text_extras_streaming(&InputSource::Stdin { data: Arc::clone(data) })
@@ -97,12 +101,12 @@ fn gather_extras_stdin(data: &Arc<[u8]>, file_type: &FileType) -> FileExtras {
                 StructuredFormat::Xml => "XML",
             },
         },
-        FileType::Image => gather_image_extras_from_bytes(data),
+        FileType::Image => gather_image_extras_from_bytes(data, magic_mime),
         FileType::Binary => FileExtras::Binary,
     }
 }
 
-fn gather_image_extras_from_bytes(data: &Arc<[u8]>) -> FileExtras {
+fn gather_image_extras_from_bytes(data: &Arc<[u8]>, magic_mime: Option<&str>) -> FileExtras {
     let decoder = match image::ImageReader::new(std::io::Cursor::new(data.as_ref()))
         .with_guessed_format()
         .ok()
@@ -119,6 +123,7 @@ fn gather_image_extras_from_bytes(data: &Arc<[u8]>) -> FileExtras {
     let hdr_format = detect_hdr_bytes(data);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
         &InputSource::Stdin { data: Arc::clone(data) },
+        magic_mime,
     );
     let exif = gather_exif_bytes(data);
 
@@ -133,9 +138,9 @@ fn gather_image_extras_from_bytes(data: &Arc<[u8]>) -> FileExtras {
     }
 }
 
-fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
+fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) -> FileExtras {
     match file_type {
-        FileType::Image => gather_image_extras(path),
+        FileType::Image => gather_image_extras(path, magic_mime),
         FileType::SourceCode { .. } | FileType::Svg => {
             gather_text_extras_streaming(&InputSource::File(path.to_path_buf()))
         }
@@ -151,7 +156,7 @@ fn gather_extras(path: &Path, file_type: &FileType) -> FileExtras {
     }
 }
 
-fn gather_image_extras(path: &Path) -> FileExtras {
+fn gather_image_extras(path: &Path, magic_mime: Option<&str>) -> FileExtras {
     // ImageReader::open + into_decoder gives dimensions and color type
     // from the file's header without doing a full pixel decode — much
     // cheaper for large RAW/HEIC/etc.
@@ -171,6 +176,7 @@ fn gather_image_extras(path: &Path) -> FileExtras {
     let hdr_format = detect_hdr(path);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
         &InputSource::File(path.to_path_buf()),
+        magic_mime,
     );
     let exif = gather_exif(path);
 

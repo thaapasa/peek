@@ -26,8 +26,14 @@ enum AnimFormat {
     Webp,
 }
 
-/// Detect GIF/WebP from either the file extension or the first magic bytes.
-fn detect_format(source: &InputSource) -> Option<AnimFormat> {
+/// Detect GIF/WebP. Prefers an already-detected MIME (set by
+/// `input::detect`) so we don't re-sniff bytes or re-parse the path; falls
+/// back to extension (file) or magic-byte sniff (stdin) when the caller
+/// has none.
+fn detect_format(source: &InputSource, magic_mime: Option<&str>) -> Option<AnimFormat> {
+    if let Some(format) = magic_mime.and_then(format_from_mime) {
+        return Some(format);
+    }
     match source {
         InputSource::File(path) => {
             let ext = path
@@ -42,6 +48,14 @@ fn detect_format(source: &InputSource) -> Option<AnimFormat> {
             }
         }
         InputSource::Stdin { data } => sniff_anim_format(data),
+    }
+}
+
+fn format_from_mime(mime: &str) -> Option<AnimFormat> {
+    match mime {
+        "image/gif" => Some(AnimFormat::Gif),
+        "image/webp" => Some(AnimFormat::Webp),
+        _ => None,
     }
 }
 
@@ -71,8 +85,14 @@ fn collect_frames<'a, D: image::AnimationDecoder<'a>>(decoder: D) -> Result<Vec<
 
 /// Decode all frames from an animated image (GIF or WebP).
 /// Returns `None` if the source is not an animated format or has ≤1 frame.
-pub fn decode_anim_frames(source: &InputSource) -> Result<Option<Vec<AnimFrame>>> {
-    let Some(format) = detect_format(source) else {
+///
+/// `magic_mime` is an upstream-detected MIME (e.g. `"image/gif"`); when
+/// present it short-circuits format detection.
+pub fn decode_anim_frames(
+    source: &InputSource,
+    magic_mime: Option<&str>,
+) -> Result<Option<Vec<AnimFrame>>> {
+    let Some(format) = detect_format(source, magic_mime) else {
         return Ok(None);
     };
     let frames = match (source, format) {
@@ -120,8 +140,11 @@ pub fn decode_anim_frames(source: &InputSource) -> Result<Option<Vec<AnimFrame>>
 ///
 /// Returns `None` for non-animated sources, single-frame sources, or
 /// when format-specific header iteration isn't available.
-pub fn anim_frame_count(source: &InputSource) -> Option<usize> {
-    match detect_format(source)? {
+///
+/// `magic_mime` is the upstream-detected MIME and short-circuits the
+/// format check when set.
+pub fn anim_frame_count(source: &InputSource, magic_mime: Option<&str>) -> Option<usize> {
+    match detect_format(source, magic_mime)? {
         AnimFormat::Gif => match source {
             InputSource::File(path) => {
                 let reader = BufReader::new(std::fs::File::open(path).ok()?);

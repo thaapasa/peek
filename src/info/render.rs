@@ -314,21 +314,40 @@ fn age_blend_factor(age_secs: u64) -> f32 {
     t as f32
 }
 
-/// Paint permissions with per-character coloring.
+/// Paint permissions with per-character coloring. Handles both the
+/// 10-char `ls -l` form (`drwxr-xr-x`) and the 9-char rwx-only form, plus
+/// the Windows fallback strings (which don't get rwx separators).
 fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
+    // Group separators sit *after* the listed indices (e.g. 3 and 6 for
+    // a 10-char string puts a divider after each rwx triplet).
+    let chars: Vec<char> = perms.chars().collect();
+    let separators: &[usize] = match chars.len() {
+        10 => &[3, 6],
+        9 => &[2, 5],
+        _ => &[],
+    };
+
     let mut result = String::new();
-    for (i, ch) in perms.chars().enumerate() {
+    for (i, ch) in chars.iter().enumerate() {
         let color = match ch {
             'r' => theme.value,
             'w' => theme.accent,
             'x' => theme.heading,
+            // Special bits — accent so they pop. Capital S/T means the
+            // execute bit is *not* set, which is more surprising than the
+            // lowercase form, but a single color keeps the row legible.
+            's' | 'S' | 't' | 'T' => theme.accent,
+            // Type-prefix characters at index 0 of the 10-char form.
+            'd' | 'l' | 'b' | 'c' | 'p' => theme.heading,
             '-' => lerp_color(theme.muted, theme.background, 0.3),
             _ => theme.foreground,
         };
         result.push_str(&theme.paint(&ch.to_string(), color));
-        // Add subtle separator between rwx groups
-        if (i == 2 || i == 5) && i + 1 < perms.len() {
-            result.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
+        if separators.contains(&i) && i + 1 < chars.len() {
+            result.push_str(&theme.paint(
+                "\u{2500}",
+                lerp_color(theme.muted, theme.background, 0.5),
+            ));
         }
     }
     result

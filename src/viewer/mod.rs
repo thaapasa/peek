@@ -170,7 +170,9 @@ impl Registry {
                     // Animated GIF/WebP: AnimationMode owns the frame stack
                     // and drives ticks via the Mode trait. Static image:
                     // ImageRenderMode renders on demand.
-                    if let Some(frames) = image::animate::decode_anim_frames(source)? {
+                    if let Some(frames) =
+                        image::animate::decode_anim_frames(source, detected.magic_mime.as_deref())?
+                    {
                         modes.push(Box::new(AnimationMode::new(frames, cfg)));
                     } else {
                         modes.push(Box::new(ImageRenderMode::new(

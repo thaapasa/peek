@@ -36,9 +36,10 @@ fn main() -> Result<()> {
     let viewers = viewer::Registry::new(&args)?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
-    // --info mode: show metadata instead of content
+    // --info mode: a fixed-size summary, never paginated. To scroll
+    // through it, use the interactive viewer's Info mode (key `i`).
     if args.info {
-        let mut output = output::Output::new(&args)?;
+        let mut output = output::Output::direct();
         let file_info = info::gather(&source, &detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);

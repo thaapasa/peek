@@ -23,6 +23,14 @@ impl Output {
         }
     }
 
+    /// Force a non-paginated direct-stdout output, regardless of TTY or
+    /// `--print` flag. Used by `--info`: the output is a fixed-size
+    /// summary that doesn't benefit from a pager — to scroll it, use the
+    /// interactive viewer's Info mode.
+    pub fn direct() -> Self {
+        Output::Direct(io::stdout())
+    }
+
     /// Write a line of text to the output.
     pub fn write_line(&mut self, line: &str) -> Result<()> {
         match self {

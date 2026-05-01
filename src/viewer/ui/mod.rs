@@ -158,3 +158,77 @@ pub(crate) fn terminal_rows() -> usize {
 pub(crate) fn content_rows() -> usize {
     terminal_rows().saturating_sub(1)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_ansi_width_skips_escape_sequences() {
+        assert_eq!(strip_ansi_width("hello"), 5);
+        assert_eq!(strip_ansi_width("\x1b[31mhello\x1b[0m"), 5);
+        assert_eq!(strip_ansi_width(""), 0);
+    }
+
+    #[test]
+    fn strip_ansi_width_counts_cjk_as_two_cols() {
+        assert_eq!(strip_ansi_width("你好"), 4);
+        assert_eq!(strip_ansi_width("a你b"), 4);
+    }
+
+    #[test]
+    fn truncate_ansi_caps_visible_width() {
+        assert_eq!(truncate_ansi("abcdef", 3), "abc");
+        assert_eq!(truncate_ansi("abcdef", 6), "abcdef");
+        assert_eq!(truncate_ansi("abcdef", 10), "abcdef");
+    }
+
+    #[test]
+    fn truncate_ansi_drops_wide_char_that_would_split() {
+        // CJK char has width 2 — at max_width 1 it can't fit at all.
+        assert_eq!(truncate_ansi("你好", 1), "");
+        // At max_width 3 only the first CJK fits (width 2); the second
+        // would push width to 4 > 3 so it's dropped whole rather than split.
+        assert_eq!(truncate_ansi("你好", 3), "你");
+    }
+
+    #[test]
+    fn truncate_ansi_preserves_trailing_escape() {
+        // Visible content fits exactly; the trailing reset escape — having
+        // zero visible width — is still emitted.
+        assert_eq!(truncate_ansi("hi\x1b[0m", 2), "hi\x1b[0m");
+    }
+
+    #[test]
+    fn status_line_fits_pads_between_left_and_hints() {
+        let s = compose_status_line("left", "hints", 20);
+        assert_eq!(strip_ansi_width(&s), 20);
+        assert_eq!(s, "left           hints");
+    }
+
+    #[test]
+    fn status_line_truncates_hints_when_room_is_tight() {
+        // left fits (4 < 10) but hints (10) don't — hints get truncated to
+        // the remaining 6 cols.
+        let s = compose_status_line("left", "0123456789", 10);
+        assert_eq!(strip_ansi_width(&s), 10);
+        assert_eq!(s, "left012345");
+    }
+
+    #[test]
+    fn status_line_truncates_left_when_no_room_for_hints() {
+        // left alone is wider than cols — drop hints entirely and clip left.
+        let s = compose_status_line("0123456789", "hints", 5);
+        assert_eq!(strip_ansi_width(&s), 5);
+        assert_eq!(s, "01234");
+    }
+
+    #[test]
+    fn status_line_handles_cjk_widths() {
+        // "你好" has visible width 4; padding accounts for that, not byte len.
+        let s = compose_status_line("你好", "你好", 10);
+        assert_eq!(strip_ansi_width(&s), 10);
+        assert!(s.starts_with("你好"));
+        assert!(s.ends_with("你好"));
+    }
+}
