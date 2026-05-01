@@ -5,6 +5,7 @@ use crate::input::mime::MimeInfo;
 
 mod gather;
 mod render;
+mod time;
 
 pub use gather::gather;
 pub use render::{render, RenderOptions};

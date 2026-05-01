@@ -37,6 +37,7 @@ src/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
     gather.rs          — FileInfo collection: FS metadata, MIME, EXIF, HDR, text/image extras
     render.rs          — Themed terminal rendering of FileInfo
+    time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
     mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
     name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme

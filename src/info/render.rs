@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 use syntect::highlighting::Color;
 
+use super::time::format_time;
 use super::{FileExtras, FileInfo};
 use crate::input::mime::{MimeCategory, MimeInfo};
 use crate::theme::{PeekTheme, lerp_color};
@@ -397,75 +398,3 @@ fn thousands_sep(n: u64) -> String {
     result.chars().rev().collect()
 }
 
-fn format_time(time: SystemTime, utc: bool) -> String {
-    let duration = match time.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(d) => d,
-        Err(_) => return "unknown".to_string(),
-    };
-    let secs = duration.as_secs() as i64;
-
-    if utc {
-        return format_iso_utc(secs);
-    }
-    // Local time on Unix; on other platforms or if libc fails, fall back to UTC.
-    #[cfg(unix)]
-    {
-        if let Some(s) = format_local_with_offset(secs) {
-            return s;
-        }
-    }
-    format_iso_utc(secs)
-}
-
-fn format_iso_utc(secs: i64) -> String {
-    let s = secs.max(0) as u64;
-    let days = s / 86400;
-    let tod = s % 86400;
-    let (year, month, day) = days_to_date(days);
-    let hours = tod / 3600;
-    let minutes = (tod % 3600) / 60;
-    let seconds = tod % 60;
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{minutes:02}:{seconds:02}Z")
-}
-
-#[cfg(unix)]
-fn format_local_with_offset(secs: i64) -> Option<String> {
-    // SAFETY: localtime_r writes to a caller-provided struct; we pass a
-    // zero-initialized one and check the return for null.
-    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    let t: libc::time_t = secs;
-    let result = unsafe { libc::localtime_r(&t, &mut tm) };
-    if result.is_null() {
-        return None;
-    }
-    let year = tm.tm_year as i64 + 1900;
-    let month = tm.tm_mon + 1;
-    let day = tm.tm_mday;
-    let hours = tm.tm_hour;
-    let minutes = tm.tm_min;
-    let seconds = tm.tm_sec;
-    let off = tm.tm_gmtoff;
-    let sign = if off >= 0 { '+' } else { '-' };
-    let off_abs = off.unsigned_abs();
-    let off_h = off_abs / 3600;
-    let off_m = (off_abs % 3600) / 60;
-    Some(format!(
-        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02} {sign}{off_h:02}:{off_m:02}"
-    ))
-}
-
-/// Convert days since Unix epoch to (year, month, day).
-fn days_to_date(days: u64) -> (u64, u64, u64) {
-    // Algorithm from http://howardhinnant.github.io/date_algorithms.html
-    let z = days + 719468;
-    let era = z / 146097;
-    let doe = z - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
-}
