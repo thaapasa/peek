@@ -115,6 +115,7 @@ modes:
 | `AnimationMode`    | GIF / WebP (drives `next_tick`/`tick`)           | no           | **yes**           |
 | `InfoMode`         | every file (file metadata)                       | no           | no                |
 | `HelpMode`         | every file (keyboard-shortcut listing)           | no           | no                |
+| `AboutMode`        | every file (logo, version, palette swatches)     | no           | no                |
 
 ### Viewer trait (`viewer/mod.rs`) — piped output
 

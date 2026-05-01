@@ -13,11 +13,12 @@ switching between views.
 **Status: Partially implemented.** Interactive viewing works for all file types via
 a mode-stack architecture (text/source/structured `ContentMode`, `ImageRenderMode`
 for raster + rasterized SVG, `AnimationMode` for GIF/WebP, plus universal `HexMode`
-/ `InfoMode` / `HelpMode`). Scrolling (Up/Down/j/k, PgUp/PgDn, Home/End), Tab/i
-toggle to file info, help screen (h/?), live theme cycling (t), and `r` (raw/pretty
-for structured data, primary-cycle for SVG rasterized↔XML). Image-specific keys: `b`
-cycles background, `m` cycles render mode (full/block/geo/ascii). Animation: `p`
-play/pause, `n`/`N` and Left/Right step frames. No search or line numbers yet.
+/ `InfoMode` / `HelpMode` / `AboutMode`). Scrolling (Up/Down/j/k, PgUp/PgDn, Home/End),
+Tab/i toggle to file info, help screen (h/?), about screen (a), live theme cycling
+(t), color-encoding cycling (c), and `r` (raw/pretty for structured data,
+primary-cycle for SVG rasterized↔XML). Image-specific keys: `b` cycles background,
+`m` cycles render mode (full/block/geo/ascii). Animation: `p` play/pause, `n`/`N`
+and Left/Right step frames. No search or line numbers yet.
 
 ### Print Mode
 
@@ -459,6 +460,16 @@ extras — so an SVG file's help shows the background-cycle shortcut, while a JS
 file's doesn't. Per-active-mode filtering (showing only the currently active mode's
 extras) is not yet done.
 
+### About Screen
+
+An in-app about screen accessible via `a` that shows the gradient peek logo,
+version, tagline, the active theme's full palette as colored swatches, and a
+short list of pointers (homepage, license, common keys). Doubles as a theme
+showcase — cycling themes with `t` while on the About screen previews how
+each theme paints the full palette.
+
+**Status: Implemented** as `AboutMode` in `viewer/modes/about.rs`.
+
 
 ## Keyboard Shortcuts
 
@@ -479,15 +490,15 @@ certain file types.
 
 ### Views and Modes
 
-| Key       | Action                                     |
-|-----------|--------------------------------------------|
-| `Tab`     | Toggle content / file info               |
-| `i`       | Jump to file info screen                   |
-| `h` / `?` | Toggle help screen                         |
-| `t`       | Cycle theme                                |
-| `c`       | Cycle output color mode                    |
-| `x`       | Toggle hex dump (no-op when hex is default)|
-| `a`       | Toggle about / status screen               |
+| Key       | Action                                      |
+|-----------|---------------------------------------------|
+| `Tab`     | Toggle content / file info                  |
+| `i`       | Jump to file info screen                    |
+| `h` / `?` | Toggle help screen                          |
+| `t`       | Cycle theme                                 |
+| `c`       | Cycle output color mode                     |
+| `x`       | Toggle hex dump (no-op when hex is default) |
+| `a`       | Toggle about / status screen                |
 
 ### Search
 
@@ -544,7 +555,7 @@ is the authoritative in-app reference.
   - **vscode-monokai** — VS Code Monokai theme
 - Themes can be cycled live in the interactive viewer with `t`.
 
-**Status: Implemented.** Theme selection works via CLI/env var. Three custom embedded
+**Status: Implemented.** Theme selection works via CLI/env var. Four custom embedded
 themes replace the previous syntect defaults. Live theme cycling is available in the
 interactive viewer.
 
@@ -603,26 +614,27 @@ yet used (line numbers and search are not implemented).
 
 ### Compatibility Modes
 
-To support a range of terminal capabilities, the following rendering modes should be
+To support a range of terminal capabilities, the following rendering axes should be
 available:
 
-| Mode              | Colors             | Characters    |
-|-------------------|--------------------|---------------|
-| True color        | 24-bit RGB         | Full Unicode  |
-| 256-color         | 256 ANSI colors    | Full Unicode  |
-| Low color         | 16 ANSI colors     | Full Unicode  |
-| No special chars  | 24-bit / 256 / 16  | ASCII only    |
-| Black and white   | No color           | ASCII only    |
+| Axis      | Modes                                                                  | Status                                                                       |
+|-----------|------------------------------------------------------------------------|------------------------------------------------------------------------------|
+| Color     | truecolor, 256, 16, grayscale, plain                                   | Implemented (see Color Modes above)                                          |
+| Character | Full Unicode, ASCII-only (image rendering only — `--image-mode ascii`) | Image side implemented; UI/glyph fallback for non-Unicode terminals not done |
 
-These modes affect all text rendering — syntax highlighting, image rendering, and UI
-elements. The common colored text output layer (from the theme architecture above)
-handles the downgrading: all output is authored in full 24-bit color via the theme
-roles, and the active compatibility mode decides how to emit it to the terminal.
+Color encoding is handled by `ColorMode` (see [Color Modes](#color-modes)) — all
+callers paint with truecolor RGB and the active mode decides the on-the-wire form.
+Image rendering routes through the same point of conversion via `ColorMode::write_fg`
+/ `write_fg_bg`. Character compatibility is partial: `--image-mode ascii` falls back
+to a luminance density ramp for terminals without block/quadrant glyphs, but the rest
+of the UI (status line, info screen, etc.) still uses Unicode box-drawing and dashes.
 
-For library-produced output (syntect), the pipeline may need to intercept and remap
-colors after syntect renders them, since syntect always outputs 24-bit ANSI codes.
+For library-produced output (syntect), `viewer::ranges_to_escaped` replaces syntect's
+hardcoded 24-bit `as_24_bit_terminal_escaped` with one routed through
+`ColorMode::fg_seq`, so syntax-highlighted code is downgraded along with everything
+else.
 
-**Status: Not implemented.** Currently assumes 24-bit truecolor throughout.
+**Status: Color axis fully implemented; character-axis fallback for the UI not yet done.**
 
 
 ## CLI Options
@@ -631,13 +643,14 @@ Current and planned CLI options:
 
 | Option           | Short | Description                                     | Status       |
 |------------------|-------|-------------------------------------------------|--------------|
-| `--help`         | `-h`  | Show help screen and exit                       | Implemented  |
-| `--version`      |       | Show version info and exit                      | Implemented  |
+| `--help`         | `-h`  | Show help screen and exit (short / long forms)  | Implemented  |
+| `--version`      | `-V`  | Show version info and exit                      | Implemented  |
 | `--viewer`       | `-v`  | Force viewer mode                               | Planned      |
 | `--print`        | `-p`  | Force print mode (direct stdout)                | Implemented  |
 | `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing | Implemented  |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)        | Implemented  |
 | `--theme`        | `-t`  | Syntax highlighting theme                       | Implemented  |
+| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain) | Implemented |
 | `--language`     | `-l`  | Force syntax language                           | Implemented  |
 | `--width`        |       | Image rendering width in characters             | Implemented  |
 | `--image-mode`   |       | Image rendering mode                            | Implemented  |
@@ -647,7 +660,6 @@ Current and planned CLI options:
 | `--margin`       |       | Image margin in transparent pixels              | Implemented  |
 | `--line-numbers` |       | Enable/disable line numbers                     | Planned      |
 | `--sizing`       |       | Image sizing mode                               | Planned      |
-| `--color-mode`   |       | Select compatibility/color mode                 | Planned      |
 
 `--plain` and `--raw` are orthogonal: `--raw` preserves the original file structure
 (no pretty-printing) but still applies colors and font styles. `--plain` disables all
@@ -659,51 +671,42 @@ highlighting and pretty-printing.
 
 ### `--help` Screen
 
-The `--help` / `-h` output should be a custom-designed help screen (not the default
-clap-generated output). It should include, in order:
+`-h` (short) and `--help` (long) produce two different custom-themed screens
+— not the default clap-generated output:
 
-1. **ASCII art "peek" logo** — a stylized text banner, colored using the active theme's
-   palette (e.g. as a gradient across the letters). Serves double duty as a theme
-   preview. Logo candidates:
+- **`-h` (concise)** — gradient logo, version + tagline, usage line, and the
+  most common options. Covers the 90% case without the wall of options.
+- **`--help` (full)** — everything in `-h`, plus rarely-used options
+  (theme, color, language, width, image-mode, background, margin, utc) and
+  the full theme listing with the active marker. Ends with a hint to run
+  `peek --help` for the longer form when only the short form is shown.
 
-   Option A — small slant (lightweight, clean):
-   ```
-                    __  
-      ___  ___ ___ / /__
-     / _ \/ -_) -_)  '_/
-    / .__/\__/\__/_/\_\ 
-   /_/                  
-   ```
+Both screens use the same gradient-painted logo (small-slant style):
 
-   Option B — chunky (compact, more weight):
-   ```
-                       __    
-   .-----.-----.-----.|  |--.
-   |  _  |  -__|  -__||    < 
-   |   __|_____|_____||__|__|
-   |__|                      
-   ```
-2. **Version** — read from `Cargo.toml` at build time.
-3. **Brief description** — one or two sentences about what peek does.
-4. **CLI option reference** — formatted list of all options with descriptions.
+```
+                 __  
+   ___  ___ ___ / /__
+  / _ \/ -_) -_)  '_/
+ / .__/\__/\__/_/\_\ 
+/_/                  
+```
 
-The entire help output should be styled using the active theme's colors — headings,
-option names, descriptions, etc. This means `--help --theme <name>` can be used to
-preview and compare different themes. The help screen itself becomes a theme showcase.
+The entire help output is styled using the active theme's colors — headings,
+option names, descriptions, etc. This means `--help --theme <name>` can be
+used to preview and compare themes; the help screen itself doubles as a
+theme showcase.
 
-**Status: Implemented.** Custom themed help screen with gradient logo, version,
-description, options reference, and theme listing with active marker.
+**Status: Implemented.** Concise `-h` and full `--help` are split; both
+share the gradient logo and themed rendering. Full help lists themes with
+the active marker.
 
 ### `--version` Screen
 
-The `--version` output shows a subset of the `--help` screen:
-
-1. **ASCII art "peek" logo** — same gradient-colored logo as `--help`.
-2. **Version** — `peek v{VERSION}` in heading color.
-3. **Brief description** — one-line description in foreground color.
-
-No usage, options, or theme listing is shown. Like `--help`, it respects
-`--theme <name>` for previewing different color schemes.
+`--version` / `-V` prints a single line: `peek X.Y.Z`. Unstyled, suitable
+for shell scripting (`peek --version | awk ...`). The themed logo banner is
+intentionally not shown here — for a styled banner with version info, use
+the `-h` / `--help` screens or the `a` (about) view in the interactive
+viewer.
 
 **Status: Implemented.**
 
