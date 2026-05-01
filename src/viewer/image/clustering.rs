@@ -101,14 +101,14 @@ pub fn fast_2_color(pixels: &[[u8; 3]]) -> ClusterResult {
         }
 
         // Recompute centroids
-        if ca > 0 {
+        if let Some(ca) = std::num::NonZeroU64::new(ca) {
             centroid_a = [
                 (sa_r / ca) as u8,
                 (sa_g / ca) as u8,
                 (sa_b / ca) as u8,
             ];
         }
-        if cb > 0 {
+        if let Some(cb) = std::num::NonZeroU64::new(cb) {
             centroid_b = [
                 (sb_r / cb) as u8,
                 (sb_g / cb) as u8,

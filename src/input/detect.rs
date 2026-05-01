@@ -205,6 +205,11 @@ fn detect_bytes(data: &[u8]) -> Detected {
     let trimmed = text.trim_start();
     let first = trimmed.as_bytes().first().copied();
 
+    // Suppress clippy::collapsible_match: rust 1.95 suggests folding the
+    // inner `if` into a match guard, but doing so changes fall-through
+    // semantics — on guard failure the arm is skipped instead of matched
+    // and emptied, so any future arm added below could silently capture it.
+    #[allow(clippy::collapsible_match)]
     match first {
         Some(b'{') | Some(b'[') => {
             if serde_json::from_str::<serde_json::Value>(text).is_ok() {

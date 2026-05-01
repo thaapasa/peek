@@ -75,7 +75,7 @@ fn collect_frames<'a, D: image::AnimationDecoder<'a>>(decoder: D) -> Result<Vec<
     for frame_result in decoder.into_frames() {
         let frame = frame_result.context("failed to decode frame")?;
         let (numer, denom) = frame.delay().numer_denom_ms();
-        let ms = if denom == 0 { 100 } else { numer / denom };
+        let ms = numer.checked_div(denom).unwrap_or(100);
         let delay = Duration::from_millis(ms.max(20) as u64);
         let image = DynamicImage::ImageRgba8(frame.into_buffer());
         frames.push(AnimFrame { image, delay });

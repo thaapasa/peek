@@ -119,11 +119,10 @@ impl Mode for HexMode {
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        let pct = if self.total_len > 0 {
-            (self.top_offset * 100 / self.total_len).min(100)
-        } else {
-            0
-        };
+        let pct = (self.top_offset * 100)
+            .checked_div(self.total_len)
+            .unwrap_or(0)
+            .min(100);
         let s = format!(
             "0x{:08x} / 0x{:08x} ({}%)",
             self.top_offset, self.total_len, pct

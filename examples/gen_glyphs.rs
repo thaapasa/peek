@@ -238,7 +238,7 @@ fn downsample_to_bitmap(canvas: &[u8], canvas_w: usize, canvas_h: usize) -> u128
                 }
             }
 
-            let avg = if count > 0 { sum / count } else { 0 };
+            let avg = sum.checked_div(count).unwrap_or(0);
 
             // Threshold: > 128 means "ink"
             if avg > 128 {
