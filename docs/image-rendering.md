@@ -1,119 +1,100 @@
-# Image Rendering in peek
+# Image Rendering
 
-peek renders images in the terminal using a two-color glyph-matching algorithm. This document
-describes how the algorithm works, the available rendering modes, and how to regenerate the glyph
-atlas.
+peek renders images via two-color glyph matching. This doc covers the algorithm, the rendering
+modes, and the glyph-atlas regeneration flow.
 
-## Algorithm overview
+## Algorithm
 
-For each character cell in the terminal output:
+For each terminal cell:
 
-1. **Pixel extraction**: The source image is resized so that each terminal cell maps to an 8×16
-   block of pixels (matching the typical ~2:1 height-to-width ratio of terminal characters).
+1. **Pixel extraction.** Source resized so each cell maps to an 8×16 pixel block (matches typical ~
+   2:1 height-to-width terminal cell ratio).
+2. **Color clustering.** The 128 pixels are clustered into two dominant colors via fast k-means
+   (k=2, 2 iterations). Produces a binary bitmap assigning each pixel to one of the two colors.
+3. **Glyph matching.** Binary bitmap compared against a precomputed atlas using Hamming distance
+   (XOR + popcount). Inverted match (swap fg/bg) checked for free, doubling the pattern count
+   without extra storage.
+4. **ANSI rendering.** Selected glyph emitted with 24-bit truecolor fg + bg.
 
-2. **Color clustering**: The 128 pixels in the block are clustered into two dominant colors using
-   fast k-means (k=2, 2 iterations). This produces a binary bitmap where each pixel is assigned to
-   one of the two colors.
-
-3. **Glyph matching**: The binary bitmap is compared against a pre-computed atlas of glyph bitmaps
-   using Hamming distance (XOR + popcount). The glyph whose spatial pattern best matches the pixel
-   assignment is selected. The inverted match (swap foreground/background) is also checked for free.
-
-4. **ANSI rendering**: The selected glyph is output with 24-bit true-color ANSI escape codes for
-   both foreground and background colors.
-
-This means that glyph selection depends on the *spatial distribution* of colors within each cell,
-not just brightness. A cell with a diagonal color boundary will produce a `/` or `\`, while a cell
-that's mostly one color at the top will produce `▄` (lower half block), etc.
+Glyph selection is driven by *spatial color distribution*, not just brightness. A diagonal color
+boundary picks `/` or `\`; a cell mostly one color at the top picks `▄`.
 
 ## Bitmap representation
 
-Each glyph is represented as a `u128` bitmap — 8 columns × 16 rows = 128 bits, packed row-major:
+Each glyph is a `u128` — 8 cols × 16 rows = 128 bits, row-major:
 
 - Bit 0 = (row 0, col 0)
-- Bit 1 = (row 0, col 1)
-- ...
 - Bit 7 = (row 0, col 7)
 - Bit 8 = (row 1, col 0)
-- ...
 - Bit 127 = (row 15, col 7)
 
-A set bit means "ink" (foreground color), a clear bit means "empty" (background color).
+Set bit = ink (foreground); clear bit = empty (background).
 
-### Matching via Hamming distance
-
-For each candidate glyph:
+### Hamming-distance match
 
 ```
-distance_normal  = popcount(cell_bitmap XOR glyph_bitmap)
+distance_normal   = popcount(cell_bitmap XOR glyph_bitmap)
 distance_inverted = 128 - distance_normal
 ```
 
-The glyph with the minimum `min(distance_normal, distance_inverted)` wins. If the inverted distance
-is smaller, the foreground and background colors are swapped. This effectively doubles the number of
-available patterns without storing any extra data.
+Glyph with the minimum `min(distance_normal, distance_inverted)` wins. Inverted distance smaller →
+swap fg and bg.
 
-On x86-64, `popcount(a XOR b)` on `u128` compiles to 2 XOR + 2 POPCNT instructions, making the
-matching loop extremely fast.
+On x86-64, `popcount(a XOR b)` on `u128` compiles to 2 XOR + 2 POPCNT — extremely fast match loop.
 
 ## Color clustering
 
-The 2-color clustering uses an optimized k-means variant:
+Optimized k-means variant:
 
-1. Compute the mean color of all 128 pixels.
-2. Find the pixel farthest from the mean → initial centroid B.
-3. Find the pixel farthest from centroid B → initial centroid A.
-4. Run 2 iterations of standard k-means (assign + recompute centroids).
+1. Mean color of all 128 pixels.
+2. Pixel farthest from the mean → initial centroid B.
+3. Pixel farthest from centroid B → initial centroid A.
+4. 2 iterations of standard k-means (assign + recompute).
 
-**Uniform cell optimization**: If the maximum pixel distance from the mean is below a threshold (sum
-of squared channel differences < 300), the cell is considered uniform and rendered as a space with
-the mean color as background. This skips clustering and glyph matching entirely.
+**Uniform-cell fast path:** if max pixel distance from mean is below threshold (sum of squared
+channel diffs < 300), cell is rendered as a space with the mean as background — skips clustering and
+glyph matching.
 
-The distance metric is squared Euclidean distance in RGB space: `(Δr² + Δg² + Δb²)`. While
-perceptual color spaces (LAB) would be more accurate, the RGB metric is faster and the visual
-difference is marginal for this use case.
+Distance metric: squared Euclidean in RGB (`Δr² + Δg² + Δb²`). Perceptual spaces (LAB) would be more
+accurate but slower; visual difference is marginal here.
 
-## Rendering modes
-
-peek supports three image rendering modes, selectable with `--image-mode`:
+## Rendering modes (`--image-mode`)
 
 ### `full` (default)
 
-Uses the entire glyph atlas:
+Entire glyph atlas:
 
-- All printable ASCII characters (32–126)
-- Latin-1 Supplement characters (160–255)
-- Unicode block and quadrant elements (U+2580–U+259F)
-- Box-drawing characters (U+2500–U+257F)
+- All printable ASCII (32–126)
+- Latin-1 Supplement (160–255)
+- Block / quadrant elements (U+2580–U+259F)
+- Box-drawing (U+2500–U+257F)
 - Geometric shapes (U+25A0–U+25FF)
 
-This provides maximum spatial detail, as the algorithm has the widest selection of shapes to choose
-from. May look "noisy" since letters and symbols appear in the output.
+Maximum spatial detail. Can look "noisy" since letters and symbols appear in the output.
 
 ### `block`
 
-Uses only:
+- Block / quadrant elements (▀▄▌▐▖▗▘▝▙▛▜▟█░▒▓)
+- Curated ASCII subset with distinct spatial patterns (`/\|-_()[]{}` etc.)
 
-- Unicode block and quadrant elements (▀▄▌▐▖▗▘▝▙▛▜▟█░▒▓)
-- A curated ASCII subset with distinct spatial patterns (`/\|-_()[]{}` etc.)
+Cleaner, less text-like. Quadrants alone give 2×2 sub-cell resolution.
 
-Produces a cleaner, less text-like output while still capturing edges and boundaries effectively.
-The quadrant characters alone provide 2×2 sub-cell resolution.
+### `geo`
+
+Block / quadrant elements + line-segment ASCII (`/\|-_`) only.
 
 ### `ascii`
 
-The legacy density-ramp renderer. Maps each pixel to a character based on perceived brightness (
-ITU-R BT.601 luminance formula), with foreground-only coloring. No background colors are used. This
-is the fastest mode and works on terminals that don't support background colors or Unicode.
+Legacy density-ramp renderer. Per-pixel character based on ITU-R BT.601 luminance, foreground only —
+no background colors. Fastest mode; works on terminals without bg colors or Unicode.
 
 ## Glyph atlas
 
-The glyph atlas is stored in `src/viewer/image/glyph_atlas.rs` and consists of two parts:
+Stored in `src/viewer/image/glyph_atlas.rs`, two parts.
 
 ### Block elements (hardcoded)
 
-Unicode block elements have mathematically exact geometry, so their bitmaps are computed at compile
-time using `const fn` helpers:
+Mathematically exact geometry → bitmaps computed at compile time via `const fn` helpers:
 
 - `full_rows(start, end)` — fills complete rows
 - `full_cols(start, end)` — fills complete columns
@@ -121,53 +102,45 @@ time using `const fn` helpers:
 
 ### Font-rasterized glyphs (generated)
 
-All other glyphs are generated by the `gen_glyphs` example tool:
+Other glyphs come from the `gen_glyphs` example tool:
 
 ```sh
 cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs
 ```
 
-The tool:
+Pipeline:
 
-1. Loads a monospace font (auto-detected from system fonts, or set `PEEK_FONT=/path/to/font.ttf`)
-2. Rasterizes each character at ~48px using `fontdue`
-3. Composes each glyph onto a cell-sized canvas using font metrics (baseline, bearing)
-4. Downsamples to 8×16 using area sampling
-5. Thresholds at 128 to produce a binary bitmap
-6. Outputs Rust source with `GlyphBitmap` entries tagged by category (`Curated` or `Extended`)
+1. Loads a monospace font (auto-detected from system fonts; override with
+   `PEEK_FONT=/path/to/font.ttf`)
+2. Rasterizes each character at ~48px via `fontdue`
+3. Composes onto a cell-sized canvas using font metrics (baseline, bearing)
+4. Downsamples to 8×16 via area sampling
+5. Thresholds at 128 → binary bitmap
+6. Outputs Rust source with `GlyphBitmap` entries tagged `Curated` or `Extended`
 
-Each glyph is tagged with a `GlyphCategory`:
+Glyph categories:
 
 - `Block` — programmatic block elements
-- `Curated` — ASCII characters with distinct spatial patterns (used in `block` mode)
-- `Extended` — all other characters (only used in `full` mode)
+- `Curated` — ASCII with distinct spatial patterns (used in `block` mode)
+- `Extended` — everything else (only `full` mode)
 
-### Regenerating the atlas
-
-If you change the character set or want to use a different font:
+### Regenerating
 
 ```sh
-# Use system default font
-cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs
-
-# Use a specific font
-PEEK_FONT=/path/to/MyFont.ttf cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs
+cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs                      # system default font
+PEEK_FONT=/path/to/MyFont.ttf cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs   # specific font
 ```
 
-The generator requires `fontdue` (listed in `[dev-dependencies]`), which is not needed at runtime.
+The generator uses `fontdue` (in `[dev-dependencies]`); not a runtime dep.
 
-## ANSI escape code format
-
-Each cell is rendered as:
+## ANSI escape format
 
 ```
 \x1b[38;2;{fg_r};{fg_g};{fg_b}m\x1b[48;2;{bg_r};{bg_g};{bg_b}m{glyph}
 ```
 
-Where:
+- `38;2;r;g;b` — 24-bit foreground
+- `48;2;r;g;b` — 24-bit background
+- Each line ends with `\x1b[0m` to reset
 
-- `38;2;r;g;b` sets the 24-bit foreground color
-- `48;2;r;g;b` sets the 24-bit background color
-- Each line ends with `\x1b[0m` to reset colors
-
-This requires a terminal that supports 24-bit true color (most modern terminals do).
+Requires a 24-bit-truecolor terminal (most modern terminals support it).

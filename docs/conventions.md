@@ -1,100 +1,82 @@
 # Coding Conventions
 
-## Error handling
+## Errors
 
-- Use `anyhow::Result` for application errors, `thiserror` for library-style typed errors.
-- No `unwrap()` in non-test code; propagate errors with `?`.
+- `anyhow::Result` for application errors; `thiserror` for library-style typed errors.
+- No `unwrap()` outside tests. Propagate with `?`.
 
 ## CLI
 
-- CLI args defined via clap derive macros on a single `Args` struct in `main.rs`.
-- When stdout is a TTY: interactive viewer. When piped: direct output.
+- All args on a single clap-derive `Args` struct in `main.rs`.
+- TTY stdout → interactive viewer. Pipe → direct output.
 
-## Color output
+## Color
 
-- **All colored terminal output must go through `PeekTheme::paint()`** — never write
-  raw ANSI escape sequences (`\x1b[...m`). This ensures future color mode support
-  (256-color, 16-color, monochrome) can be applied in one place.
-- Target 24-bit true color; degrade gracefully when terminal doesn't support it.
-- Use semantic color roles from `PeekTheme` (`heading`, `label`, `value`, `accent`,
-  `muted`, `warning`) rather than hardcoded colors. Derive context-appropriate shades
-  via `lerp_color()` when needed.
+- All colored output goes through `PeekTheme::paint()`. Never hand-write ANSI escapes
+  (`\x1b[...m`) — `ColorMode` decides the on-the-wire form (24-bit / 256 / 16 / grayscale / plain)
+  in one place.
+- Use semantic roles (`heading`, `label`, `value`, `accent`, `muted`, `warning`). Derive shades with
+  `lerp_color()`. Don't hardcode RGB.
+- Target truecolor; degrade gracefully.
 
 ## Themes
 
-- Themes are `.tmTheme` files embedded at compile time via `include_str!()`.
-- `PeekTheme` semantic roles are derived automatically from syntect theme settings.
-- Adding a theme: create the `.tmTheme` file, add a `PeekThemeName` variant, wire
-  the `include_str!`, `cli_name`, `tmtheme_source`, `next`, and `help_text` methods.
+- `.tmTheme` files in `themes/`, embedded via `include_str!()`.
+- `PeekTheme` semantic roles derive automatically from syntect theme settings.
+- Adding a theme: drop the `.tmTheme` file, add a `PeekThemeName` variant, wire `include_str!` /
+  `cli_name` / `tmtheme_source` / `next` / `help_text`.
 
 ## Viewers and modes
 
-Two parallel abstractions, one per output path:
+Two parallel abstractions, one per output path.
 
-- **`Viewer` trait** (`viewer/mod.rs`) — one-shot rendering for piped output.
-  Implemented by `SyntaxViewer`, `StructuredViewer`, `TextViewer`, `HexViewer`,
-  `ImageViewer`, `SvgViewer`. Used only when stdout is not a TTY (or `--print`).
-- **`Mode` trait** (`viewer/modes/mod.rs`) — interactive views that participate
-  in the viewer's mode stack. Implemented by `ContentMode`, `HexMode`,
-  `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`. Each file type
-  composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`; the unified
-  event loop in `viewer::interactive::run` drives them.
+- **`Viewer` trait** (`viewer/mod.rs`) — one-shot piped output. Impls: `SyntaxViewer`,
+  `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`. Used when stdout isn't
+  a TTY (or `--print`).
+- **`Mode` trait** (`viewer/modes/mod.rs`) — interactive views that participate in the mode stack.
+  Impls: `ContentMode`, `HexMode`, `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`,
+  `AboutMode`. Each file type composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`;
+  `viewer::interactive::run` drives the stack.
 
-Adding a new file type means adding a `Mode` impl (or reusing `ContentMode`)
-and a line in `compose_modes`. A `Viewer` impl is only needed if the piped
-path needs custom rendering — without one, the piped fallback is `TextViewer`
+Adding a file type: add a `Mode` impl (or reuse `ContentMode`) and a line in `compose_modes`.
+`Viewer` impl only when piped output needs custom rendering — otherwise the fallback is `TextViewer`
 or `HexViewer`.
 
-Modes that re-render based on terminal size override
-`Mode::rerender_on_resize() -> true` (image render and animation do; line-based
-views don't). Modes that own their scroll position (Hex's byte-aligned offset)
-override `owns_scroll` + `scroll`; others let `ViewerState` manage line scroll.
+Modes that re-render on resize override `rerender_on_resize()`. Modes that own scroll position
+(Hex's byte-aligned offset) override `owns_scroll` + `scroll`.
 
 ## Module organization
 
-- **Split modules before they get unwieldy.** A file pushing past ~400 lines
-  with multiple unrelated concerns is a refactor signal. `info::gather` and
-  `viewer::image` are the worked examples — both started as a single mod.rs
-  that grew to mix 4–8 different topics, and both got split into a directory
-  of focused files. Keep `mod.rs` small: module declarations, re-exports, and
-  small "glue" types only. Type-specific logic lives in its own file, named
-  for the concern it owns (`exif.rs`, `xmp.rs`, `animation.rs`, `mode.rs`,
+- **Split before unwieldy.** A file past ~400 lines mixing unrelated concerns is a refactor signal.
+  Worked examples: `info::gather` and `viewer::image` both started as fat `mod.rs` files and got
+  split into per-concern directories.
+- **`mod.rs` stays small** — module declarations, re-exports, small glue types only. Topic-specific
+  logic lives in its own file named for the concern (`exif.rs`, `xmp.rs`, `animation.rs`, `mode.rs`,
   `viewer.rs`).
-- **Colocate by concern, not by trait.** All SVG code lives in
-  `viewer/image/svg.rs` — the rasterization helpers and the `SvgViewer`
-  trait impl share that file because they're the same concern (handling
-  SVG content), even though the trait impl pattern is shared with
-  `ImageViewer` in `viewer.rs`. A reader who comes in asking "how does SVG
-  work" finds one file, not two. Resist the urge to group by abstraction
-  shape (every Viewer in `viewers.rs`) — that scatters topic knowledge.
-- **Splitting earns its keep when it reduces what the reader has to hold
-  in their head.** Don't split a 200-line file that does one thing well.
-  Don't split for line count alone. Split when one file is asking the
-  reader to track multiple unrelated mental models at once.
+- **Colocate by concern, not by trait.** All SVG code lives in `viewer/image/svg.rs` — rasterization
+  helpers + `SvgViewer` together, because they're the same concern. A reader asking "how does SVG
+  work" finds one file. Resist grouping by abstraction shape (every `Viewer` in `viewers.rs`) — that
+  scatters topic knowledge.
+- **Splitting earns its keep when it reduces what the reader has to hold in their head.** Don't
+  split a 200-line file that does one thing well. Split when one file demands tracking multiple
+  unrelated mental models.
 
 ## Tests
 
-- **New `info::gather` / `info::render` / `input::detect` functionality
-  needs fixture-based tests.** Put them in `src/info/gather/tests.rs` (or
-  the equivalent `tests` submodule) and use the real files in
-  `test-images/` and `test-data/` as fixtures via
-  `PathBuf::from(env!("CARGO_MANIFEST_DIR"))`. Each test loads a fixture
-  through the full `detect` → `gather` pipeline and asserts a small set
-  of known-true facts about the extracted metadata (dimensions, top-level
-  kind, indent style, root element, etc.). Reasoning: these layers are
-  thin wrappers over external parsers (image, exif, quick-xml,
-  serde_json, …) and their behaviour is hard to assert against synthetic
-  inputs alone — fixture tests catch upstream regressions and pin our
-  field-extraction logic to ground truth.
-- **Synthetic streaming-pass tests stay where they are** (e.g. UTF-8
-  edge cases in `info::gather::text`). Fixture tests complement them,
-  they don't replace them — a 4-line synthetic input is the right tool
-  for "does CRLF detection work at a chunk boundary".
-- **Add a fixture if you need one that isn't present.** `test-data/`
-  and `test-images/` are first-class — extending them is part of the
-  task, not a side errand.
+- **New `info::gather` / `info::render` / `input::detect` functionality needs fixture-based tests.**
+  Live under `src/info/gather/tests.rs` (or equivalent `tests` submodule). Use the real files in
+  `test-images/` and `test-data/` via `PathBuf::from(env!("CARGO_MANIFEST_DIR"))`. Each test runs
+  the full `detect` → `gather` pipeline and asserts a small set of known-true facts (dimensions,
+  top-level kind, indent style, root element). Reasoning: these layers are thin wrappers over
+  external parsers (image, exif, quick-xml, serde_json) — fixture tests catch upstream regressions
+  and pin field-extraction to ground truth.
+- **Synthetic streaming-pass tests stay where they are** — UTF-8 chunk-boundary cases in
+  `info::gather::text` are easier to assert against tiny synthetic inputs. Fixture tests complement,
+  don't replace.
+- **Add a fixture if you need one.** `test-data/` and `test-images/` are first-class; extending them
+  is part of the task.
 
 ## Standards
 
-- Use IANA-registered MIME types only (RFC 6648 — no `x-` prefixes). Languages
-  without registered types fall back to `text/plain`.
+- IANA-registered MIME types only (RFC 6648 — no `x-` prefixes). Languages without registered types
+  fall back to `text/plain`.

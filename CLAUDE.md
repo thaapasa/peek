@@ -1,10 +1,10 @@
 # peek
 
-Modern terminal file viewer with syntax highlighting, structured data pretty-printing, and image rendering.
+Modern terminal file viewer with syntax highlighting, structured-data pretty-printing, and image
+rendering.
 
-**Single-file viewer.** peek takes one path (or stdin) and shows it. No batch
-mode, no file list, no `cat`-style concatenation — those use cases are served
-by other tools.
+**Single-file viewer.** One path (or stdin) at a time. No batch mode, no file list, no `cat`-style
+concatenation — those use cases belong to other tools.
 
 ## Build & Run
 
@@ -16,9 +16,9 @@ cargo test                   # run all tests
 cargo clippy                 # lint
 ```
 
-No external runtime dependencies. Image rendering is built-in.
+No external runtime dependencies. Image rendering is built in.
 
-## Architecture
+## Architecture map
 
 ```
 src/
@@ -27,7 +27,7 @@ src/
   input/
     mod.rs             — re-exports InputSource, ByteSource
     source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait
-    detect.rs          — File type detection (extension + magic bytes + stdin sniffing)
+    detect.rs          — File-type detection (extension + magic bytes + stdin sniffing)
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   output/
     mod.rs             — re-exports Output
@@ -102,35 +102,48 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 
 ## Workflow
 
-- **Do not commit unless explicitly asked.** The user decides when and what to commit.
+- **Don't commit unless asked.** The user decides what and when.
 
 ## Collaboration
 
-The project's three north stars:
+Three north stars:
 
-1. **Architecture is clean, robust, and maintainable.** New abstractions earn their place by reducing total surface area or making extension easier. Modules have clear, narrow responsibilities. The dispatcher in `main.rs` should stay short — file-type-specific logic lives in `compose_modes` and the modes themselves.
-2. **Stream, don't load.** The viewer should handle multi-GB files comfortably. Prefer `InputSource::open_byte_source()` for random-access reads (HexMode does this) or chunked iteration over `read_bytes()` / `read_text()`, which load the whole file into memory. Whole-file reads are acceptable only when the feature genuinely needs them (full-file pretty-print of structured data, image decode) — never as a casual default.
-3. **Keep cognitive load low.** What matters here is how much a reader has to track to understand a piece of code — branches, scattered state, layers of indirection, concerns tangled together. Abstractions can *reduce* that load (a well-named trait lets you stop thinking about mechanism) or *add* to it (chasing through four files to follow one operation). Inlining can do either too — sometimes everything-visible is the right call, sometimes it's a 200-line function with three concerns mixed in. The test is what the next reader has to hold in their head; type count, line count, and call-site count are not the test.
+1. **Clean, robust, maintainable architecture.** New abstractions earn their place by reducing total
+   surface area or making extension easier. Modules have narrow responsibilities. `main.rs` stays
+   short — file-type-specific logic lives in `compose_modes` and the modes themselves.
+2. **Stream, don't load.** Multi-GB files are first-class. Prefer
+   `InputSource::open_byte_source()` (random access) or chunked iteration over `read_bytes()` /
+   `read_text()` (whole-file). Whole-file reads only when the feature truly needs it (full-file
+   pretty-print of structured data, image decode) — never as a casual default.
+3. **Keep cognitive load low.** What matters is what the next reader has to hold in their head.
+   Abstractions can reduce that load (named trait → stop thinking about mechanism) or add to it
+   (chasing four files for one operation). Inlining cuts both ways. Type count, line count, and
+   call-site count aren't the test — what the reader has to track is.
 
-Be a critical collaborator, not an order-taker. Push back when a proposed change would:
+Be a critical collaborator. Push back when a change would:
 
-- **Deteriorate architecture quality** — leak abstractions, blur module boundaries, conflate orthogonal concerns (e.g. mixing piped-output and interactive paths), or re-introduce a `match file_type` chain that `compose_modes` was meant to eliminate.
-- **Add cognitive load without payoff** — deep branching, state scattered across structs that has to be kept in sync by hand, mechanism that leaks through several call sites instead of being hidden behind one, layers of indirection that don't earn the click-through cost, hypothetical-future abstractions whose concept isn't real yet. Whether the fix is a new abstraction, inlining what's there, or restructuring is the judgment call.
-- **Worsen performance** — redundant re-renders, extra allocations on hot paths, full-file reads where streaming or seeking would do, eager work that should be lazy.
+- **Damage architecture quality** — leak abstractions, blur boundaries, conflate orthogonal
+  concerns (mixing piped + interactive paths), or re-introduce a `match file_type` chain that
+  `compose_modes` was meant to eliminate.
+- **Add cognitive load without payoff** — deep branching, scattered state synced by hand, mechanism
+  leaking through call sites, indirection that doesn't earn the click-through, hypothetical-future
+  abstractions whose concept isn't real yet.
+- **Hurt performance** — redundant re-renders, hot-path allocations, full-file reads where streaming
+  or seeking would do, eager work that should be lazy.
 
-Surface the trade-off concretely and propose an alternative — the user wants help finding the best path, not the path of least resistance.
+Surface the trade-off concretely; propose an alternative.
 
 ## Conventions
 
-See [docs/conventions.md](docs/conventions.md) for coding conventions.
+[docs/conventions.md](docs/conventions.md).
 
 ## Documentation
 
-Keep documentation up to date when making changes. In particular:
+Keep these in sync with code changes:
 
 - **README.md** — project overview, feature summary, usage examples
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/features.md** — feature specification and implementation status
-- **docs/conventions.md** — coding conventions and patterns
-- **docs/release.md** — release pipeline and recovery procedures
-- **CLAUDE.md** — architecture map (if files/modules are added, moved, or removed)
+- **docs/features.md** — feature specification and status
+- **docs/conventions.md** — coding conventions
+- **docs/release.md** — release pipeline and recovery
+- **CLAUDE.md** — architecture map (when files / modules are added, moved, or removed)
