@@ -102,18 +102,10 @@ pub fn fast_2_color(pixels: &[[u8; 3]]) -> ClusterResult {
 
         // Recompute centroids
         if let Some(ca) = std::num::NonZeroU64::new(ca) {
-            centroid_a = [
-                (sa_r / ca) as u8,
-                (sa_g / ca) as u8,
-                (sa_b / ca) as u8,
-            ];
+            centroid_a = [(sa_r / ca) as u8, (sa_g / ca) as u8, (sa_b / ca) as u8];
         }
         if let Some(cb) = std::num::NonZeroU64::new(cb) {
-            centroid_b = [
-                (sb_r / cb) as u8,
-                (sb_g / cb) as u8,
-                (sb_b / cb) as u8,
-            ];
+            centroid_b = [(sb_r / cb) as u8, (sb_g / cb) as u8, (sb_b / cb) as u8];
         }
     }
 
@@ -160,10 +152,7 @@ mod tests {
         assert!(dist > 10000, "colors should be far apart, dist={dist}");
         // Check that exactly 64 bits are set (one cluster) or 64 are clear
         let popcount = result.bitmap.count_ones();
-        assert!(
-            popcount == 64,
-            "expected 64 bits set, got {popcount}"
-        );
+        assert!(popcount == 64, "expected 64 bits set, got {popcount}");
     }
 
     #[test]

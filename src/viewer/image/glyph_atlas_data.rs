@@ -2,6 +2,7 @@
 // Font: /System/Library/Fonts/Menlo.ttc
 // Do not edit manually — regenerate with the gen_glyphs tool.
 
+#[rustfmt::skip]
 static GENERATED_GLYPHS: &[GlyphBitmap] = &[
     GlyphBitmap { ch: '!', bits: 0x00000010100000101010101010000000, category: GlyphCategory::Curated },
     GlyphBitmap { ch: '"', bits: 0x00000000000000000000262626240000, category: GlyphCategory::Curated },

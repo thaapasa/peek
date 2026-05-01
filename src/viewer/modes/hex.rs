@@ -5,9 +5,7 @@ use syntect::highlighting::Color;
 use super::{Mode, ModeId, Position, RenderCtx};
 use crate::input::{ByteSource, InputSource};
 use crate::theme::PeekTheme;
-use crate::viewer::hex::{
-    align_down, bytes_per_row, format_row, max_top,
-};
+use crate::viewer::hex::{align_down, bytes_per_row, format_row, max_top};
 use crate::viewer::ui::{Action, content_rows};
 
 pub(crate) struct HexMode {
@@ -30,7 +28,6 @@ impl HexMode {
             label: "hex".to_string(),
         })
     }
-
 }
 
 impl Mode for HexMode {

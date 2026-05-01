@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::{
-    cursor, event::KeyEvent, execute,
+    cursor,
+    event::KeyEvent,
+    execute,
     terminal::{self, ClearType},
 };
 
@@ -36,9 +38,11 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::CycleColorMode, "Next color mode"),
     // `r` is dispatched globally so modes that don't handle it locally
     // fall through to `cycle_primary` (e.g. SVG rasterized → XML view).
-    (Action::ToggleRawSource, "Toggle raw / pretty / cycle primary"),
+    (
+        Action::ToggleRawSource,
+        "Toggle raw / pretty / cycle primary",
+    ),
 ];
-
 
 pub(crate) struct ViewerState<'a> {
     modes: Vec<Box<dyn Mode>>,
@@ -492,7 +496,6 @@ impl<'a> ViewerState<'a> {
             self.peek_theme.color_mode.reset_bytes(),
         )
     }
-
 }
 
 /// Render the screen: clear, draw visible lines, draw status bar on last row.
@@ -510,7 +513,11 @@ fn draw_screen(
     // screen with a leftover background color. (Empty in Plain mode —
     // there's nothing to reset.)
     stdout.write_all(reset_bytes)?;
-    execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0),)?;
+    execute!(
+        stdout,
+        terminal::Clear(ClearType::All),
+        cursor::MoveTo(0, 0),
+    )?;
 
     let start = scroll.min(lines.len());
     let end = (start + rows).min(lines.len());

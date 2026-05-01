@@ -3,10 +3,10 @@ use syntect::parsing::Scope;
 
 use super::ColorMode;
 
-const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
-const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
-const RED: Color = Color { r: 255, g: 80, b: 80, a: 255 };
-const YELLOW: Color = Color { r: 255, g: 255, b: 0, a: 255 };
+#[rustfmt::skip] const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
+#[rustfmt::skip] const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
+#[rustfmt::skip] const RED: Color = Color { r: 255, g: 80, b: 80, a: 255 };
+#[rustfmt::skip] const YELLOW: Color = Color { r: 255, g: 255, b: 0, a: 255 };
 
 /// Semantic color roles for all non-syntax UI output.
 #[derive(Clone)]
@@ -42,18 +42,10 @@ impl PeekTheme {
         Self {
             foreground: fg,
             background: bg,
-            heading: theme
-                .settings
-                .accent
-                .or(keyword_color)
-                .unwrap_or(fg),
+            heading: theme.settings.accent.or(keyword_color).unwrap_or(fg),
             label: scope_color(theme, "entity.name").unwrap_or(fg),
             value: scope_color(theme, "string").unwrap_or(fg),
-            accent: theme
-                .settings
-                .accent
-                .or(keyword_color)
-                .unwrap_or(fg),
+            accent: theme.settings.accent.or(keyword_color).unwrap_or(fg),
             muted,
             warning: scope_color(theme, "invalid").unwrap_or(RED),
             gutter: theme.settings.gutter_foreground.unwrap_or(muted),
@@ -70,7 +62,12 @@ impl PeekTheme {
 
     /// Wrap text in a foreground-color escape with a trailing reset.
     pub fn paint(&self, text: &str, color: Color) -> String {
-        format!("{}{}{}", self.color_mode.fg_seq(color), text, self.color_mode.reset())
+        format!(
+            "{}{}{}",
+            self.color_mode.fg_seq(color),
+            text,
+            self.color_mode.reset()
+        )
     }
 
     /// Wrap text in a foreground-color escape **without** a trailing reset.
@@ -82,7 +79,12 @@ impl PeekTheme {
 
     /// Wrap content in a background-color escape with a trailing reset.
     pub fn paint_bg(&self, content: &str, color: Color) -> String {
-        format!("{}{}{}", self.color_mode.bg_seq(color), content, self.color_mode.reset())
+        format!(
+            "{}{}{}",
+            self.color_mode.bg_seq(color),
+            content,
+            self.color_mode.reset()
+        )
     }
 
     pub fn paint_heading(&self, text: &str) -> String {

@@ -91,7 +91,9 @@ fn gather_extras_stdin(
 ) -> FileExtras {
     match file_type {
         FileType::SourceCode { .. } | FileType::Svg => {
-            gather_text_extras_streaming(&InputSource::Stdin { data: Arc::clone(data) })
+            gather_text_extras_streaming(&InputSource::Stdin {
+                data: Arc::clone(data),
+            })
         }
         FileType::Structured(fmt) => FileExtras::Structured {
             format_name: match fmt {
@@ -122,7 +124,9 @@ fn gather_image_extras_from_bytes(data: &Arc<[u8]>, magic_mime: Option<&str>) ->
 
     let hdr_format = detect_hdr_bytes(data);
     let frame_count = crate::viewer::image::animate::anim_frame_count(
-        &InputSource::Stdin { data: Arc::clone(data) },
+        &InputSource::Stdin {
+            data: Arc::clone(data),
+        },
         magic_mime,
     );
     let exif = gather_exif_bytes(data);
@@ -373,7 +377,10 @@ mod tests {
                 word_count,
                 char_count,
             } => (line_count, word_count, char_count),
-            other => panic!("expected Text extras, got {:?}", std::mem::discriminant(&other)),
+            other => panic!(
+                "expected Text extras, got {:?}",
+                std::mem::discriminant(&other)
+            ),
         }
     }
 

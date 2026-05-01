@@ -20,9 +20,7 @@ pub(crate) use state::{GLOBAL_ACTIONS, ViewerState};
 /// terminal — without the guard, an unwinding panic would leave the
 /// user's shell in raw-mode + alternate-screen, which is unrecoverable
 /// without `reset(1)`.
-pub(crate) fn with_alternate_screen(
-    f: impl FnOnce(&mut io::Stdout) -> Result<()>,
-) -> Result<()> {
+pub(crate) fn with_alternate_screen(f: impl FnOnce(&mut io::Stdout) -> Result<()>) -> Result<()> {
     let mut stdout = io::stdout();
     execute!(
         stdout,

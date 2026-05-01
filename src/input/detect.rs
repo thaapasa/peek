@@ -73,7 +73,10 @@ fn detect_file(path: &Path) -> Result<Detected> {
             _ => None,
         };
         if let Some(file_type) = file_type {
-            return Ok(Detected { file_type, magic_mime: None });
+            return Ok(Detected {
+                file_type,
+                magic_mime: None,
+            });
         }
     }
 
@@ -178,10 +181,16 @@ fn detect_bytes(data: &[u8]) -> Detected {
     let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
         if mime == "image/svg+xml" {
-            return Detected { file_type: FileType::Svg, magic_mime };
+            return Detected {
+                file_type: FileType::Svg,
+                magic_mime,
+            };
         }
         if mime.starts_with("image/") {
-            return Detected { file_type: FileType::Image, magic_mime };
+            return Detected {
+                file_type: FileType::Image,
+                magic_mime,
+            };
         }
         if mime.starts_with("video/")
             || mime.starts_with("audio/")
@@ -189,7 +198,10 @@ fn detect_bytes(data: &[u8]) -> Detected {
             || mime.starts_with("application/gzip")
             || mime.starts_with("application/x-executable")
         {
-            return Detected { file_type: FileType::Binary, magic_mime };
+            return Detected {
+                file_type: FileType::Binary,
+                magic_mime,
+            };
         }
     }
 
@@ -222,7 +234,10 @@ fn detect_bytes(data: &[u8]) -> Detected {
         Some(b'<') => {
             // SVG has a distinctive root element — catch it before generic XML
             if trimmed.contains("<svg") {
-                return Detected { file_type: FileType::Svg, magic_mime };
+                return Detected {
+                    file_type: FileType::Svg,
+                    magic_mime,
+                };
             }
             return Detected {
                 file_type: FileType::Structured(StructuredFormat::Xml),

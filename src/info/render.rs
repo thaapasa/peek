@@ -21,7 +21,12 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
 
     // Section: File
     push_section_header(&mut lines, "File", theme);
-    push_field(&mut lines, "Name", &paint_filename(&info.file_name, theme), theme);
+    push_field(
+        &mut lines,
+        "Name",
+        &paint_filename(&info.file_name, theme),
+        theme,
+    );
     push_field(&mut lines, "Path", &paint_path(&info.path, theme), theme);
     push_field(
         &mut lines,
@@ -110,18 +115,8 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
         } => {
             lines.push(String::new());
             push_section_header(&mut lines, "Content", theme);
-            push_field(
-                &mut lines,
-                "Lines",
-                &paint_count(*line_count, theme),
-                theme,
-            );
-            push_field(
-                &mut lines,
-                "Words",
-                &paint_count(*word_count, theme),
-                theme,
-            );
+            push_field(&mut lines, "Lines", &paint_count(*line_count, theme), theme);
+            push_field(&mut lines, "Words", &paint_count(*word_count, theme), theme);
             push_field(
                 &mut lines,
                 "Characters",
@@ -344,10 +339,8 @@ fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
         };
         result.push_str(&theme.paint(&ch.to_string(), color));
         if separators.contains(&i) && i + 1 < chars.len() {
-            result.push_str(&theme.paint(
-                "\u{2500}",
-                lerp_color(theme.muted, theme.background, 0.5),
-            ));
+            result
+                .push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
         }
     }
     result
@@ -416,4 +409,3 @@ fn thousands_sep(n: u64) -> String {
     }
     result.chars().rev().collect()
 }
-

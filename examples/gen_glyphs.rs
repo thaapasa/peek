@@ -122,13 +122,7 @@ fn main() {
         }
 
         // Compose glyph onto a full-cell canvas using metrics
-        let canvas = compose_glyph_on_canvas(
-            &bitmap,
-            &metrics,
-            canvas_w,
-            canvas_h,
-            ascent,
-        );
+        let canvas = compose_glyph_on_canvas(&bitmap, &metrics, canvas_w, canvas_h, ascent);
 
         // Downsample canvas to 8x16 binary bitmap
         let bits = downsample_to_bitmap(&canvas, canvas_w, canvas_h);
@@ -154,6 +148,7 @@ fn main() {
     println!("// Font: {font_path}");
     println!("// Do not edit manually — regenerate with the gen_glyphs tool.");
     println!();
+    println!("#[rustfmt::skip]");
     println!("static GENERATED_GLYPHS: &[GlyphBitmap] = &[");
 
     for (ch, (bits, category)) in &glyphs {

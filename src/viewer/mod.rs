@@ -5,8 +5,8 @@ use syntect::easy::HighlightLines;
 use syntect::highlighting::Style;
 
 use crate::Args;
-use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::input::InputSource;
+use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::output::Output;
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
@@ -28,12 +28,8 @@ pub(crate) mod ui;
 /// renders the whole file to an `Output` in one shot — distinct from the
 /// interactive `Mode` system, which drives a TTY event loop.
 pub trait Viewer {
-    fn render(
-        &self,
-        source: &InputSource,
-        file_type: &FileType,
-        output: &mut Output,
-    ) -> Result<()>;
+    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut Output)
+    -> Result<()>;
 }
 
 /// Highlight text content as colored terminal lines.
@@ -49,8 +45,7 @@ pub fn highlight_lines(
         .find_syntax_by_token(syntax_token)
         .or_else(|| tm.syntax_set.find_syntax_by_name(syntax_token))
         .or_else(|| {
-            fallback_syntax_token(syntax_token)
-                .and_then(|t| tm.syntax_set.find_syntax_by_name(t))
+            fallback_syntax_token(syntax_token).and_then(|t| tm.syntax_set.find_syntax_by_name(t))
         })
         .unwrap_or_else(|| tm.syntax_set.find_syntax_plain_text());
     let theme = tm.theme_for(theme_name);

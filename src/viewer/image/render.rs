@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
 
 use super::clustering::fast_2_color;
-use super::glyph_atlas::{atlas_for_mode, best_glyph, GlyphBitmap, CELL_H, CELL_W};
+use super::glyph_atlas::{CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_glyph};
 use super::{Background, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
@@ -43,16 +43,14 @@ pub fn contain_size(img_w: u32, img_h: u32, term: TermSize, forced_width: u32) -
     //   cols = img_w * rows * 2 / img_h
 
     // Try fitting to terminal width
-    let rows_from_width =
-        (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
+    let rows_from_width = (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
 
     if rows_from_width <= term.rows {
         // Fits vertically — use full width
         (term.cols, rows_from_width.max(1))
     } else {
         // Too tall — fit to terminal height instead
-        let cols_from_height =
-            (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
+        let cols_from_height = (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
         (cols_from_height.clamp(1, term.cols), term.rows)
     }
 }
@@ -94,11 +92,8 @@ pub fn render_block_color(
             for cy in 0..CELL_H as usize {
                 for cx in 0..CELL_W as usize {
                     let px_offset = (base_y + cy) * stride + (base_x + cx) * 3;
-                    cell_pixels[cy * CELL_W as usize + cx] = [
-                        raw[px_offset],
-                        raw[px_offset + 1],
-                        raw[px_offset + 2],
-                    ];
+                    cell_pixels[cy * CELL_W as usize + cx] =
+                        [raw[px_offset], raw[px_offset + 1], raw[px_offset + 2]];
                 }
             }
 
@@ -135,11 +130,7 @@ pub fn render_density(
     let resized = if img.width() == term_cols && img.height() == term_rows {
         img.clone()
     } else {
-        img.resize_exact(
-            term_cols,
-            term_rows,
-            image::imageops::FilterType::Lanczos3,
-        )
+        img.resize_exact(term_cols, term_rows, image::imageops::FilterType::Lanczos3)
     };
 
     let ramp_len = DENSITY_RAMP.len();
@@ -181,7 +172,11 @@ fn has_alpha(img: &DynamicImage) -> bool {
     use image::ColorType;
     matches!(
         img.color(),
-        ColorType::Rgba8 | ColorType::Rgba16 | ColorType::Rgba32F | ColorType::La8 | ColorType::La16
+        ColorType::Rgba8
+            | ColorType::Rgba16
+            | ColorType::Rgba32F
+            | ColorType::La8
+            | ColorType::La16
     )
 }
 
@@ -225,7 +220,11 @@ fn resolve_bg(bg: Background, img: &DynamicImage) -> Box<dyn Fn(u32, u32) -> [u8
             // Half-block-sized checkerboard (8x8 px = one half-block glyph)
             Box::new(|x, y| {
                 let cell = (x / 8 + y / 8) % 2;
-                if cell == 0 { [204, 204, 204] } else { [102, 102, 102] }
+                if cell == 0 {
+                    [204, 204, 204]
+                } else {
+                    [102, 102, 102]
+                }
             })
         }
     }
@@ -279,11 +278,7 @@ pub fn load_and_render(
 ///
 /// Resizes to target pixel resolution before alpha-compositing so the
 /// checkerboard pattern aligns to the glyph grid.
-pub fn render_decoded(
-    img: DynamicImage,
-    config: &ImageConfig,
-    term: TermSize,
-) -> Vec<String> {
+pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -> Vec<String> {
     let img = add_margin(img, config.margin);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, config.width);
@@ -345,7 +340,12 @@ pub fn load_and_render_svg(
     let mut canvas = image::RgbaImage::new(px_w, px_h);
     let offset_x = (px_w - inner_w) / 2;
     let offset_y = (px_h - inner_h) / 2;
-    image::imageops::overlay(&mut canvas, &inner.to_rgba8(), offset_x as i64, offset_y as i64);
+    image::imageops::overlay(
+        &mut canvas,
+        &inner.to_rgba8(),
+        offset_x as i64,
+        offset_y as i64,
+    );
     let img = DynamicImage::ImageRgba8(canvas);
     let img = composite_with_bg(img, config.background);
 

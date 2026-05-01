@@ -14,8 +14,8 @@ pub fn svg_dimensions(source: &InputSource) -> Result<(u32, u32)> {
 pub fn rasterize_svg(source: &InputSource, width: u32, height: u32) -> Result<DynamicImage> {
     let tree = load_svg(source)?;
 
-    let mut pixmap = resvg::tiny_skia::Pixmap::new(width, height)
-        .context("failed to create pixmap")?;
+    let mut pixmap =
+        resvg::tiny_skia::Pixmap::new(width, height).context("failed to create pixmap")?;
 
     let transform = resvg::tiny_skia::Transform::from_scale(
         width as f32 / tree.size().width(),

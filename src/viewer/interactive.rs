@@ -9,9 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ColorMode, PeekThemeName};
 use crate::viewer::modes::Mode;
-use crate::viewer::ui::{
-    Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
-};
+use crate::viewer::ui::{Outcome, ViewerState, render_themed_status_line, with_alternate_screen};
 
 /// Run the interactive viewer for a given list of view modes.
 ///
@@ -31,7 +29,15 @@ pub fn run(
     modes: Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
-        event_loop(stdout, source, detected, theme_name, color_mode, render_opts, modes)
+        event_loop(
+            stdout,
+            source,
+            detected,
+            theme_name,
+            color_mode,
+            render_opts,
+            modes,
+        )
     })
 }
 

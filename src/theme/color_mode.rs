@@ -109,7 +109,12 @@ impl ColorMode {
     /// Hot-loop entry point for image rendering.
     pub fn write_fg(self, buf: &mut String, color: [u8; 3], ch: char) {
         use std::fmt::Write;
-        let c = Color { r: color[0], g: color[1], b: color[2], a: 255 };
+        let c = Color {
+            r: color[0],
+            g: color[1],
+            b: color[2],
+            a: 255,
+        };
         match self {
             Self::Plain => {
                 buf.push(ch);
@@ -125,8 +130,18 @@ impl ColorMode {
     /// rendering.
     pub fn write_fg_bg(self, buf: &mut String, fg: [u8; 3], bg: [u8; 3], ch: char) {
         use std::fmt::Write;
-        let f = Color { r: fg[0], g: fg[1], b: fg[2], a: 255 };
-        let b = Color { r: bg[0], g: bg[1], b: bg[2], a: 255 };
+        let f = Color {
+            r: fg[0],
+            g: fg[1],
+            b: fg[2],
+            a: 255,
+        };
+        let b = Color {
+            r: bg[0],
+            g: bg[1],
+            b: bg[2],
+            a: 255,
+        };
         match self {
             Self::Plain => {
                 buf.push(ch);
@@ -164,14 +179,20 @@ impl clap::ValueEnum for ColorMode {
 
 /// Rec. 601 luma — common YIQ/YUV approximation.
 fn luminance(r: u8, g: u8, b: u8) -> u8 {
-    (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32).round().clamp(0.0, 255.0) as u8
+    (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
+        .round()
+        .clamp(0.0, 255.0) as u8
 }
 
 /// Quantize one channel into the 6-step xterm cube (0,95,135,175,215,255).
 fn cube_channel(v: u8) -> u8 {
-    if v < 48 { 0 }
-    else if v < 115 { 1 }
-    else { (v - 35) / 40 }
+    if v < 48 {
+        0
+    } else if v < 115 {
+        1
+    } else {
+        (v - 35) / 40
+    }
 }
 
 /// Map an RGB triple to the closest entry in the xterm 256-color palette.
@@ -179,8 +200,12 @@ fn cube_channel(v: u8) -> u8 {
 /// for finer luminance fidelity than the 6×6×6 cube provides.
 fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
     if r == g && g == b {
-        if r < 8 { return 16; }
-        if r > 248 { return 231; }
+        if r < 8 {
+            return 16;
+        }
+        if r > 248 {
+            return 231;
+        }
         return 232 + ((r as u32 - 8) / 10).min(23) as u8;
     }
     16 + 36 * cube_channel(r) + 6 * cube_channel(g) + cube_channel(b)

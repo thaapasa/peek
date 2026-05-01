@@ -71,7 +71,11 @@ impl Mode for AboutMode {
 
         // Tips
         lines.push(pt.paint_heading("TIPS"));
-        lines.push(tip_line(pt, "t", "Cycle themes (compare them on this screen)"));
+        lines.push(tip_line(
+            pt,
+            "t",
+            "Cycle themes (compare them on this screen)",
+        ));
         lines.push(tip_line(pt, "c", "Cycle output color encoding"));
         lines.push(tip_line(pt, "h / ?", "Full keybinding reference"));
         lines.push(tip_line(pt, "a / Tab", "Exit this screen"));
@@ -117,13 +121,7 @@ fn palette_line(pt: &PeekTheme) -> String {
     ];
     entries
         .iter()
-        .map(|(name, color)| {
-            format!(
-                "{} {}",
-                pt.paint(BLOCK, *color),
-                pt.paint_muted(name),
-            )
-        })
+        .map(|(name, color)| format!("{} {}", pt.paint(BLOCK, *color), pt.paint_muted(name),))
         .collect::<Vec<_>>()
         .join("  ")
 }

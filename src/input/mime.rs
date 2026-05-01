@@ -191,9 +191,18 @@ mod tests {
 
     #[test]
     fn classify_registered() {
-        assert_eq!(MimeCategory::classify("image/png"), MimeCategory::Registered);
-        assert_eq!(MimeCategory::classify("text/plain"), MimeCategory::Registered);
-        assert_eq!(MimeCategory::classify("application/json"), MimeCategory::Registered);
+        assert_eq!(
+            MimeCategory::classify("image/png"),
+            MimeCategory::Registered
+        );
+        assert_eq!(
+            MimeCategory::classify("text/plain"),
+            MimeCategory::Registered
+        );
+        assert_eq!(
+            MimeCategory::classify("application/json"),
+            MimeCategory::Registered
+        );
     }
 
     #[test]
@@ -203,27 +212,43 @@ mod tests {
             MimeCategory::Vendor
         );
         assert_eq!(
-            MimeCategory::classify("application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            MimeCategory::classify(
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ),
             MimeCategory::Vendor
         );
     }
 
     #[test]
     fn classify_convention() {
-        assert_eq!(MimeCategory::classify("text/x-python"), MimeCategory::Convention);
-        assert_eq!(MimeCategory::classify("application/x-bittorrent"), MimeCategory::Convention);
+        assert_eq!(
+            MimeCategory::classify("text/x-python"),
+            MimeCategory::Convention
+        );
+        assert_eq!(
+            MimeCategory::classify("application/x-bittorrent"),
+            MimeCategory::Convention
+        );
     }
 
     #[test]
     fn classify_experimental_and_personal() {
-        assert_eq!(MimeCategory::classify("application/x.example"), MimeCategory::Experimental);
-        assert_eq!(MimeCategory::classify("application/prs.example"), MimeCategory::Personal);
+        assert_eq!(
+            MimeCategory::classify("application/x.example"),
+            MimeCategory::Experimental
+        );
+        assert_eq!(
+            MimeCategory::classify("application/prs.example"),
+            MimeCategory::Personal
+        );
     }
 
     #[test]
     fn source_code_yields_plain_plus_convention() {
         let mimes = mimes_for_path(
-            &FileType::SourceCode { syntax: Some("py".into()) },
+            &FileType::SourceCode {
+                syntax: Some("py".into()),
+            },
             Some(Path::new("foo.py")),
             None,
         );
@@ -235,7 +260,9 @@ mod tests {
     #[test]
     fn rust_source_classifies_convention() {
         let mimes = mimes_for_path(
-            &FileType::SourceCode { syntax: Some("rs".into()) },
+            &FileType::SourceCode {
+                syntax: Some("rs".into()),
+            },
             Some(Path::new("foo.rs")),
             None,
         );

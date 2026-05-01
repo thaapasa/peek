@@ -205,6 +205,7 @@ const fn shade(n: u32) -> u128 {
 include!("glyph_atlas_data.rs");
 
 /// The complete glyph atlas, combining block elements and generated glyphs.
+#[rustfmt::skip]
 static GLYPH_ATLAS: std::sync::LazyLock<Vec<GlyphBitmap>> = std::sync::LazyLock::new(|| {
     let mut atlas = vec![
         // ── Block elements (exact geometry) ──

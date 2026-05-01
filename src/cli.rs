@@ -12,7 +12,13 @@ use crate::theme;
 ///
 /// peek is a single-file viewer: it takes one path (or stdin), not a list.
 #[derive(Parser, Debug)]
-#[command(name = "peek", about, long_about, disable_help_flag = true, disable_version_flag = true)]
+#[command(
+    name = "peek",
+    about,
+    long_about,
+    disable_help_flag = true,
+    disable_version_flag = true
+)]
 pub struct Args {
     /// File to view. Use `-` to read stdin.
     pub file: Option<PathBuf>,

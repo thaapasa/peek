@@ -1,7 +1,7 @@
 use anyhow::Result;
 
-use crate::input::detect::FileType;
 use crate::input::InputSource;
+use crate::input::detect::FileType;
 use crate::output::Output;
 use crate::theme::ColorMode;
 

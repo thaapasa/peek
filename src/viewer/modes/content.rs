@@ -39,8 +39,7 @@ pub(crate) struct ContentMode {
     label: &'static str,
 }
 
-const RAW_TOGGLE_ACTIONS: &[(Action, &str)] =
-    &[(Action::ToggleRawSource, "Toggle raw / pretty")];
+const RAW_TOGGLE_ACTIONS: &[(Action, &str)] = &[(Action::ToggleRawSource, "Toggle raw / pretty")];
 
 impl ContentMode {
     pub(crate) fn new(

@@ -10,9 +10,9 @@ fn main() {
         for x in 0..200 {
             let color = match (x < 100, y < 100) {
                 (true, true) => Rgb([255, 0, 0]),     // red
-                (false, true) => Rgb([0, 255, 0]),     // green
-                (true, false) => Rgb([0, 0, 255]),     // blue
-                (false, false) => Rgb([255, 255, 0]),  // yellow
+                (false, true) => Rgb([0, 255, 0]),    // green
+                (true, false) => Rgb([0, 0, 255]),    // blue
+                (false, false) => Rgb([255, 255, 0]), // yellow
             };
             img.put_pixel(x, y, color);
         }

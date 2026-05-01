@@ -9,7 +9,9 @@ pub(crate) struct Binding {
 }
 
 impl Binding {
+    #[rustfmt::skip]
     pub const fn plain(code: KeyCode) -> Self { Self { code, ctrl: false } }
+    #[rustfmt::skip]
     pub const fn ctrl(c: char) -> Self { Self { code: KeyCode::Char(c), ctrl: true } }
 
     pub fn matches(self, key: KeyEvent) -> bool {
@@ -69,6 +71,7 @@ pub(crate) enum Action {
 
 impl Action {
     /// Physical keys that trigger this action. Edit this map to rebind.
+    #[rustfmt::skip]
     pub fn bindings(self) -> &'static [Binding] {
         use KeyCode::*;
 
@@ -120,6 +123,7 @@ impl Action {
     }
 
     /// Human-readable label of the keys for help screens (e.g. "q / Esc").
+    #[rustfmt::skip]
     pub fn label_keys(self) -> &'static str {
         match self {
             Action::Quit              => "q / Esc",
@@ -153,7 +157,9 @@ impl Action {
 /// Find the first action this viewer allows whose bindings match `key`.
 /// Linear scan over a small `&'static` slice — sub-microsecond.
 pub(crate) fn dispatch(key: KeyEvent, allowed: &[(Action, &'static str)]) -> Option<Action> {
-    allowed.iter().find_map(|(a, _)| a.matches(key).then_some(*a))
+    allowed
+        .iter()
+        .find_map(|(a, _)| a.matches(key).then_some(*a))
 }
 
 /// Result of `ViewerState::apply` — what the event loop should do next.
@@ -165,4 +171,3 @@ pub(crate) enum Outcome {
     /// The action is not a global one; the active mode should handle it.
     Unhandled,
 }
-

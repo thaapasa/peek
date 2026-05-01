@@ -3,12 +3,12 @@ use std::rc::Rc;
 use anyhow::Result;
 use syntect::easy::HighlightLines;
 
-use crate::input::detect::{FileType, StructuredFormat};
 use crate::input::InputSource;
+use crate::input::detect::{FileType, StructuredFormat};
 use crate::output::Output;
 use crate::theme::ThemeManager;
 
-use super::{ranges_to_escaped, Viewer};
+use super::{Viewer, ranges_to_escaped};
 
 pub struct StructuredViewer {
     theme: Rc<ThemeManager>,
@@ -118,10 +118,10 @@ fn pretty_toml(raw: &str) -> Result<String> {
 }
 
 fn pretty_xml(raw: &str) -> Result<String> {
-    use std::io::Cursor;
     use quick_xml::events::Event;
     use quick_xml::reader::Reader;
     use quick_xml::writer::Writer;
+    use std::io::Cursor;
 
     // Don't trim text content — for HTML/XHTML this would collapse <pre>
     // blocks and inline whitespace between tags. We keep the document

@@ -2,12 +2,12 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::detect::FileType;
 use crate::input::InputSource;
+use crate::input::detect::FileType;
 use crate::output::Output;
 use crate::theme::ThemeManager;
 
-use super::{syntax_token_for, Viewer};
+use super::{Viewer, syntax_token_for};
 
 pub struct SyntaxViewer {
     theme: Rc<ThemeManager>,

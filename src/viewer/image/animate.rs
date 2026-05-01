@@ -6,8 +6,8 @@ use image::DynamicImage;
 
 use crate::input::InputSource;
 
-use super::render;
 use super::ImageConfig;
+use super::render;
 
 /// A single decoded animation frame with its display duration.
 pub struct AnimFrame {
@@ -160,9 +160,7 @@ pub fn anim_frame_count(source: &InputSource, magic_mime: Option<&str>) -> Optio
 /// frame's image descriptor but skips the pixel payload — orders of
 /// magnitude faster than full decoding for the count alone.
 fn count_gif_frames<R: std::io::Read>(reader: R) -> Option<usize> {
-    let mut decoder = gif::DecodeOptions::new()
-        .read_info(reader)
-        .ok()?;
+    let mut decoder = gif::DecodeOptions::new().read_info(reader).ok()?;
     let mut count = 0usize;
     while decoder.next_frame_info().ok()?.is_some() {
         count += 1;
@@ -179,4 +177,3 @@ pub(crate) fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<Strin
     term.rows = term.rows.saturating_sub(1);
     render::render_decoded(frame.image.clone(), config, term)
 }
-

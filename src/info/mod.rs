@@ -8,7 +8,7 @@ mod render;
 mod time;
 
 pub use gather::gather;
-pub use render::{render, RenderOptions};
+pub use render::{RenderOptions, render};
 
 /// Collected file metadata.
 pub struct FileInfo {
@@ -54,7 +54,10 @@ pub enum FileExtras {
 pub(super) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     use std::os::unix::fs::PermissionsExt;
     let mode = meta.permissions().mode();
-    Some(format_unix_permissions(unix_type_char(&meta.file_type()), mode))
+    Some(format_unix_permissions(
+        unix_type_char(&meta.file_type()),
+        mode,
+    ))
 }
 
 #[cfg(not(unix))]

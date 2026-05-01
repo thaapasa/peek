@@ -350,7 +350,11 @@ mod tests {
         let s = stdin_source("alpha\nbeta\ngamma\ndelta\n");
         for line in 0..4 {
             let byte = s.line_to_byte(line).unwrap();
-            assert_eq!(s.byte_to_line(byte), Some(line), "round trip failed at line {line}");
+            assert_eq!(
+                s.byte_to_line(byte),
+                Some(line),
+                "round trip failed at line {line}"
+            );
         }
     }
 

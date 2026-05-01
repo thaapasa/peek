@@ -20,7 +20,9 @@ pub(crate) const LOGO: &[&str] = &[
 /// and `heading` colors. One returned String per logo line.
 pub(crate) fn paint_logo(pt: &PeekTheme) -> Vec<String> {
     let total_width = LOGO.iter().map(|l| l.len()).max().unwrap_or(0);
-    LOGO.iter().map(|line| paint_gradient_line(line, total_width, pt)).collect()
+    LOGO.iter()
+        .map(|line| paint_gradient_line(line, total_width, pt))
+        .collect()
 }
 
 fn paint_gradient_line(line: &str, total_width: usize, pt: &PeekTheme) -> String {
@@ -107,11 +109,7 @@ pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
             String::new()
         };
 
-        writeln!(
-            out,
-            "  {}{value_name}",
-            pt.paint_label(&flag),
-        )?;
+        writeln!(out, "  {}{value_name}", pt.paint_label(&flag),)?;
         if !help_text.is_empty() {
             writeln!(out, "      {}", pt.paint_muted(&help_text))?;
         }
