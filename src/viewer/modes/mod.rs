@@ -1,13 +1,12 @@
 //! Composable view modes.
 //!
-//! A `Mode` is one renderable + interactive view of a file (content,
-//! file info, help, hex dump, image render, structured source, etc.).
-//! The interactive viewer is configured with a list of modes per file
-//! type — Tab cycles between them, `i` jumps to Info, `h` toggles Help.
-//!
-//! This module currently only hosts `InfoMode` and `HelpMode` while the
-//! larger migration is in progress; the rest of the viewers still go
-//! through `ViewMode` in `ui/state.rs`.
+//! A `Mode` is one renderable view of a file (content, file info, help,
+//! hex dump, image render, structured source, etc.) plus its interactive
+//! behavior. The interactive viewer is configured with a list of modes
+//! per file type — Tab cycles between them, `i` jumps to Info, `h`
+//! toggles Help. The same mode list also drives the `--print` / pipe
+//! path: the first non-aux mode's `render_to_pipe` is written straight
+//! to stdout.
 
 use std::time::Duration;
 

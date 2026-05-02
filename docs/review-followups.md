@@ -52,8 +52,12 @@ For context, the review's clear-cut bugs and small cleanups were landed in that 
   for un-highlighted text). `RenderCtx` carries `term_cols` / `term_rows` so the same `render` body
   serves both interactive and pipe — pipe injects `$COLUMNS-or-80` and `usize::MAX`. `compose_modes`
   is the single dispatcher; `main` picks the first non-aux mode (or first, for binary) for pipe
-  output. Pipe smoke-diffs (source, JSON pretty/raw, plain text, hex, PNG, GIF first-frame, SVG
-  raster, plain-binary) are byte-identical to the pre-change output.
+  output. Pipe smoke-diffs are byte-identical to the pre-change output for source / JSON pretty /
+  JSON raw / plain text / hex / plain-binary. Images (PNG, GIF first-frame, SVG raster) now render
+  at the correct cells-aspect ratio: the previous path called `crossterm::terminal::size()` which
+  fell back to `(80, 24)` whenever stdout was redirected, clamping piped images into 24 rows and
+  distorting aspect; the new `usize::MAX` rows in pipe mode lets `contain_size` pick the
+  fit-to-width branch and produce aspect-correct output.
 
 Everything below is what's left.
 
