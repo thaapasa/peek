@@ -24,9 +24,10 @@ mod syntax;
 mod text;
 pub(crate) mod ui;
 
-/// Trait for non-interactive (piped output) file viewers. Each Viewer
+/// Trait for print-mode (non-interactive) file viewers. Each Viewer
 /// renders the whole file to a `PrintOutput` in one shot — distinct from
-/// the interactive `Mode` system, which drives a TTY event loop.
+/// the interactive `Mode` system in `viewer::interactive`, which drives
+/// a TTY event loop.
 pub trait Viewer {
     fn render(
         &self,
@@ -145,7 +146,7 @@ impl Registry {
     /// appends Hex, Info, and Help so every file gets those views; other
     /// modes are file-type specific.
     ///
-    /// The non-interactive (piped) path uses `viewer_for` instead.
+    /// The print-mode (non-interactive) path uses `viewer_for` instead.
     pub fn compose_modes(
         &self,
         source: &InputSource,

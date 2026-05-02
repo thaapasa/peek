@@ -103,7 +103,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | `HelpMode`        | every file (keyboard-shortcut listing)       | no                     | no                |
 | `AboutMode`       | every file (logo, version, palette swatches) | no                     | no                |
 
-### Viewer trait — piped output (`viewer/mod.rs`)
+### Viewer trait — print-mode output (`viewer/mod.rs`)
 
 ```rust
 pub trait Viewer {
@@ -111,8 +111,8 @@ pub trait Viewer {
 }
 ```
 
-One-shot, no event loop. Each piped viewer (syntax, structured, image, SVG, text, hex) implements
-this.
+One-shot, no event loop. Each print-mode viewer (syntax, structured, image, SVG, text, hex)
+implements this.
 
 ### ViewerState (`viewer/ui/state.rs`)
 
@@ -142,11 +142,11 @@ will eventually carry their own line-to-source-byte table.
 ### Registry (`viewer/mod.rs`)
 
 Factory built once from CLI args. Holds the shared `ThemeManager`. Provides `viewer_for(file_type)`
-for piped output and `compose_modes(source, detected, args)` for the interactive path.
+for print-mode output and `compose_modes(source, detected, args)` for the interactive path.
 
 ### Hex viewer + HexMode (`viewer/hex.rs` + `viewer/modes/hex.rs`)
 
-`viewer/hex.rs` keeps the piped `HexViewer` (writes whole file via `format_row`) and the layout
+`viewer/hex.rs` keeps the print-mode `HexViewer` (writes whole file via `format_row`) and the layout
 helpers — `bytes_per_row` (`14 + 4*bpr` columns; rounded to a multiple of 8), `align_down`,
 `max_top`, `format_row`, `pipe_bytes_per_row`. Layout matches `hexdump -C`. Pipe mode honors
 `$COLUMNS` (≥ 24) or falls back to 16.

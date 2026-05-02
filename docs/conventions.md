@@ -30,17 +30,17 @@
 
 Two parallel abstractions, one per output path.
 
-- **`Viewer` trait** (`viewer/mod.rs`) — one-shot piped output. Impls: `SyntaxViewer`,
-  `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`. Used when stdout isn't
-  a TTY (or `--print`).
+- **`Viewer` trait** (`viewer/mod.rs`) — one-shot print-mode output via `PrintOutput`. Impls:
+  `SyntaxViewer`, `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`. Used
+  when stdout isn't a TTY (or `--print`).
 - **`Mode` trait** (`viewer/modes/mod.rs`) — interactive views that participate in the mode stack.
   Impls: `ContentMode`, `HexMode`, `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`,
   `AboutMode`. Each file type composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`;
   `viewer::interactive::run` drives the stack.
 
 Adding a file type: add a `Mode` impl (or reuse `ContentMode`) and a line in `compose_modes`.
-`Viewer` impl only when piped output needs custom rendering — otherwise the fallback is `TextViewer`
-or `HexViewer`.
+`Viewer` impl only when print-mode output needs custom rendering — otherwise the fallback is
+`TextViewer` or `HexViewer`.
 
 Modes that re-render on resize override `rerender_on_resize()`. Modes that own scroll position
 (Hex's byte-aligned offset) override `owns_scroll` + `scroll`.

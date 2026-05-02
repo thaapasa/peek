@@ -55,7 +55,7 @@ src/
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   viewer/
-    mod.rs             — Viewer trait (piped output), Registry, compose_modes, highlight_lines
+    mod.rs             — Viewer trait (print-mode output), Registry, compose_modes, highlight_lines
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx (the interactive abstraction)
@@ -71,15 +71,15 @@ src/
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
-    syntax.rs          — Piped-output syntax-highlighted source code (Viewer impl)
-    structured.rs      — JSON/YAML/TOML/XML pretty-print + Viewer impl for piped output
-    text.rs            — Plain text Viewer impl for piped output
-    hex.rs             — Hex dump Viewer impl for piped output + shared layout helpers
+    syntax.rs          — Print-mode syntax-highlighted source code (Viewer impl)
+    structured.rs      — JSON/YAML/TOML/XML pretty-print + Viewer impl for print mode
+    text.rs            — Plain text Viewer impl for print mode
+    hex.rs             — Hex dump Viewer impl for print mode + shared layout helpers
     image/
       mod.rs           — Module wiring + Background / ImageConfig generic types
       mode.rs          — ImageMode enum (full/block/geo/ascii palette selection)
-      viewer.rs        — ImageViewer: piped-output Viewer impl for raster images
-      svg.rs           — SVG rasterization (resvg) + SvgViewer piped-output impl
+      viewer.rs        — ImageViewer: print-mode Viewer impl for raster images
+      svg.rs           — SVG rasterization (resvg) + SvgViewer print-mode impl
       render.rs        — Image → glyph-matched ASCII art with true color
       animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
       glyph_atlas.rs   — Precomputed glyph bitmaps
@@ -125,7 +125,7 @@ Three north stars:
 Be a critical collaborator. Push back when a change would:
 
 - **Damage architecture quality** — leak abstractions, blur boundaries, conflate orthogonal
-  concerns (mixing piped + interactive paths), or re-introduce a `match file_type` chain that
+  concerns (mixing print-mode + interactive paths), or re-introduce a `match file_type` chain that
   `compose_modes` was meant to eliminate.
 - **Add cognitive load without payoff** — deep branching, scattered state synced by hand, mechanism
   leaking through call sites, indirection that doesn't earn the click-through, hypothetical-future

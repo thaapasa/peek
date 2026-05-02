@@ -10,11 +10,11 @@ use crate::theme::PeekTheme;
 use super::Viewer;
 
 // ---------------------------------------------------------------------------
-// HexViewer (non-interactive / piped output)
+// HexViewer (print-mode / non-interactive)
 // ---------------------------------------------------------------------------
 //
 // Interactive hex viewing now goes through `modes::HexMode` and the unified
-// event loop in `viewer::interactive`. This file keeps only the piped-output
+// event loop in `viewer::interactive`. This file keeps only the print-mode
 // `Viewer` impl plus the shared layout/format helpers (re-used by `HexMode`).
 
 pub struct HexViewer {

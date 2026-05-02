@@ -1,6 +1,6 @@
 //! Image and SVG viewers plus their shared rendering pipeline.
 //!
-//! - [`ImageViewer`] / [`SvgViewer`] are the piped-output [`Viewer`]
+//! - [`ImageViewer`] / [`SvgViewer`] are the print-mode [`Viewer`]
 //!   implementations (one per format).
 //! - [`render`], [`animate`], [`clustering`], [`glyph_atlas`] make up the
 //!   shared rasterization → ASCII-art pipeline.

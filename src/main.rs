@@ -30,13 +30,13 @@ fn main() -> Result<()> {
     let source = input::stdin::build_source(&args)?;
     let detected = input::detect::detect(&source)?;
 
-    let use_pager = !args.print && std::io::stdout().is_terminal();
+    let interactive = !args.print && std::io::stdout().is_terminal();
 
     let viewers = viewer::Registry::new(&args)?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
-    // --info mode: a fixed-size summary, never paginated. To scroll
-    // through it, use the interactive viewer's Info mode (key `i`).
+    // --info mode: a fixed-size summary, written straight to stdout. For
+    // a scrollable view, use the interactive viewer's Info mode (key `i`).
     if args.info {
         let mut output = output::PrintOutput::stdout();
         let file_info = info::gather(&source, &detected)
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    if use_pager {
+    if interactive {
         // Interactive TTY: compose mode list per file type; one event loop.
         // compose_modes handles animation detection internally, so this
         // path is uniform across file types.
