@@ -69,14 +69,17 @@ fn resolve_syntax<'a>(tm: &'a ThemeManager, syntax_token: &str) -> &'a SyntaxRef
 ///
 /// State is kept as owned `ParseState` + `HighlightState` rather than a
 /// borrowing `HighlightLines` so the struct doesn't need to thread theme
-/// / syntax lifetimes through `ContentMode`. The `Highlighter` (which
-/// borrows `&Theme`) is rebuilt per `feed()`; it's a thin pointer wrapper
-/// with no allocation.
+/// / syntax lifetimes through `ContentMode`. Theme and color mode are
+/// passed in per call; `feed` rebuilds the lightweight `Highlighter`
+/// wrapper from the live theme on each invocation. The caller is
+/// responsible for `reset()`ing on theme change (the cached
+/// `HighlightState` styles are theme-derived and would be stale).
 pub(crate) struct LineStreamHighlighter {
     tm: Rc<ThemeManager>,
     syntax_token: String,
-    theme_name: PeekThemeName,
-    color_mode: ColorMode,
+    /// Theme used to seed the current `highlight_state`. Stored so `feed`
+    /// can paint with the matching theme; rotated on `reset()`.
+    active_theme: PeekThemeName,
     parse_state: ParseState,
     highlight_state: HighlightState,
     next_line: usize,
@@ -87,14 +90,12 @@ impl LineStreamHighlighter {
         syntax_token: String,
         tm: Rc<ThemeManager>,
         theme_name: PeekThemeName,
-        color_mode: ColorMode,
     ) -> Self {
         let (parse_state, highlight_state) = build_states(&tm, &syntax_token, theme_name);
         Self {
             tm,
             syntax_token,
-            theme_name,
-            color_mode,
+            active_theme: theme_name,
             parse_state,
             highlight_state,
             next_line: 0,
@@ -102,20 +103,24 @@ impl LineStreamHighlighter {
     }
 
     /// Discard accumulated state and rewind to line 0. Call before
-    /// catching up from the top after a backward jump or any change that
-    /// invalidates prior styling (theme cycle, color-mode cycle).
-    pub(crate) fn reset(&mut self) {
-        let (parse_state, highlight_state) =
-            build_states(&self.tm, &self.syntax_token, self.theme_name);
+    /// catching up from the top after a backward jump or a theme change
+    /// (color mode changes don't need a reset — escape encoding is per-feed).
+    pub(crate) fn reset(&mut self, theme_name: PeekThemeName) {
+        let (parse_state, highlight_state) = build_states(&self.tm, &self.syntax_token, theme_name);
         self.parse_state = parse_state;
         self.highlight_state = highlight_state;
+        self.active_theme = theme_name;
         self.next_line = 0;
+    }
+
+    pub(crate) fn active_theme(&self) -> PeekThemeName {
+        self.active_theme
     }
 
     /// Feed the next line and return its escaped form. The line must be
     /// the highlighter's current `at()` line; the caller drives sequence.
-    pub(crate) fn feed(&mut self, line: &str) -> Result<String> {
-        let theme = self.tm.theme_for(self.theme_name);
+    pub(crate) fn feed(&mut self, line: &str, color_mode: ColorMode) -> Result<String> {
+        let theme = self.tm.theme_for(self.active_theme);
         let highlighter = Highlighter::new(theme);
         // syntect expects the trailing newline as part of the line for
         // correct state transitions on rules anchored to line ends.
@@ -127,7 +132,7 @@ impl LineStreamHighlighter {
         let ranges: Vec<(Style, &str)> = iter.collect();
         // Drop the synthetic trailing newline from the styled output so
         // the caller can decide its own line termination.
-        let escaped = ranges_to_escaped_trim_newline(&ranges, self.color_mode);
+        let escaped = ranges_to_escaped_trim_newline(&ranges, color_mode);
         self.next_line += 1;
         Ok(escaped)
     }
@@ -304,15 +309,17 @@ impl Registry {
     /// Build a `ContentMode` for text-based file types: source code,
     /// structured (lazy pretty-print), plain text, or SVG XML.
     ///
-    /// Raw text is loaded eagerly here; pretty-print is deferred to the
-    /// first time pretty view is rendered (see `ContentMode::ensure_pretty`).
+    /// Constructs a `LineSource` over the input — one streaming pass to
+    /// count lines and capture sparse anchors — instead of reading the
+    /// whole file into memory. Pretty-print is deferred to the first
+    /// time pretty view is rendered, capped at `PRETTY_MAX_BYTES`.
     fn text_content_mode(
         &self,
         source: &InputSource,
         file_type: &FileType,
         args: &Args,
     ) -> Result<Box<dyn Mode>> {
-        let raw = source.read_text()?;
+        let line_source = source.open_line_source()?;
 
         let pretty_target = if !self.plain_mode {
             match file_type {
@@ -346,10 +353,12 @@ impl Registry {
         };
 
         Ok(Box::new(ContentMode::new(
-            raw,
+            source.clone(),
+            line_source,
             pretty_target,
             syntax_token,
             Rc::clone(&self.theme_manager),
+            self.theme_name,
             initial_use_pretty,
             allow_pretty_toggle,
             label,
@@ -464,10 +473,11 @@ mod tests {
                 token.to_string(),
                 Rc::clone(&tm),
                 PeekThemeName::IdeaDark,
-                ColorMode::TrueColor,
             );
-            let per_line: Vec<String> =
-                content.lines().map(|l| streamed.feed(l).unwrap()).collect();
+            let per_line: Vec<String> = content
+                .lines()
+                .map(|l| streamed.feed(l, ColorMode::TrueColor).unwrap())
+                .collect();
 
             assert_eq!(
                 per_line.len(),
@@ -484,16 +494,12 @@ mod tests {
     #[test]
     fn line_stream_reset_rewinds() {
         let tm = tm();
-        let mut s = LineStreamHighlighter::new(
-            "Rust".to_string(),
-            Rc::clone(&tm),
-            PeekThemeName::IdeaDark,
-            ColorMode::TrueColor,
-        );
-        s.feed("fn a() {}").unwrap();
-        s.feed("fn b() {}").unwrap();
+        let mut s =
+            LineStreamHighlighter::new("Rust".to_string(), Rc::clone(&tm), PeekThemeName::IdeaDark);
+        s.feed("fn a() {}", ColorMode::TrueColor).unwrap();
+        s.feed("fn b() {}", ColorMode::TrueColor).unwrap();
         assert_eq!(s.at(), 2);
-        s.reset();
+        s.reset(PeekThemeName::IdeaDark);
         assert_eq!(s.at(), 0);
     }
 }

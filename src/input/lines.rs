@@ -34,6 +34,11 @@ pub struct LineSource {
     anchors: Vec<u64>,
     total_lines: usize,
     total_bytes: u64,
+    /// True iff the source's final byte is `\n`. Lets the pipe path
+    /// preserve byte-for-byte fidelity for un-highlighted text — the
+    /// last line is written without a synthesized newline when the
+    /// source didn't have one.
+    ends_with_newline: bool,
 }
 
 impl LineSource {
@@ -41,12 +46,13 @@ impl LineSource {
     /// scan of the source to count newlines and capture sparse anchors.
     pub fn open(source: &InputSource) -> Result<Self> {
         let bs = source.open_byte_source()?;
-        let (anchors, total_lines, total_bytes) = scan(bs.as_ref())?;
+        let (anchors, total_lines, total_bytes, ends_with_newline) = scan(bs.as_ref())?;
         Ok(Self {
             bs,
             anchors,
             total_lines,
             total_bytes,
+            ends_with_newline,
         })
     }
 
@@ -56,6 +62,13 @@ impl LineSource {
 
     pub fn total_bytes(&self) -> u64 {
         self.total_bytes
+    }
+
+    /// Whether the source's final byte was `\n`. Empty sources return
+    /// `false`. Used by the pipe path to preserve byte-for-byte output
+    /// for un-highlighted text.
+    pub fn ends_with_newline(&self) -> bool {
+        self.ends_with_newline
     }
 
     /// Fetch the line at `idx` (0-based). Returns an empty string for
@@ -189,7 +202,7 @@ fn decode(bytes: Vec<u8>) -> Result<String> {
 /// Newline-byte counting is safe over raw bytes: in UTF-8, no continuation
 /// or multibyte-start byte ever has the value `0x0A`, so the count is
 /// independent of how chunks split codepoints.
-fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64)> {
+fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64, bool)> {
     let total_bytes = bs.len();
     let mut anchors = vec![0u64];
     let mut newline_count = 0usize;
@@ -213,6 +226,7 @@ fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64)> {
         offset += buf.len() as u64;
     }
 
+    let ends_with_newline = matches!(last_byte, Some(b'\n'));
     let total_lines = newline_count
         + match last_byte {
             Some(b'\n') => 0,
@@ -220,7 +234,7 @@ fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64)> {
             None => 0,
         };
 
-    Ok((anchors, total_lines, total_bytes))
+    Ok((anchors, total_lines, total_bytes, ends_with_newline))
 }
 
 #[cfg(test)]
