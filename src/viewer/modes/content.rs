@@ -408,3 +408,156 @@ impl Mode for ContentMode {
         !self.use_pretty
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::info::RenderOptions;
+    use crate::input::detect;
+    use crate::theme::{PeekTheme, PeekThemeName};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    fn fixture(name: &str) -> InputSource {
+        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push("test-data");
+        path.push(name);
+        InputSource::File(path)
+    }
+
+    fn make_ctx<'a>(
+        source: &'a InputSource,
+        detected: &'a detect::Detected,
+        file_info: &'a crate::info::FileInfo,
+        peek_theme: &'a PeekTheme,
+    ) -> RenderCtx<'a> {
+        RenderCtx {
+            source,
+            detected,
+            file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 24,
+        }
+    }
+
+    /// End-to-end: ContentMode's streaming windowed render must match the
+    /// whole-file `highlight_lines` output for the same line indices.
+    /// Uses a real Rust fixture so the test goes through the full
+    /// LineSource → LineStreamHighlighter → ranges_to_escaped path.
+    #[test]
+    fn render_window_matches_whole_file_highlight() {
+        let source = fixture("theme.rs");
+        let detected = detect::detect(&source).unwrap();
+        let file_info = crate::info::gather(&source, &detected).unwrap();
+        let tm = Rc::new(ThemeManager::new(
+            PeekThemeName::IdeaDark,
+            ColorMode::TrueColor,
+        ));
+        let peek_theme = tm.peek_theme().clone();
+
+        let line_source = source.open_line_source().unwrap();
+        let total = line_source.total_lines();
+        assert!(total > 50, "fixture should have plenty of lines");
+
+        // Reference: whole-file highlight via the same path the pre-A1
+        // code used.
+        let raw = source.read_text().unwrap();
+        let whole = crate::viewer::highlight_lines(
+            &raw,
+            "rs",
+            &tm,
+            PeekThemeName::IdeaDark,
+            ColorMode::TrueColor,
+        )
+        .unwrap();
+
+        let mut mode = ContentMode::new(
+            source.clone(),
+            line_source,
+            None,
+            Some("rs".to_string()),
+            Rc::clone(&tm),
+            PeekThemeName::IdeaDark,
+            false,
+            false,
+            "Source",
+        );
+
+        let ctx = make_ctx(&source, &detected, &file_info, &peek_theme);
+
+        // Forward scroll: window 0..10 then 10..20 (incremental, no reset).
+        let w0 = mode.render_window(&ctx, 0, 10).unwrap();
+        assert_eq!(w0.lines.len(), 10);
+        assert_eq!(w0.total, total);
+        for (i, line) in w0.lines.iter().enumerate() {
+            assert_eq!(line, &whole[i], "forward window 0..10 line {i} drift");
+        }
+
+        let w1 = mode.render_window(&ctx, 10, 10).unwrap();
+        assert_eq!(w1.lines.len(), 10);
+        for (i, line) in w1.lines.iter().enumerate() {
+            assert_eq!(line, &whole[10 + i], "forward window 10..20 line {i} drift");
+        }
+
+        // Backward jump triggers a highlighter reset; output must still
+        // match (this is the regression-prone path — wrong reset and
+        // multi-line block-comment highlighting goes sideways).
+        let w_back = mode.render_window(&ctx, 0, 5).unwrap();
+        for (i, line) in w_back.lines.iter().enumerate() {
+            assert_eq!(line, &whole[i], "backward jump line {i} drift");
+        }
+    }
+
+    /// Above the size cap, `ensure_pretty` should refuse to load, push a
+    /// warning, and clear `use_pretty` so the user sees the streamed raw
+    /// view instead.
+    #[test]
+    fn pretty_cap_falls_back_to_raw_with_warning() {
+        // Pad past PRETTY_MAX_BYTES (16 MB) with valid JSON.
+        let mut buf = String::with_capacity(PRETTY_MAX_BYTES as usize + 1024);
+        buf.push('[');
+        let entry = "0,";
+        while (buf.len() as u64) < PRETTY_MAX_BYTES + 64 {
+            buf.push_str(entry);
+        }
+        buf.pop(); // strip trailing comma
+        buf.push(']');
+
+        let source = InputSource::Stdin {
+            data: Arc::from(buf.into_bytes().into_boxed_slice()),
+        };
+        let line_source = source.open_line_source().unwrap();
+        assert!(line_source.total_bytes() > PRETTY_MAX_BYTES);
+
+        let tm = Rc::new(ThemeManager::new(
+            PeekThemeName::IdeaDark,
+            ColorMode::TrueColor,
+        ));
+
+        let mut mode = ContentMode::new(
+            source,
+            line_source,
+            Some(StructuredFormat::Json),
+            Some("JSON".to_string()),
+            tm,
+            PeekThemeName::IdeaDark,
+            true, // initial_use_pretty
+            true, // allow_pretty_toggle
+            "Content",
+        );
+
+        // Trigger the cap check via ensure_pretty directly.
+        mode.ensure_pretty();
+        assert!(!mode.use_pretty, "size cap must clear use_pretty");
+        let warnings = mode.take_warnings();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("too large for pretty-print")),
+            "expected size-cap warning, got {warnings:?}"
+        );
+    }
+}
