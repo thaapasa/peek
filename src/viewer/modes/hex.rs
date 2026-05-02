@@ -4,6 +4,7 @@ use syntect::highlighting::Color;
 
 use super::{Mode, ModeId, Position, RenderCtx};
 use crate::input::{ByteSource, InputSource};
+use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::hex::{align_down, bytes_per_row, format_row, max_top};
 use crate::viewer::ui::Action;
@@ -67,6 +68,28 @@ impl Mode for HexMode {
             lines.push(format_row(ctx.peek_theme, row_off, row, bpr));
         }
         Ok(lines)
+    }
+
+    /// Stream the full file to the print sink. Reading in 4 KB-sized
+    /// chunks (256 rows at the typical 16-bpr layout) avoids ever
+    /// holding more than one chunk in memory — important for hex-dumping
+    /// multi-GB binaries.
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        let bpr = bytes_per_row(ctx.term_cols as u16);
+        let chunk_bytes = bpr * 256;
+        let mut offset: u64 = 0;
+        while offset < self.total_len {
+            let buf = self.bs.read_range(offset, chunk_bytes)?;
+            if buf.is_empty() {
+                break;
+            }
+            for (i, row) in buf.chunks(bpr).enumerate() {
+                let row_off = offset + (i * bpr) as u64;
+                out.write_line(&format_row(ctx.peek_theme, row_off, row, bpr))?;
+            }
+            offset += buf.len() as u64;
+        }
+        Ok(())
     }
 
     fn owns_scroll(&self) -> bool {

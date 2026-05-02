@@ -17,6 +17,7 @@ use syntect::highlighting::Color;
 use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
+use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
 
@@ -122,6 +123,22 @@ pub(crate) trait Mode {
     /// recompute on every call; full-content modes (Info, Help) typically
     /// memoize internally.
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
+
+    /// Render the entire view to a non-interactive print sink (`peek
+    /// --print` and pipe contexts). The default impl materializes
+    /// `render(ctx)` and writes each line; modes whose interactive
+    /// `render` is viewport-clamped (HexMode) or that can stream from a
+    /// `ByteSource` directly should override this to avoid loading the
+    /// whole file into a `Vec<String>`.
+    ///
+    /// `ctx.term_rows` is `usize::MAX` in pipe contexts, so a default-impl
+    /// `render` that honors `term_rows` will already produce all lines.
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        for line in self.render(ctx)? {
+            out.write_line(&line)?;
+        }
+        Ok(())
+    }
 
     /// True if this mode manages its own scroll position (e.g. Hex's
     /// byte-offset scrolling). When true, `ViewerState`'s line-based
