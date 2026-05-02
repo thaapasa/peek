@@ -9,7 +9,9 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ColorMode, PeekThemeName};
 use crate::viewer::modes::Mode;
-use crate::viewer::ui::{Outcome, ViewerState, render_themed_status_line, with_alternate_screen};
+use crate::viewer::ui::{
+    Action, Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
+};
 
 /// Run the interactive viewer for a given list of view modes.
 ///
@@ -70,40 +72,74 @@ fn event_loop(
             continue;
         }
 
-        match event::read()? {
-            Event::Key(key) => {
-                let Some(action) = state.dispatch_key(key) else {
-                    continue;
-                };
+        // Drain every queued event in one batch, redraw once at the end.
+        // Coalescing identical consecutive actions stops a buffered key
+        // repeat (terminal auto-repeat fills the queue faster than draws
+        // happen) from firing extra actions after the user releases the
+        // key — without this, a held `j` followed by release keeps
+        // scrolling until the buffer drains.
+        let mut needs_redraw = false;
+        let mut last_action: Option<Action> = None;
+        let mut event_opt: Option<Event> = Some(event::read()?);
 
-                // 1. Active mode's scroll handler (byte-based for hex etc.).
-                if state.try_active_scroll(action) {
-                    state.invalidate_active();
-                    redraw(stdout, &mut state, &name)?;
-                    continue;
+        while let Some(ev) = event_opt {
+            match ev {
+                Event::Key(key) => {
+                    if let Some(action) = state.dispatch_key(key)
+                        && last_action != Some(action)
+                    {
+                        match dispatch_action(&mut state, action)? {
+                            ActionOutcome::Quit => return Ok(()),
+                            ActionOutcome::Changed => needs_redraw = true,
+                            ActionOutcome::Unchanged => {}
+                        }
+                        last_action = Some(action);
+                    }
                 }
-
-                // 2. Active mode's local handler (toggle pretty, cycle bg, etc.).
-                if state.try_active_handle(action) {
-                    state.invalidate_active();
-                    redraw(stdout, &mut state, &name)?;
-                    continue;
+                Event::Resize(_, _) => {
+                    state.handle_resize();
+                    needs_redraw = true;
                 }
-
-                // 3. Global dispatch (scroll-by-line, mode switching, theme).
-                match state.apply(action)? {
-                    Outcome::Quit => return Ok(()),
-                    Outcome::Redraw => redraw(stdout, &mut state, &name)?,
-                    Outcome::Unhandled => {}
-                }
+                _ => {}
             }
-            Event::Resize(_, _) => {
-                state.handle_resize();
-                redraw(stdout, &mut state, &name)?;
-            }
-            _ => {}
+            // Pull the next queued event without blocking; stop when the
+            // OS input buffer is empty.
+            event_opt = if event::poll(Duration::ZERO)? {
+                Some(event::read()?)
+            } else {
+                None
+            };
+        }
+
+        if needs_redraw {
+            redraw(stdout, &mut state, &name)?;
         }
     }
+}
+
+enum ActionOutcome {
+    Quit,
+    Changed,
+    Unchanged,
+}
+
+/// Single-action dispatch: scroll handler → local handler → global. Mirrors
+/// the previous inline order; lifted out so the batched event loop can
+/// reuse it for every event in the drained queue.
+fn dispatch_action(state: &mut ViewerState, action: Action) -> Result<ActionOutcome> {
+    if state.try_active_scroll(action) {
+        state.invalidate_active();
+        return Ok(ActionOutcome::Changed);
+    }
+    if state.try_active_handle(action) {
+        state.invalidate_active();
+        return Ok(ActionOutcome::Changed);
+    }
+    Ok(match state.apply(action)? {
+        Outcome::Quit => ActionOutcome::Quit,
+        Outcome::Redraw => ActionOutcome::Changed,
+        Outcome::Unhandled => ActionOutcome::Unchanged,
+    })
 }
 
 fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Result<()> {
