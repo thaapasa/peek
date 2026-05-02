@@ -91,7 +91,7 @@ fn event_loop(
                 }
 
                 // 3. Global dispatch (scroll-by-line, mode switching, theme).
-                match state.apply(action) {
+                match state.apply(action)? {
                     Outcome::Quit => return Ok(()),
                     Outcome::Redraw => redraw(stdout, &mut state, &name)?,
                     Outcome::Unhandled => {}

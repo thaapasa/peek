@@ -2,7 +2,7 @@ use anyhow::Result;
 use crossterm::terminal;
 use syntect::highlighting::Color;
 
-use super::{Mode, ModeId, Position, RenderCtx};
+use super::{Mode, ModeId, Position, RenderCtx, Window};
 use crate::input::{ByteSource, InputSource};
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
@@ -54,7 +54,7 @@ impl Mode for HexMode {
         true
     }
 
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         self.cached_cols = ctx.term_cols as u16;
         self.cached_rows = ctx.term_rows;
         let bpr = bytes_per_row(self.cached_cols);
@@ -67,7 +67,8 @@ impl Mode for HexMode {
             let row_off = self.top_offset + (i * bpr) as u64;
             lines.push(format_row(ctx.peek_theme, row_off, row, bpr));
         }
-        Ok(lines)
+        let total = lines.len();
+        Ok(Window { lines, total })
     }
 
     /// Stream the full file to the print sink. Reading in 4 KB-sized

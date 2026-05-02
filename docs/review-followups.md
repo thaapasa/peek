@@ -45,6 +45,18 @@ For context, the review's clear-cut bugs and small cleanups were landed in that 
   no longer allocate (TrueColor / Ansi256 / Grayscale / Plain). Ansi16 still returns its lookup
   string. Microbenchmark skipped — the change is mechanical and the alloc-count drop is visible from
   inspection.
+- A1 — `ContentMode` raw view streams from a new `LineSource` (one-pass anchor scan over
+  `InputSource`, anchors every 1024 lines for O(stride) random access). With a syntax token,
+  highlighting goes through a stateful `LineStreamHighlighter` driven forward across the visible
+  window; backward scrolls past the cursor reset and replay. Pretty-print branch stays whole-file
+  with a 16 MB cap — above the cap a warning lands in `FileInfo.warnings` and the streamed raw view
+  takes over. `Mode::render` was replaced by `Mode::render_window(scroll, rows) -> Window`; modes
+  pre-slice their output, so `ViewerState` caches the visible window keyed on `(scroll, rows)` and
+  `draw_screen` writes the slice verbatim. Pipe path: byte-identical to pre-A1 across all 11
+  test-data fixtures × pretty/raw/plain. Deferred sub-items: sparse syntax-state checkpoints (would
+  make backward jumps on huge files cheap), streaming pretty-print for JSON/YAML (probably never —
+  the cap is the right answer), jump-to-bottom progress hint when syntax replay touches a lot of
+  lines.
 - A2 — `Viewer` trait, `Registry::viewer_for`, and the six print-mode impls (`SyntaxViewer`,
   `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`) are gone. New
   `Mode::render_to_pipe(ctx, &mut PrintOutput)` is the print-path entry on every mode (default impl
@@ -64,47 +76,6 @@ Everything below is what's left.
 ---
 
 ## A. Architectural decisions
-
-### A1. Stream the text, syntax, and structured viewers
-
-**Severity:** medium-high. The "Stream, don't load" north star is currently aspirational for any
-text path. Real-world impact: OOM or long startup on multi-GB log files.
-
-**Where:**
-
-- `viewer/mod.rs` — `text_content_mode` calls `source.read_text()` to seed `ContentMode.raw`
-- `viewer/modes/content.rs` — `ContentMode` holds `raw: String` and emits all lines through
-  `render` and `render_to_pipe` (after A2, the only text-loading site)
-- (`gather_text_extras` was already converted in an earlier pass)
-
-**Why not auto-fixed:** real refactor, not a tweak. Touches:
-
-- `syntect::HighlightLines` is line-stateful (each line's parse depends on the previous line's
-  state) — to stream, keep the highlighter live and feed it lines as they arrive. Not hard, but it
-  changes the shape of `highlight_lines` and the `Vec<String>` line cache `ViewerState` builds for
-  every mode.
-- `ContentMode`'s cache strategy needs to become windowed — N lines around current scroll, reload on
-  big jumps. Real design call (LRU? strict window? on-disk index?).
-- Pretty-printing structured data legitimately needs the whole document (no streaming pretty-print
-  of JSON without buffering). `ContentMode`'s pretty branch should stay whole-file but with an
-  explicit size cap + "show raw with warning" fallback for huge files.
-
-**Suggested approach:**
-
-1. Tighten `highlight_lines` to take an iterator of lines and yield an iterator of highlighted
-   lines. Keep the existing whole-string call site as a thin wrapper.
-2. Introduce `LineSource` on top of `InputSource` that yields lines in 64 KB chunks (UTF-8
-   boundaries handled like `gather_text_extras_streaming` does today).
-3. Replace `ContentMode`'s `raw: String` with a `LineSource` plus a bounded line cache. Total
-   scroll/length comes from a one-pass line count (which can also live in the existing streaming
-   scan).
-4. Either keep `ContentMode`'s pretty branch whole-file (with documented size cap + graceful
-   fallback) or, longer-term, add a streaming pretty-printer for JSON/YAML.
-
-**Effort:** ~1–2 days. Touches the line-cache layer that both interactive and piped paths share —
-needs testing.
-
----
 
 ### A3. Long-line horizontal scrolling
 

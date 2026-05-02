@@ -1,7 +1,7 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Handled, Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::image::{ImageConfig, render};
@@ -52,7 +52,7 @@ impl Mode for ImageRenderMode {
         self.label
     }
 
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         let term = render::TermSize {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,
@@ -60,10 +60,12 @@ impl Mode for ImageRenderMode {
         // ColorMode is interactive-cyclable, so read it from the live ctx
         // rather than the stale copy captured at construction time.
         self.config.color_mode = ctx.peek_theme.color_mode;
-        match self.kind {
-            ImageKind::Raster => render::load_and_render(&self.source, &self.config, term),
-            ImageKind::Svg => render::load_and_render_svg(&self.source, &self.config, term),
-        }
+        let lines = match self.kind {
+            ImageKind::Raster => render::load_and_render(&self.source, &self.config, term)?,
+            ImageKind::Svg => render::load_and_render_svg(&self.source, &self.config, term)?,
+        };
+        let total = lines.len();
+        Ok(Window { lines, total })
     }
 
     fn rerender_on_resize(&self) -> bool {

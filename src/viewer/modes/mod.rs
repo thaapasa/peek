@@ -86,7 +86,7 @@ impl Handled {
     }
 }
 
-/// Read-only context passed to `Mode::render`.
+/// Read-only context passed to `Mode::render_window`.
 ///
 /// `term_cols` is the terminal width in character cells. `term_rows` is
 /// the height of the *content area* (terminal rows minus the status line),
@@ -104,6 +104,29 @@ pub(crate) struct RenderCtx<'a> {
     pub term_rows: usize,
 }
 
+/// Result of `Mode::render_window`: the visible lines for the requested
+/// window plus the mode's total line count. Streaming modes use this to
+/// expose how big the source is without materializing every line.
+///
+/// `lines` is the slice that should be drawn at the top of the viewport
+/// — `ViewerState` writes them out without further indexing. `total` is
+/// the full-source line count and drives scroll math (max_scroll, the
+/// `Bottom` jump, status-line position).
+pub(crate) struct Window {
+    pub lines: Vec<String>,
+    pub total: usize,
+}
+
+/// Slice helper for fixed-content modes (Info/Help/About) whose
+/// `render_window` materializes the full view and then needs to crop to
+/// the caller's scroll position. Returns owned lines because the trait
+/// signature does, and the slice is small (one viewport).
+pub(crate) fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<String> {
+    let start = scroll.min(lines.len());
+    let end = start.saturating_add(rows).min(lines.len());
+    lines[start..end].to_vec()
+}
+
 /// One renderable + interactive view of a file.
 #[allow(dead_code)]
 pub(crate) trait Mode {
@@ -118,25 +141,34 @@ pub(crate) trait Mode {
         false
     }
 
-    /// Produce lines for the current viewport. Streaming modes (Hex)
-    /// recompute on every call; full-content modes (Info, Help) typically
-    /// memoize internally.
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
+    /// Produce lines for a viewport `[scroll, scroll + rows)` plus the
+    /// mode's total line count. Modes that render fixed content (Info,
+    /// Help, About) generally ignore `scroll`/`rows` and return the full
+    /// view; streaming modes (ContentMode) honor the window so multi-GB
+    /// files never materialize. Modes that own their scroll position
+    /// (Hex) ignore the caller's `scroll` and use their own.
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window>;
 
     /// Render the entire view to a non-interactive print sink (`peek
-    /// --print` and pipe contexts). The default impl materializes
-    /// `render(ctx)` and writes each line; modes whose interactive
-    /// `render` is viewport-clamped (HexMode) or that can stream from a
-    /// `ByteSource` directly should override this to avoid loading the
-    /// whole file into a `Vec<String>`.
-    ///
-    /// `ctx.term_rows` is `usize::MAX` in pipe contexts, so a default-impl
-    /// `render` that honors `term_rows` will already produce all lines.
+    /// --print` and pipe contexts). The default impl asks `render_window`
+    /// for the full content (`scroll = 0`, `rows = ctx.term_rows`, which
+    /// is `usize::MAX` in pipe contexts) and writes each line. Modes that
+    /// can stream from a `ByteSource` directly (HexMode, ContentMode)
+    /// override this to avoid materializing the whole file.
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        for line in self.render(ctx)? {
+        let window = self.render_window(ctx, 0, ctx.term_rows)?;
+        for line in window.lines {
             out.write_line(&line)?;
         }
         Ok(())
+    }
+
+    /// Total line count the mode currently exposes. `Some(n)` only when
+    /// the mode can answer cheaply (without materializing all lines) —
+    /// streaming modes like ContentMode return their `LineSource` total.
+    /// Default `None` means "ask via render_window".
+    fn total_lines(&self) -> Option<usize> {
+        None
     }
 
     /// True if this mode manages its own scroll position (e.g. Hex's
