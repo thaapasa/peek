@@ -120,6 +120,14 @@ impl InputSource {
         Some(count)
     }
 
+    /// Open a streaming line reader over this source. See `LineSource`
+    /// for semantics. Performs one full pass of the source to count lines
+    /// and capture sparse byte-offset anchors; subsequent line lookups
+    /// are bounded by the anchor stride.
+    pub fn open_line_source(&self) -> Result<crate::input::LineSource> {
+        crate::input::LineSource::open(self)
+    }
+
     /// Open a streaming byte reader. For files, holds the file handle and
     /// seeks per read. For stdin, shares the already-buffered bytes via Arc.
     pub fn open_byte_source(&self) -> Result<Box<dyn ByteSource>> {
