@@ -1,0 +1,25 @@
+Long-line test fixture. Mix of widths so horizontal-scroll behaviour can be exercised.
+
+# 1. Short lines as baseline
+alpha
+beta
+gamma
+
+# 2. ~200 col line
+The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. END-200
+
+# 3. ~500 col log line
+2026-05-02T12:34:56.789Z INFO  request_id=7a3f9c2e-4b18-49d1-9b6c-2c5e88a01234 user_id=42 path=/api/v1/widgets/search?q=foo&limit=100&offset=0&sort=created_at:desc&include=meta,counts,owner method=GET status=200 duration_ms=137 bytes=8421 ua="Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15" referer="https://example.com/dashboard?tab=widgets&filter=mine" cache=miss upstream=widget-svc.prod.local:8080 END-500
+
+# 4. ~1200 col minified-JSON-ish line
+{"id":"7a3f9c2e-4b18-49d1-9b6c-2c5e88a01234","ts":"2026-05-02T12:34:56.789Z","actor":{"id":42,"name":"Ada Lovelace","email":"ada@example.com","roles":["admin","editor","reviewer"]},"target":{"type":"widget","id":"wgt_8821","attrs":{"color":"orange","size":"xl","tags":["alpha","beta","gamma","delta","epsilon","zeta","eta","theta"],"metrics":{"views":12345,"clicks":678,"ctr":0.0549,"dwell_ms":4321,"shares":12,"likes":345,"comments":67}}},"context":{"ip":"203.0.113.42","ua":"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15","geo":{"country":"FI","region":"Uusimaa","city":"Helsinki","lat":60.1699,"lon":24.9384},"session":"sess_4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c"},"changes":[{"field":"title","from":"old","to":"new"},{"field":"published","from":false,"to":true},{"field":"tags","from":["alpha"],"to":["alpha","beta","gamma"]}]} END-1200
+
+# 5. CJK + emoji mix (variable width glyphs)
+日本語のテスト行です。これは横スクロールでの幅計算を確認するためのものです。🎉🚀✨ 終わり。日本語のテスト行です。これは横スクロールでの幅計算を確認するためのものです。🎉🚀✨ END-CJK
+
+# 6. Tab-heavy line
+col1	col2	col3	col4	col5	col6	col7	col8	col9	col10	col11	col12	col13	col14	col15	col16	col17	col18	col19	col20	END-TABS
+
+# 7. Trailing short lines
+omega
+END

@@ -156,6 +156,15 @@ Two viewing modes (toggle with `r`):
 
 Re-renders on terminal resize.
 
+##### SVG Animation ☐
+
+`<animate>` / `<animateMotion>` elements are silently ignored — SVG always goes through
+`ImageRenderMode` as one rasterized frame. Short term: emit a `FileInfo` warning when these
+elements are present so the static render isn't misread as the whole picture. Longer term:
+rasterize the animation timeline in `viewer/image/svg.rs` into `Vec<AnimFrame>` and route through
+`AnimationMode` like GIF / WebP. (`resvg`'s animation API surface is limited, so the full version
+is a bigger project.)
+
 #### Transparency Handling ◐
 
 Images with transparency (PNG, SVG, WebP, GIF) need a compositing background before ASCII rendering.
@@ -324,6 +333,25 @@ views (source, structured, document text, file info).
 
 Toggleable line numbers for text-based views. CLI flag + keyboard shortcut.
 
+### Line Wrapping ☐
+
+Long lines (minified JSON, log lines, prose without hard breaks) currently render verbatim — the
+terminal wraps them into extra visual rows, consuming row budget that `draw_screen`'s math doesn't
+account for, so the status line can scroll out of view and content can bleed past it.
+
+Planned: opt-in soft wrap that pre-slices each visible logical line into visual rows of width
+`term_cols`, counts wrapped rows against the row budget, and marks wrapped continuations in the
+gutter. Scroll unit stays logical-line; partial wraps at the top/bottom edge are fine.
+
+Toggle with `w`; CLI `--wrap` / `--no-wrap`. Default off (matches `less` / `bat` muscle memory and
+keeps source-code alignment intact).
+
+### Horizontal Scrolling ❓
+
+Companion to wrap-off mode: `<` / `>` (or shift-arrows) pan a fixed-width viewport across long
+lines, with a truncation indicator in the status bar. Useful for tables and code where wrap would
+ruin alignment. Follow-up to line wrapping; both can coexist (wrap toggle wins when on).
+
 ### Large File Safeguards ☐
 
 For large files: viewer mode defaults to the file info screen instead of loading full contents.
@@ -384,6 +412,7 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | Key | Action                                            |
 |-----|---------------------------------------------------|
 | `l` | Toggle line numbers                               |
+| `w` | Toggle line wrapping                              |
 | `r` | Toggle pretty-print vs raw (structured data only) |
 
 ### Image Views *(context)*
@@ -505,6 +534,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                            | ✅      |
 | `--line-numbers` |       | Enable/disable line numbers                                   | ☐      |
+| `--wrap`         |       | Soft-wrap long lines (`--no-wrap` to force off)               | ☐      |
 | `--sizing`       |       | Image sizing mode                                             | ☐      |
 
 `--plain` and `--raw` are orthogonal. `--raw` preserves original file structure (no pretty-printing)
