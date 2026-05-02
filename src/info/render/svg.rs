@@ -1,0 +1,56 @@
+use super::{paint_count, push_field, push_section_header};
+use crate::theme::PeekTheme;
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn render_section(
+    lines: &mut Vec<String>,
+    view_box: Option<&str>,
+    declared_width: Option<&str>,
+    declared_height: Option<&str>,
+    path_count: usize,
+    group_count: usize,
+    rect_count: usize,
+    circle_count: usize,
+    text_count: usize,
+    has_script: bool,
+    has_external_href: bool,
+    theme: &PeekTheme,
+) {
+    lines.push(String::new());
+    push_section_header(lines, "SVG", theme);
+    if let Some(vb) = view_box {
+        push_field(lines, "viewBox", &theme.paint_value(vb), theme);
+    }
+    if let Some(w) = declared_width {
+        push_field(lines, "Width", &theme.paint_value(w), theme);
+    }
+    if let Some(h) = declared_height {
+        push_field(lines, "Height", &theme.paint_value(h), theme);
+    }
+    if path_count > 0 {
+        push_field(lines, "Paths", &paint_count(path_count, theme), theme);
+    }
+    if group_count > 0 {
+        push_field(lines, "Groups", &paint_count(group_count, theme), theme);
+    }
+    if rect_count > 0 {
+        push_field(lines, "Rects", &paint_count(rect_count, theme), theme);
+    }
+    if circle_count > 0 {
+        push_field(lines, "Circles", &paint_count(circle_count, theme), theme);
+    }
+    if text_count > 0 {
+        push_field(lines, "Text Elems", &paint_count(text_count, theme), theme);
+    }
+    if has_script {
+        push_field(lines, "Script", &theme.paint(" yes", theme.warning), theme);
+    }
+    if has_external_href {
+        push_field(
+            lines,
+            "External ref",
+            &theme.paint(" yes", theme.warning),
+            theme,
+        );
+    }
+}

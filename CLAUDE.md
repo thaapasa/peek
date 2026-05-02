@@ -47,7 +47,14 @@ src/
       svg.rs           — SVG-specific extras (viewBox, element counts, security)
       binary.rs        — Friendly format label from magic-byte MIME
       tests.rs         — Fixture-based tests against test-images / test-data
-    render.rs          — Themed terminal rendering of FileInfo
+    render/            — Themed terminal rendering of FileInfo, split per section
+      mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
+      file.rs          — File section: name, path, size, MIME, timestamps, permissions
+      image.rs         — Image section: dimensions, megapixels, animation, EXIF/XMP
+      svg.rs           — SVG section: viewBox, element counts, security flags
+      text.rs          — Text/Source section: line/word counts, encoding, indent labels
+      structured.rs    — Format section for JSON/YAML/TOML/XML structured stats
+      binary.rs        — Format section for friendly binary format label
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
     mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
