@@ -93,6 +93,10 @@ pub struct Args {
     #[arg(long)]
     pub info: bool,
 
+    /// Show line numbers in text views (toggle in viewer with `l`)
+    #[arg(short = 'n', long = "line-numbers")]
+    pub line_numbers: bool,
+
     /// Show timestamps in UTC (ISO 8601 with `Z` suffix) instead of
     /// local time with offset.
     #[arg(long, hide_short_help = true)]

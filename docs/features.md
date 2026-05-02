@@ -14,8 +14,8 @@ Works for all file types via the mode-stack architecture: text/source/structured
 `HexMode` / `InfoMode` / `HelpMode` / `AboutMode`. Scrolling, Tab/i toggle to file info, help (`h`/
 `?`), about (`a`), live theme cycle (`t`), color-encoding cycle (`c`), `r` (raw/pretty for
 structured; primary-cycle for SVG rasterized↔XML). Image-specific: `b` cycles background, `m` cycles
-render mode. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. Search and line numbers
-not yet.
+render mode. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. `l` toggles the
+line-number gutter in text views. Search not yet.
 
 ### Print Mode ◐
 
@@ -77,7 +77,8 @@ All standard languages supported by syntect with `two-face`/bat extended definit
 languages including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML,
 Dockerfile.
 
-Features: syntax-colored source with theme support; toggleable line numbers (☐).
+Features: syntax-colored source with theme support; toggleable line numbers (✅, `--line-numbers` /
+`-n` / `l`).
 
 ### Structured Data / Config Files
 
@@ -329,9 +330,13 @@ that also detects BOM-based encoding. HDR detection scans for Ultra HDR gain map
 highlighted in content. Regex is desirable; plain text is the minimum. Applies to all text-based
 views (source, structured, document text, file info).
 
-### Line Numbers ☐
+### Line Numbers ✅
 
-Toggleable line numbers for text-based views. CLI flag + keyboard shortcut.
+Toggleable line numbers for text-based views (ContentMode: source, structured raw/pretty, plain
+text, SVG XML). Off by default; `--line-numbers` / `-n` enables at startup, `l` toggles in the
+viewer. Gutter is right-aligned with a minimum width of 2 digits and painted in the theme's gutter
+color. In pretty mode the numbers count visible pretty-printed lines (the lines actually shown), not
+source byte lines.
 
 ### Line Wrapping ☐
 
@@ -492,8 +497,8 @@ downgrade colors from 24-bit to 256/16/none.
 
 `PeekTheme` derives the roles from the active syntect theme. All non-syntax UI (info screens, help,
 `--help`) uses these via `PeekTheme::paint()`. `.tmTheme` files embedded at compile time via
-`include_str!`. Gutter and search-highlight roles defined but unused (line numbers and search not
-implemented yet).
+`include_str!`. The gutter role drives the line-number column in ContentMode; the search-highlight
+role is defined but unused (search not implemented yet).
 
 ### Compatibility Modes ◐
 
@@ -533,7 +538,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                            | ✅      |
-| `--line-numbers` |       | Enable/disable line numbers                                   | ☐      |
+| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           | ✅      |
 | `--wrap`         |       | Soft-wrap long lines (`--no-wrap` to force off)               | ☐      |
 | `--sizing`       |       | Image sizing mode                                             | ☐      |
 

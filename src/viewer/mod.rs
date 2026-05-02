@@ -374,6 +374,7 @@ impl Registry {
             self.theme_name,
             initial_use_pretty,
             allow_pretty_toggle,
+            args.line_numbers,
             label,
         )))
     }

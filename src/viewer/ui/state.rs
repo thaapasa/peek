@@ -273,7 +273,8 @@ impl<'a> ViewerState<'a> {
             | Action::NextFrame
             | Action::PrevFrame
             | Action::CycleBackground
-            | Action::CycleImageMode => Outcome::Unhandled,
+            | Action::CycleImageMode
+            | Action::ToggleLineNumbers => Outcome::Unhandled,
         })
     }
 

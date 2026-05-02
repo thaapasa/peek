@@ -6,7 +6,7 @@ use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
 use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
-use crate::theme::{ColorMode, PeekThemeName, ThemeManager};
+use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::structured;
 use crate::viewer::ui::Action;
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
@@ -67,10 +67,17 @@ pub(crate) struct ContentMode {
     theme_manager: Rc<ThemeManager>,
     use_pretty: bool,
     allow_pretty_toggle: bool,
+    show_line_numbers: bool,
     label: &'static str,
 }
 
-const RAW_TOGGLE_ACTIONS: &[(Action, &str)] = &[(Action::ToggleRawSource, "Toggle raw / pretty")];
+const RAW_TOGGLE_ACTIONS: &[(Action, &str)] = &[
+    (Action::ToggleRawSource, "Toggle raw / pretty"),
+    (Action::ToggleLineNumbers, "Toggle line numbers"),
+];
+
+const LINE_NUMBER_ACTIONS: &[(Action, &str)] =
+    &[(Action::ToggleLineNumbers, "Toggle line numbers")];
 
 impl ContentMode {
     #[allow(clippy::too_many_arguments)]
@@ -83,6 +90,7 @@ impl ContentMode {
         initial_theme: PeekThemeName,
         initial_use_pretty: bool,
         allow_pretty_toggle: bool,
+        show_line_numbers: bool,
         label: &'static str,
     ) -> Self {
         let highlighter = syntax_token.as_ref().map(|t| {
@@ -101,7 +109,43 @@ impl ContentMode {
             theme_manager,
             use_pretty: initial_use_pretty && pretty_target.is_some(),
             allow_pretty_toggle,
+            show_line_numbers,
             label,
+        }
+    }
+
+    /// Number of digits in `n`, minimum 2 (so a 9-line file's gutter
+    /// doesn't bounce in width as you scroll past line 9 vs line 99).
+    fn gutter_digit_width(total: usize) -> usize {
+        let mut digits = 1;
+        let mut n = total;
+        while n >= 10 {
+            n /= 10;
+            digits += 1;
+        }
+        digits.max(2)
+    }
+
+    /// Mutate `lines` in place, prepending a right-aligned line-number
+    /// gutter painted in the theme's gutter color. `start` is the
+    /// 0-based line index of `lines[0]` in the full source; `total` is
+    /// the source's total line count, used to size the gutter so the
+    /// width is stable across the visible window.
+    fn apply_gutter(lines: &mut [String], start: usize, total: usize, peek_theme: &PeekTheme) {
+        if total == 0 || lines.is_empty() {
+            return;
+        }
+        let width = Self::gutter_digit_width(total);
+        let color_mode = peek_theme.color_mode;
+        let fg_open = color_mode.fg_seq(peek_theme.gutter);
+        let reset = color_mode.reset();
+        for (offset, line) in lines.iter_mut().enumerate() {
+            let n = start + offset + 1;
+            let gutter = format!("{fg_open}{n:>width$} │ {reset}");
+            let mut prefixed = String::with_capacity(gutter.len() + line.len());
+            prefixed.push_str(&gutter);
+            prefixed.push_str(line);
+            *line = prefixed;
         }
     }
 
@@ -207,7 +251,10 @@ impl ContentMode {
             }
             let cached = &self.pretty_highlighted.as_ref().unwrap().2;
             let total = cached.len();
-            let lines = Self::slice_window(cached, scroll, rows);
+            let mut lines = Self::slice_window(cached, scroll, rows);
+            if self.show_line_numbers {
+                Self::apply_gutter(&mut lines, scroll, total, ctx.peek_theme);
+            }
             Ok(Window { lines, total })
         } else {
             if self.pretty_raw_lines.is_none() {
@@ -219,7 +266,10 @@ impl ContentMode {
             }
             let cached = self.pretty_raw_lines.as_ref().unwrap();
             let total = cached.len();
-            let lines = Self::slice_window(cached, scroll, rows);
+            let mut lines = Self::slice_window(cached, scroll, rows);
+            if self.show_line_numbers {
+                Self::apply_gutter(&mut lines, scroll, total, ctx.peek_theme);
+            }
             Ok(Window { lines, total })
         }
     }
@@ -256,10 +306,16 @@ impl ContentMode {
                     out.push(escaped);
                 }
             }
+            if self.show_line_numbers {
+                Self::apply_gutter(&mut out, scroll, total, ctx.peek_theme);
+            }
             Ok(Window { lines: out, total })
         } else {
             let end = scroll.saturating_add(rows).min(total);
-            let lines = self.line_source.window(scroll..end)?;
+            let mut lines = self.line_source.window(scroll..end)?;
+            if self.show_line_numbers {
+                Self::apply_gutter(&mut lines, scroll, total, ctx.peek_theme);
+            }
             Ok(Window { lines, total })
         }
     }
@@ -307,13 +363,24 @@ impl Mode for ContentMode {
             && let Some(Ok(pretty)) = self.pretty.as_ref()
         {
             if let Some(ref token) = self.syntax_token {
-                let lines = highlight_lines(
+                let mut lines = highlight_lines(
                     pretty,
                     token,
                     &self.theme_manager,
                     ctx.theme_name,
                     ctx.peek_theme.color_mode,
                 )?;
+                if self.show_line_numbers {
+                    let total = lines.len();
+                    Self::apply_gutter(&mut lines, 0, total, ctx.peek_theme);
+                }
+                for line in &lines {
+                    out.write_line(line)?;
+                }
+            } else if self.show_line_numbers {
+                let mut lines: Vec<String> = pretty.lines().map(String::from).collect();
+                let total = lines.len();
+                Self::apply_gutter(&mut lines, 0, total, ctx.peek_theme);
                 for line in &lines {
                     out.write_line(line)?;
                 }
@@ -330,23 +397,44 @@ impl Mode for ContentMode {
         // Without a token, preserve the source's trailing-newline status
         // for byte-for-byte fidelity (matches `cat` and the pre-A1
         // un-highlighted path).
+        let total = self.line_source.total_lines();
+        let gutter_width = if self.show_line_numbers && total > 0 {
+            Some(Self::gutter_digit_width(total))
+        } else {
+            None
+        };
+        let color_mode = ctx.peek_theme.color_mode;
+        let gutter_fg = color_mode.fg_seq(ctx.peek_theme.gutter);
+        let gutter_reset = color_mode.reset();
+        let prefix = |n: usize| -> Option<String> {
+            gutter_width.map(|w| format!("{gutter_fg}{n:>w$} │ {gutter_reset}"))
+        };
+
         if let Some(hl) = self.highlighter.as_mut() {
             hl.reset(ctx.theme_name);
-            for line in self.line_source.iter_all() {
+            for (idx, line) in self.line_source.iter_all().enumerate() {
                 let line = line?;
-                let escaped = hl.feed(&line, ctx.peek_theme.color_mode)?;
-                out.write_line(&escaped)?;
+                let escaped = hl.feed(&line, color_mode)?;
+                if let Some(p) = prefix(idx + 1) {
+                    out.write_line(&format!("{p}{escaped}"))?;
+                } else {
+                    out.write_line(&escaped)?;
+                }
             }
         } else {
-            let total = self.line_source.total_lines();
             let trailing_nl = self.line_source.ends_with_newline();
             for (idx, line) in self.line_source.iter_all().enumerate() {
                 let line = line?;
                 let is_last = idx + 1 == total;
-                if is_last && !trailing_nl {
-                    out.write_str(&line)?;
+                let body = if let Some(p) = prefix(idx + 1) {
+                    format!("{p}{line}")
                 } else {
-                    out.write_line(&line)?;
+                    line
+                };
+                if is_last && !trailing_nl {
+                    out.write_str(&body)?;
+                } else {
+                    out.write_line(&body)?;
                 }
             }
         }
@@ -357,11 +445,15 @@ impl Mode for ContentMode {
         if self.allow_pretty_toggle {
             RAW_TOGGLE_ACTIONS
         } else {
-            &[]
+            LINE_NUMBER_ACTIONS
         }
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        if action == Action::ToggleLineNumbers {
+            self.show_line_numbers = !self.show_line_numbers;
+            return Handled::Yes;
+        }
         if action == Action::ToggleRawSource
             && self.allow_pretty_toggle
             && self.pretty_target.is_some()
@@ -488,6 +580,7 @@ mod tests {
             PeekThemeName::IdeaDark,
             false,
             false,
+            false,
             "Source",
         );
 
@@ -549,8 +642,9 @@ mod tests {
             Some("JSON".to_string()),
             tm,
             PeekThemeName::IdeaDark,
-            true, // initial_use_pretty
-            true, // allow_pretty_toggle
+            true,  // initial_use_pretty
+            true,  // allow_pretty_toggle
+            false, // show_line_numbers
             "Content",
         );
 

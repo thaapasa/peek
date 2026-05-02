@@ -61,6 +61,8 @@ pub(crate) enum Action {
     CycleImageMode,
     /// Toggle raw / pretty rendering (text + SVG source).
     ToggleRawSource,
+    /// Toggle the line-number gutter in text views.
+    ToggleLineNumbers,
     /// Play / pause an animated image.
     PlayPause,
     /// Advance to the next animation frame.
@@ -94,6 +96,7 @@ impl Action {
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
         const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
+        const TOGGLE_LINENUM: &[Binding] = &[Binding::plain(Char('l'))];
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n')), Binding::plain(Right)];
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N')), Binding::plain(Left)];
@@ -116,6 +119,7 @@ impl Action {
             Action::CycleBackground   => CYCLE_BG,
             Action::CycleImageMode    => CYCLE_IMG_MODE,
             Action::ToggleRawSource   => TOGGLE_RAW,
+            Action::ToggleLineNumbers => TOGGLE_LINENUM,
             Action::PlayPause         => PLAY_PAUSE,
             Action::NextFrame         => NEXT_FRAME,
             Action::PrevFrame         => PREV_FRAME,
@@ -143,6 +147,7 @@ impl Action {
             Action::CycleBackground   => "b",
             Action::CycleImageMode    => "m",
             Action::ToggleRawSource   => "r",
+            Action::ToggleLineNumbers => "l",
             Action::PlayPause         => "p",
             Action::NextFrame         => "n / Right",
             Action::PrevFrame         => "N / Left",
