@@ -35,7 +35,7 @@ detect::detect(source) --> FileType
   +-- Pipe? --> Registry::viewer_for(file_type) --> &dyn Viewer
                   |
                   v
-                Viewer::render() --> pager::Output --> stdout
+                Viewer::render() --> print::PrintOutput --> stdout
 ```
 
 ### InputSource (`input/source.rs`)
@@ -107,7 +107,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 
 ```rust
 pub trait Viewer {
-    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut Output) -> Result<()>;
+    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut PrintOutput) -> Result<()>;
 }
 ```
 

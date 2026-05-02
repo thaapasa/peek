@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::input::detect::FileType;
-use crate::output::Output;
+use crate::output::PrintOutput;
 
 use super::Viewer;
 
@@ -14,7 +14,7 @@ impl Viewer for TextViewer {
         &self,
         source: &InputSource,
         _file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let content = source.read_text()?;
         output.write_str(&content)?;

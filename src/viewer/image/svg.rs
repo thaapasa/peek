@@ -3,7 +3,7 @@ use image::DynamicImage;
 
 use crate::input::InputSource;
 use crate::input::detect::FileType;
-use crate::output::Output;
+use crate::output::PrintOutput;
 
 use super::Viewer;
 use super::{ImageConfig, render};
@@ -26,7 +26,7 @@ impl Viewer for SvgViewer {
         &self,
         source: &InputSource,
         _file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let term = render::TermSize::detect();
         let lines = render::load_and_render_svg(source, &self.config, term)?;

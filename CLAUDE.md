@@ -30,8 +30,8 @@ src/
     detect.rs          — File-type detection (extension + magic bytes + stdin sniffing)
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   output/
-    mod.rs             — re-exports Output
-    pager.rs           — Output abstraction (pager / direct stdout)
+    mod.rs             — re-exports PrintOutput
+    print.rs           — PrintOutput: write-once stdout for --print / pipes / --info
     help.rs            — CLI help and version screens
   info/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers

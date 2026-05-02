@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::input::detect::FileType;
-use crate::output::Output;
+use crate::output::PrintOutput;
 use crate::theme::ThemeManager;
 
 use super::{Viewer, syntax_token_for};
@@ -28,7 +28,7 @@ impl Viewer for SyntaxViewer {
         &self,
         source: &InputSource,
         file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let content = source.read_text()?;
 

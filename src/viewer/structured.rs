@@ -5,7 +5,7 @@ use syntect::easy::HighlightLines;
 
 use crate::input::InputSource;
 use crate::input::detect::{FileType, StructuredFormat};
-use crate::output::Output;
+use crate::output::PrintOutput;
 use crate::theme::ThemeManager;
 
 use super::{Viewer, ranges_to_escaped};
@@ -26,7 +26,7 @@ impl Viewer for StructuredViewer {
         &self,
         source: &InputSource,
         file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let format = match file_type {
             FileType::Structured(f) => *f,

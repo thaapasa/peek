@@ -38,7 +38,7 @@ fn main() -> Result<()> {
     // --info mode: a fixed-size summary, never paginated. To scroll
     // through it, use the interactive viewer's Info mode (key `i`).
     if args.info {
-        let mut output = output::Output::direct();
+        let mut output = output::PrintOutput::stdout();
         let file_info = info::gather(&source, &detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
@@ -66,9 +66,10 @@ fn main() -> Result<()> {
         )
         .with_context(|| format!("failed to render {}", source.name()))?;
     } else {
-        // Piped or --no-pager: direct output. Binary → hex viewer (registered
-        // as the dispatch target for FileType::Binary in viewer_for).
-        let mut output = output::Output::new(use_pager);
+        // Print mode: stdout once, no event loop. Binary → hex viewer
+        // (registered as the dispatch target for FileType::Binary in
+        // viewer_for).
+        let mut output = output::PrintOutput::stdout();
         let file_type = &detected.file_type;
         let viewer = viewers.viewer_for(file_type);
         viewer

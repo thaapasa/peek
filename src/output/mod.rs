@@ -1,4 +1,4 @@
 pub mod help;
-pub mod pager;
+pub mod print;
 
-pub use pager::Output;
+pub use print::PrintOutput;

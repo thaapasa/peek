@@ -4,7 +4,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::input::detect::FileType;
-use crate::output::Output;
+use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 
 use super::Viewer;
@@ -32,7 +32,7 @@ impl Viewer for HexViewer {
         &self,
         source: &InputSource,
         _file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let bs = source.open_byte_source()?;
         let bpr = pipe_bytes_per_row();

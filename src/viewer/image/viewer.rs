@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::input::detect::FileType;
-use crate::output::Output;
+use crate::output::PrintOutput;
 
 use super::Viewer;
 use super::{ImageConfig, render};
@@ -26,7 +26,7 @@ impl Viewer for ImageViewer {
         &self,
         source: &InputSource,
         _file_type: &FileType,
-        output: &mut Output,
+        output: &mut PrintOutput,
     ) -> Result<()> {
         let term = render::TermSize::detect();
         let lines = render::load_and_render(source, &self.config, term)?;

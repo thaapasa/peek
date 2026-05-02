@@ -19,9 +19,6 @@ crossterm = "0.29"
 syntect = "5"
 two-face = "0.5.1"
 
-# Built-in pager
-minus = { version = "5", features = ["dynamic_output", "static_output", "search"] }
-
 # File type detection via magic bytes
 infer = "0.19"
 

@@ -7,7 +7,7 @@ use syntect::highlighting::Style;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
-use crate::output::Output;
+use crate::output::PrintOutput;
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
@@ -25,11 +25,15 @@ mod text;
 pub(crate) mod ui;
 
 /// Trait for non-interactive (piped output) file viewers. Each Viewer
-/// renders the whole file to an `Output` in one shot — distinct from the
-/// interactive `Mode` system, which drives a TTY event loop.
+/// renders the whole file to a `PrintOutput` in one shot — distinct from
+/// the interactive `Mode` system, which drives a TTY event loop.
 pub trait Viewer {
-    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut Output)
-    -> Result<()>;
+    fn render(
+        &self,
+        source: &InputSource,
+        file_type: &FileType,
+        output: &mut PrintOutput,
+    ) -> Result<()>;
 }
 
 /// Highlight text content as colored terminal lines.
