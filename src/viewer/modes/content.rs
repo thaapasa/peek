@@ -365,6 +365,11 @@ impl Mode for ContentMode {
         if action == Action::ToggleRawSource
             && self.allow_pretty_toggle
             && self.pretty_target.is_some()
+            // Pretty-cap fallback is permanent for this session: pretty was
+            // attempted and refused (size cap or parse error) so flipping
+            // `use_pretty` would be invisible (next render falls through to
+            // raw anyway) and the scroll-reset would surprise the user.
+            && !matches!(self.pretty, Some(Err(_)))
         {
             self.use_pretty = !self.use_pretty;
             // Pretty line N and raw line N are unrelated content — the

@@ -83,6 +83,9 @@ pub(crate) struct LineStreamHighlighter {
     parse_state: ParseState,
     highlight_state: HighlightState,
     next_line: usize,
+    /// Reusable buffer for `line + '\n'` syntect input. Avoids per-line
+    /// allocation when streaming millions of lines through `feed`.
+    line_buf: String,
 }
 
 impl LineStreamHighlighter {
@@ -99,6 +102,7 @@ impl LineStreamHighlighter {
             parse_state,
             highlight_state,
             next_line: 0,
+            line_buf: String::new(),
         }
     }
 
@@ -124,11 +128,20 @@ impl LineStreamHighlighter {
         let highlighter = Highlighter::new(theme);
         // syntect expects the trailing newline as part of the line for
         // correct state transitions on rules anchored to line ends.
-        let mut owned = String::with_capacity(line.len() + 1);
-        owned.push_str(line);
-        owned.push('\n');
-        let ops = self.parse_state.parse_line(&owned, &self.tm.syntax_set)?;
-        let iter = HighlightIterator::new(&mut self.highlight_state, &ops, &owned, &highlighter);
+        // Reuse `line_buf` so streaming millions of lines doesn't allocate
+        // per call (capacity grows to the longest line seen).
+        self.line_buf.clear();
+        self.line_buf.push_str(line);
+        self.line_buf.push('\n');
+        let ops = self
+            .parse_state
+            .parse_line(&self.line_buf, &self.tm.syntax_set)?;
+        let iter = HighlightIterator::new(
+            &mut self.highlight_state,
+            &ops,
+            &self.line_buf,
+            &highlighter,
+        );
         let ranges: Vec<(Style, &str)> = iter.collect();
         // Drop the synthetic trailing newline from the styled output so
         // the caller can decide its own line termination.

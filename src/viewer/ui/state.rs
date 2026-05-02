@@ -505,8 +505,6 @@ impl<'a> ViewerState<'a> {
             // Seed a placeholder view so max_scroll has something to read
             // without forcing an early render. Real lines arrive on the
             // next draw.
-            let rows = content_rows();
-            let scroll = self.scroll[self.active];
             let needs_seed = self.views[self.active]
                 .as_ref()
                 .is_none_or(|v| v.total != n);
@@ -514,10 +512,9 @@ impl<'a> ViewerState<'a> {
                 self.views[self.active] = Some(RenderedView {
                     lines: Vec::new(),
                     scroll_at: usize::MAX, // force re-render on next draw
-                    rows_at: rows,
+                    rows_at: content_rows(),
                     total: n,
                 });
-                let _ = scroll;
             }
             return Ok(());
         }
