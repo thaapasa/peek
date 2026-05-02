@@ -4,6 +4,7 @@ use anyhow::Result;
 
 use super::{Handled, Mode, ModeId, RenderCtx};
 use crate::input::detect::StructuredFormat;
+use crate::output::PrintOutput;
 use crate::theme::ThemeManager;
 use crate::viewer::highlight_lines;
 use crate::viewer::structured;
@@ -125,6 +126,41 @@ impl Mode for ContentMode {
         } else {
             Ok(content.lines().map(String::from).collect())
         }
+    }
+
+    /// Pipe-mode render preserves byte-for-byte output for un-highlighted
+    /// content (no syntax token) — matches the old `TextViewer` behavior
+    /// where a file without a trailing newline is emitted as-is. With a
+    /// syntax token, escape sequences are inserted per line, so per-line
+    /// writes (each followed by `\n`) are the natural shape — matches the
+    /// old `SyntaxViewer` / `StructuredViewer`.
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        if self.use_pretty {
+            self.ensure_pretty();
+        }
+        let content: &str = if self.use_pretty {
+            match self.pretty.as_ref() {
+                Some(Ok(s)) => s.as_str(),
+                _ => &self.raw,
+            }
+        } else {
+            &self.raw
+        };
+        if let Some(ref token) = self.syntax_token {
+            let lines = highlight_lines(
+                content,
+                token,
+                &self.theme_manager,
+                ctx.theme_name,
+                ctx.peek_theme.color_mode,
+            )?;
+            for line in &lines {
+                out.write_line(line)?;
+            }
+        } else {
+            out.write_str(content)?;
+        }
+        Ok(())
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {

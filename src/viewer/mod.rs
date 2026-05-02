@@ -157,7 +157,11 @@ impl Registry {
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
 
         if self.plain_mode {
-            modes.push(self.text_content_mode(source, file_type, args)?);
+            // Binary in --plain still goes to Hex (the universal tail);
+            // ContentMode requires UTF-8 input.
+            if !matches!(file_type, FileType::Binary) {
+                modes.push(self.text_content_mode(source, file_type, args)?);
+            }
         } else {
             match file_type {
                 FileType::SourceCode { .. } | FileType::Structured(_) => {
