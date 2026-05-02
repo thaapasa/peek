@@ -49,6 +49,12 @@ For random-access reads without slurping, `open_byte_source() -> Box<dyn ByteSou
 seeking handle. `HexMode` uses this to read just the visible window per scroll. `File` seeks per
 call; `Stdin` slices the buffered bytes.
 
+For line-oriented streaming, `open_line_source() -> LineSource` (in `input/lines.rs`) does one pass
+of the source to count newlines and capture sparse byte-offset anchors (every 1024 lines), then
+serves windowed line lookups in O(stride) — `ContentMode` uses this so multi-GB text files never
+materialize. Stdin and file go through the same path: stdin's `Arc<[u8]>` backing makes "streaming"
+a zero-cost slice; file seeks per chunk via `FileByteSource`.
+
 When stdin is consumed (`-` argument or no args + piped stdin), `input/stdin.rs` reopens fd 0 from
 the controlling terminal so the event loop can still read keystrokes. Resolved via `ttyname()` on
 stderr/stdout, not `/dev/tty` directly — macOS kqueue rejects the latter with EINVAL.
@@ -61,15 +67,19 @@ XML/SVG, `---` → YAML), in `input::detect::detect_bytes()`.
 ### Mode trait — interactive (`viewer/modes/mod.rs`)
 
 ```rust
+pub(crate) struct Window { pub lines: Vec<String>, pub total: usize }
+
 pub(crate) trait Mode {
     fn id(&self) -> ModeId;
     fn label(&self) -> &str;
     fn is_aux(&self) -> bool { false }
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window>;
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        for line in self.render(ctx)? { out.write_line(&line)?; }
+        let w = self.render_window(ctx, 0, ctx.term_rows)?;
+        for line in w.lines { out.write_line(&line)?; }
         Ok(())
     }
+    fn total_lines(&self) -> Option<usize> { None }
 
     fn owns_scroll(&self) -> bool { false }
     fn scroll(&mut self, _action: Action) -> bool { false }
@@ -87,6 +97,14 @@ pub(crate) trait Mode {
 
 pub(crate) enum Handled { No, Yes, YesResetScroll }
 ```
+
+`render_window` is the single rendering contract. The mode receives a viewport request `(scroll,
+rows)` and returns the visible slice plus the full-source `total` line count — `ViewerState` writes
+the slice verbatim (no further indexing) and uses `total` for scroll math. Streaming modes
+(`ContentMode`) honor the window so they only fetch what's visible; fixed-content modes
+(Info/Help/About) materialize their full output and pre-slice via the `slice_window` helper.
+`Mode::total_lines()` lets a mode answer the line-count question cheaply when it can — `ContentMode`
+returns its `LineSource.total_lines()` in O(1) so Bottom-jumps don't force a render.
 
 `is_aux()` marks Info / Help / Hex as auxiliary so they can be reached only via dedicated keys
 (Tab/i, h, x), are skipped by the `r` primary cycle, and toggle back to `last_primary`.
@@ -166,12 +184,27 @@ dumps are first-class.
 
 ### ContentMode (`viewer/modes/content.rs`)
 
-Holds the eagerly-loaded raw text plus a lazy pretty-print slot. Pretty-print runs only when the
-user lands on pretty mode for the first time — files opened with `--raw` or never toggled never
-trigger the parse. On parse failure ContentMode caches the `Err`, falls back to raw, and queues a
-one-shot warning via `take_warnings()`. `ViewerState` polls `take_warnings()` after each render and
-merges new entries into `FileInfo.warnings`, invalidating InfoMode's cached lines so the next `i`
-view shows the new warning alongside extension-mismatch notices.
+Streams the raw view from a `LineSource` (anchor-indexed line iterator over `InputSource`); a
+window-only render fetches just the visible lines per scroll, so multi-GB text never materializes.
+With a syntax token, `LineStreamHighlighter` (in `viewer/mod.rs`) carries syntect `ParseState` +
+`HighlightState` across `feed()` calls so multi-line constructs (block comments, here-docs)
+highlight correctly. Backward scrolls past the highlighter's cursor reset and replay forward —
+typical top-to-bottom reading is cheap; pathological backward jumps on huge files pay a one-time
+cost. Theme cycle resets state too (cached styles are theme-derived); color cycle takes effect on
+the next `feed()` without a reset.
+
+Pretty-print is whole-file with a 16 MB cap (`PRETTY_MAX_BYTES` in `content.rs`). Above the cap
+ContentMode pushes a warning, clears `use_pretty`, and the streamed raw view takes over. Below the
+cap, pretty-print runs lazily on first access; the parsed text is cached, and the highlighted-pretty
+form (when a syntax token is set) is cached keyed by `(theme, color)` so a cycle invalidates and
+recomputes. On parse failure ContentMode caches the `Err`, falls back to raw, and queues a one-shot
+warning via `take_warnings()`. `ViewerState` polls `take_warnings()` after each render and merges
+new entries into `FileInfo.warnings`, invalidating InfoMode's cached lines so the next `i` view
+shows the new warning alongside extension-mismatch notices.
+
+Pipe path: highlighted output is `\n`-terminated per line (escape sequences are line-scoped);
+un-highlighted preserves the source's trailing-newline status (`LineSource.ends_with_newline()`)
+for byte-for-byte fidelity with `cat`.
 
 ### Animation (`viewer/modes/animation.rs` + `viewer/image/animate.rs`)
 

@@ -25,8 +25,9 @@ src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
   input/
-    mod.rs             — re-exports InputSource, ByteSource
+    mod.rs             — re-exports InputSource, ByteSource, LineSource
     source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait
+    lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
     detect.rs          — File-type detection (extension + magic bytes + stdin sniffing)
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   output/
@@ -55,11 +56,11 @@ src/
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   viewer/
-    mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines
+    mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
-      content.rs       — ContentMode: text / syntax / structured / SVG XML source
+      content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       image_render.rs  — ImageRenderMode: raster + rasterized SVG
       animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
