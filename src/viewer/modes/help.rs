@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{Mode, ModeId, RenderCtx, Window};
+use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::viewer::ui::Action;
 use crate::viewer::ui::help::render_help_with_keys;
 
@@ -27,9 +27,10 @@ impl Mode for HelpMode {
         true
     }
 
-    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
-        let lines = render_help_with_keys(ctx.peek_theme, ctx.theme_name, &self.actions);
-        let total = lines.len();
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
+        let full = render_help_with_keys(ctx.peek_theme, ctx.theme_name, &self.actions);
+        let total = full.len();
+        let lines = slice_window(&full, scroll, rows);
         Ok(Window { lines, total })
     }
 }

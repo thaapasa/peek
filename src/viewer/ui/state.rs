@@ -18,6 +18,18 @@ use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 use super::keys::{self, Action, Outcome};
 use super::{content_rows, make_peek_theme, terminal_cols};
 
+/// One mode's most recent windowed render. The `lines` field is the
+/// exact slice that should be drawn at the top of the viewport; the
+/// `scroll_at` and `rows_at` fields are the inputs the mode was given,
+/// used as the cache key. `total` is the full-source line count so
+/// scroll math (max_scroll, Bottom jump) doesn't need to re-render.
+struct RenderedView {
+    lines: Vec<String>,
+    scroll_at: usize,
+    rows_at: usize,
+    total: usize,
+}
+
 /// Global actions that work in every mode (unless the mode shadows the
 /// key via its own `extra_actions`). Used for both key dispatch and the
 /// help screen.
@@ -56,9 +68,10 @@ pub(crate) struct ViewerState<'a> {
     /// files: Hex is the default and toggling out is a no-op).
     last_primary: Option<usize>,
     scroll: Vec<usize>,
-    /// Per-mode rendered lines. `None` = needs render (lazy on first use,
-    /// invalidated by theme cycles and resize).
-    lines: Vec<Option<Vec<String>>>,
+    /// Per-mode rendered window cache. `None` = needs render (lazy on
+    /// first use, invalidated by scroll change, theme/color cycle, or
+    /// resize for modes that opt in via `rerender_on_resize`).
+    views: Vec<Option<RenderedView>>,
 
     /// Last known logical position in the source. Captured from any
     /// position-tracking mode on switch-out and pushed to the next one
@@ -89,12 +102,16 @@ impl<'a> ViewerState<'a> {
         let peek_theme = make_peek_theme(theme_name, color_mode);
         let file_info = crate::info::gather(source, detected)?;
         let last_primary = if modes[0].is_aux() { None } else { Some(0) };
+        let mut views = Vec::with_capacity(n);
+        for _ in 0..n {
+            views.push(None);
+        }
         Ok(Self {
             modes,
             active: 0,
             last_primary,
             scroll: vec![0; n],
-            lines: vec![None; n],
+            views,
             position: Position::Unknown,
             current_theme: theme_name,
             peek_theme,
@@ -185,23 +202,23 @@ impl<'a> ViewerState<'a> {
     // Globals — apply() handles everything not consumed by the active mode
     // ---------------------------------------------------------------------
 
-    pub(crate) fn apply(&mut self, action: Action) -> Outcome {
-        match action {
+    pub(crate) fn apply(&mut self, action: Action) -> Result<Outcome> {
+        Ok(match action {
             Action::Quit => Outcome::Quit,
             Action::ScrollUp => {
-                self.scroll_by(-1);
+                self.scroll_by(-1)?;
                 Outcome::Redraw
             }
             Action::ScrollDown => {
-                self.scroll_by(1);
+                self.scroll_by(1)?;
                 Outcome::Redraw
             }
             Action::PageUp => {
-                self.page(-1);
+                self.page(-1)?;
                 Outcome::Redraw
             }
             Action::PageDown => {
-                self.page(1);
+                self.page(1)?;
                 Outcome::Redraw
             }
             Action::Top => {
@@ -209,6 +226,7 @@ impl<'a> ViewerState<'a> {
                 Outcome::Redraw
             }
             Action::Bottom => {
+                self.prepare_total()?;
                 self.scroll[self.active] = self.max_scroll();
                 Outcome::Redraw
             }
@@ -256,7 +274,7 @@ impl<'a> ViewerState<'a> {
             | Action::PrevFrame
             | Action::CycleBackground
             | Action::CycleImageMode => Outcome::Unhandled,
-        }
+        })
     }
 
     // ---------------------------------------------------------------------
@@ -367,8 +385,8 @@ impl<'a> ViewerState<'a> {
     fn cycle_theme(&mut self) {
         self.current_theme = self.current_theme.next();
         self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.color_mode);
-        // All themed lines are stale.
-        for slot in &mut self.lines {
+        // All themed views are stale.
+        for slot in &mut self.views {
             *slot = None;
         }
     }
@@ -378,7 +396,7 @@ impl<'a> ViewerState<'a> {
         // Every cached line embeds escape sequences keyed to the previous
         // mode — invalidate them all so the next draw re-paints in the new
         // encoding.
-        for slot in &mut self.lines {
+        for slot in &mut self.views {
             *slot = None;
         }
     }
@@ -393,7 +411,7 @@ impl<'a> ViewerState<'a> {
         for (i, m) in self.modes.iter_mut().enumerate() {
             m.on_resize(cols, rows);
             if m.rerender_on_resize() {
-                self.lines[i] = None;
+                self.views[i] = None;
             }
         }
     }
@@ -402,22 +420,30 @@ impl<'a> ViewerState<'a> {
     // Rendering
     // ---------------------------------------------------------------------
 
-    /// Ensure the active mode's lines are rendered (lazy). Called before
-    /// each draw.
+    /// Ensure the active mode's view is rendered for the current scroll
+    /// position and viewport height. A cached view from a previous render
+    /// is reused only when its scroll_at and rows_at match the current
+    /// request; any scroll change forces a re-render so streaming modes
+    /// (ContentMode) can fetch the new window.
     pub(crate) fn ensure_active_rendered(&mut self) -> Result<()> {
-        if self.lines[self.active].is_none() {
-            let lines = self.render_active()?;
-            self.lines[self.active] = Some(lines);
+        let scroll = self.scroll[self.active];
+        let rows = content_rows();
+        let cache_hit = self.views[self.active]
+            .as_ref()
+            .is_some_and(|v| v.scroll_at == scroll && v.rows_at == rows);
+        if !cache_hit {
+            let view = self.render_active()?;
+            self.views[self.active] = Some(view);
         }
         Ok(())
     }
 
-    /// Mark the active mode's lines as stale so the next draw re-renders.
+    /// Mark the active mode's view as stale so the next draw re-renders.
     pub(crate) fn invalidate_active(&mut self) {
-        self.lines[self.active] = None;
+        self.views[self.active] = None;
     }
 
-    fn render_active(&mut self) -> Result<Vec<String>> {
+    fn render_active(&mut self) -> Result<RenderedView> {
         let scroll = self.scroll[self.active];
         let rows = content_rows();
         let ctx = RenderCtx {
@@ -439,33 +465,73 @@ impl<'a> ViewerState<'a> {
         if !new_warnings.is_empty() {
             self.file_info.warnings.extend(new_warnings);
             if let Some(idx) = self.mode_index(ModeId::Info) {
-                self.lines[idx] = None;
+                self.views[idx] = None;
             }
         }
-        Ok(window.lines)
+        Ok(RenderedView {
+            lines: window.lines,
+            scroll_at: scroll,
+            rows_at: rows,
+            total: window.total,
+        })
     }
 
     fn current_lines(&self) -> &[String] {
-        self.lines[self.active].as_deref().unwrap_or(&[])
-    }
-
-    fn current_scroll(&self) -> usize {
-        self.scroll[self.active]
+        self.views[self.active]
+            .as_ref()
+            .map(|v| v.lines.as_slice())
+            .unwrap_or(&[])
     }
 
     // ---------------------------------------------------------------------
     // Line scrolling (used when active mode does NOT own scroll)
     // ---------------------------------------------------------------------
 
+    /// Maximum scroll offset for the active mode's last-rendered total.
+    /// Falls back to 0 when no render has happened yet — callers that
+    /// need an authoritative total (Bottom action) should ensure a
+    /// render first via `prepare_total`.
     fn max_scroll(&self) -> usize {
-        let len = self.lines[self.active].as_deref().map_or(0, |l| l.len());
-        len.saturating_sub(content_rows())
+        let total = self.views[self.active].as_ref().map_or(0, |v| v.total);
+        total.saturating_sub(content_rows())
     }
 
-    fn scroll_by(&mut self, delta: isize) {
-        if self.modes[self.active].owns_scroll() {
-            return;
+    /// Ensure the active mode's `total` is known. Prefers a cheap
+    /// `Mode::total_lines()` (ContentMode answers in O(1) from its
+    /// LineSource); falls back to a render. Used by Bottom-jumps where
+    /// we need the line count before adjusting scroll.
+    fn prepare_total(&mut self) -> Result<()> {
+        if let Some(n) = self.modes[self.active].total_lines() {
+            // Seed a placeholder view so max_scroll has something to read
+            // without forcing an early render. Real lines arrive on the
+            // next draw.
+            let rows = content_rows();
+            let scroll = self.scroll[self.active];
+            let needs_seed = self.views[self.active]
+                .as_ref()
+                .is_none_or(|v| v.total != n);
+            if needs_seed {
+                self.views[self.active] = Some(RenderedView {
+                    lines: Vec::new(),
+                    scroll_at: usize::MAX, // force re-render on next draw
+                    rows_at: rows,
+                    total: n,
+                });
+                let _ = scroll;
+            }
+            return Ok(());
         }
+        if self.views[self.active].is_none() {
+            self.ensure_active_rendered()?;
+        }
+        Ok(())
+    }
+
+    fn scroll_by(&mut self, delta: isize) -> Result<()> {
+        if self.modes[self.active].owns_scroll() {
+            return Ok(());
+        }
+        self.prepare_total()?;
         let max = self.max_scroll();
         let s = &mut self.scroll[self.active];
         *s = if delta < 0 {
@@ -473,12 +539,14 @@ impl<'a> ViewerState<'a> {
         } else {
             (*s + delta as usize).min(max)
         };
+        Ok(())
     }
 
-    fn page(&mut self, direction: isize) {
+    fn page(&mut self, direction: isize) -> Result<()> {
         if self.modes[self.active].owns_scroll() {
-            return;
+            return Ok(());
         }
+        self.prepare_total()?;
         let step = content_rows().saturating_sub(1);
         let max = self.max_scroll();
         let s = &mut self.scroll[self.active];
@@ -487,6 +555,7 @@ impl<'a> ViewerState<'a> {
         } else {
             (*s + step).min(max)
         };
+        Ok(())
     }
 
     // ---------------------------------------------------------------------
@@ -497,18 +566,18 @@ impl<'a> ViewerState<'a> {
         draw_screen(
             stdout,
             self.current_lines(),
-            self.current_scroll(),
             status,
             self.peek_theme.color_mode.reset_bytes(),
         )
     }
 }
 
-/// Render the screen: clear, draw visible lines, draw status bar on last row.
+/// Render the screen: clear, draw the pre-windowed `lines` (already
+/// sliced by the active mode for the current scroll), draw status bar
+/// on last row.
 fn draw_screen(
     stdout: &mut io::Stdout,
     lines: &[String],
-    scroll: usize,
     status: &str,
     reset_bytes: &[u8],
 ) -> Result<()> {
@@ -525,9 +594,8 @@ fn draw_screen(
         cursor::MoveTo(0, 0),
     )?;
 
-    let start = scroll.min(lines.len());
-    let end = (start + rows).min(lines.len());
-    for (i, line) in lines[start..end].iter().enumerate() {
+    let end = lines.len().min(rows);
+    for (i, line) in lines[..end].iter().enumerate() {
         if i > 0 {
             stdout.write_all(b"\r\n")?;
         }

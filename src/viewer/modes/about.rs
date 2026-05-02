@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{Mode, ModeId, RenderCtx, Window};
+use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::help::paint_logo;
 use crate::theme::PeekTheme;
 use crate::viewer::ui::Action;
@@ -32,7 +32,7 @@ impl Mode for AboutMode {
         true
     }
 
-    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
         let pt = ctx.peek_theme;
         let theme_name = ctx.theme_name.cli_name();
         let color_mode = pt.color_mode.cli_name();
@@ -81,6 +81,7 @@ impl Mode for AboutMode {
         lines.push(tip_line(pt, "a / Tab", "Exit this screen"));
 
         let total = lines.len();
+        let lines = slice_window(&lines, scroll, rows);
         Ok(Window { lines, total })
     }
 

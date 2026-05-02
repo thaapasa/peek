@@ -107,9 +107,24 @@ pub(crate) struct RenderCtx<'a> {
 /// Result of `Mode::render_window`: the visible lines for the requested
 /// window plus the mode's total line count. Streaming modes use this to
 /// expose how big the source is without materializing every line.
+///
+/// `lines` is the slice that should be drawn at the top of the viewport
+/// — `ViewerState` writes them out without further indexing. `total` is
+/// the full-source line count and drives scroll math (max_scroll, the
+/// `Bottom` jump, status-line position).
 pub(crate) struct Window {
     pub lines: Vec<String>,
     pub total: usize,
+}
+
+/// Slice helper for fixed-content modes (Info/Help/About) whose
+/// `render_window` materializes the full view and then needs to crop to
+/// the caller's scroll position. Returns owned lines because the trait
+/// signature does, and the slice is small (one viewport).
+pub(crate) fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<String> {
+    let start = scroll.min(lines.len());
+    let end = start.saturating_add(rows).min(lines.len());
+    lines[start..end].to_vec()
 }
 
 /// One renderable + interactive view of a file.

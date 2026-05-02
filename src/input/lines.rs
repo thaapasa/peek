@@ -73,6 +73,7 @@ impl LineSource {
 
     /// Fetch the line at `idx` (0-based). Returns an empty string for
     /// indices at or past `total_lines`.
+    #[cfg(test)]
     pub fn line(&self, idx: usize) -> Result<String> {
         let mut v = self.window(idx..idx + 1)?;
         Ok(v.pop().unwrap_or_default())

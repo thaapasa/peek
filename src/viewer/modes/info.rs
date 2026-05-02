@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{Mode, ModeId, RenderCtx, Window};
+use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 
 pub(crate) struct InfoMode;
 
@@ -23,9 +23,10 @@ impl Mode for InfoMode {
         true
     }
 
-    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
-        let lines = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
-        let total = lines.len();
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
+        let full = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
+        let total = full.len();
+        let lines = slice_window(&full, scroll, rows);
         Ok(Window { lines, total })
     }
 }
