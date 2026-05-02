@@ -7,7 +7,6 @@ use syntect::highlighting::Style;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
-use crate::output::PrintOutput;
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
@@ -20,22 +19,7 @@ pub mod image;
 pub mod interactive;
 pub(crate) mod modes;
 pub mod structured;
-mod syntax;
-mod text;
 pub(crate) mod ui;
-
-/// Trait for print-mode (non-interactive) file viewers. Each Viewer
-/// renders the whole file to a `PrintOutput` in one shot — distinct from
-/// the interactive `Mode` system in `viewer::interactive`, which drives
-/// a TTY event loop.
-pub trait Viewer {
-    fn render(
-        &self,
-        source: &InputSource,
-        file_type: &FileType,
-        output: &mut PrintOutput,
-    ) -> Result<()>;
-}
 
 /// Highlight text content as colored terminal lines.
 pub fn highlight_lines(
@@ -76,14 +60,12 @@ pub(crate) fn ranges_to_escaped(ranges: &[(Style, &str)], color_mode: ColorMode)
     out
 }
 
-/// Registry of viewers, dispatches by file type.
+/// File-type-aware mode-stack builder. Holds the shared `ThemeManager`
+/// plus the CLI-driven options every mode in the stack needs to consume
+/// (plain mode, current theme, image config). Used by both the
+/// interactive event loop and the print-mode `render_to_pipe` path —
+/// `compose_modes` is the single dispatcher across both.
 pub struct Registry {
-    syntax_viewer: syntax::SyntaxViewer,
-    structured_viewer: structured::StructuredViewer,
-    image_viewer: image::ImageViewer,
-    svg_viewer: image::SvgViewer,
-    text_viewer: text::TextViewer,
-    hex_viewer: hex::HexViewer,
     theme_manager: Rc<ThemeManager>,
     plain_mode: bool,
     theme_name: PeekThemeName,
@@ -94,20 +76,7 @@ impl Registry {
     pub fn new(args: &Args) -> Result<Self> {
         let theme = Rc::new(ThemeManager::new(args.theme, args.color));
         let peek_theme = theme.peek_theme().clone();
-        let img_config = image::ImageConfig {
-            mode: image::ImageMode::from_str(&args.image_mode),
-            width: args.width,
-            background: image::Background::from_str(&args.background),
-            margin: args.margin,
-            color_mode: args.color,
-        };
         Ok(Self {
-            syntax_viewer: syntax::SyntaxViewer::new(Rc::clone(&theme), args.language.clone()),
-            structured_viewer: structured::StructuredViewer::new(Rc::clone(&theme), args.raw),
-            image_viewer: image::ImageViewer::new(img_config),
-            svg_viewer: image::SvgViewer::new(img_config),
-            text_viewer: text::TextViewer,
-            hex_viewer: hex::HexViewer::new(peek_theme.clone()),
             theme_manager: theme,
             plain_mode: args.plain,
             theme_name: args.theme,
@@ -123,30 +92,12 @@ impl Registry {
         &self.peek_theme
     }
 
-    pub fn viewer_for(&self, file_type: &FileType) -> &dyn Viewer {
-        if self.plain_mode {
-            // --plain: use plain text for non-binary; hex still beats failing on
-            // non-UTF-8 bytes for binary.
-            return match file_type {
-                FileType::Binary => &self.hex_viewer,
-                _ => &self.text_viewer,
-            };
-        }
-
-        match file_type {
-            FileType::SourceCode { .. } => &self.syntax_viewer,
-            FileType::Structured(_) => &self.structured_viewer,
-            FileType::Image => &self.image_viewer,
-            FileType::Svg => &self.svg_viewer,
-            FileType::Binary => &self.hex_viewer,
-        }
-    }
-
-    /// Compose the interactive view-mode list for a given file type. Always
-    /// appends Hex, Info, and Help so every file gets those views; other
-    /// modes are file-type specific.
-    ///
-    /// The print-mode (non-interactive) path uses `viewer_for` instead.
+    /// Compose the view-mode list for a given file type. Always appends
+    /// Hex, Info, About, and Help so every file gets those views; other
+    /// modes are file-type specific. The interactive event loop and the
+    /// print-mode pipe path both consume this stack — pipe mode picks
+    /// the first non-aux mode (or the first mode if all are aux, e.g.
+    /// binary files).
     pub fn compose_modes(
         &self,
         source: &InputSource,
@@ -292,9 +243,6 @@ impl Registry {
 /// (extension), then the bare filename (catches `Makefile`, `Dockerfile`
 /// — syntect matches these by name). Structured/SVG always map to a
 /// fixed syntax token.
-///
-/// Shared by `Registry::compose_modes` and `SyntaxViewer` so the two
-/// rendering paths agree on syntax resolution.
 pub(crate) fn syntax_token_for(
     forced_language: Option<&str>,
     source: &InputSource,

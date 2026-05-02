@@ -129,11 +129,10 @@ impl Mode for ContentMode {
     }
 
     /// Pipe-mode render preserves byte-for-byte output for un-highlighted
-    /// content (no syntax token) — matches the old `TextViewer` behavior
-    /// where a file without a trailing newline is emitted as-is. With a
-    /// syntax token, escape sequences are inserted per line, so per-line
-    /// writes (each followed by `\n`) are the natural shape — matches the
-    /// old `SyntaxViewer` / `StructuredViewer`.
+    /// content (no syntax token): a file without a trailing newline is
+    /// emitted as-is. With a syntax token, escape sequences are inserted
+    /// per line, so per-line writes (each followed by `\n`) are the
+    /// natural shape.
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         if self.use_pretty {
             self.ensure_pretty();

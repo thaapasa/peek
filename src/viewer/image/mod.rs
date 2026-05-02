@@ -1,15 +1,12 @@
-//! Image and SVG viewers plus their shared rendering pipeline.
+//! Image rendering pipeline for raster + SVG sources.
 //!
-//! - [`ImageViewer`] / [`SvgViewer`] are the print-mode [`Viewer`]
-//!   implementations (one per format).
 //! - [`render`], [`animate`], [`clustering`], [`glyph_atlas`] make up the
-//!   shared rasterization → ASCII-art pipeline.
+//!   shared rasterization → ASCII-art pipeline used by the interactive
+//!   `ImageRenderMode` and `AnimationMode`.
 //! - [`ImageConfig`] / [`ImageMode`] / [`Background`] configure that
-//!   pipeline; they're shared with the interactive image modes too.
+//!   pipeline; they flow in from CLI args via `Registry`.
 
 use crate::theme::ColorMode;
-
-use super::Viewer;
 
 pub(crate) mod animate;
 mod clustering;
@@ -17,11 +14,8 @@ mod glyph_atlas;
 mod mode;
 pub mod render;
 mod svg;
-mod viewer;
 
 pub use mode::ImageMode;
-pub use svg::SvgViewer;
-pub use viewer::ImageViewer;
 
 /// Background mode for transparency compositing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

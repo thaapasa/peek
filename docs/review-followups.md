@@ -45,6 +45,15 @@ For context, the review's clear-cut bugs and small cleanups were landed in that 
   no longer allocate (TrueColor / Ansi256 / Grayscale / Plain). Ansi16 still returns its lookup
   string. Microbenchmark skipped — the change is mechanical and the alloc-count drop is visible from
   inspection.
+- A2 — `Viewer` trait, `Registry::viewer_for`, and the six print-mode impls (`SyntaxViewer`,
+  `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`) are gone. New
+  `Mode::render_to_pipe(ctx, &mut PrintOutput)` is the print-path entry on every mode (default impl
+  materializes `render(ctx)`; `HexMode` streams in 4 KB chunks, `ContentMode` preserves byte-fidelity
+  for un-highlighted text). `RenderCtx` carries `term_cols` / `term_rows` so the same `render` body
+  serves both interactive and pipe — pipe injects `$COLUMNS-or-80` and `usize::MAX`. `compose_modes`
+  is the single dispatcher; `main` picks the first non-aux mode (or first, for binary) for pipe
+  output. Pipe smoke-diffs (source, JSON pretty/raw, plain text, hex, PNG, GIF first-frame, SVG
+  raster, plain-binary) are byte-identical to the pre-change output.
 
 Everything below is what's left.
 
@@ -59,11 +68,10 @@ text path. Real-world impact: OOM or long startup on multi-GB log files.
 
 **Where:**
 
-- `viewer/mod.rs:215` — `text_content_mode` calls `source.read_text()`
-- `viewer/syntax.rs:55` — `SyntaxViewer::render` calls `source.read_text()`
-- `viewer/structured.rs:37` — `StructuredViewer::render` calls `source.read_text()`
-- `viewer/text.rs:19` — `TextViewer::render` calls `source.read_text()`
-- (`gather_text_extras` was already converted in this pass)
+- `viewer/mod.rs` — `text_content_mode` calls `source.read_text()` to seed `ContentMode.raw`
+- `viewer/modes/content.rs` — `ContentMode` holds `raw: String` and emits all lines through
+  `render` and `render_to_pipe` (after A2, the only text-loading site)
+- (`gather_text_extras` was already converted in an earlier pass)
 
 **Why not auto-fixed:** real refactor, not a tweak. Touches:
 
@@ -74,8 +82,8 @@ text path. Real-world impact: OOM or long startup on multi-GB log files.
 - `ContentMode`'s cache strategy needs to become windowed — N lines around current scroll, reload on
   big jumps. Real design call (LRU? strict window? on-disk index?).
 - Pretty-printing structured data legitimately needs the whole document (no streaming pretty-print
-  of JSON without buffering). `StructuredViewer` and ContentMode's pretty branch should stay
-  whole-file but with an explicit size cap + "show raw with warning" fallback for huge files.
+  of JSON without buffering). `ContentMode`'s pretty branch should stay whole-file but with an
+  explicit size cap + "show raw with warning" fallback for huge files.
 
 **Suggested approach:**
 
@@ -86,43 +94,11 @@ text path. Real-world impact: OOM or long startup on multi-GB log files.
 3. Replace `ContentMode`'s `raw: String` with a `LineSource` plus a bounded line cache. Total
    scroll/length comes from a one-pass line count (which can also live in the existing streaming
    scan).
-4. Either keep `StructuredViewer` whole-file (with documented size cap + graceful fallback) or,
-   longer-term, add a streaming pretty-printer for JSON/YAML.
+4. Either keep `ContentMode`'s pretty branch whole-file (with documented size cap + graceful
+   fallback) or, longer-term, add a streaming pretty-printer for JSON/YAML.
 
 **Effort:** ~1–2 days. Touches the line-cache layer that both interactive and piped paths share —
 needs testing.
-
----
-
-### A2. Unify `Viewer` (piped) and `Mode` (interactive)
-
-**Severity:** medium. Duplication shows up as drift hazards — two pipelines means two places to
-remember updates to syntax-token logic, warning behavior, pretty-print fallback. Most easy
-duplication is deduped (`syntax_token_for`, `render_decoded`, structured `pretty_print` shared), but
-`viewer_for` and `compose_modes` are still parallel dispatchers.
-
-**Where:**
-
-- `viewer/mod.rs:113` — `Registry::viewer_for(file_type)`
-- `viewer/mod.rs:137` — `Registry::compose_modes(...)`
-
-**Why not auto-fixed:** genuine design choice. Two reasonable shapes:
-
-- **Option α — drop `Viewer`:** piped path renders the first non-aux mode's `render()` to stdout
-  once. One dispatcher, one render contract. But modes were designed for interactive use (
-  terminal-size-aware sizing, colored escapes for a TTY); they'd need to learn pipe sizing.
-- **Option β — keep `Viewer`, generate from mode:** add a
-  `Mode::render_for_pipe(&self, output) -> Result<()>` default method delegating to `render()`.
-  Easier path, less benefit.
-
-**Suggested approach:** start by collapsing the dispatch — make `viewer_for` itself call
-`compose_modes` and pluck the first non-aux mode. Inside that mode's `render()`, decide based on a
-`for_pipe: bool` flag (or separate `RenderCtx::pipe`) whether to size to terminal, emit colors, etc.
-Mostly mechanical. Genuinely new code: figuring out what `term.rows` / `term.cols` mean in pipe
-mode (probably rows = unbounded, cols = `$COLUMNS` or default).
-
-**Effort:** ~half a day for Option α with the "render once and output" shape. Most modes already
-work in piped contexts because they produce ANSI strings either way.
 
 ---
 

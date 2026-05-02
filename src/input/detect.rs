@@ -259,7 +259,7 @@ fn detect_bytes(data: &[u8]) -> Detected {
         };
     }
 
-    // Plain text — the SyntaxViewer's `--language` flag can still apply
+    // Plain text — `--language` can still pin a syntax for highlighting.
     Detected {
         file_type: FileType::SourceCode { syntax: None },
         magic_mime,

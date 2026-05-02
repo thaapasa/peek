@@ -7,21 +7,14 @@ use super::{Background, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
 
-/// Terminal dimensions in characters.
+/// Terminal dimensions in characters. The image renderer is fed sizes
+/// from `RenderCtx` rather than querying the terminal itself, so the
+/// same code path serves both interactive (live terminal size) and
+/// pipe (`$COLUMNS or 80`, unbounded rows) rendering.
 #[derive(Debug, Clone, Copy)]
 pub struct TermSize {
     pub cols: u32,
     pub rows: u32,
-}
-
-impl TermSize {
-    pub fn detect() -> Self {
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-        Self {
-            cols: cols as u32,
-            rows: rows as u32,
-        }
-    }
 }
 
 /// Compute the output grid size (cols, rows) for an image that fits
