@@ -124,14 +124,16 @@ fn gather_extras_stdin(
             None => binary::binary_extras(magic_mime),
         },
         FileType::Structured(fmt) => structured::structured_extras(*fmt, data),
-        FileType::Image => image::gather_image_extras_from_bytes(data, magic_mime),
+        FileType::Image => image::gather_image_extras(&stdin_source, magic_mime),
         FileType::Binary => binary::binary_extras(magic_mime),
     }
 }
 
 fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) -> FileExtras {
     match file_type {
-        FileType::Image => image::gather_image_extras(path, magic_mime),
+        FileType::Image => {
+            image::gather_image_extras(&InputSource::File(path.to_path_buf()), magic_mime)
+        }
         FileType::SourceCode { .. } => {
             match text::gather_text_stats(&InputSource::File(path.to_path_buf())) {
                 Some(stats) => FileExtras::Text(stats),

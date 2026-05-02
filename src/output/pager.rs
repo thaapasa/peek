@@ -1,9 +1,7 @@
 use std::fmt::Write as FmtWrite;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 
 use anyhow::Result;
-
-use crate::Args;
 
 /// Output abstraction: pager or direct stdout.
 pub enum Output {
@@ -12,14 +10,13 @@ pub enum Output {
 }
 
 impl Output {
-    pub fn new(args: &Args) -> Result<Self> {
-        let use_pager = !args.print && io::stdout().is_terminal();
-
+    /// Pick pager or direct stdout. Caller decides which (typically:
+    /// pager when stdout is a TTY and `--print` is not set).
+    pub fn new(use_pager: bool) -> Self {
         if use_pager {
-            let pager = minus::Pager::new();
-            Ok(Output::Pager(pager))
+            Output::Pager(minus::Pager::new())
         } else {
-            Ok(Output::Direct(io::stdout()))
+            Output::Direct(io::stdout())
         }
     }
 

@@ -7,54 +7,54 @@ use std::sync::Arc;
 
 use ::image::ImageDecoder;
 
-use super::super::{AnimationStats, FileExtras};
+use super::super::FileExtras;
 use super::{animation, binary, exif, xmp};
+use crate::input::InputSource;
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
 pub(super) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
 
-pub(super) fn gather_image_extras_from_bytes(
-    data: &Arc<[u8]>,
-    magic_mime: Option<&str>,
-) -> FileExtras {
-    let decoder = match ::image::ImageReader::new(std::io::Cursor::new(data.as_ref()))
-        .with_guessed_format()
-        .ok()
-        .and_then(|r| r.into_decoder().ok())
-    {
-        Some(d) => d,
-        None => return binary::binary_extras(magic_mime),
+pub(super) fn gather_image_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtras {
+    let Some(decoder) = image_decoder_for(source) else {
+        return binary::binary_extras(magic_mime);
     };
-    image_extras_from_decoder(decoder, data, magic_mime, |mime| {
-        animation::animation_stats_bytes(data, mime)
-    })
+    let head = read_source_head(source, IMAGE_HEAD_SCAN);
+    let anim = match source {
+        InputSource::File(path) => animation::animation_stats_path(path, magic_mime),
+        InputSource::Stdin { data } => animation::animation_stats_bytes(data, magic_mime),
+    };
+    image_extras_from_decoder(decoder, &head, anim)
 }
 
-pub(super) fn gather_image_extras(path: &Path, magic_mime: Option<&str>) -> FileExtras {
-    let decoder = match ::image::ImageReader::open(path)
-        .ok()
-        .and_then(|r| r.with_guessed_format().ok())
-        .and_then(|r| r.into_decoder().ok())
-    {
-        Some(d) => d,
-        None => return binary::binary_extras(magic_mime),
-    };
-    let head = read_head(path, IMAGE_HEAD_SCAN);
-    image_extras_from_decoder(decoder, &head, magic_mime, |mime| {
-        animation::animation_stats_path(path, mime)
-    })
+fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
+    match source {
+        InputSource::File(path) => ::image::ImageReader::open(path)
+            .ok()
+            .and_then(|r| r.with_guessed_format().ok())
+            .and_then(|r| r.into_decoder().ok())
+            .map(|d| Box::new(d) as Box<dyn ImageDecoder>),
+        InputSource::Stdin { data } => {
+            ::image::ImageReader::new(std::io::Cursor::new(Arc::clone(data)))
+                .with_guessed_format()
+                .ok()
+                .and_then(|r| r.into_decoder().ok())
+                .map(|d| Box::new(d) as Box<dyn ImageDecoder>)
+        }
+    }
 }
 
-fn image_extras_from_decoder<D, F>(
-    mut decoder: D,
+fn read_source_head(source: &InputSource, max: usize) -> Vec<u8> {
+    let Ok(bs) = source.open_byte_source() else {
+        return Vec::new();
+    };
+    bs.read_range(0, max).unwrap_or_default()
+}
+
+fn image_extras_from_decoder(
+    mut decoder: Box<dyn ImageDecoder>,
     head: &[u8],
-    magic_mime: Option<&str>,
-    anim_fn: F,
-) -> FileExtras
-where
-    D: ImageDecoder,
-    F: FnOnce(Option<&str>) -> Option<AnimationStats>,
-{
+    animation: Option<super::super::AnimationStats>,
+) -> FileExtras {
     let (width, height) = decoder.dimensions();
     let ct = decoder.color_type();
     let color_type = format!("{ct:?}");
@@ -67,7 +67,6 @@ where
         .and_then(|p| icc_description(&p));
 
     let hdr_format = detect_hdr_bytes(head);
-    let animation = anim_fn(magic_mime);
     let exif = exif::exif_fields_from_bytes(head);
     let xmp = xmp::xmp_fields_from_bytes(head);
 

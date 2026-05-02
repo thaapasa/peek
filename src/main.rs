@@ -30,8 +30,7 @@ fn main() -> Result<()> {
     let source = input::stdin::build_source(&args)?;
     let detected = input::detect::detect(&source)?;
 
-    let is_tty = std::io::stdout().is_terminal();
-    let use_pager = !args.print && is_tty;
+    let use_pager = !args.print && std::io::stdout().is_terminal();
 
     let viewers = viewer::Registry::new(&args)?;
     let render_opts = info::RenderOptions { utc: args.utc };
@@ -69,7 +68,7 @@ fn main() -> Result<()> {
     } else {
         // Piped or --no-pager: direct output. Binary → hex viewer (registered
         // as the dispatch target for FileType::Binary in viewer_for).
-        let mut output = output::Output::new(&args)?;
+        let mut output = output::Output::new(use_pager);
         let file_type = &detected.file_type;
         let viewer = viewers.viewer_for(file_type);
         viewer

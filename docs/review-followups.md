@@ -28,6 +28,17 @@ For context, the review's clear-cut bugs and small cleanups were landed in that 
   interactive viewer's Info mode. (The original "press q on a tiny info screen" papercut was a
   non-issue — minus's static mode short-circuits when content fits — but `--info` shouldn't be
   paginated regardless.)
+- B6 — image extras unified behind a single `gather_image_extras(&InputSource, magic_mime)`. New
+  `image_decoder_for(&InputSource) -> Option<Box<dyn ImageDecoder>>` branches between
+  `ImageReader::open` and `ImageReader::new(Cursor::new(Arc::clone(data)))`; head bytes come from
+  `source.open_byte_source()`. The path/bytes split survives only inside `animation::*` for the
+  GIF streaming reader.
+- B4 — dropped `Registry.forced_language` and `Registry::syntax_token_for`. `text_content_mode`
+  passes `args.language.as_deref()` straight to the free `syntax_token_for`; `SyntaxViewer` keeps
+  its own copy as before.
+- B3 — `Output::new(&Args)` replaced with `Output::new(use_pager: bool)`. `main` computes
+  `use_pager = !args.print && stdout().is_terminal()` once and passes it in; `Output` no longer
+  re-checks the TTY or `--print`.
 
 Everything below is what's left.
 
@@ -150,51 +161,6 @@ static render isn't the whole story.
 
 **Effort:** few hours for the warning. Full animation support is a bigger project (resvg's animation
 API surface is limited).
-
----
-
-### B3. `is_terminal()` checked twice
-
-**Severity:** trivial duplication.
-
-- `main.rs:31` — `is_tty = stdout().is_terminal()` for the `use_pager` flag
-- `output/pager.rs:16` — `Output::new` recomputes `use_pager`
-
-**Suggested approach:** pass the decision in. `Output::new(args, use_pager)` or `Output::Direct` /
-`Output::Pager` constructors that don't re-decide. Falls naturally out of B2.
-
-**Effort:** ~10 minutes.
-
----
-
-### B4. `Registry` still stores `forced_language` after the dedup
-
-**Severity:** trivial. Field only read by `Registry::syntax_token_for`, which now just delegates to
-the free function `syntax_token_for(forced_language, source, file_type)`. The same value also lives
-in `SyntaxViewer.forced_language`.
-
-**Where:** `viewer/mod.rs:74,98,269`
-
-**Suggested approach:** drop `Registry.forced_language`. `compose_modes` already has `&Args`, so the
-call site can pass `args.language.as_deref()` directly to `syntax_token_for`.
-
-**Effort:** ~5 minutes.
-
----
-
-### B6. `gather_extras` for images still has separate path / bytes variants
-
-**Severity:** trivial. Same shape as the text-extras code that was unified, but for
-`FileType::Image` the path (`gather_image_extras`) and stdin (`gather_image_extras_from_bytes`)
-still split.
-
-**Where:** `info/gather.rs:142-199`
-
-**Suggested approach:** factor `image_decoder_for(source) -> Box<dyn ImageDecoder>` for either
-`InputSource::File` (`ImageReader::open`) or `InputSource::Stdin` (
-`ImageReader::new(Cursor::new(...))`). Both extras-builders collapse into one.
-
-**Effort:** ~20 minutes.
 
 ---
 

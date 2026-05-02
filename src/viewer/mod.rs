@@ -80,7 +80,6 @@ pub struct Registry {
     text_viewer: text::TextViewer,
     hex_viewer: hex::HexViewer,
     theme_manager: Rc<ThemeManager>,
-    forced_language: Option<String>,
     plain_mode: bool,
     theme_name: PeekThemeName,
     peek_theme: PeekTheme,
@@ -105,7 +104,6 @@ impl Registry {
             text_viewer: text::TextViewer,
             hex_viewer: hex::HexViewer::new(peek_theme.clone()),
             theme_manager: theme,
-            forced_language: args.language.clone(),
             plain_mode: args.plain,
             theme_name: args.theme,
             peek_theme,
@@ -240,7 +238,7 @@ impl Registry {
         let syntax_token = if self.plain_mode {
             None
         } else {
-            self.syntax_token_for(source, file_type)
+            syntax_token_for(args.language.as_deref(), source, file_type)
         };
 
         // Pretty-print is the default whenever it's available; --raw flips
@@ -277,10 +275,6 @@ impl Registry {
             margin: args.margin,
             color_mode: args.color,
         }
-    }
-
-    fn syntax_token_for(&self, source: &InputSource, file_type: &FileType) -> Option<String> {
-        syntax_token_for(self.forced_language.as_deref(), source, file_type)
     }
 }
 
