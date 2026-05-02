@@ -96,8 +96,7 @@ fn stream_utf8(
                 e.valid_up_to()
             }
         };
-        let s = std::str::from_utf8(&buf[..valid_up_to])
-            .expect("valid_up_to slice is valid UTF-8");
+        let s = std::str::from_utf8(&buf[..valid_up_to]).expect("valid_up_to slice is valid UTF-8");
 
         if at_file_start && s.starts_with("#!") {
             let line_end = s.find('\n').unwrap_or(s.len());

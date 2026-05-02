@@ -103,6 +103,8 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 ## Workflow
 
 - **Don't commit unless asked.** The user decides what and when.
+- **Run `cargo fmt` after editing Rust code** so formatting drift doesn't pile up across unrelated
+  files. Cheap; keeps diffs focused on real changes.
 
 ## Collaboration
 

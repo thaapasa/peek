@@ -158,16 +158,31 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
                 push_field(&mut lines, "Paths", &paint_count(*path_count, theme), theme);
             }
             if *group_count > 0 {
-                push_field(&mut lines, "Groups", &paint_count(*group_count, theme), theme);
+                push_field(
+                    &mut lines,
+                    "Groups",
+                    &paint_count(*group_count, theme),
+                    theme,
+                );
             }
             if *rect_count > 0 {
                 push_field(&mut lines, "Rects", &paint_count(*rect_count, theme), theme);
             }
             if *circle_count > 0 {
-                push_field(&mut lines, "Circles", &paint_count(*circle_count, theme), theme);
+                push_field(
+                    &mut lines,
+                    "Circles",
+                    &paint_count(*circle_count, theme),
+                    theme,
+                );
             }
             if *text_count > 0 {
-                push_field(&mut lines, "Text Elems", &paint_count(*text_count, theme), theme);
+                push_field(
+                    &mut lines,
+                    "Text Elems",
+                    &paint_count(*text_count, theme),
+                    theme,
+                );
             }
             if *has_script {
                 push_field(

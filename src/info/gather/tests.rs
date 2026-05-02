@@ -110,11 +110,12 @@ fn png_fire_has_dimensions_and_icc() {
 fn gif_lightning_animation_stats() {
     let info = gather_fixture("test-images/lightning.gif");
     let FileExtras::Image {
-        animation: Some(AnimationStats {
-            frame_count,
-            total_duration_ms,
-            loop_count,
-        }),
+        animation:
+            Some(AnimationStats {
+                frame_count,
+                total_duration_ms,
+                loop_count,
+            }),
         ..
     } = &info.extras
     else {
@@ -133,11 +134,12 @@ fn gif_lightning_animation_stats() {
 fn webp_rickroll_animation_stats() {
     let info = gather_fixture("test-images/rickroll.webp");
     let FileExtras::Image {
-        animation: Some(AnimationStats {
-            frame_count,
-            total_duration_ms,
-            loop_count,
-        }),
+        animation:
+            Some(AnimationStats {
+                frame_count,
+                total_duration_ms,
+                loop_count,
+            }),
         ..
     } = &info.extras
     else {

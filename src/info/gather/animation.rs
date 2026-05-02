@@ -95,8 +95,7 @@ fn webp_animation_stats_bytes(data: &[u8]) -> Option<AnimationStats> {
     let mut loop_count: Option<LoopCount> = None;
     while offset + 8 <= data.len() {
         let chunk_id = &data[offset..offset + 4];
-        let chunk_size =
-            u32::from_le_bytes(data[offset + 4..offset + 8].try_into().ok()?) as usize;
+        let chunk_size = u32::from_le_bytes(data[offset + 4..offset + 8].try_into().ok()?) as usize;
         let body_start = offset + 8;
         let body_end = body_start.checked_add(chunk_size)?;
         if body_end > data.len() {

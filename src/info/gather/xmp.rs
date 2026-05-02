@@ -9,7 +9,10 @@ pub(super) fn xmp_fields_from_bytes(data: &[u8]) -> Vec<(String, String)> {
     // if not present.
     let needle_start = b"<x:xmpmeta";
     let needle_end = b"</x:xmpmeta>";
-    let start = match data.windows(needle_start.len()).position(|w| w == needle_start) {
+    let start = match data
+        .windows(needle_start.len())
+        .position(|w| w == needle_start)
+    {
         Some(p) => p,
         None => return Vec::new(),
     };
