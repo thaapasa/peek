@@ -165,3 +165,23 @@ pub(super) fn thousands_sep(n: u64) -> String {
     }
     result.chars().rev().collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::thousands_sep;
+
+    #[test]
+    fn thousands_sep_inserts_commas_every_three_digits() {
+        assert_eq!(thousands_sep(0), "0");
+        assert_eq!(thousands_sep(1), "1");
+        assert_eq!(thousands_sep(999), "999");
+        assert_eq!(thousands_sep(1_000), "1,000");
+        assert_eq!(thousands_sep(12_345), "12,345");
+        assert_eq!(thousands_sep(1_234_567), "1,234,567");
+    }
+
+    #[test]
+    fn thousands_sep_handles_u64_max() {
+        assert_eq!(thousands_sep(u64::MAX), "18,446,744,073,709,551,615");
+    }
+}

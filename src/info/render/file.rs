@@ -248,3 +248,68 @@ fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
     }
     result
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{age_blend_factor, format_size_human};
+
+    #[test]
+    fn format_size_human_uses_correct_unit_at_boundaries() {
+        assert_eq!(format_size_human(0), "0 B");
+        assert_eq!(format_size_human(1), "1 B");
+        assert_eq!(format_size_human(1023), "1023 B");
+        assert_eq!(format_size_human(1024), "1.00 KiB");
+        assert_eq!(format_size_human(1536), "1.50 KiB");
+        assert_eq!(format_size_human(1024 * 1024 - 1), "1024.00 KiB");
+        assert_eq!(format_size_human(1024 * 1024), "1.00 MiB");
+        assert_eq!(format_size_human(1024 * 1024 * 1024), "1.00 GiB");
+    }
+
+    #[test]
+    fn format_size_human_handles_petabyte_overflow() {
+        // 2 PiB exceeds the explicit unit table; should fall through to PiB.
+        let two_pib = 2u64 * 1024 * 1024 * 1024 * 1024 * 1024;
+        assert_eq!(format_size_human(two_pib), "2.00 PiB");
+    }
+
+    #[test]
+    fn age_blend_factor_is_monotonically_non_decreasing() {
+        let samples = [
+            0,
+            3_000,
+            3_600, // HOUR
+            50_000,
+            86_400, // DAY
+            500_000,
+            604_800, // WEEK
+            2_000_000,
+            2_592_000, // MONTH
+            10_000_000,
+            31_536_000, // YEAR
+            100_000_000,
+        ];
+        let mut prev = age_blend_factor(samples[0]);
+        for &s in &samples[1..] {
+            let cur = age_blend_factor(s);
+            assert!(cur >= prev, "non-monotonic at {s}: {prev} -> {cur}");
+            prev = cur;
+        }
+    }
+
+    #[test]
+    fn age_blend_factor_hits_segment_boundaries() {
+        // Curve is piecewise linear with segment endpoints at the named
+        // constants. Boundary values are the documented anchors.
+        assert_eq!(age_blend_factor(0), 0.0);
+        assert!((age_blend_factor(3_600) - 0.0).abs() < 1e-6);
+        assert!((age_blend_factor(86_400) - 0.15).abs() < 1e-6);
+        assert!((age_blend_factor(604_800) - 0.30).abs() < 1e-6);
+        assert!((age_blend_factor(2_592_000) - 0.45).abs() < 1e-6);
+        assert!((age_blend_factor(31_536_000) - 0.60).abs() < 1e-6);
+    }
+
+    #[test]
+    fn age_blend_factor_caps_at_60_percent() {
+        assert_eq!(age_blend_factor(u64::MAX), 0.60);
+    }
+}
