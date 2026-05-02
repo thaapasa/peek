@@ -1,9 +1,9 @@
 //! Print-mode output.
 //!
 //! Write-once, non-interactive stdout sink used for `--print`, piped runs
-//! (stdout is not a TTY), and `--info`. Each `Viewer` impl writes its
-//! whole rendering through a `PrintOutput` and returns; there's no event
-//! loop here.
+//! (stdout is not a TTY), and `--info`. The primary mode's
+//! `render_to_pipe` writes its whole rendering through a `PrintOutput`
+//! and returns; there's no event loop here.
 //!
 //! For the interactive TTY path (alternate screen, mode stack, key
 //! dispatch, animation ticks), see [`crate::viewer::interactive`].

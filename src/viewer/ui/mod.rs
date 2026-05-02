@@ -152,6 +152,10 @@ pub(crate) fn terminal_rows() -> usize {
     terminal::size().map(|(_, h)| h as usize).unwrap_or(24)
 }
 
+pub(crate) fn terminal_cols() -> usize {
+    terminal::size().map(|(w, _)| w as usize).unwrap_or(80)
+}
+
 /// Visible rows available for content (total rows minus status line).
 pub(crate) fn content_rows() -> usize {
     terminal_rows().saturating_sub(1)

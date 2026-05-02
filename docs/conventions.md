@@ -26,23 +26,23 @@
 - Adding a theme: drop the `.tmTheme` file, add a `PeekThemeName` variant, wire `include_str!` /
   `cli_name` / `tmtheme_source` / `next` / `help_text`.
 
-## Viewers and modes
+## Modes
 
-Two parallel abstractions, one per output path.
+One abstraction, two output paths.
 
-- **`Viewer` trait** (`viewer/mod.rs`) — one-shot print-mode output via `PrintOutput`. Impls:
-  `SyntaxViewer`, `StructuredViewer`, `TextViewer`, `HexViewer`, `ImageViewer`, `SvgViewer`. Used
-  when stdout isn't a TTY (or `--print`).
-- **`Mode` trait** (`viewer/modes/mod.rs`) — interactive views that participate in the mode stack.
-  Impls: `ContentMode`, `HexMode`, `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`,
-  `AboutMode`. Each file type composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`;
-  `viewer::interactive::run` drives the stack.
+- **`Mode` trait** (`viewer/modes/mod.rs`) is the single rendering contract. Impls: `ContentMode`,
+  `HexMode`, `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`, `AboutMode`. Each file type
+  composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`.
+- **Interactive path** (`viewer::interactive::run`) drives the stack through an event loop, calling
+  `Mode::render(ctx) -> Vec<String>` per redraw and slicing into the visible viewport.
+- **Pipe path** (`main`) picks the first non-aux mode (or first mode for binary, where all are aux)
+  and calls `Mode::render_to_pipe(ctx, &mut PrintOutput)`. Default impl materializes `render(ctx)`;
+  override when streaming or byte-faithful output matters (HexMode streams chunks, ContentMode
+  preserves trailing-newline fidelity for un-highlighted text).
 
 Adding a file type: add a `Mode` impl (or reuse `ContentMode`) and a line in `compose_modes`.
-`Viewer` impl only when print-mode output needs custom rendering — otherwise the fallback is
-`TextViewer` or `HexViewer`.
 
-Modes that re-render on resize override `rerender_on_resize()`. Modes that own scroll position
+Modes that re-render on resize override `rerender_on_resize`. Modes that own scroll position
 (Hex's byte-aligned offset) override `owns_scroll` + `scroll`.
 
 ## Module organization
@@ -53,10 +53,9 @@ Modes that re-render on resize override `rerender_on_resize()`. Modes that own s
 - **`mod.rs` stays small** — module declarations, re-exports, small glue types only. Topic-specific
   logic lives in its own file named for the concern (`exif.rs`, `xmp.rs`, `animation.rs`, `mode.rs`,
   `viewer.rs`).
-- **Colocate by concern, not by trait.** All SVG code lives in `viewer/image/svg.rs` — rasterization
-  helpers + `SvgViewer` together, because they're the same concern. A reader asking "how does SVG
-  work" finds one file. Resist grouping by abstraction shape (every `Viewer` in `viewers.rs`) — that
-  scatters topic knowledge.
+- **Colocate by concern, not by trait.** All SVG rasterization helpers live in
+  `viewer/image/svg.rs` because they're one concern. A reader asking "how does SVG work" finds one
+  file. Resist grouping by abstraction shape — that scatters topic knowledge.
 - **Splitting earns its keep when it reduces what the reader has to hold in their head.** Don't
   split a 200-line file that does one thing well. Split when one file demands tracking multiple
   unrelated mental models.

@@ -55,12 +55,12 @@ src/
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   viewer/
-    mod.rs             — Viewer trait (print-mode output), Registry, compose_modes, highlight_lines
+    mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
     modes/
-      mod.rs           — Mode trait, ModeId, RenderCtx (the interactive abstraction)
+      mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
       content.rs       — ContentMode: text / syntax / structured / SVG XML source
-      hex.rs           — HexMode: byte-offset-scrolled hex dump
+      hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       image_render.rs  — ImageRenderMode: raster + rasterized SVG
       animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
       info.rs          — InfoMode: file metadata view
@@ -71,15 +71,12 @@ src/
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
-    syntax.rs          — Print-mode syntax-highlighted source code (Viewer impl)
-    structured.rs      — JSON/YAML/TOML/XML pretty-print + Viewer impl for print mode
-    text.rs            — Plain text Viewer impl for print mode
-    hex.rs             — Hex dump Viewer impl for print mode + shared layout helpers
+    structured.rs      — JSON/YAML/TOML/XML pretty-print helpers (used by ContentMode)
+    hex.rs             — Hex layout primitives + format_row (used by HexMode)
     image/
       mod.rs           — Module wiring + Background / ImageConfig generic types
       mode.rs          — ImageMode enum (full/block/geo/ascii palette selection)
-      viewer.rs        — ImageViewer: print-mode Viewer impl for raster images
-      svg.rs           — SVG rasterization (resvg) + SvgViewer print-mode impl
+      svg.rs           — SVG rasterization (resvg): svg_dimensions / rasterize_svg
       render.rs        — Image → glyph-matched ASCII art with true color
       animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
       glyph_atlas.rs   — Precomputed glyph bitmaps

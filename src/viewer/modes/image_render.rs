@@ -53,8 +53,10 @@ impl Mode for ImageRenderMode {
     }
 
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
-        let mut term = render::TermSize::detect();
-        term.rows = term.rows.saturating_sub(1);
+        let term = render::TermSize {
+            cols: ctx.term_cols.min(u32::MAX as usize) as u32,
+            rows: ctx.term_rows.min(u32::MAX as usize) as u32,
+        };
         // ColorMode is interactive-cyclable, so read it from the live ctx
         // rather than the stale copy captured at construction time.
         self.config.color_mode = ctx.peek_theme.color_mode;

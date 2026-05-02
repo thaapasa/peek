@@ -1,63 +1,14 @@
 use std::fmt::Write as _;
 
-use anyhow::Result;
-
-use crate::input::InputSource;
-use crate::input::detect::FileType;
-use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 
-use super::Viewer;
-
 // ---------------------------------------------------------------------------
-// HexViewer (print-mode / non-interactive)
+// Hex layout helpers
 // ---------------------------------------------------------------------------
 //
-// Interactive hex viewing now goes through `modes::HexMode` and the unified
-// event loop in `viewer::interactive`. This file keeps only the print-mode
-// `Viewer` impl plus the shared layout/format helpers (re-used by `HexMode`).
-
-pub struct HexViewer {
-    theme: PeekTheme,
-}
-
-impl HexViewer {
-    pub fn new(theme: PeekTheme) -> Self {
-        Self { theme }
-    }
-}
-
-impl Viewer for HexViewer {
-    fn render(
-        &self,
-        source: &InputSource,
-        _file_type: &FileType,
-        output: &mut PrintOutput,
-    ) -> Result<()> {
-        let bs = source.open_byte_source()?;
-        let bpr = pipe_bytes_per_row();
-        let theme = &self.theme;
-        let len = bs.len();
-        let chunk_bytes = bpr * 256; // ~4 KB chunks for typical bpr
-        let mut offset: u64 = 0;
-        while offset < len {
-            let buf = bs.read_range(offset, chunk_bytes)?;
-            if buf.is_empty() {
-                break;
-            }
-            for (i, row) in buf.chunks(bpr).enumerate() {
-                let row_off = offset + (i * bpr) as u64;
-                output.write_line(&format_row(theme, row_off, row, bpr))?;
-            }
-            offset += buf.len() as u64;
-        }
-        Ok(())
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Layout helpers (shared with `modes::HexMode`)
-// ---------------------------------------------------------------------------
+// `modes::HexMode` is the sole hex renderer (interactive viewport-clamped
+// rendering and pipe-mode full-file streaming both live there). This file
+// hosts the layout primitives and per-row formatter shared with that mode.
 
 /// Compute bytes-per-row for a given terminal width. Formula:
 ///   row width = 14 + 4*bpr
@@ -68,24 +19,6 @@ pub(crate) fn bytes_per_row(term_cols: u16) -> usize {
     let usable = cols.saturating_sub(14);
     let raw = usable / 4;
     ((raw / 8) * 8).max(8)
-}
-
-/// Bytes-per-row for pipe (non-TTY) output: respects $COLUMNS if set and
-/// reasonable, otherwise defaults to 16 (classic `hexdump -C`).
-pub(crate) fn pipe_bytes_per_row() -> usize {
-    pipe_bytes_per_row_from(std::env::var("COLUMNS").ok().as_deref())
-}
-
-/// Pure form of `pipe_bytes_per_row` — takes the column override as an
-/// argument so it's testable without touching the process environment.
-pub(crate) fn pipe_bytes_per_row_from(columns: Option<&str>) -> usize {
-    if let Some(s) = columns
-        && let Ok(n) = s.parse::<u16>()
-        && n >= 24
-    {
-        return bytes_per_row(n);
-    }
-    16
 }
 
 pub(crate) fn align_down(offset: u64, bpr: usize) -> u64 {
@@ -298,17 +231,5 @@ mod tests {
         assert_eq!(align_down(16, 16), 16);
         assert_eq!(align_down(31, 16), 16);
         assert_eq!(align_down(32, 16), 32);
-    }
-
-    #[test]
-    fn pipe_bytes_per_row_from_columns_string() {
-        // None → 16
-        assert_eq!(pipe_bytes_per_row_from(None), 16);
-        // Reasonable width → bytes_per_row(132) == 24
-        assert_eq!(pipe_bytes_per_row_from(Some("132")), 24);
-        // Unparseable → 16
-        assert_eq!(pipe_bytes_per_row_from(Some("abc")), 16);
-        // Too narrow → 16
-        assert_eq!(pipe_bytes_per_row_from(Some("10")), 16);
     }
 }

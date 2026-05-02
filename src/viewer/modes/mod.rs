@@ -1,13 +1,12 @@
 //! Composable view modes.
 //!
-//! A `Mode` is one renderable + interactive view of a file (content,
-//! file info, help, hex dump, image render, structured source, etc.).
-//! The interactive viewer is configured with a list of modes per file
-//! type — Tab cycles between them, `i` jumps to Info, `h` toggles Help.
-//!
-//! This module currently only hosts `InfoMode` and `HelpMode` while the
-//! larger migration is in progress; the rest of the viewers still go
-//! through `ViewMode` in `ui/state.rs`.
+//! A `Mode` is one renderable view of a file (content, file info, help,
+//! hex dump, image render, structured source, etc.) plus its interactive
+//! behavior. The interactive viewer is configured with a list of modes
+//! per file type — Tab cycles between them, `i` jumps to Info, `h`
+//! toggles Help. The same mode list also drives the `--print` / pipe
+//! path: the first non-aux mode's `render_to_pipe` is written straight
+//! to stdout.
 
 use std::time::Duration;
 
@@ -17,6 +16,7 @@ use syntect::highlighting::Color;
 use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
+use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
 
@@ -87,6 +87,11 @@ impl Handled {
 }
 
 /// Read-only context passed to `Mode::render`.
+///
+/// `term_cols` is the terminal width in character cells. `term_rows` is
+/// the height of the *content area* (terminal rows minus the status line),
+/// or `usize::MAX` for non-interactive (pipe) rendering where output is
+/// unbounded vertically.
 #[allow(dead_code)]
 pub(crate) struct RenderCtx<'a> {
     pub source: &'a InputSource,
@@ -95,6 +100,8 @@ pub(crate) struct RenderCtx<'a> {
     pub theme_name: PeekThemeName,
     pub peek_theme: &'a PeekTheme,
     pub render_opts: RenderOptions,
+    pub term_cols: usize,
+    pub term_rows: usize,
 }
 
 /// One renderable + interactive view of a file.
@@ -115,6 +122,22 @@ pub(crate) trait Mode {
     /// recompute on every call; full-content modes (Info, Help) typically
     /// memoize internally.
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
+
+    /// Render the entire view to a non-interactive print sink (`peek
+    /// --print` and pipe contexts). The default impl materializes
+    /// `render(ctx)` and writes each line; modes whose interactive
+    /// `render` is viewport-clamped (HexMode) or that can stream from a
+    /// `ByteSource` directly should override this to avoid loading the
+    /// whole file into a `Vec<String>`.
+    ///
+    /// `ctx.term_rows` is `usize::MAX` in pipe contexts, so a default-impl
+    /// `render` that honors `term_rows` will already produce all lines.
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        for line in self.render(ctx)? {
+            out.write_line(&line)?;
+        }
+        Ok(())
+    }
 
     /// True if this mode manages its own scroll position (e.g. Hex's
     /// byte-offset scrolling). When true, `ViewerState`'s line-based
@@ -138,8 +161,10 @@ pub(crate) trait Mode {
 
     /// Hook called on a terminal resize event before re-rendering.
     /// Modes that maintain layout-dependent state (e.g. Hex's byte-aligned
-    /// top offset) update it here.
-    fn on_resize(&mut self) {}
+    /// top offset) update it here. `term_cols` / `term_rows` reflect the
+    /// new content area; modes that cache size-derived state should
+    /// refresh it from these values.
+    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {}
 
     /// Status-line segments contributed by this mode, inserted between
     /// the mode label and the theme-name segment.

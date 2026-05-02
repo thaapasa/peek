@@ -8,8 +8,10 @@ rules: [conventions.md](conventions.md).
 1. **Single-file viewer.** One path (or stdin) at a time — closer to `less` than to `cat`.
 2. **Zero runtime deps.** Themes, glyph bitmaps, and syntax definitions are compiled in. No config
    files, no downloads, no setup.
-3. **Two output paths.** TTY → interactive viewer (alternate screen, scrolling, key bindings).
-   Pipe → plain streamed output. Same rendering logic, different targets.
+3. **One mode stack, two outputs.** `compose_modes` builds a `Vec<Box<dyn Mode>>` per file type.
+   TTY → interactive viewer (alternate screen, scrolling, key bindings). Pipe → first non-aux
+   mode's `render_to_pipe(ctx)` straight to stdout. Same rendering logic, different targets — no
+   parallel `Viewer` trait.
 4. **Theme-aware everything.** All colored output uses `PeekTheme` semantic roles. Theme switch
    re-renders the whole view without re-reading files.
 5. **Compose modes, not viewers.** New file types compose a list of view modes (text-extract,
@@ -27,15 +29,14 @@ build_source() --> InputSource  (File path, or buffered Stdin)
   v
 detect::detect(source) --> FileType
   |
-  +-- TTY?  --> Registry::compose_modes() --> Vec<Box<dyn Mode>>
-  |               |
-  |               v
-  |             interactive::run() --> event loop on the mode stack
-  |
-  +-- Pipe? --> Registry::viewer_for(file_type) --> &dyn Viewer
-                  |
-                  v
-                Viewer::render() --> print::PrintOutput --> stdout
+  +-- Registry::compose_modes() --> Vec<Box<dyn Mode>>
+        |
+        +-- TTY?  --> interactive::run() --> event loop on the mode stack
+        |
+        +-- Pipe? --> first non-aux mode (or first, for binary)
+                        |
+                        v
+                      Mode::render_to_pipe(ctx) --> PrintOutput --> stdout
 ```
 
 ### InputSource (`input/source.rs`)
@@ -65,11 +66,15 @@ pub(crate) trait Mode {
     fn label(&self) -> &str;
     fn is_aux(&self) -> bool { false }
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>>;
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        for line in self.render(ctx)? { out.write_line(&line)?; }
+        Ok(())
+    }
 
     fn owns_scroll(&self) -> bool { false }
     fn scroll(&mut self, _action: Action) -> bool { false }
     fn rerender_on_resize(&self) -> bool { false }
-    fn on_resize(&mut self) {}
+    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {}
     fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> { vec![] }
     fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> { vec![] }
     fn extra_actions(&self) -> &'static [(Action, &'static str)] { &[] }
@@ -103,16 +108,17 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | `HelpMode`        | every file (keyboard-shortcut listing)       | no                     | no                |
 | `AboutMode`       | every file (logo, version, palette swatches) | no                     | no                |
 
-### Viewer trait — print-mode output (`viewer/mod.rs`)
+### Pipe-mode rendering (`Mode::render_to_pipe`)
 
-```rust
-pub trait Viewer {
-    fn render(&self, source: &InputSource, file_type: &FileType, output: &mut PrintOutput) -> Result<()>;
-}
-```
+`render_to_pipe` is the print-path entry point on every mode. The default impl materializes
+`render(ctx)` and writes each line to `PrintOutput`; modes that can stream directly from a
+`ByteSource` (HexMode) or that need byte-faithful raw output (ContentMode without a syntax token)
+override it. `RenderCtx` injects `term_cols = $COLUMNS-or-80` and `term_rows = usize::MAX` for the
+pipe path, so a single `render` body can serve both interactive and pipe contexts when bounded
+viewports aren't required.
 
-One-shot, no event loop. Each print-mode viewer (syntax, structured, image, SVG, text, hex)
-implements this.
+`main` picks the pipe primary as the first non-aux mode in the stack, falling back to the first
+mode when all are aux (binary files, where the stack is `[Hex, Info, About, Help]`).
 
 ### ViewerState (`viewer/ui/state.rs`)
 
@@ -141,20 +147,22 @@ will eventually carry their own line-to-source-byte table.
 
 ### Registry (`viewer/mod.rs`)
 
-Factory built once from CLI args. Holds the shared `ThemeManager`. Provides `viewer_for(file_type)`
-for print-mode output and `compose_modes(source, detected, args)` for the interactive path.
+Factory built once from CLI args. Holds the shared `ThemeManager` plus the resolved `PeekTheme` /
+`plain_mode` flags consumed during composition. Provides `compose_modes(source, detected, args)`,
+the single dispatcher that produces the mode stack consumed by both the interactive event loop and
+the pipe path.
 
-### Hex viewer + HexMode (`viewer/hex.rs` + `viewer/modes/hex.rs`)
+### HexMode (`viewer/hex.rs` + `viewer/modes/hex.rs`)
 
-`viewer/hex.rs` keeps the print-mode `HexViewer` (writes whole file via `format_row`) and the layout
-helpers — `bytes_per_row` (`14 + 4*bpr` columns; rounded to a multiple of 8), `align_down`,
-`max_top`, `format_row`, `pipe_bytes_per_row`. Layout matches `hexdump -C`. Pipe mode honors
-`$COLUMNS` (≥ 24) or falls back to 16.
+`viewer/hex.rs` hosts the layout primitives — `bytes_per_row` (`14 + 4*bpr` columns; rounded to a
+multiple of 8), `align_down`, `max_top`, `format_row`. Layout matches `hexdump -C`.
 
-`HexMode` is the interactive half: owns a `Box<dyn ByteSource>` plus `top_offset: u64` aligned to
+`HexMode` (`viewer/modes/hex.rs`) owns a `Box<dyn ByteSource>` plus `top_offset: u64` aligned to
 the current `bytes_per_row`. Returns `owns_scroll() = true` so `ViewerState`'s line-scroll is
-suppressed; handles ScrollUp/Down/PageUp/Down/Top/Bottom byte-wise via `scroll()`. `on_resize()`
-re-aligns `top_offset` to the new column count.
+suppressed; handles ScrollUp/Down/PageUp/Down/Top/Bottom byte-wise via `scroll()`. `on_resize`
+re-aligns `top_offset` to the new column count. `render_to_pipe` streams the whole file in 4 KB
+chunks straight to the print sink — never holds more than one chunk in memory, so multi-GB hex
+dumps are first-class.
 
 ### ContentMode (`viewer/modes/content.rs`)
 
@@ -282,12 +290,12 @@ aux falls back to mode 0 (Hex itself), so `x` from standalone hex is a no-op.
 ## Adding a new file type
 
 1. Add a `FileType` variant in `input/detect.rs` and wire detection.
-2. (Pipe path) `Viewer` impl in `viewer/`; register in `Registry`; add a `viewer_for()` arm.
-3. (Interactive path) Build one or more `Mode` impls in `viewer/modes/`. Add a `ModeId` variant if
-   the mode needs to be toggleable by id.
-4. Wire the modes into `Registry::compose_modes` for that file type. Hex / Info / Help are appended
-   automatically.
-5. Add info gathering in `info/gather/` if the type has interesting metadata (and themed display in
+2. Build one or more `Mode` impls in `viewer/modes/`. Add a `ModeId` variant if the mode needs to be
+   toggleable by id. Override `render_to_pipe` if the default (materialize-then-write) wastes memory
+   or violates byte-fidelity for that mode.
+3. Wire the modes into `Registry::compose_modes` for that file type. Hex / Info / About / Help are
+   appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).
+4. Add info gathering in `info/gather/` if the type has interesting metadata (and themed display in
    `info/render.rs` for novel field types).
 
 Example — adding PDF:

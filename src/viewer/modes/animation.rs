@@ -7,6 +7,7 @@ use super::{Handled, Mode, ModeId, RenderCtx};
 use crate::theme::PeekTheme;
 use crate::viewer::image::ImageConfig;
 use crate::viewer::image::animate::{AnimFrame, render_frame};
+use crate::viewer::image::render::TermSize;
 use crate::viewer::ui::Action;
 
 /// Animated image view (GIF/WebP). Owns the decoded frame list, current
@@ -53,7 +54,11 @@ impl Mode for AnimationMode {
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
         // ColorMode can change between renders (interactive cycle).
         self.config.color_mode = ctx.peek_theme.color_mode;
-        Ok(render_frame(&self.frames[self.current], &self.config))
+        let term = TermSize {
+            cols: ctx.term_cols.min(u32::MAX as usize) as u32,
+            rows: ctx.term_rows.min(u32::MAX as usize) as u32,
+        };
+        Ok(render_frame(&self.frames[self.current], &self.config, term))
     }
 
     fn rerender_on_resize(&self) -> bool {

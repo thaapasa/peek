@@ -132,8 +132,10 @@ pub fn decode_anim_frames(
 // Frame rendering (shared with `modes::AnimationMode`)
 // ---------------------------------------------------------------------------
 
-pub(crate) fn render_frame(frame: &AnimFrame, config: &ImageConfig) -> Vec<String> {
-    let mut term = render::TermSize::detect();
-    term.rows = term.rows.saturating_sub(1);
+pub(crate) fn render_frame(
+    frame: &AnimFrame,
+    config: &ImageConfig,
+    term: render::TermSize,
+) -> Vec<String> {
     render::render_decoded(frame.image.clone(), config, term)
 }

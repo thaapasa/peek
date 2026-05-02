@@ -10,7 +10,6 @@ pub struct ThemeManager {
     pub syntax_set: SyntaxSet,
     pub theme_set: ThemeSet,
     pub theme_name: PeekThemeName,
-    color_mode: ColorMode,
     peek_theme: PeekTheme,
 }
 
@@ -41,16 +40,8 @@ impl ThemeManager {
             syntax_set,
             theme_set,
             theme_name,
-            color_mode,
             peek_theme,
         }
-    }
-
-    pub fn theme(&self) -> &syntect::highlighting::Theme {
-        self.theme_set
-            .themes
-            .get(self.theme_name.cli_name())
-            .expect("theme must exist")
     }
 
     pub fn theme_for(&self, name: PeekThemeName) -> &syntect::highlighting::Theme {
@@ -62,9 +53,5 @@ impl ThemeManager {
 
     pub fn peek_theme(&self) -> &PeekTheme {
         &self.peek_theme
-    }
-
-    pub fn color_mode(&self) -> ColorMode {
-        self.color_mode
     }
 }

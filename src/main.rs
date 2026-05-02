@@ -49,13 +49,14 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let mut modes = viewers
+        .compose_modes(&source, &detected, &args)
+        .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
+
     if interactive {
         // Interactive TTY: compose mode list per file type; one event loop.
         // compose_modes handles animation detection internally, so this
         // path is uniform across file types.
-        let modes = viewers
-            .compose_modes(&source, &detected, &args)
-            .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
         viewer::interactive::run(
             &source,
             &detected,
@@ -66,17 +67,40 @@ fn main() -> Result<()> {
         )
         .with_context(|| format!("failed to render {}", source.name()))?;
     } else {
-        // Print mode: stdout once, no event loop. Binary → hex viewer
-        // (registered as the dispatch target for FileType::Binary in
-        // viewer_for).
+        // Print mode: stdout once, no event loop. Render the primary
+        // (first non-aux) mode straight to stdout — for binary files,
+        // where every mode is aux, fall back to the first mode (Hex).
         let mut output = output::PrintOutput::stdout();
-        let file_type = &detected.file_type;
-        let viewer = viewers.viewer_for(file_type);
-        viewer
-            .render(&source, file_type, &mut output)
+        let file_info = info::gather(&source, &detected)
+            .with_context(|| format!("failed to read info for {}", source.name()))?;
+        let ctx = viewer::modes::RenderCtx {
+            source: &source,
+            detected: &detected,
+            file_info: &file_info,
+            theme_name: viewers.theme_name(),
+            peek_theme: viewers.peek_theme(),
+            render_opts,
+            term_cols: pipe_term_cols(),
+            term_rows: usize::MAX,
+        };
+        let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);
+        modes[primary_idx]
+            .render_to_pipe(&ctx, &mut output)
             .with_context(|| format!("failed to render {}", source.name()))?;
         output.finish()?;
     }
 
     Ok(())
+}
+
+/// Terminal width to use for non-interactive (pipe) rendering. Honors
+/// `$COLUMNS` if set and at least 24; otherwise falls back to 80. Hex
+/// dumps and image rendering use this to size their output sensibly
+/// even when stdout isn't a TTY.
+fn pipe_term_cols() -> usize {
+    std::env::var("COLUMNS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|&n| n >= 24)
+        .unwrap_or(80)
 }
