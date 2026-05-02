@@ -39,6 +39,12 @@ For context, the review's clear-cut bugs and small cleanups were landed in that 
 - B3 — `Output::new(&Args)` replaced with `Output::new(use_pager: bool)`. `main` computes
   `use_pager = !args.print && stdout().is_terminal()` once and passes it in; `Output` no longer
   re-checks the TTY or `--print`.
+- C1 — `format_row` builds one `String` per row instead of ~33. New
+  `PeekTheme::paint_into / push_fg / push_reset` write into a caller-owned buffer; new
+  `ColorMode::write_fg_seq` formats the SGR escape directly via `write!` so per-byte color sequences
+  no longer allocate (TrueColor / Ansi256 / Grayscale / Plain). Ansi16 still returns its lookup
+  string. Microbenchmark skipped — the change is mechanical and the alloc-count drop is visible from
+  inspection.
 
 Everything below is what's left.
 
@@ -161,24 +167,6 @@ static render isn't the whole story.
 
 **Effort:** few hours for the warning. Full animation support is a bigger project (resvg's animation
 API surface is limited).
-
----
-
-## C. Polish / micro-perf
-
-### C1. `paint()` allocates per call; hot in hex rendering
-
-**Severity:** minor. `format_row` does ~33 `String` allocations per row (`paint(offset)` + per-byte
-hex `paint` + per-byte ascii `paint`), times ~24 rows = ~800 allocations per redraw. Redraw on every
-keystroke. Probably invisible in profile but worth knowing.
-
-**Where:** `viewer/hex.rs:115-155`, `theme.rs:167-184`
-
-**Suggested approach:** add `theme.paint_into(buf: &mut String, text: &str, color: Color)` that
-writes ANSI escape + text + reset directly into a caller-owned buffer. `format_row` then builds one
-`String` per row.
-
-**Effort:** ~30 minutes including a microbenchmark.
 
 ---
 

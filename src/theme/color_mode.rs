@@ -63,15 +63,28 @@ impl ColorMode {
 
     /// Foreground SGR sequence for `color`, or `""` in `Plain` mode.
     pub fn fg_seq(self, color: Color) -> String {
+        let mut s = String::new();
+        self.write_fg_seq(&mut s, color);
+        s
+    }
+
+    /// Append the foreground SGR sequence for `color` directly to `buf`,
+    /// skipping the `String` allocation that `fg_seq` produces.
+    pub fn write_fg_seq(self, buf: &mut String, color: Color) {
+        use std::fmt::Write;
         match self {
-            Self::Plain => String::new(),
-            Self::TrueColor => format!("\x1b[38;2;{};{};{}m", color.r, color.g, color.b),
+            Self::Plain => {}
+            Self::TrueColor => {
+                let _ = write!(buf, "\x1b[38;2;{};{};{}m", color.r, color.g, color.b);
+            }
             Self::Grayscale => {
                 let l = luminance(color.r, color.g, color.b);
-                format!("\x1b[38;2;{l};{l};{l}m")
+                let _ = write!(buf, "\x1b[38;2;{l};{l};{l}m");
             }
-            Self::Ansi256 => format!("\x1b[38;5;{}m", rgb_to_256(color.r, color.g, color.b)),
-            Self::Ansi16 => fg_ansi16(color.r, color.g, color.b),
+            Self::Ansi256 => {
+                let _ = write!(buf, "\x1b[38;5;{}m", rgb_to_256(color.r, color.g, color.b));
+            }
+            Self::Ansi16 => buf.push_str(&fg_ansi16(color.r, color.g, color.b)),
         }
     }
 

@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 use anyhow::Result;
 
 use crate::input::InputSource;
@@ -117,10 +119,16 @@ pub(crate) fn max_top(len: u64, bpr: usize, rows: usize) -> u64 {
 /// Format one hex-dump row: themed offset, hex bytes (with mid-gap), and
 /// ASCII column. `bytes` may be shorter than `bpr` for the final row.
 pub(crate) fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usize) -> String {
-    let mut out = String::with_capacity(16 + 4 * bpr);
-    // Offset
-    out.push_str(&theme.paint(&format!("{:08x}", offset), theme.gutter));
+    // Roughly: 14 visible chars + ~12 ANSI escape bytes per colored span,
+    // ~3 spans per byte plus a few framing spans.
+    let mut out = String::with_capacity(64 + 40 * bpr);
+
+    // Offset — themed `gutter` color, written digit-by-digit into `out`.
+    theme.push_fg(&mut out, theme.gutter);
+    let _ = write!(out, "{offset:08x}");
+    theme.push_reset(&mut out);
     out.push_str("  ");
+
     // Hex column
     let half = bpr / 2;
     for i in 0..bpr {
@@ -129,8 +137,9 @@ pub(crate) fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usiz
         }
         if i < bytes.len() {
             let b = bytes[i];
-            let color = byte_color(theme, b);
-            out.push_str(&theme.paint(&format!("{:02x}", b), color));
+            theme.push_fg(&mut out, byte_color(theme, b));
+            let _ = write!(out, "{b:02x}");
+            theme.push_reset(&mut out);
         } else {
             out.push_str("  ");
         }
@@ -138,23 +147,27 @@ pub(crate) fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usiz
             out.push(' ');
         }
     }
+
     // Gap between hex and ASCII
     out.push_str("  ");
+
     // ASCII column
-    out.push_str(&theme.paint("|", theme.label));
+    theme.paint_into(&mut out, "|", theme.label);
+    let mut buf = [0u8; 4];
     for i in 0..bpr {
         if i < bytes.len() {
             let b = bytes[i];
             if (0x20..=0x7e).contains(&b) {
-                out.push_str(&theme.paint(&(b as char).to_string(), theme.value));
+                let s = (b as char).encode_utf8(&mut buf);
+                theme.paint_into(&mut out, s, theme.value);
             } else {
-                out.push_str(&theme.paint(".", theme.muted));
+                theme.paint_into(&mut out, ".", theme.muted);
             }
         } else {
             out.push(' ');
         }
     }
-    out.push_str(&theme.paint("|", theme.label));
+    theme.paint_into(&mut out, "|", theme.label);
     out
 }
 

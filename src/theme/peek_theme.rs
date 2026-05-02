@@ -62,12 +62,30 @@ impl PeekTheme {
 
     /// Wrap text in a foreground-color escape with a trailing reset.
     pub fn paint(&self, text: &str, color: Color) -> String {
-        format!(
-            "{}{}{}",
-            self.color_mode.fg_seq(color),
-            text,
-            self.color_mode.reset()
-        )
+        let mut out = String::with_capacity(text.len() + 16);
+        self.paint_into(&mut out, text, color);
+        out
+    }
+
+    /// Append `text` to `buf` wrapped in a foreground-color escape and
+    /// trailing reset. Avoids the intermediate `String` allocation that
+    /// `paint` produces — useful inside hot rendering loops.
+    pub fn paint_into(&self, buf: &mut String, text: &str, color: Color) {
+        self.color_mode.write_fg_seq(buf, color);
+        buf.push_str(text);
+        buf.push_str(self.color_mode.reset());
+    }
+
+    /// Push a bare foreground-color escape (no text, no reset). Pair with
+    /// `push_reset` when emitting `Display`-formatted content directly into
+    /// a buffer via `write!`.
+    pub fn push_fg(&self, buf: &mut String, color: Color) {
+        self.color_mode.write_fg_seq(buf, color);
+    }
+
+    /// Push a bare reset escape. See `push_fg`.
+    pub fn push_reset(&self, buf: &mut String) {
+        buf.push_str(self.color_mode.reset());
     }
 
     /// Wrap text in a foreground-color escape **without** a trailing reset.
