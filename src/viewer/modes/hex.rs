@@ -6,26 +6,36 @@ use super::{Mode, ModeId, Position, RenderCtx};
 use crate::input::{ByteSource, InputSource};
 use crate::theme::PeekTheme;
 use crate::viewer::hex::{align_down, bytes_per_row, format_row, max_top};
-use crate::viewer::ui::{Action, content_rows};
+use crate::viewer::ui::Action;
 
 pub(crate) struct HexMode {
     bs: Box<dyn ByteSource>,
     total_len: u64,
     top_offset: u64,
     label: String,
+    /// Last terminal width / content-row count seen — set on every
+    /// `render`/`on_resize`. `scroll` and `set_position` are called
+    /// outside the render path and read these cached values rather than
+    /// querying the terminal directly. The user must have rendered at
+    /// least once before they can scroll, so the cache is always seeded.
+    cached_cols: u16,
+    cached_rows: usize,
 }
 
 impl HexMode {
     pub(crate) fn new(source: &InputSource, start_offset: u64) -> Result<Self> {
         let bs = source.open_byte_source()?;
         let total_len = bs.len();
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
+        let (cols, rows) = terminal::size().unwrap_or((80, 24));
+        let cached_rows = (rows as usize).saturating_sub(1);
         let top_offset = align_down(start_offset, bytes_per_row(cols));
         Ok(Self {
             bs,
             total_len,
             top_offset,
             label: "hex".to_string(),
+            cached_cols: cols,
+            cached_rows,
         })
     }
 }
@@ -44,10 +54,11 @@ impl Mode for HexMode {
     }
 
     fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        let bpr = bytes_per_row(cols);
-        let rows = content_rows();
-        let want = rows * bpr;
+        self.cached_cols = ctx.term_cols as u16;
+        self.cached_rows = ctx.term_rows;
+        let bpr = bytes_per_row(self.cached_cols);
+        let rows = self.cached_rows;
+        let want = rows.saturating_mul(bpr);
         let buf = self.bs.read_range(self.top_offset, want)?;
 
         let mut lines = Vec::with_capacity(rows);
@@ -63,11 +74,10 @@ impl Mode for HexMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        let bpr = bytes_per_row(cols);
+        let bpr = bytes_per_row(self.cached_cols);
         let bpr_u = bpr as u64;
-        let rows = content_rows() as u64;
-        let max = max_top(self.total_len, bpr, content_rows());
+        let rows = self.cached_rows as u64;
+        let max = max_top(self.total_len, bpr, self.cached_rows);
         let new_top = match action {
             Action::ScrollUp => self.top_offset.saturating_sub(bpr_u),
             Action::ScrollDown => self.top_offset.saturating_add(bpr_u).min(max),
@@ -90,9 +100,10 @@ impl Mode for HexMode {
         true
     }
 
-    fn on_resize(&mut self) {
-        let (cols, _) = terminal::size().unwrap_or((80, 24));
-        self.top_offset = align_down(self.top_offset, bytes_per_row(cols));
+    fn on_resize(&mut self, term_cols: usize, term_rows: usize) {
+        self.cached_cols = term_cols as u16;
+        self.cached_rows = term_rows;
+        self.top_offset = align_down(self.top_offset, bytes_per_row(self.cached_cols));
     }
 
     fn tracks_position(&self) -> bool {
@@ -110,8 +121,7 @@ impl Mode for HexMode {
             Position::Unknown => None,
         };
         if let Some(b) = byte {
-            let (cols, _) = terminal::size().unwrap_or((80, 24));
-            self.top_offset = align_down(b, bytes_per_row(cols));
+            self.top_offset = align_down(b, bytes_per_row(self.cached_cols));
         }
     }
 

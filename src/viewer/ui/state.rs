@@ -16,7 +16,7 @@ use crate::theme::{ColorMode, PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
-use super::{content_rows, make_peek_theme};
+use super::{content_rows, make_peek_theme, terminal_cols};
 
 /// Global actions that work in every mode (unless the mode shadows the
 /// key via its own `extra_actions`). Used for both key dispatch and the
@@ -388,8 +388,10 @@ impl<'a> ViewerState<'a> {
     // ---------------------------------------------------------------------
 
     pub(crate) fn handle_resize(&mut self) {
+        let cols = terminal_cols();
+        let rows = content_rows();
         for (i, m) in self.modes.iter_mut().enumerate() {
-            m.on_resize();
+            m.on_resize(cols, rows);
             if m.rerender_on_resize() {
                 self.lines[i] = None;
             }
@@ -423,6 +425,8 @@ impl<'a> ViewerState<'a> {
             theme_name: self.current_theme,
             peek_theme: &self.peek_theme,
             render_opts: self.render_opts,
+            term_cols: terminal_cols(),
+            term_rows: content_rows(),
         };
         let lines = self.modes[self.active].render(&ctx)?;
         // Drain any warnings the mode raised during render (e.g. ContentMode's

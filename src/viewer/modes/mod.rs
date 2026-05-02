@@ -87,6 +87,11 @@ impl Handled {
 }
 
 /// Read-only context passed to `Mode::render`.
+///
+/// `term_cols` is the terminal width in character cells. `term_rows` is
+/// the height of the *content area* (terminal rows minus the status line),
+/// or `usize::MAX` for non-interactive (pipe) rendering where output is
+/// unbounded vertically.
 #[allow(dead_code)]
 pub(crate) struct RenderCtx<'a> {
     pub source: &'a InputSource,
@@ -95,6 +100,8 @@ pub(crate) struct RenderCtx<'a> {
     pub theme_name: PeekThemeName,
     pub peek_theme: &'a PeekTheme,
     pub render_opts: RenderOptions,
+    pub term_cols: usize,
+    pub term_rows: usize,
 }
 
 /// One renderable + interactive view of a file.
@@ -138,8 +145,10 @@ pub(crate) trait Mode {
 
     /// Hook called on a terminal resize event before re-rendering.
     /// Modes that maintain layout-dependent state (e.g. Hex's byte-aligned
-    /// top offset) update it here.
-    fn on_resize(&mut self) {}
+    /// top offset) update it here. `term_cols` / `term_rows` reflect the
+    /// new content area; modes that cache size-derived state should
+    /// refresh it from these values.
+    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {}
 
     /// Status-line segments contributed by this mode, inserted between
     /// the mode label and the theme-name segment.
