@@ -2,7 +2,8 @@ use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::easy::HighlightLines;
-use syntect::highlighting::Style;
+use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style};
+use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 use crate::Args;
 use crate::input::InputSource;
@@ -29,14 +30,7 @@ pub fn highlight_lines(
     theme_name: PeekThemeName,
     color_mode: ColorMode,
 ) -> Result<Vec<String>> {
-    let syntax = tm
-        .syntax_set
-        .find_syntax_by_token(syntax_token)
-        .or_else(|| tm.syntax_set.find_syntax_by_name(syntax_token))
-        .or_else(|| {
-            fallback_syntax_token(syntax_token).and_then(|t| tm.syntax_set.find_syntax_by_name(t))
-        })
-        .unwrap_or_else(|| tm.syntax_set.find_syntax_plain_text());
+    let syntax = resolve_syntax(tm, syntax_token);
     let theme = tm.theme_for(theme_name);
     let mut hl = HighlightLines::new(syntax, theme);
     let mut lines = Vec::new();
@@ -45,6 +39,141 @@ pub fn highlight_lines(
         lines.push(ranges_to_escaped(&ranges, color_mode));
     }
     Ok(lines)
+}
+
+/// Resolve a syntax token to a syntect `SyntaxReference`. Same fallback
+/// chain as the original inline lookup: token → name → extension fallback
+/// → plain text.
+fn resolve_syntax<'a>(tm: &'a ThemeManager, syntax_token: &str) -> &'a SyntaxReference {
+    tm.syntax_set
+        .find_syntax_by_token(syntax_token)
+        .or_else(|| tm.syntax_set.find_syntax_by_name(syntax_token))
+        .or_else(|| {
+            fallback_syntax_token(syntax_token).and_then(|t| tm.syntax_set.find_syntax_by_name(t))
+        })
+        .unwrap_or_else(|| tm.syntax_set.find_syntax_plain_text())
+}
+
+/// Forward-only, line-stateful syntect feeder. Holds the parse and
+/// highlight state across `feed()` calls so each line resumes from where
+/// the previous one left off — required because syntect's parse state is
+/// line-by-line (a `/* ... */` comment that opens on one line and closes
+/// many lines later only highlights correctly when state carries over).
+///
+/// `at()` reports the index of the next line the highlighter expects to
+/// consume. The driver (ContentMode) compares this to its target window:
+/// if the desired start is ahead, feed catch-up lines; if it's behind,
+/// `reset()` and replay from the top. Replay is O(N) lines — acceptable
+/// for the common forward-scroll case; pathological backward jumps on
+/// huge files pay a one-time cost.
+///
+/// State is kept as owned `ParseState` + `HighlightState` rather than a
+/// borrowing `HighlightLines` so the struct doesn't need to thread theme
+/// / syntax lifetimes through `ContentMode`. The `Highlighter` (which
+/// borrows `&Theme`) is rebuilt per `feed()`; it's a thin pointer wrapper
+/// with no allocation.
+pub(crate) struct LineStreamHighlighter {
+    tm: Rc<ThemeManager>,
+    syntax_token: String,
+    theme_name: PeekThemeName,
+    color_mode: ColorMode,
+    parse_state: ParseState,
+    highlight_state: HighlightState,
+    next_line: usize,
+}
+
+impl LineStreamHighlighter {
+    pub(crate) fn new(
+        syntax_token: String,
+        tm: Rc<ThemeManager>,
+        theme_name: PeekThemeName,
+        color_mode: ColorMode,
+    ) -> Self {
+        let (parse_state, highlight_state) = build_states(&tm, &syntax_token, theme_name);
+        Self {
+            tm,
+            syntax_token,
+            theme_name,
+            color_mode,
+            parse_state,
+            highlight_state,
+            next_line: 0,
+        }
+    }
+
+    /// Discard accumulated state and rewind to line 0. Call before
+    /// catching up from the top after a backward jump or any change that
+    /// invalidates prior styling (theme cycle, color-mode cycle).
+    pub(crate) fn reset(&mut self) {
+        let (parse_state, highlight_state) =
+            build_states(&self.tm, &self.syntax_token, self.theme_name);
+        self.parse_state = parse_state;
+        self.highlight_state = highlight_state;
+        self.next_line = 0;
+    }
+
+    /// Feed the next line and return its escaped form. The line must be
+    /// the highlighter's current `at()` line; the caller drives sequence.
+    pub(crate) fn feed(&mut self, line: &str) -> Result<String> {
+        let theme = self.tm.theme_for(self.theme_name);
+        let highlighter = Highlighter::new(theme);
+        // syntect expects the trailing newline as part of the line for
+        // correct state transitions on rules anchored to line ends.
+        let mut owned = String::with_capacity(line.len() + 1);
+        owned.push_str(line);
+        owned.push('\n');
+        let ops = self.parse_state.parse_line(&owned, &self.tm.syntax_set)?;
+        let iter = HighlightIterator::new(&mut self.highlight_state, &ops, &owned, &highlighter);
+        let ranges: Vec<(Style, &str)> = iter.collect();
+        // Drop the synthetic trailing newline from the styled output so
+        // the caller can decide its own line termination.
+        let escaped = ranges_to_escaped_trim_newline(&ranges, self.color_mode);
+        self.next_line += 1;
+        Ok(escaped)
+    }
+
+    /// Index of the next line the highlighter will consume.
+    pub(crate) fn at(&self) -> usize {
+        self.next_line
+    }
+}
+
+fn build_states(
+    tm: &ThemeManager,
+    syntax_token: &str,
+    theme_name: PeekThemeName,
+) -> (ParseState, HighlightState) {
+    let syntax = resolve_syntax(tm, syntax_token);
+    let theme = tm.theme_for(theme_name);
+    let highlighter = Highlighter::new(theme);
+    let parse_state = ParseState::new(syntax);
+    let highlight_state = HighlightState::new(&highlighter, ScopeStack::new());
+    (parse_state, highlight_state)
+}
+
+/// Same as `ranges_to_escaped` but skips a trailing `\n` if the styled
+/// content ends with one. Used by `LineStreamHighlighter` because syntect
+/// is fed `line + "\n"` for correct end-of-line state transitions. If
+/// trimming leaves the final range empty (the common case — the trailing
+/// newline often arrives as its own range), drop it so we don't emit a
+/// stray foreground escape sequence with no text behind it.
+fn ranges_to_escaped_trim_newline(ranges: &[(Style, &str)], color_mode: ColorMode) -> String {
+    let mut out = String::new();
+    for (i, (style, text)) in ranges.iter().enumerate() {
+        let is_last = i + 1 == ranges.len();
+        let slice: &str = if is_last {
+            text.strip_suffix('\n').unwrap_or(text)
+        } else {
+            text
+        };
+        if slice.is_empty() {
+            continue;
+        }
+        out.push_str(&color_mode.fg_seq(style.foreground));
+        out.push_str(slice);
+    }
+    out.push_str(color_mode.reset());
+    out
 }
 
 /// Walk syntect's `(Style, &str)` ranges and emit one line of text with
@@ -285,5 +414,86 @@ fn fallback_syntax_token(ext: &str) -> Option<&'static str> {
         "hpp" | "hxx" => Some("C++"),
         "cxx" | "cc" => Some("C++"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tm() -> Rc<ThemeManager> {
+        Rc::new(ThemeManager::new(
+            PeekThemeName::IdeaDark,
+            ColorMode::TrueColor,
+        ))
+    }
+
+    /// Feeding `LineStreamHighlighter` line-by-line must produce the same
+    /// escaped output as `highlight_lines` over the whole content. Covers
+    /// JSON (simple) and Rust (multi-line block comment exercises
+    /// cross-line state).
+    #[test]
+    fn line_stream_matches_whole_string_highlight() {
+        let cases: &[(&str, &str)] = &[
+            (
+                "JSON",
+                r#"{
+  "name": "peek",
+  "version": 1,
+  "tags": ["fast", "tiny"]
+}"#,
+            ),
+            (
+                "Rust",
+                "/* multi-line\n   comment */\nfn main() {\n    let x = 42;\n    println!(\"{x}\");\n}\n",
+            ),
+        ];
+
+        for (token, content) in cases {
+            let tm = tm();
+            let whole = highlight_lines(
+                content,
+                token,
+                &tm,
+                PeekThemeName::IdeaDark,
+                ColorMode::TrueColor,
+            )
+            .unwrap();
+
+            let mut streamed = LineStreamHighlighter::new(
+                token.to_string(),
+                Rc::clone(&tm),
+                PeekThemeName::IdeaDark,
+                ColorMode::TrueColor,
+            );
+            let per_line: Vec<String> =
+                content.lines().map(|l| streamed.feed(l).unwrap()).collect();
+
+            assert_eq!(
+                per_line.len(),
+                whole.len(),
+                "line count mismatch for {token}"
+            );
+            for (i, (a, b)) in per_line.iter().zip(whole.iter()).enumerate() {
+                assert_eq!(a, b, "{token} line {i} differs");
+            }
+            assert_eq!(streamed.at(), content.lines().count());
+        }
+    }
+
+    #[test]
+    fn line_stream_reset_rewinds() {
+        let tm = tm();
+        let mut s = LineStreamHighlighter::new(
+            "Rust".to_string(),
+            Rc::clone(&tm),
+            PeekThemeName::IdeaDark,
+            ColorMode::TrueColor,
+        );
+        s.feed("fn a() {}").unwrap();
+        s.feed("fn b() {}").unwrap();
+        assert_eq!(s.at(), 2);
+        s.reset();
+        assert_eq!(s.at(), 0);
     }
 }
