@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use super::{Handled, Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
 use crate::output::PrintOutput;
 use crate::theme::ThemeManager;
@@ -102,7 +102,7 @@ impl Mode for ContentMode {
         self.label
     }
 
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         if self.use_pretty {
             self.ensure_pretty();
         }
@@ -115,17 +115,19 @@ impl Mode for ContentMode {
         } else {
             &self.raw
         };
-        if let Some(ref token) = self.syntax_token {
+        let lines = if let Some(ref token) = self.syntax_token {
             highlight_lines(
                 content,
                 token,
                 &self.theme_manager,
                 ctx.theme_name,
                 ctx.peek_theme.color_mode,
-            )
+            )?
         } else {
-            Ok(content.lines().map(String::from).collect())
-        }
+            content.lines().map(String::from).collect()
+        };
+        let total = lines.len();
+        Ok(Window { lines, total })
     }
 
     /// Pipe-mode render preserves byte-for-byte output for un-highlighted

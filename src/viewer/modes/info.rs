@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use super::{Mode, ModeId, RenderCtx};
+use super::{Mode, ModeId, RenderCtx, Window};
 
 pub(crate) struct InfoMode;
 
@@ -23,11 +23,9 @@ impl Mode for InfoMode {
         true
     }
 
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
-        Ok(crate::info::render(
-            ctx.file_info,
-            ctx.peek_theme,
-            ctx.render_opts,
-        ))
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
+        let lines = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
+        let total = lines.len();
+        Ok(Window { lines, total })
     }
 }

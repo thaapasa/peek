@@ -204,7 +204,7 @@ fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64)> {
         for (i, b) in buf.iter().enumerate() {
             if *b == b'\n' {
                 newline_count += 1;
-                if newline_count % ANCHOR_STRIDE == 0 {
+                if newline_count.is_multiple_of(ANCHOR_STRIDE) {
                     anchors.push(offset + (i + 1) as u64);
                 }
             }

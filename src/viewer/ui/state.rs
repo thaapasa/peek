@@ -418,6 +418,8 @@ impl<'a> ViewerState<'a> {
     }
 
     fn render_active(&mut self) -> Result<Vec<String>> {
+        let scroll = self.scroll[self.active];
+        let rows = content_rows();
         let ctx = RenderCtx {
             source: self.source,
             detected: self.detected,
@@ -426,9 +428,9 @@ impl<'a> ViewerState<'a> {
             peek_theme: &self.peek_theme,
             render_opts: self.render_opts,
             term_cols: terminal_cols(),
-            term_rows: content_rows(),
+            term_rows: rows,
         };
-        let lines = self.modes[self.active].render(&ctx)?;
+        let window = self.modes[self.active].render_window(&ctx, scroll, rows)?;
         // Drain any warnings the mode raised during render (e.g. ContentMode's
         // lazy pretty-print failure) and merge into FileInfo so InfoMode
         // surfaces them. Invalidate Info's cache when new warnings arrived
@@ -440,7 +442,7 @@ impl<'a> ViewerState<'a> {
                 self.lines[idx] = None;
             }
         }
-        Ok(lines)
+        Ok(window.lines)
     }
 
     fn current_lines(&self) -> &[String] {

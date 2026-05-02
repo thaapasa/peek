@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Handled, Mode, ModeId, RenderCtx};
+use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::theme::PeekTheme;
 use crate::viewer::image::ImageConfig;
 use crate::viewer::image::animate::{AnimFrame, render_frame};
@@ -51,14 +51,16 @@ impl Mode for AnimationMode {
         "Animation"
     }
 
-    fn render(&mut self, ctx: &RenderCtx) -> Result<Vec<String>> {
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         // ColorMode can change between renders (interactive cycle).
         self.config.color_mode = ctx.peek_theme.color_mode;
         let term = TermSize {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,
         };
-        Ok(render_frame(&self.frames[self.current], &self.config, term))
+        let lines = render_frame(&self.frames[self.current], &self.config, term);
+        let total = lines.len();
+        Ok(Window { lines, total })
     }
 
     fn rerender_on_resize(&self) -> bool {
