@@ -386,6 +386,7 @@ impl Registry {
             background: image::Background::from_str(&args.background),
             margin: args.margin,
             color_mode: args.color,
+            edge_density: args.edge_density,
         }
     }
 }

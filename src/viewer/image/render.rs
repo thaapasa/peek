@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
 
 use super::clustering::fast_2_color;
-use super::glyph_atlas::{CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_glyph};
+use super::glyph_atlas::{
+    CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_contour_glyph, best_glyph, dilate_bitmap,
+};
 use super::{Background, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
@@ -150,6 +152,75 @@ fn mono_cell(px: &[[u8; 3]; 128]) -> (u128, Option<char>) {
         }
     }
     (bits, None)
+}
+
+/// Render a binary edge image as line-art glyphs.
+///
+/// `edges` is the output of [`super::contour::detect_edges`] — pure white
+/// pixels on pure black. Per cell we build a bitmap (bit = 1 where pixel
+/// is an edge) and ask the existing glyph matcher for the best line shape.
+///
+/// Colors are emitted as foreground only — edge pixels render in the
+/// theme's bright fg, the void uses terminal default bg. This avoids the
+/// 2-cluster algorithm's polarity ambiguity on sparse-edge cells and lets
+/// the result blend with whatever terminal theme the user has.
+pub fn render_contour(
+    edges: &DynamicImage,
+    term_cols: u32,
+    term_rows: u32,
+    mode: ImageMode,
+    color_mode: ColorMode,
+) -> Vec<String> {
+    let px_w = term_cols * CELL_W;
+    let px_h = term_rows * CELL_H;
+    let resized = if edges.width() == px_w && edges.height() == px_h {
+        edges.to_rgb8()
+    } else {
+        edges
+            .resize_exact(px_w, px_h, image::imageops::FilterType::Nearest)
+            .to_rgb8()
+    };
+
+    let raw = resized.as_raw();
+    let stride = (px_w * 3) as usize;
+
+    let atlas_refs = atlas_for_mode(mode);
+    let atlas: Vec<GlyphBitmap> = atlas_refs.iter().map(|g| **g).collect();
+    let dilated_atlas: Vec<u128> = atlas.iter().map(|g| dilate_bitmap(g.bits)).collect();
+
+    let edge_fg: [u8; 3] = [230, 230, 230];
+    let mut lines = Vec::with_capacity(term_rows as usize);
+
+    for row in 0..term_rows {
+        let mut line = String::with_capacity((term_cols * 20) as usize);
+
+        for col in 0..term_cols {
+            let base_x = (col * CELL_W) as usize;
+            let base_y = (row * CELL_H) as usize;
+
+            let mut bits: u128 = 0;
+            for cy in 0..CELL_H as usize {
+                for cx in 0..CELL_W as usize {
+                    let off = (base_y + cy) * stride + (base_x + cx) * 3;
+                    if raw[off] >= 128 {
+                        bits |= 1u128 << (cy * CELL_W as usize + cx);
+                    }
+                }
+            }
+
+            if bits == 0 {
+                line.push(' ');
+                continue;
+            }
+            let ch = best_contour_glyph(bits, &atlas, &dilated_atlas);
+            color_mode.write_fg(&mut line, edge_fg, ch);
+        }
+
+        line.push_str(color_mode.reset());
+        lines.push(line);
+    }
+
+    lines
 }
 
 /// Render an image using the legacy density-ramp algorithm.
@@ -328,6 +399,10 @@ pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -
 
     match config.mode {
         ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
+        ImageMode::Contour => {
+            let edges = super::contour::detect_edges(&img, config.edge_density);
+            render_contour(&edges, cols, rows, config.mode, config.color_mode)
+        }
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
             render_block_color(&img, cols, rows, config.mode, config.color_mode)
         }
@@ -387,6 +462,10 @@ pub fn load_and_render_svg(
 
     let lines = match config.mode {
         ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
+        ImageMode::Contour => {
+            let edges = super::contour::detect_edges(&img, config.edge_density);
+            render_contour(&edges, cols, rows, config.mode, config.color_mode)
+        }
         _ => render_block_color(&img, cols, rows, config.mode, config.color_mode),
     };
 

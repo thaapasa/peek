@@ -10,6 +10,7 @@ use crate::theme::ColorMode;
 
 pub(crate) mod animate;
 mod clustering;
+mod contour;
 mod glyph_atlas;
 mod mode;
 pub mod render;
@@ -58,4 +59,8 @@ pub struct ImageConfig {
     pub background: Background,
     pub margin: u32,
     pub color_mode: ColorMode,
+    /// Target fraction of pixels marked as edges in `ImageMode::Contour`.
+    /// Range 0.0..1.0. Higher = denser line-art. Stable across animation
+    /// frames because it's a percentile of the gradient histogram.
+    pub edge_density: f32,
 }

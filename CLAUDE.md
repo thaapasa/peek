@@ -83,12 +83,13 @@ src/
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
     image/
       mod.rs           — Module wiring + Background / ImageConfig generic types
-      mode.rs          — ImageMode enum (full/block/geo/ascii palette selection)
+      mode.rs          — ImageMode enum (full/block/geo/ascii/contour palette selection)
       svg.rs           — SVG rasterization (resvg): svg_dimensions / rasterize_svg
       render.rs        — Image → glyph-matched ASCII art with true color
       animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering
+      contour.rs       — Sobel + Otsu edge detection for ImageMode::Contour
 themes/
   idea-dark.tmTheme           — JetBrains IDEA default Dark theme (default)
   vscode-dark-modern.tmTheme  — VS Code Dark Modern theme
