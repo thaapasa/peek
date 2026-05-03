@@ -369,23 +369,39 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
     composite_onto(&img, &*bg_fn)
 }
 
-/// Load and render an image to lines, using contain-ratio sizing.
-/// Resizes to target resolution before compositing so that the checkerboard
-/// pattern is always aligned to the glyph grid.
-pub fn load_and_render(
-    source: &InputSource,
-    config: &ImageConfig,
-    term: TermSize,
-) -> Result<Vec<String>> {
-    Ok(render_decoded(load_image(source)?, config, term))
+/// Output of the decode → margin → resize → composite pipeline; the
+/// mode-specific glyph render runs against this. Cached by
+/// `ImageRenderMode` so mode/color-mode cycling skips the costly
+/// decode + Lanczos + composite stages.
+pub struct PreparedImage {
+    pub composited: DynamicImage,
+    pub cols: u32,
+    pub rows: u32,
 }
 
-/// Render an already-decoded image. Shared by `load_and_render` and the
-/// animation loop, which holds frames in memory and shouldn't re-decode.
+/// Render an already-decoded image. Used by the animation loop, which
+/// holds frames in memory and shouldn't re-decode. The interactive raster
+/// path goes through `prepare_raster` + `render_prepared` so it can cache
+/// the post-composite intermediate.
 ///
 /// Resizes to target pixel resolution before alpha-compositing so the
 /// checkerboard pattern aligns to the glyph grid.
 pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -> Vec<String> {
+    let prep = prepare_decoded(img, config, term);
+    render_prepared(&prep, config)
+}
+
+/// Run the load → margin → resize → composite pipeline for a raster source.
+pub fn prepare_raster(
+    source: &InputSource,
+    config: &ImageConfig,
+    term: TermSize,
+) -> Result<PreparedImage> {
+    Ok(prepare_decoded(load_image(source)?, config, term))
+}
+
+/// Run margin → resize → composite on an already-decoded image.
+pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -> PreparedImage {
     let img = add_margin(img, config.margin);
     let (img_w, img_h) = img.dimensions();
     let (cols, rows) = contain_size(img_w, img_h, term, config.width);
@@ -397,15 +413,30 @@ pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -
     let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
     let img = composite_with_bg(img, config.background);
 
+    PreparedImage {
+        composited: img,
+        cols,
+        rows,
+    }
+}
+
+/// Mode-specific glyph render against an already-prepared image.
+pub fn render_prepared(prep: &PreparedImage, config: &ImageConfig) -> Vec<String> {
     match config.mode {
-        ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
+        ImageMode::Ascii => {
+            render_density(&prep.composited, prep.cols, prep.rows, config.color_mode)
+        }
         ImageMode::Contour => {
-            let edges = super::contour::detect_edges(&img, config.edge_density);
-            render_contour(&edges, cols, rows, config.mode, config.color_mode)
+            let edges = super::contour::detect_edges(&prep.composited, config.edge_density);
+            render_contour(&edges, prep.cols, prep.rows, config.mode, config.color_mode)
         }
-        ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
-            render_block_color(&img, cols, rows, config.mode, config.color_mode)
-        }
+        ImageMode::Full | ImageMode::Block | ImageMode::Geo => render_block_color(
+            &prep.composited,
+            prep.cols,
+            prep.rows,
+            config.mode,
+            config.color_mode,
+        ),
     }
 }
 
@@ -419,13 +450,12 @@ pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
     }
 }
 
-/// Load and render an SVG source to ASCII art lines.
-/// Rasterizes at the exact target pixel resolution for maximum sharpness.
-pub fn load_and_render_svg(
+/// Run the rasterize → margin → composite pipeline for an SVG source.
+pub fn prepare_svg(
     source: &InputSource,
     config: &ImageConfig,
     term: TermSize,
-) -> Result<Vec<String>> {
+) -> Result<PreparedImage> {
     let (svg_w, svg_h) = super::svg::svg_dimensions(source)?;
     let margin = config.margin;
     // Account for margin in aspect ratio calculation
@@ -460,14 +490,9 @@ pub fn load_and_render_svg(
     let img = DynamicImage::ImageRgba8(canvas);
     let img = composite_with_bg(img, config.background);
 
-    let lines = match config.mode {
-        ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
-        ImageMode::Contour => {
-            let edges = super::contour::detect_edges(&img, config.edge_density);
-            render_contour(&edges, cols, rows, config.mode, config.color_mode)
-        }
-        _ => render_block_color(&img, cols, rows, config.mode, config.color_mode),
-    };
-
-    Ok(lines)
+    Ok(PreparedImage {
+        composited: img,
+        cols,
+        rows,
+    })
 }

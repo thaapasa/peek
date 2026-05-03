@@ -1,7 +1,7 @@
 //! SVG rasterization helpers used by the image rendering pipeline. The
 //! interactive view of an SVG flows through `ImageRenderMode` (which
-//! calls `render::load_and_render_svg`); these helpers are the
-//! resvg-backed primitives behind that pipeline.
+//! calls `render::prepare_svg`); these helpers are the resvg-backed
+//! primitives behind that pipeline.
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
