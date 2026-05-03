@@ -59,6 +59,12 @@ pub(crate) enum Action {
     CycleBackground,
     /// Cycle the image rendering mode (full/block/geo/ascii).
     CycleImageMode,
+    /// Cycle the image fit mode (contain / fit-width / fit-height).
+    CycleFitMode,
+    /// Scroll the visible viewport one step left (FitHeight images).
+    ScrollLeft,
+    /// Scroll the visible viewport one step right (FitHeight images).
+    ScrollRight,
     /// Toggle raw / pretty rendering (text + SVG source).
     ToggleRawSource,
     /// Toggle the line-number gutter in text views.
@@ -95,11 +101,14 @@ impl Action {
         const SWITCH_ABOUT:   &[Binding] = &[Binding::plain(Char('a'))];
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
         const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
+        const CYCLE_FIT:      &[Binding] = &[Binding::plain(Char('f'))];
+        const SCROLL_LEFT:    &[Binding] = &[Binding::plain(Left)];
+        const SCROLL_RIGHT:   &[Binding] = &[Binding::plain(Right)];
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
         const TOGGLE_LINENUM: &[Binding] = &[Binding::plain(Char('l'))];
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
-        const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n')), Binding::plain(Right)];
-        const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N')), Binding::plain(Left)];
+        const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
+        const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
 
         match self {
             Action::Quit              => QUIT,
@@ -118,6 +127,9 @@ impl Action {
             Action::SwitchToAbout     => SWITCH_ABOUT,
             Action::CycleBackground   => CYCLE_BG,
             Action::CycleImageMode    => CYCLE_IMG_MODE,
+            Action::CycleFitMode      => CYCLE_FIT,
+            Action::ScrollLeft        => SCROLL_LEFT,
+            Action::ScrollRight       => SCROLL_RIGHT,
             Action::ToggleRawSource   => TOGGLE_RAW,
             Action::ToggleLineNumbers => TOGGLE_LINENUM,
             Action::PlayPause         => PLAY_PAUSE,
@@ -146,11 +158,14 @@ impl Action {
             Action::SwitchToAbout     => "a",
             Action::CycleBackground   => "b",
             Action::CycleImageMode    => "m",
+            Action::CycleFitMode      => "f",
+            Action::ScrollLeft        => "Left",
+            Action::ScrollRight       => "Right",
             Action::ToggleRawSource   => "r",
             Action::ToggleLineNumbers => "l",
             Action::PlayPause         => "p",
-            Action::NextFrame         => "n / Right",
-            Action::PrevFrame         => "N / Left",
+            Action::NextFrame         => "n",
+            Action::PrevFrame         => "N",
         }
     }
 

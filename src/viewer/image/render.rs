@@ -5,7 +5,7 @@ use super::clustering::fast_2_color;
 use super::glyph_atlas::{
     CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_contour_glyph, best_glyph, dilate_bitmap,
 };
-use super::{Background, ImageConfig, ImageMode};
+use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
 
@@ -19,49 +19,111 @@ pub struct TermSize {
     pub rows: u32,
 }
 
-/// Compute the output grid size (cols, rows) for an image that fits
-/// within the given terminal dimensions while preserving aspect ratio.
+/// Compute the rendered grid size `(cols, rows)` for an image. Aspect
+/// ratio is always preserved; the `fit` argument decides which axis
+/// constrains the result.
 ///
-/// Uses "contain" logic: the image is scaled to fit entirely within
-/// the terminal, constrained by both width and height.
-pub fn contain_size(img_w: u32, img_h: u32, term: TermSize, forced_width: u32) -> (u32, u32) {
+/// Aspect ratio rule for terminal cells (~2:1 height:width):
+///   cols / (rows * 2) = img_w / img_h
+///
+/// - `forced_width > 0`: width is locked to that value, height follows
+///   from aspect ratio. Ignores both `term` and `fit` — the CLI knob
+///   `--width` is an explicit override.
+/// - `Contain`: scale to fit entirely within `term`, constrained by
+///   the smaller axis. Output never exceeds `term`.
+/// - `FitWidth`: width = `term.cols`, height follows aspect ratio.
+///   Output may exceed `term.rows` (vertical overflow → vertical scroll).
+/// - `FitHeight`: height = `term.rows`, width follows aspect ratio.
+///   Output may exceed `term.cols` (horizontal overflow → horizontal
+///   scroll).
+pub fn compute_grid(
+    img_w: u32,
+    img_h: u32,
+    term: TermSize,
+    forced_width: u32,
+    fit: FitMode,
+) -> (u32, u32) {
     if forced_width > 0 {
-        // Forced width: only constrain by width, ignore height
         let rows = (img_h as f64 * forced_width as f64 / (img_w as f64 * 2.0)) as u32;
         return (forced_width, rows.max(1));
     }
+    match fit {
+        FitMode::Contain => contain_grid(img_w, img_h, term),
+        FitMode::FitWidth => {
+            let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
+            (term.cols.max(1), rows.max(1))
+        }
+        FitMode::FitHeight => {
+            let cols = (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
+            (cols.max(1), term.rows.max(1))
+        }
+    }
+}
 
-    // Aspect ratio rule for terminal cells (~2:1 height:width):
-    //   cols / (rows * 2) = img_w / img_h
-    // So:
-    //   rows = img_h * cols / (img_w * 2)
-    //   cols = img_w * rows * 2 / img_h
-
-    // Try fitting to terminal width
+fn contain_grid(img_w: u32, img_h: u32, term: TermSize) -> (u32, u32) {
     let rows_from_width = (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
-
     if rows_from_width <= term.rows {
-        // Fits vertically — use full width
         (term.cols, rows_from_width.max(1))
     } else {
-        // Too tall — fit to terminal height instead
         let cols_from_height = (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
         (cols_from_height.clamp(1, term.cols), term.rows)
     }
 }
 
+/// A rectangular sub-grid of a `PreparedImage` to render.
+///
+/// Cell coordinates are in the full prepared grid (`PreparedImage::cols` /
+/// `rows`). When the image fits the terminal entirely (`Contain`), this is
+/// always the full grid; under `FitWidth` / `FitHeight` it carries the
+/// scrolled, terminal-sized window into a larger grid.
+#[derive(Debug, Clone, Copy)]
+pub struct GridWindow {
+    pub col_start: u32,
+    pub col_end: u32,
+    pub row_start: u32,
+    pub row_end: u32,
+}
+
+impl GridWindow {
+    #[allow(dead_code)]
+    pub fn full(cols: u32, rows: u32) -> Self {
+        Self {
+            col_start: 0,
+            col_end: cols,
+            row_start: 0,
+            row_end: rows,
+        }
+    }
+
+    pub fn cols(&self) -> u32 {
+        self.col_end.saturating_sub(self.col_start)
+    }
+
+    pub fn rows(&self) -> u32 {
+        self.row_end.saturating_sub(self.row_start)
+    }
+}
+
 /// Render an image using the block-color algorithm.
-/// Returns a vector of ANSI-colored lines.
+///
+/// `full_cols` / `full_rows` describe the prepared grid (used to derive the
+/// pixel canvas size). `window` selects which sub-rectangle of that grid is
+/// emitted as lines — under fit modes that scroll, the renderer skips cells
+/// outside the visible viewport instead of producing strings that would have
+/// to be re-sliced (escape sequences make horizontal substring expensive).
+///
+/// Returns a vector of ANSI-colored lines, one per row in `window`.
 pub fn render_block_color(
     img: &DynamicImage,
-    term_cols: u32,
-    term_rows: u32,
+    full_cols: u32,
+    full_rows: u32,
+    window: GridWindow,
     mode: ImageMode,
     color_mode: ColorMode,
 ) -> Vec<String> {
     let plain = color_mode == ColorMode::Plain;
-    let px_w = term_cols * CELL_W;
-    let px_h = term_rows * CELL_H;
+    let px_w = full_cols * CELL_W;
+    let px_h = full_rows * CELL_H;
     let resized = if img.width() == px_w && img.height() == px_h {
         img.to_rgb8()
     } else {
@@ -76,12 +138,12 @@ pub fn render_block_color(
     let atlas: Vec<GlyphBitmap> = atlas_refs.iter().map(|g| **g).collect();
 
     let mut cell_pixels = [[0u8; 3]; 128];
-    let mut lines = Vec::with_capacity(term_rows as usize);
+    let mut lines = Vec::with_capacity(window.rows() as usize);
 
-    for row in 0..term_rows {
-        let mut line = String::with_capacity((term_cols * 40) as usize);
+    for row in window.row_start..window.row_end {
+        let mut line = String::with_capacity((window.cols() * 40) as usize);
 
-        for col in 0..term_cols {
+        for col in window.col_start..window.col_end {
             let base_x = (col * CELL_W) as usize;
             let base_y = (row * CELL_H) as usize;
 
@@ -166,13 +228,14 @@ fn mono_cell(px: &[[u8; 3]; 128]) -> (u128, Option<char>) {
 /// the result blend with whatever terminal theme the user has.
 pub fn render_contour(
     edges: &DynamicImage,
-    term_cols: u32,
-    term_rows: u32,
+    full_cols: u32,
+    full_rows: u32,
+    window: GridWindow,
     mode: ImageMode,
     color_mode: ColorMode,
 ) -> Vec<String> {
-    let px_w = term_cols * CELL_W;
-    let px_h = term_rows * CELL_H;
+    let px_w = full_cols * CELL_W;
+    let px_h = full_rows * CELL_H;
     let resized = if edges.width() == px_w && edges.height() == px_h {
         edges.to_rgb8()
     } else {
@@ -189,12 +252,12 @@ pub fn render_contour(
     let dilated_atlas: Vec<u128> = atlas.iter().map(|g| dilate_bitmap(g.bits)).collect();
 
     let edge_fg: [u8; 3] = [230, 230, 230];
-    let mut lines = Vec::with_capacity(term_rows as usize);
+    let mut lines = Vec::with_capacity(window.rows() as usize);
 
-    for row in 0..term_rows {
-        let mut line = String::with_capacity((term_cols * 20) as usize);
+    for row in window.row_start..window.row_end {
+        let mut line = String::with_capacity((window.cols() * 20) as usize);
 
-        for col in 0..term_cols {
+        for col in window.col_start..window.col_end {
             let base_x = (col * CELL_W) as usize;
             let base_y = (row * CELL_H) as usize;
 
@@ -227,25 +290,26 @@ pub fn render_contour(
 /// Returns a vector of ANSI-colored lines.
 pub fn render_density(
     img: &DynamicImage,
-    term_cols: u32,
-    term_rows: u32,
+    full_cols: u32,
+    full_rows: u32,
+    window: GridWindow,
     color_mode: ColorMode,
 ) -> Vec<String> {
     const DENSITY_RAMP: &[u8] =
         b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
 
-    let resized = if img.width() == term_cols && img.height() == term_rows {
+    let resized = if img.width() == full_cols && img.height() == full_rows {
         img.clone()
     } else {
-        img.resize_exact(term_cols, term_rows, image::imageops::FilterType::Lanczos3)
+        img.resize_exact(full_cols, full_rows, image::imageops::FilterType::Lanczos3)
     };
 
     let ramp_len = DENSITY_RAMP.len();
-    let mut lines = Vec::with_capacity(term_rows as usize);
+    let mut lines = Vec::with_capacity(window.rows() as usize);
 
-    for y in 0..term_rows {
-        let mut line = String::with_capacity((term_cols * 20) as usize);
-        for x in 0..term_cols {
+    for y in window.row_start..window.row_end {
+        let mut line = String::with_capacity((window.cols() * 20) as usize);
+        for x in window.col_start..window.col_end {
             let pixel = resized.get_pixel(x, y);
             let [r, g, b, _a] = pixel.0;
 
@@ -379,18 +443,6 @@ pub struct PreparedImage {
     pub rows: u32,
 }
 
-/// Render an already-decoded image. Used by the animation loop, which
-/// holds frames in memory and shouldn't re-decode. The interactive raster
-/// path goes through `prepare_raster` + `render_prepared` so it can cache
-/// the post-composite intermediate.
-///
-/// Resizes to target pixel resolution before alpha-compositing so the
-/// checkerboard pattern aligns to the glyph grid.
-pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -> Vec<String> {
-    let prep = prepare_decoded(img, config, term);
-    render_prepared(&prep, config)
-}
-
 /// Run the load → margin → resize → composite pipeline for a raster source.
 pub fn prepare_raster(
     source: &InputSource,
@@ -404,7 +456,7 @@ pub fn prepare_raster(
 pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -> PreparedImage {
     let img = add_margin(img, config.margin);
     let (img_w, img_h) = img.dimensions();
-    let (cols, rows) = contain_size(img_w, img_h, term, config.width);
+    let (cols, rows) = compute_grid(img_w, img_h, term, config.width, config.fit);
 
     let (px_w, px_h) = match config.mode {
         ImageMode::Ascii => (cols, rows),
@@ -420,20 +472,38 @@ pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) 
     }
 }
 
-/// Mode-specific glyph render against an already-prepared image.
-pub fn render_prepared(prep: &PreparedImage, config: &ImageConfig) -> Vec<String> {
+/// Mode-specific glyph render against an already-prepared image. `window`
+/// selects the visible sub-rectangle of the prepared grid; pass
+/// `GridWindow::full(prep.cols, prep.rows)` for a full render.
+pub fn render_prepared(
+    prep: &PreparedImage,
+    config: &ImageConfig,
+    window: GridWindow,
+) -> Vec<String> {
     match config.mode {
-        ImageMode::Ascii => {
-            render_density(&prep.composited, prep.cols, prep.rows, config.color_mode)
-        }
+        ImageMode::Ascii => render_density(
+            &prep.composited,
+            prep.cols,
+            prep.rows,
+            window,
+            config.color_mode,
+        ),
         ImageMode::Contour => {
             let edges = super::contour::detect_edges(&prep.composited, config.edge_density);
-            render_contour(&edges, prep.cols, prep.rows, config.mode, config.color_mode)
+            render_contour(
+                &edges,
+                prep.cols,
+                prep.rows,
+                window,
+                config.mode,
+                config.color_mode,
+            )
         }
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => render_block_color(
             &prep.composited,
             prep.cols,
             prep.rows,
+            window,
             config.mode,
             config.color_mode,
         ),
@@ -461,7 +531,7 @@ pub fn prepare_svg(
     // Account for margin in aspect ratio calculation
     let padded_w = svg_w + margin * 2;
     let padded_h = svg_h + margin * 2;
-    let (cols, rows) = contain_size(padded_w, padded_h, term, config.width);
+    let (cols, rows) = compute_grid(padded_w, padded_h, term, config.width, config.fit);
 
     // Compute target pixel size, then rasterize SVG into the inner area
     // (target minus margin) so that adding margin reaches exact target size.

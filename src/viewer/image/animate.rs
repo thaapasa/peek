@@ -6,9 +6,6 @@ use image::DynamicImage;
 
 use crate::input::InputSource;
 
-use super::ImageConfig;
-use super::render;
-
 /// A single decoded animation frame with its display duration.
 pub struct AnimFrame {
     pub image: DynamicImage,
@@ -126,16 +123,4 @@ pub fn decode_anim_frames(
         return Ok(None);
     }
     Ok(Some(frames))
-}
-
-// ---------------------------------------------------------------------------
-// Frame rendering (shared with `modes::AnimationMode`)
-// ---------------------------------------------------------------------------
-
-pub(crate) fn render_frame(
-    frame: &AnimFrame,
-    config: &ImageConfig,
-    term: render::TermSize,
-) -> Vec<String> {
-    render::render_decoded(frame.image.clone(), config, term)
 }

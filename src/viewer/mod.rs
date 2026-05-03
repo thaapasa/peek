@@ -387,6 +387,7 @@ impl Registry {
             margin: args.margin,
             color_mode: args.color,
             edge_density: args.edge_density,
+            fit: image::FitMode::Contain,
         }
     }
 }

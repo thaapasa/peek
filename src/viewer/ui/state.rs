@@ -274,6 +274,9 @@ impl<'a> ViewerState<'a> {
             | Action::PrevFrame
             | Action::CycleBackground
             | Action::CycleImageMode
+            | Action::CycleFitMode
+            | Action::ScrollLeft
+            | Action::ScrollRight
             | Action::ToggleLineNumbers => Outcome::Unhandled,
         })
     }

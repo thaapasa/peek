@@ -253,7 +253,11 @@ source image/SVG
 add_margin() --> transparent padding
   |
   v
-contain_size() --> aspect-ratio-preserving grid (cols x rows)
+compute_grid() --> aspect-ratio-preserving grid (cols x rows)
+                   constraint axis chosen by FitMode:
+                     Contain   --> fit both axes (default)
+                     FitWidth  --> width fixed, rows may exceed terminal
+                     FitHeight --> height fixed, cols may exceed terminal
   |
   v
 resize_exact() --> target pixel resolution (cols*CELL_W x rows*CELL_H)
@@ -263,6 +267,9 @@ composite_with_bg() --> resolve alpha (auto/black/white/checkerboard)
   |
   v
 render_block_color() or render_density()
+  |  GridWindow selects the visible sub-rectangle of the prepared grid;
+  |  ImageRenderMode passes a window derived from scroll_x/scroll_y when
+  |  the prepared grid exceeds the terminal viewport.
   |  Per cell (8x16 pixels):
   |    fast_2_color() --> 2 cluster colors + u128 bitmap
   |    best_glyph()   --> Hamming-distance match against glyph atlas
@@ -274,6 +281,12 @@ Vec<String> lines
 
 **Critical order:** resize *before* composite. Otherwise the checkerboard pattern doesn't align to
 the glyph grid at the final resolution.
+
+**Windowed render:** under `FitWidth` / `FitHeight` the prepared grid can be larger than the
+terminal. The renderer never builds full lines and re-slices them — horizontal substring of styled
+strings would have to parse ANSI escapes. Instead the inner cell loops iterate `GridWindow`'s
+sub-range so the emitted strings are pre-windowed. `ImageRenderMode::owns_scroll() = true` and the
+mode tracks `scroll_x`/`scroll_y`; pipe / `--print` always renders with `Contain`.
 
 ## Event loop (`viewer/interactive.rs`)
 

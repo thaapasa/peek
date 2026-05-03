@@ -128,28 +128,29 @@ stdout.
 
 ### Keyboard Shortcuts
 
-| Key              | Action                    |
-|------------------|---------------------------|
-| `q` / `Esc`      | Quit                      |
-| `Up` / `k`       | Scroll up                 |
-| `Down` / `j`     | Scroll down               |
-| `PgUp`           | Page up                   |
-| `PgDn` / `Space` | Page down                 |
-| `Home` / `g`     | Top                       |
-| `End` / `G`      | Bottom                    |
-| `Tab`            | Cycle content / file info |
-| `i`              | File info                 |
-| `h` / `?`        | Toggle help               |
-| `t`              | Cycle theme               |
-| `c`              | Cycle color mode          |
-| `r`              | Toggle raw / pretty       |
-| `x`              | Toggle hex dump           |
-| `a`              | About / status screen     |
-| `m`              | Cycle image render mode   |
-| `b`              | Cycle image background    |
-| `p`              | Play / pause animation    |
-| `n` / `Right`    | Next animation frame      |
-| `N` / `Left`     | Previous animation frame  |
+| Key              | Action                          |
+|------------------|---------------------------------|
+| `q` / `Esc`      | Quit                            |
+| `Up` / `k`       | Scroll up                       |
+| `Down` / `j`     | Scroll down                     |
+| `PgUp`           | Page up                         |
+| `PgDn` / `Space` | Page down                       |
+| `Home` / `g`     | Top                             |
+| `End` / `G`      | Bottom                          |
+| `Tab`            | Cycle content / file info       |
+| `i`              | File info                       |
+| `h` / `?`        | Toggle help                     |
+| `t`              | Cycle theme                     |
+| `c`              | Cycle color mode                |
+| `r`              | Toggle raw / pretty             |
+| `x`              | Toggle hex dump                 |
+| `a`              | About / status screen           |
+| `m`              | Cycle image render mode         |
+| `b`              | Cycle image background          |
+| `f`              | Cycle image fit mode            |
+| `Left` / `Right` | Pan horizontally (FitHeight)    |
+| `p`              | Play / pause animation          |
+| `n` / `N`        | Next / previous animation frame |
 
 Source of truth: [`src/viewer/ui/keys.rs`](src/viewer/ui/keys.rs).
 

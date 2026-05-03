@@ -186,13 +186,25 @@ is present (no per-image opt-out).
 
 #### Image Sizing Modes ◐
 
-| Mode        | Behavior                                                    |
-|-------------|-------------------------------------------------------------|
-| `contain`   | Fit within both width and height — whole image always shown |
-| `portrait`  | Constrain to console height (may overflow width)            |
-| `landscape` | Constrain to console width (may overflow height)            |
+| Mode         | Behavior                                                                |
+|--------------|-------------------------------------------------------------------------|
+| `Contain`    | Fit within both width and height — whole image always shown (default)   |
+| `FitWidth`   | Width fills the terminal; height grows freely → vertical scroll         |
+| `FitHeight`  | Height fills the terminal; width grows freely → horizontal scroll       |
 
-Default: `contain`. `contain` works; portrait/landscape and keyboard cycling not yet.
+Cycle interactively with `f` (image / SVG render views). Pipe / `--print`
+output always uses `Contain` (rows are unbounded, so the other modes are
+either nonsensical or reduce to `Contain`). The image is never rotated;
+only the constraining axis changes.
+
+Scroll keys in image views:
+
+- `Up` / `Down` / `PgUp` / `PgDn` — vertical scroll under `FitWidth`
+- `Left` / `Right` — horizontal scroll under `FitHeight`
+- `Home` — return to top-left; `End` — jump to bottom
+
+Toggling fit mode resets the scroll offset (the old position has no
+meaning in the new grid). No `--sizing` CLI flag yet.
 
 #### Zoom ☐
 
@@ -423,25 +435,28 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 ### Image Views *(context)*
 
-| Key        | Action                                           |
-|------------|--------------------------------------------------|
-| `m`        | Cycle rendering mode (full/block/geo/ascii)      |
-| `b`        | Cycle background (none/black/white/checkerboard) |
-| `s`        | Cycle sizing mode (contain/portrait/landscape)   |
-| `+` / `=`  | Zoom in                                          |
-| `-`        | Zoom out                                         |
-| Arrow keys | Pan (when zoomed beyond terminal size)           |
+| Key              | Action                                                       |
+|------------------|--------------------------------------------------------------|
+| `m`              | Cycle rendering mode (full/block/geo/ascii/contour)          |
+| `b`              | Cycle background (auto/black/white/checkerboard)             |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)              |
+| `Left` / `Right` | Pan horizontally (FitHeight)                                 |
+| `+` / `=`        | Zoom in (planned)                                            |
+| `-`              | Zoom out (planned)                                           |
 
 ### Animated Image Views *(context: GIF, WebP)*
 
-| Key              | Action                                            |
-|------------------|---------------------------------------------------|
-| `p`              | Play / pause animation                            |
-| `Left` / `Right` | Previous / next frame (when paused)               |
-| `n` / `N`        | Next / previous frame (alternative, always works) |
+| Key              | Action                                                 |
+|------------------|--------------------------------------------------------|
+| `p`              | Play / pause animation                                 |
+| `n` / `N`        | Next / previous frame                                  |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)        |
+| `Left` / `Right` | Pan horizontally under `FitHeight`                     |
+| `b`              | Cycle background                                       |
+| `m`              | Cycle render mode                                      |
 
-When zoomed in, Left/Right are used for panning (image takes priority); use `n`/`N` for stepping.
-These mirror the search navigation keys used in text views.
+`Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
+`n` / `N` exclusively (the previous Left/Right frame-step bindings are gone).
 
 These bindings are initial suggestions and may be revised. The help screen (`h`) is the
 authoritative in-app reference.

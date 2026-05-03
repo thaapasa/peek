@@ -54,6 +54,44 @@ impl Background {
     }
 }
 
+/// Which axis constrains the rendered image grid relative to the terminal
+/// viewport. The image is never rotated; only the fitting/scrolling
+/// behavior changes.
+///
+/// - `Contain`: scale to fit both terminal width and height (current
+///   default). Neither axis overflows; the viewer never scrolls the
+///   image.
+/// - `FitWidth`: scale to fill terminal width. Height grows to preserve
+///   aspect ratio and may exceed the terminal — the viewer scrolls the
+///   image vertically.
+/// - `FitHeight`: scale to fill terminal height. Width grows similarly
+///   and may exceed the terminal — the viewer scrolls the image
+///   horizontally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FitMode {
+    Contain,
+    FitWidth,
+    FitHeight,
+}
+
+impl FitMode {
+    pub fn next(self) -> Self {
+        match self {
+            Self::Contain => Self::FitWidth,
+            Self::FitWidth => Self::FitHeight,
+            Self::FitHeight => Self::Contain,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Contain => "Contain",
+            Self::FitWidth => "FitWidth",
+            Self::FitHeight => "FitHeight",
+        }
+    }
+}
+
 /// Shared configuration for image rendering (mode, size, background, margin).
 #[derive(Debug, Clone, Copy)]
 pub struct ImageConfig {
@@ -66,4 +104,10 @@ pub struct ImageConfig {
     /// Range 0.0..1.0. Higher = denser line-art. Stable across animation
     /// frames because it's a percentile of the gradient histogram.
     pub edge_density: f32,
+    /// Which terminal axis constrains the rendered image grid. Toggled
+    /// interactively with `f`; CLI default is `Contain`. Ignored by the
+    /// pipe / `--print` path, which always uses `Contain` (rows are
+    /// unbounded there, so `FitHeight` is meaningless and `FitWidth`
+    /// reduces to `Contain` anyway).
+    pub fit: FitMode,
 }
