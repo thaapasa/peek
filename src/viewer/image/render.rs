@@ -57,6 +57,7 @@ pub fn render_block_color(
     mode: ImageMode,
     color_mode: ColorMode,
 ) -> Vec<String> {
+    let plain = color_mode == ColorMode::Plain;
     let px_w = term_cols * CELL_W;
     let px_h = term_rows * CELL_H;
     let resized = if img.width() == px_w && img.height() == px_h {
@@ -90,16 +91,22 @@ pub fn render_block_color(
                 }
             }
 
-            let cluster = fast_2_color(&cell_pixels);
-            let glyph_match = best_glyph(cluster.bitmap, &atlas);
-
-            let (fg, bg) = if glyph_match.inverted {
-                (cluster.color_b, cluster.color_a)
+            let (ch, fg, bg) = if plain {
+                let (bits, shade) = mono_cell(&cell_pixels);
+                let ch = shade.unwrap_or_else(|| best_glyph(bits, &atlas).ch);
+                (ch, [0; 3], [0; 3])
             } else {
-                (cluster.color_a, cluster.color_b)
+                let cluster = fast_2_color(&cell_pixels);
+                let glyph_match = best_glyph(cluster.bitmap, &atlas);
+                let (fg, bg) = if glyph_match.inverted {
+                    (cluster.color_b, cluster.color_a)
+                } else {
+                    (cluster.color_a, cluster.color_b)
+                };
+                (glyph_match.ch, fg, bg)
             };
 
-            color_mode.write_fg_bg(&mut line, fg, bg, glyph_match.ch);
+            color_mode.write_fg_bg(&mut line, fg, bg, ch);
         }
 
         line.push_str(color_mode.reset());
@@ -107,6 +114,42 @@ pub fn render_block_color(
     }
 
     lines
+}
+
+/// Variance threshold below which a Plain-mode cell is treated as uniform
+/// and rendered with a shade-ramp glyph instead of a spatial bitmap match.
+/// ~400 ≈ 20 luma stddev.
+const UNIFORM_VAR_THRESHOLD: f32 = 400.0;
+
+/// Plain-mode cell mapping. Returns either:
+/// - `(bitmap, None)` — bit i set if pixel i is at or above cell mean luma;
+///   caller runs through `best_glyph` for spatial pattern.
+/// - `(0, Some(ch))` — low-variance cell; glyph picked from a 5-step shade
+///   ramp by mean luma. Avoids degenerate empty/full glyphs for flat regions.
+///
+/// Polarity convention: ink represents brighter pixels (suits the common
+/// light-on-dark terminal default).
+fn mono_cell(px: &[[u8; 3]; 128]) -> (u128, Option<char>) {
+    let lumas: [f32; 128] = std::array::from_fn(|i| {
+        let [r, g, b] = px[i];
+        0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32
+    });
+    let mean = lumas.iter().sum::<f32>() / 128.0;
+    let variance = lumas.iter().map(|l| (l - mean).powi(2)).sum::<f32>() / 128.0;
+
+    if variance < UNIFORM_VAR_THRESHOLD {
+        const RAMP: [char; 5] = [' ', '░', '▒', '▓', '█'];
+        let idx = ((mean / 255.0) * 4.0).round() as usize;
+        return (0, Some(RAMP[idx.min(4)]));
+    }
+
+    let mut bits: u128 = 0;
+    for (i, l) in lumas.iter().enumerate() {
+        if *l >= mean {
+            bits |= 1u128 << i;
+        }
+    }
+    (bits, None)
 }
 
 /// Render an image using the legacy density-ramp algorithm.
