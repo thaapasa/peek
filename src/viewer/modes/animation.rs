@@ -56,13 +56,6 @@ impl AnimationMode {
             scroll_y: 0,
         }
     }
-
-    fn max_scroll(prep_cols: u32, prep_rows: u32, term_cols: u32, term_rows: u32) -> (u32, u32) {
-        (
-            prep_cols.saturating_sub(term_cols),
-            prep_rows.saturating_sub(term_rows),
-        )
-    }
 }
 
 impl Mode for AnimationMode {
@@ -84,7 +77,7 @@ impl Mode for AnimationMode {
         let frame = &self.frames[self.current];
         let prep = render::prepare_decoded(frame.image.clone(), &self.config, term);
 
-        let (max_x, max_y) = Self::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
+        let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
         self.scroll_x = self.scroll_x.min(max_x);
         self.scroll_y = self.scroll_y.min(max_y);
         let visible_cols = prep.cols.min(term.cols);

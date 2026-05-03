@@ -84,16 +84,6 @@ impl ImageRenderMode {
             scroll_y: 0,
         }
     }
-
-    /// Maximum scroll offset on each axis given the prepared grid size and
-    /// the visible viewport. Returns `(max_x, max_y)`; an axis with no
-    /// overflow returns 0.
-    fn max_scroll(prep_cols: u32, prep_rows: u32, term_cols: u32, term_rows: u32) -> (u32, u32) {
-        (
-            prep_cols.saturating_sub(term_cols),
-            prep_rows.saturating_sub(term_rows),
-        )
-    }
 }
 
 impl Mode for ImageRenderMode {
@@ -135,7 +125,7 @@ impl Mode for ImageRenderMode {
         // Clamp scroll to the current grid + viewport, then carve a window.
         // Visible viewport is min(term, prep) per axis — nothing past the
         // image edge is meaningful to render.
-        let (max_x, max_y) = Self::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
+        let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
         self.scroll_x = self.scroll_x.min(max_x);
         self.scroll_y = self.scroll_y.min(max_y);
         let visible_cols = prep.cols.min(term.cols);
@@ -195,7 +185,7 @@ impl Mode for ImageRenderMode {
         let Some(cache) = &self.cache else {
             return false;
         };
-        let (max_x, max_y) = Self::max_scroll(
+        let (max_x, max_y) = render::max_scroll(
             cache.prep.cols,
             cache.prep.rows,
             cache.key.term_cols,

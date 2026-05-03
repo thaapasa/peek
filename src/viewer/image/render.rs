@@ -104,6 +104,16 @@ impl GridWindow {
     }
 }
 
+/// Maximum scroll offset on each axis given the prepared grid size and
+/// the visible viewport. Returns `(max_x, max_y)`; an axis with no
+/// overflow returns 0.
+pub fn max_scroll(prep_cols: u32, prep_rows: u32, term_cols: u32, term_rows: u32) -> (u32, u32) {
+    (
+        prep_cols.saturating_sub(term_cols),
+        prep_rows.saturating_sub(term_rows),
+    )
+}
+
 /// Render an image using the block-color algorithm.
 ///
 /// `full_cols` / `full_rows` describe the prepared grid (used to derive the
