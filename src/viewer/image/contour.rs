@@ -1,10 +1,13 @@
 //! Edge detection for `ImageMode::Contour`.
 //!
-//! Sobel 3×3 gradient on luma + Otsu auto-threshold → binary edge image.
-//! Output is RGB white-on-black so it flows through `render_block_color`'s
-//! 2-cluster path unchanged: edges become the bright cluster, background
-//! the dark cluster, glyph picker draws line shapes from the Geo+Block
-//! atlas subset.
+//! Sobel 3×3 gradient on luma + percentile threshold → binary edge image.
+//! Output is white-on-black RGB consumed by `render_contour`.
+//!
+//! Threshold is percentile-based rather than Otsu so a fixed fraction of
+//! pixels is marked as edges regardless of frame content. Otsu's bimodal
+//! assumption breaks on smooth-content frames (faces, sky), making
+//! animation flicker badly as the chosen threshold whips around between
+//! frames.
 
 use image::{DynamicImage, RgbImage};
 
@@ -13,9 +16,11 @@ const VOID: [u8; 3] = [0, 0, 0];
 
 /// Convert an RGB image to a binary edge image.
 ///
-/// Pipeline: luma → Sobel gradient magnitude → Otsu threshold.
-/// Pixels at or above threshold become white, others black.
-pub fn detect_edges(img: &DynamicImage) -> DynamicImage {
+/// Pipeline: luma → Sobel gradient magnitude → percentile threshold.
+/// `density` is the target fraction (0.0..1.0) of pixels above the
+/// threshold; higher means denser line-art. Pixels at or above the
+/// resolved threshold become white, others black.
+pub fn detect_edges(img: &DynamicImage, density: f32) -> DynamicImage {
     let rgb = img.to_rgb8();
     let (w, h) = rgb.dimensions();
     if w < 3 || h < 3 {
@@ -53,7 +58,7 @@ pub fn detect_edges(img: &DynamicImage) -> DynamicImage {
         }
     }
 
-    let threshold = otsu(&mag);
+    let threshold = percentile_threshold(&mag, density);
 
     let mut out = RgbImage::new(w, h);
     for y in 0..h as usize {
@@ -65,9 +70,14 @@ pub fn detect_edges(img: &DynamicImage) -> DynamicImage {
     DynamicImage::ImageRgb8(out)
 }
 
-/// Otsu's method: pick the threshold that maximizes inter-class variance.
-/// Operates on a 256-bin histogram of `data`.
-fn otsu(data: &[u8]) -> u8 {
+/// Percentile threshold: pick the value above which roughly `density`
+/// fraction of pixels lie. Walks a 256-bin histogram from the top until
+/// the running count reaches the target.
+///
+/// Floors at 8 so the threshold never collapses into the noise-floor
+/// (gradient ≈ 0 for flat regions of the image).
+fn percentile_threshold(data: &[u8], density: f32) -> u8 {
+    let density = density.clamp(0.001, 0.99);
     let mut hist = [0u64; 256];
     for &v in data {
         hist[v as usize] += 1;
@@ -77,37 +87,13 @@ fn otsu(data: &[u8]) -> u8 {
         return 128;
     }
 
-    let sum_total: f64 = hist
-        .iter()
-        .enumerate()
-        .map(|(i, &c)| i as f64 * c as f64)
-        .sum();
-
-    let mut w_bg = 0u64;
-    let mut sum_bg = 0.0f64;
-    let mut best_var = -1.0f64;
-    let mut best_t: u8 = 0;
-
-    for (t, &count) in hist.iter().enumerate() {
-        w_bg += count;
-        if w_bg == 0 {
-            continue;
-        }
-        let w_fg = total - w_bg;
-        if w_fg == 0 {
-            break;
-        }
-        sum_bg += t as f64 * count as f64;
-        let mean_bg = sum_bg / w_bg as f64;
-        let mean_fg = (sum_total - sum_bg) / w_fg as f64;
-        let var = w_bg as f64 * w_fg as f64 * (mean_bg - mean_fg).powi(2);
-        if var > best_var {
-            best_var = var;
-            best_t = t as u8;
+    let target = (density * total as f32).max(1.0) as u64;
+    let mut cum = 0u64;
+    for t in (0..256).rev() {
+        cum += hist[t];
+        if cum >= target {
+            return (t as u8).max(8);
         }
     }
-
-    // Floor at a small value so completely flat images don't pick 0
-    // (which would mark every pixel as an edge).
-    best_t.max(16)
+    8
 }

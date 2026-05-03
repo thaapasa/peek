@@ -85,6 +85,56 @@ pub fn best_glyph(cell_bits: u128, atlas: &[GlyphBitmap]) -> GlyphMatch {
     }
 }
 
+/// 4-connected 1-pixel dilation of a CELL_W × CELL_H bitmap.
+///
+/// Each set bit propagates to its N/S/E/W neighbours within the same
+/// 8×16 grid; row and column boundaries do not wrap.
+pub fn dilate_bitmap(b: u128) -> u128 {
+    // 0x7F per row: clears col 7 before left-shift, prevents row wrap.
+    const COL_KEEP_LEFT: u128 = 0x7F7F_7F7F_7F7F_7F7F_7F7F_7F7F_7F7F_7F7F;
+    // 0xFE per row: clears col 0 before right-shift, prevents row wrap.
+    const COL_KEEP_RIGHT: u128 = 0xFEFE_FEFE_FEFE_FEFE_FEFE_FEFE_FEFE_FEFE;
+    let right = (b & COL_KEEP_LEFT) << 1;
+    let left = (b & COL_KEEP_RIGHT) >> 1;
+    let down = b << 8;
+    let up = b >> 8;
+    b | right | left | up | down
+}
+
+/// Soft (dilation-aware) glyph match for sparse bitmaps such as edge
+/// images. Penalty has two halves:
+/// - `miss_bm`: bitmap pixels not covered by the dilated glyph (ink the
+///   glyph can't represent even with 1-px slack).
+/// - `miss_g`: glyph pixels not covered by the dilated bitmap (glyph ink
+///   that isn't backed by any nearby bitmap pixel).
+///
+/// Sums are minimised across the atlas. Empty glyphs (`bits == 0`) are
+/// excluded so a sparse bitmap doesn't collapse to whitespace.
+///
+/// `dilated_atlas[i]` must equal `dilate_bitmap(atlas[i].bits)` — caller
+/// hoists this precompute out of the per-cell hot loop.
+pub fn best_contour_glyph(bitmap: u128, atlas: &[GlyphBitmap], dilated_atlas: &[u128]) -> char {
+    if bitmap == 0 {
+        return ' ';
+    }
+    let dilated_bm = dilate_bitmap(bitmap);
+    let mut best_ch = ' ';
+    let mut best_score = u32::MAX;
+    for (g, &d_g) in atlas.iter().zip(dilated_atlas.iter()) {
+        if g.bits == 0 {
+            continue;
+        }
+        let miss_bm = (bitmap & !d_g).count_ones();
+        let miss_g = (g.bits & !dilated_bm).count_ones();
+        let score = miss_bm + miss_g;
+        if score < best_score {
+            best_score = score;
+            best_ch = g.ch;
+        }
+    }
+    best_ch
+}
+
 /// Check if a character is safe to use in a fixed-width grid.
 ///
 /// Many Unicode characters have "ambiguous" East Asian Width (EAW),

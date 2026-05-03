@@ -2,7 +2,9 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
 
 use super::clustering::fast_2_color;
-use super::glyph_atlas::{CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_glyph};
+use super::glyph_atlas::{
+    CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_contour_glyph, best_glyph, dilate_bitmap,
+};
 use super::{Background, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
@@ -184,6 +186,7 @@ pub fn render_contour(
 
     let atlas_refs = atlas_for_mode(mode);
     let atlas: Vec<GlyphBitmap> = atlas_refs.iter().map(|g| **g).collect();
+    let dilated_atlas: Vec<u128> = atlas.iter().map(|g| dilate_bitmap(g.bits)).collect();
 
     let edge_fg: [u8; 3] = [230, 230, 230];
     let mut lines = Vec::with_capacity(term_rows as usize);
@@ -209,8 +212,8 @@ pub fn render_contour(
                 line.push(' ');
                 continue;
             }
-            let glyph = best_glyph(bits, &atlas);
-            color_mode.write_fg(&mut line, edge_fg, glyph.ch);
+            let ch = best_contour_glyph(bits, &atlas, &dilated_atlas);
+            color_mode.write_fg(&mut line, edge_fg, ch);
         }
 
         line.push_str(color_mode.reset());
@@ -397,7 +400,7 @@ pub fn render_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) -
     match config.mode {
         ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
         ImageMode::Contour => {
-            let edges = super::contour::detect_edges(&img);
+            let edges = super::contour::detect_edges(&img, config.edge_density);
             render_contour(&edges, cols, rows, config.mode, config.color_mode)
         }
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
@@ -460,7 +463,7 @@ pub fn load_and_render_svg(
     let lines = match config.mode {
         ImageMode::Ascii => render_density(&img, cols, rows, config.color_mode),
         ImageMode::Contour => {
-            let edges = super::contour::detect_edges(&img);
+            let edges = super::contour::detect_edges(&img, config.edge_density);
             render_contour(&edges, cols, rows, config.mode, config.color_mode)
         }
         _ => render_block_color(&img, cols, rows, config.mode, config.color_mode),

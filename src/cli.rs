@@ -81,6 +81,10 @@ pub struct Args {
     #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii", "contour"], hide_short_help = true)]
     pub image_mode: String,
 
+    /// Edge density target for contour mode (fraction of pixels marked as edges, 0.01..0.5)
+    #[arg(long, default_value_t = 0.1, hide_short_help = true)]
+    pub edge_density: f32,
+
     /// Image transparency background: "auto" (detect), "black", "white", "checkerboard"
     #[arg(long, default_value = "auto", value_parser = ["auto", "black", "white", "checkerboard", "checker"], hide_short_help = true)]
     pub background: String,

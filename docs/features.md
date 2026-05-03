@@ -136,13 +136,13 @@ Raster formats rendered as ASCII art. Supported via the `image` crate:
 
 Five ASCII-art rendering modes (cyclable with `m`; CLI `--image-mode`):
 
-| Mode      | Description                                            |
-|-----------|--------------------------------------------------------|
-| `full`    | All glyphs (block, quadrant, extended)                 |
-| `block`   | Block / quadrant elements + ASCII subset               |
-| `geo`     | Block / quadrant elements + line segments only         |
-| `ascii`   | Legacy luminance-based density ramp                    |
-| `contour` | Sobel + Otsu edge detection rendered as line-art       |
+| Mode      | Description                                                                   |
+|-----------|-------------------------------------------------------------------------------|
+| `full`    | All glyphs (block, quadrant, extended)                                        |
+| `block`   | Block / quadrant elements + ASCII subset                                      |
+| `geo`     | Block / quadrant elements + line segments only                                |
+| `ascii`   | Legacy luminance-based density ramp                                           |
+| `contour` | Sobel edge detection rendered as line-art (`--edge-density` tunes line count) |
 
 In viewer mode, Tab switches between the ASCII art and the file info screen. 24-bit truecolor;
 status line shows the active mode.
