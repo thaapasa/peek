@@ -1,0 +1,17 @@
+---
+source: src/viewer/image/tests.rs
+expression: "render_raster(\"test-images/cozy-room.jpg\", ImageMode::Ascii, ColorMode::Plain,\nBackground::Auto,)"
+---
+;!1xuvzCUYmhpdbkkkkbbdbqUYXzcuQpqpppddpq
+:"-jvjjbdJbkCJCQ0OZmmmZmwmmZZqdd0|/|//xq
+>I~{tffk*wbaUU0QZ0LOOOwddppppqqpm){{]-(q
+;l>><~}OokhbYp&oBaJmwdkkqwwwwqqqZ/|1{1fq
+",":;?}nadaO{Z#k&aZbdkbbqmmmmwwwZjtf(/jq
+l<_?+jYbowhUI|mqbqwddbdwZZOZZZmwO/({1]{J
+"l+-+fvw#phOfcwddbhppqLJQmZZmqwmQ}[{/{jw
+,lI,!tzkh/11}cbhhbbmCUJQXjjrucUm0)_?}{/q
+IlI"I/vLLj_i~(/)|cOCOOOZv1nctffZO}i<<~}O
+..``!tJJwO|i<~+-{/)vYccc|+__>~)w0_!I;l?0
+"""^!/q0UXOc([>[x)|1?+-+<<<!li+Yn><i>i-Y
+^^,I<|uzwbQr}!!,nf)t?>][(ttt|tfxunuunnxu
+;I<?{{{rLoJv[~II?)]!,,:;>i!ii<>>>+-[(tjr

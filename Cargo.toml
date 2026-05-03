@@ -54,6 +54,9 @@ libc = "0.2"
 # Font rasterization for glyph atlas generation
 fontdue = "0.9"
 
+# Snapshot testing for image rendering output
+insta = "1"
+
 # Optimize image processing dependencies even in dev builds —
 # these are unusably slow without at least -O2
 [profile.dev.package.image]

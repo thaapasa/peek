@@ -16,6 +16,9 @@ mod mode;
 pub mod render;
 mod svg;
 
+#[cfg(test)]
+mod tests;
+
 pub use mode::ImageMode;
 
 /// Background mode for transparency compositing.
