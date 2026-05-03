@@ -12,6 +12,8 @@ pub enum ImageMode {
     Geo,
     /// Legacy density-ramp renderer (brightness-based, foreground only)
     Ascii,
+    /// Sobel edge detection: render image as line-art contours
+    Contour,
 }
 
 impl ImageMode {
@@ -20,6 +22,7 @@ impl ImageMode {
             "block" => Self::Block,
             "geo" => Self::Geo,
             "ascii" => Self::Ascii,
+            "contour" => Self::Contour,
             _ => Self::Full,
         }
     }
@@ -29,7 +32,8 @@ impl ImageMode {
             Self::Full => Self::Block,
             Self::Block => Self::Geo,
             Self::Geo => Self::Ascii,
-            Self::Ascii => Self::Full,
+            Self::Ascii => Self::Contour,
+            Self::Contour => Self::Full,
         }
     }
 
@@ -39,6 +43,7 @@ impl ImageMode {
             Self::Block => "block",
             Self::Geo => "geo",
             Self::Ascii => "ascii",
+            Self::Contour => "contour",
         }
     }
 }

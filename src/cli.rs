@@ -77,8 +77,8 @@ pub struct Args {
     #[arg(long, default_value = "0", hide_short_help = true)]
     pub width: u32,
 
-    /// Image rendering mode: "full" (all glyphs), "block" (blocks + punctuation), "geo" (blocks + lines only), "ascii" (legacy density ramp)
-    #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii"], hide_short_help = true)]
+    /// Image rendering mode: "full" (all glyphs), "block" (blocks + punctuation), "geo" (blocks + lines only), "ascii" (legacy density ramp), "contour" (Sobel edge line-art)
+    #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii", "contour"], hide_short_help = true)]
     pub image_mode: String,
 
     /// Image transparency background: "auto" (detect), "black", "white", "checkerboard"

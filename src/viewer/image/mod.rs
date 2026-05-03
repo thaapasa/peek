@@ -10,6 +10,7 @@ use crate::theme::ColorMode;
 
 pub(crate) mod animate;
 mod clustering;
+mod contour;
 mod glyph_atlas;
 mod mode;
 pub mod render;

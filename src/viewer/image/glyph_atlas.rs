@@ -122,6 +122,9 @@ pub fn atlas_for_mode(mode: ImageMode) -> Vec<&'static GlyphBitmap> {
                 ImageMode::Geo => {
                     matches!(g.category, GlyphCategory::Block | GlyphCategory::Geo)
                 }
+                ImageMode::Contour => {
+                    matches!(g.category, GlyphCategory::Block | GlyphCategory::Geo)
+                }
                 ImageMode::Ascii => false,
             };
             // Block elements are hardcoded with exact geometry and are
