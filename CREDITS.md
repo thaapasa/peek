@@ -14,17 +14,19 @@ The example images included in this repository are used under the
 
 ## Example vectors
 
-| File                              | Source                                                                                                                       | License                                                         |
-|-----------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------|
-| `test-images/calendar.svg`        | [Bootstrap Icons](https://icons.getbootstrap.com/icons/calendar2-week/)                                                      | [MIT](https://github.com/twbs/icons/blob/main/LICENSE)          |
-| `test-images/certificate.svg`     | [unDraw](https://undraw.co/search/certificate)                                                                               | [unDraw License](https://undraw.co/license)                     |
-| `test-images/feather.svg`         | [designed by OpenMoji](https://openmoji.org/library/emoji-1FAB6/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
-| `test-images/nature-kids.svg`     | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Vector-clip-art-of-kids-in-nature-poster/18798.html) | [CC0](https://publicdomainvectors.org/en/public-domain)         |
-| `test-images/star-struck.svg`     | [designed by OpenMoji](https://openmoji.org/library/emoji-1F929/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
-| `test-images/tropical-jungle.ai`  | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)         |
-| `test-images/tropical-jungle.eps` | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)         |
-| `test-images/unicorn.svg`         | [designed by OpenMoji](https://openmoji.org/library/emoji-1F984/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
-| `test-images/walking-outside.svg` | [unDraw](https://undraw.co/search/walking-outside)                                                                           | [unDraw License](https://undraw.co/license)                     |
+| File                                 | Source                                                                                                                       | License                                                             |
+|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------|
+| `test-images/calendar.svg`           | [Bootstrap Icons](https://icons.getbootstrap.com/icons/calendar2-week/)                                                      | [MIT](https://github.com/twbs/icons/blob/main/LICENSE)              |
+| `test-images/certificate.svg`        | [unDraw](https://undraw.co/search/certificate)                                                                               | [unDraw License](https://undraw.co/license)                         |
+| `test-images/feather.svg`            | [designed by OpenMoji](https://openmoji.org/library/emoji-1FAB6/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)     |
+| `test-images/loader-dots.svg`        | [svg-spinners by Utkarsh Verma](https://github.com/n3r4zzurr0/svg-spinners/blob/main/svg-css/6-dots-scale.svg)               | [MIT](https://github.com/n3r4zzurr0/svg-spinners/blob/main/LICENSE) |
+| `test-images/nature-kids.svg`        | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Vector-clip-art-of-kids-in-nature-poster/18798.html) | [CC0](https://publicdomainvectors.org/en/public-domain)             |
+| `test-images/pentaskelion-beads.svg` | [freesvg — Animated Polyskelion Beads (Jay Nick)](https://freesvg.org/animated-polyskelion-beads)                            | [CC0](https://freesvg.org/faq)                                      |
+| `test-images/star-struck.svg`        | [designed by OpenMoji](https://openmoji.org/library/emoji-1F929/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)     |
+| `test-images/tropical-jungle.ai`     | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)             |
+| `test-images/tropical-jungle.eps`    | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)             |
+| `test-images/unicorn.svg`            | [designed by OpenMoji](https://openmoji.org/library/emoji-1F984/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)     |
+| `test-images/walking-outside.svg`    | [unDraw](https://undraw.co/search/walking-outside)                                                                           | [unDraw License](https://undraw.co/license)                         |
 
 ## Animated test images
 
