@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use anyhow::Result;
+use syntect::highlighting::Color;
 
 use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
@@ -34,9 +35,10 @@ const PRETTY_MAX_BYTES: u64 = 16 * 1024 * 1024;
 /// a single batch (bounded by the cap).
 ///
 /// `r` flips `use_pretty` when `allow_pretty_toggle` is set — used for
-/// structured files (JSON/YAML/TOML/XML) where raw vs pretty is a
-/// meaningful user choice. SVG XML opts out so `r` instead falls through
-/// to cycling between SVG-rasterized and SVG-XML.
+/// structured files (JSON/YAML/TOML/XML) and SVG XML, where raw vs
+/// pretty is a meaningful user choice. Source code / plain text have no
+/// pretty form, so `r` is inert. The active sub-state (Pretty / Raw)
+/// shows up as a status-line segment.
 pub(crate) struct ContentMode {
     source: InputSource,
     line_source: LineSource,
@@ -447,6 +449,22 @@ impl Mode for ContentMode {
         } else {
             LINE_NUMBER_ACTIONS
         }
+    }
+
+    fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
+        if !self.allow_pretty_toggle {
+            return Vec::new();
+        }
+        // `pretty: Some(Err)` means pretty was attempted and refused
+        // (size cap or parse failure). `use_pretty` is forced false in
+        // that case, so the user is effectively locked in raw — surface
+        // that explicitly so the inert `r` key isn't mysterious.
+        let label = match (&self.pretty, self.use_pretty) {
+            (Some(Err(_)), _) => "Raw (forced)",
+            (_, true) => "Pretty",
+            (_, false) => "Raw",
+        };
+        vec![(label.to_string(), theme.label)]
     }
 
     fn handle(&mut self, action: Action) -> Handled {

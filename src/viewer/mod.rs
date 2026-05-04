@@ -1,7 +1,6 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use syntect::easy::HighlightLines;
 use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style};
 use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
@@ -23,20 +22,25 @@ pub mod structured;
 pub(crate) mod ui;
 
 /// Highlight text content as colored terminal lines.
+///
+/// Drives `LineStreamHighlighter` line-by-line so the output is byte-for-byte
+/// identical to the raw streaming path used by `ContentMode` — pretty
+/// pre-rendered output and raw streamed output agree on every escape
+/// sequence. (Previously this used `HighlightLines::highlight_line` without
+/// a trailing newline; syntect's end-of-line rules then fired differently
+/// from the streaming path, so toggling pretty/raw would shift highlight
+/// colors on multi-line tags.)
 pub fn highlight_lines(
     content: &str,
     syntax_token: &str,
-    tm: &ThemeManager,
+    tm: &Rc<ThemeManager>,
     theme_name: PeekThemeName,
     color_mode: ColorMode,
 ) -> Result<Vec<String>> {
-    let syntax = resolve_syntax(tm, syntax_token);
-    let theme = tm.theme_for(theme_name);
-    let mut hl = HighlightLines::new(syntax, theme);
+    let mut hl = LineStreamHighlighter::new(syntax_token.to_string(), Rc::clone(tm), theme_name);
     let mut lines = Vec::new();
     for line in content.lines() {
-        let ranges = hl.highlight_line(line, &tm.syntax_set)?;
-        lines.push(ranges_to_escaped(&ranges, color_mode));
+        lines.push(hl.feed(line, color_mode)?);
     }
     Ok(lines)
 }
@@ -189,19 +193,6 @@ fn ranges_to_escaped_trim_newline(ranges: &[(Style, &str)], color_mode: ColorMod
         }
         out.push_str(&color_mode.fg_seq(style.foreground));
         out.push_str(slice);
-    }
-    out.push_str(color_mode.reset());
-    out
-}
-
-/// Walk syntect's `(Style, &str)` ranges and emit one line of text with
-/// colors encoded according to `color_mode`. Replaces syntect's
-/// `as_24_bit_terminal_escaped`, which is hardcoded to 24-bit output.
-pub(crate) fn ranges_to_escaped(ranges: &[(Style, &str)], color_mode: ColorMode) -> String {
-    let mut out = String::new();
-    for (style, text) in ranges {
-        out.push_str(&color_mode.fg_seq(style.foreground));
-        out.push_str(text);
     }
     out.push_str(color_mode.reset());
     out
@@ -363,11 +354,10 @@ impl Registry {
         // structured/SVG views back to the raw source.
         let initial_use_pretty = pretty_target.is_some() && !args.raw;
 
-        // Structured files expose `r` as a pretty/raw toggle. SVG XML
-        // doesn't — flipping between the rasterized view and the XML
-        // source is done by Tab's view cycle, not `r`. Source/text have
-        // no pretty form.
-        let allow_pretty_toggle = matches!(file_type, FileType::Structured(_));
+        // Structured formats and SVG (which is XML) both expose `r` as a
+        // pretty/raw toggle on the Source view. Source code / plain text
+        // have no pretty form, so `r` is inert there.
+        let allow_pretty_toggle = matches!(file_type, FileType::Structured(_) | FileType::Svg);
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
@@ -481,6 +471,21 @@ mod tests {
             (
                 "Rust",
                 "/* multi-line\n   comment */\nfn main() {\n    let x = 42;\n    println!(\"{x}\");\n}\n",
+            ),
+            // XML with multi-line opening tag — pretty/raw color parity
+            // depends on syntect getting the trailing newline so end-of-line
+            // rules fire consistently. Without it, the second `<element`
+            // inside a multi-line tag gets a different scope than the first.
+            (
+                "XML",
+                r#"<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="100"
+  height="100">
+  <rect x="0" y="0" width="100" height="100"/>
+  <circle cx="50" cy="50" r="40"/>
+</svg>
+"#,
             ),
         ];
 

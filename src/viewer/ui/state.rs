@@ -607,3 +607,170 @@ fn draw_screen(
     stdout.flush()?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Args;
+    use crate::viewer::Registry;
+    use clap::Parser;
+
+    fn build_state<'a>(
+        args_argv: &[&str],
+        source: &'a InputSource,
+        detected: &'a Detected,
+    ) -> ViewerState<'a> {
+        let args = Args::parse_from(args_argv);
+        let registry = Registry::new(&args).unwrap();
+        let modes = registry.compose_modes(source, detected, &args).unwrap();
+        ViewerState::new(
+            source,
+            detected,
+            args.theme,
+            args.color,
+            RenderOptions::default(),
+            modes,
+        )
+        .unwrap()
+    }
+
+    fn fixture_source(rel: &str) -> InputSource {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(rel);
+        InputSource::File(path)
+    }
+
+    /// Tab on an SVG file walks ImageRender → ContentMode (XML source) →
+    /// Info → ImageRender. Hex/About/Help are skipped.
+    #[test]
+    fn tab_cycles_svg_view_modes() {
+        let source = fixture_source("test-images/calendar.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], &source, &detected);
+
+        let id_at = |s: &ViewerState| s.modes[s.active].id();
+        assert_eq!(id_at(&state), ModeId::ImageRender);
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(id_at(&state), ModeId::Content, "tab → XML source");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(id_at(&state), ModeId::Info, "tab → info");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(
+            id_at(&state),
+            ModeId::ImageRender,
+            "tab wraps back to image"
+        );
+    }
+
+    /// After Tab from ImageRender to Info on an SVG, ScrollDown must
+    /// advance scroll[Info]. Regression guard for the Tab+scroll path.
+    #[test]
+    fn scrolldown_on_info_after_tab_advances_scroll() {
+        let source = fixture_source("test-images/calendar.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], &source, &detected);
+
+        // Land on Info (skip ContentMode in between).
+        state.apply(Action::CycleView).unwrap(); // Content
+        state.apply(Action::CycleView).unwrap(); // Info
+        assert_eq!(state.modes[state.active].id(), ModeId::Info);
+
+        // Force a render so Info has a populated view + total.
+        state.ensure_active_rendered().unwrap();
+        let info_idx = state.active;
+        let total = state.views[info_idx].as_ref().unwrap().total;
+        let rows = content_rows();
+        // Sanity: only meaningful if Info has more lines than the viewport.
+        if total > rows {
+            let before = state.scroll[info_idx];
+            state.apply(Action::ScrollDown).unwrap();
+            let after = state.scroll[info_idx];
+            assert_eq!(after, before + 1, "ScrollDown should bump scroll by 1");
+        }
+    }
+
+    /// Static and animated SVG must expose the same Source mode
+    /// (ContentMode for XML pretty/raw). The image-side mode differs
+    /// (ImageRender vs SvgAnimation) but the source view is identical
+    /// — same label, same allow_pretty_toggle, same Pretty/Raw status
+    /// segment behavior.
+    #[test]
+    fn static_and_animated_svg_share_source_mode() {
+        let static_src = fixture_source("test-images/calendar.svg");
+        let static_det = crate::input::detect::detect(&static_src).unwrap();
+        let mut static_state = build_state(
+            &["peek", "test-images/calendar.svg"],
+            &static_src,
+            &static_det,
+        );
+
+        let anim_src = fixture_source("test-images/demo.svg");
+        let anim_det = crate::input::detect::detect(&anim_src).unwrap();
+        let mut anim_state = build_state(&["peek", "test-images/demo.svg"], &anim_src, &anim_det);
+
+        // First mode differs (Image render vs Animation).
+        assert_eq!(static_state.modes[0].id(), ModeId::ImageRender);
+        assert_eq!(anim_state.modes[0].id(), ModeId::Animation);
+
+        // Tab to source on both → land on ContentMode with label "Source".
+        static_state.apply(Action::CycleView).unwrap();
+        anim_state.apply(Action::CycleView).unwrap();
+        assert_eq!(
+            static_state.modes[static_state.active].id(),
+            ModeId::Content
+        );
+        assert_eq!(anim_state.modes[anim_state.active].id(), ModeId::Content);
+        assert_eq!(static_state.active_label(), "Source");
+        assert_eq!(anim_state.active_label(), "Source");
+
+        // Pretty/Raw segment is present on both (allow_pretty_toggle = true
+        // for SVG via the Structured | Svg match).
+        let static_segs = static_state.active_status_segments();
+        let anim_segs = anim_state.active_status_segments();
+        assert!(
+            static_segs.iter().any(|(s, _)| s == "Pretty"),
+            "static SVG source should show Pretty segment, got {static_segs:?}"
+        );
+        assert!(
+            anim_segs.iter().any(|(s, _)| s == "Pretty"),
+            "animated SVG source should show Pretty segment, got {anim_segs:?}"
+        );
+    }
+
+    /// ScrollDown on the SVG source view (ContentMode pretty XML) must
+    /// advance the scroll offset and the rendered window content.
+    #[test]
+    fn scrolldown_on_svg_source_shifts_window() {
+        let source = fixture_source("test-images/demo.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/demo.svg"], &source, &detected);
+
+        state.apply(Action::CycleView).unwrap(); // → Content (XML source)
+        assert_eq!(state.modes[state.active].id(), ModeId::Content);
+
+        state.ensure_active_rendered().unwrap();
+        let idx = state.active;
+        let total = state.views[idx].as_ref().unwrap().total;
+        let rows = content_rows();
+        assert!(
+            total > rows + 5,
+            "demo.svg pretty XML must exceed viewport (total={total}, rows={rows})"
+        );
+        let initial_first = state.views[idx].as_ref().unwrap().lines[0].clone();
+
+        for _ in 0..5 {
+            state.apply(Action::ScrollDown).unwrap();
+        }
+        assert_eq!(state.scroll[idx], 5);
+        state.ensure_active_rendered().unwrap();
+        let scrolled_first = state.views[idx].as_ref().unwrap().lines[0].clone();
+        assert_ne!(
+            initial_first, scrolled_first,
+            "viewport content should shift after scrolling"
+        );
+        assert_eq!(state.views[idx].as_ref().unwrap().scroll_at, 5);
+    }
+}
