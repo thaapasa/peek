@@ -707,9 +707,13 @@ mod tests {
             &static_det,
         );
 
-        let anim_src = fixture_source("test-images/demo.svg");
+        let anim_src = fixture_source("test-images/airlock-demo.svg");
         let anim_det = crate::input::detect::detect(&anim_src).unwrap();
-        let mut anim_state = build_state(&["peek", "test-images/demo.svg"], &anim_src, &anim_det);
+        let mut anim_state = build_state(
+            &["peek", "test-images/airlock-demo.svg"],
+            &anim_src,
+            &anim_det,
+        );
 
         // First mode differs (Image render vs Animation).
         assert_eq!(static_state.modes[0].id(), ModeId::ImageRender);
@@ -744,9 +748,13 @@ mod tests {
     /// advance the scroll offset and the rendered window content.
     #[test]
     fn scrolldown_on_svg_source_shifts_window() {
-        let source = fixture_source("test-images/demo.svg");
+        let source = fixture_source("test-images/airlock-demo.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
-        let mut state = build_state(&["peek", "test-images/demo.svg"], &source, &detected);
+        let mut state = build_state(
+            &["peek", "test-images/airlock-demo.svg"],
+            &source,
+            &detected,
+        );
 
         state.apply(Action::CycleView).unwrap(); // → Content (XML source)
         assert_eq!(state.modes[state.active].id(), ModeId::Content);
@@ -757,7 +765,7 @@ mod tests {
         let rows = content_rows();
         assert!(
             total > rows + 5,
-            "demo.svg pretty XML must exceed viewport (total={total}, rows={rows})"
+            "airlock-demo.svg pretty XML must exceed viewport (total={total}, rows={rows})"
         );
         let initial_first = state.views[idx].as_ref().unwrap().lines[0].clone();
 

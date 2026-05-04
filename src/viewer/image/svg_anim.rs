@@ -967,8 +967,8 @@ mod tests {
         };
         let n: usize = n_str.parse().unwrap_or(5);
         let path = format!(
-            "{}/Downloads/demo.svg",
-            std::env::var("HOME").unwrap_or_default()
+            "{}/test-images/airlock-demo.svg",
+            env!("CARGO_MANIFEST_DIR")
         );
         let bytes = std::fs::read(&path).unwrap();
         let model = try_parse_bytes(&bytes).expect("animated");
@@ -982,18 +982,15 @@ mod tests {
         );
     }
 
-    /// Sanity-check the demo file (`~/Downloads/demo.svg`) when present:
-    /// frame 0 should differ visually from a mid-animation frame. Skipped
-    /// if the file isn't on disk so CI / fresh checkouts pass without it.
+    /// Sanity-check the airlock demo fixture: frame 0 should differ
+    /// visually from a mid-animation frame.
     #[test]
     fn demo_svg_frames_diverge_when_available() {
-        let path = match std::env::var("HOME") {
-            Ok(h) => format!("{h}/Downloads/demo.svg"),
-            Err(_) => return,
-        };
-        let Ok(bytes) = std::fs::read(&path) else {
-            return;
-        };
+        let path = format!(
+            "{}/test-images/airlock-demo.svg",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        let bytes = std::fs::read(&path).expect("airlock-demo.svg fixture missing");
         let model = try_parse_bytes(&bytes).expect("demo file is animated");
         assert!(model.frames.len() > 4, "expected many frames");
         let mid = model.frames.len() / 2;
