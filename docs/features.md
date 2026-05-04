@@ -11,9 +11,11 @@ toggling options, scrolling, searching, and switching between views.
 
 Works for all file types via the mode-stack architecture: text/source/structured `ContentMode`,
 `ImageRenderMode` for raster + rasterized SVG, `AnimationMode` for GIF/WebP, plus universal
-`HexMode` / `InfoMode` / `HelpMode` / `AboutMode`. Scrolling, Tab/i toggle to file info, help (`h`/
-`?`), about (`a`), live theme cycle (`t`), color-encoding cycle (`c`), `r` (raw/pretty for
-structured; primary-cycle for SVG rasterized↔XML). Image-specific: `b` cycles background, `m` cycles
+`HexMode` / `InfoMode` / `HelpMode` / `AboutMode`. Scrolling; Tab cycles the file's view modes
+(content / image / SVG-source / Info — Hex, About, and Help are kept on dedicated keys); `i` jumps
+straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`); color-encoding
+cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
+background, `m` cycles
 render mode. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. `l` toggles the
 line-number gutter in text views. Search not yet.
 
@@ -144,14 +146,14 @@ Five ASCII-art rendering modes (cyclable with `m`; CLI `--image-mode`):
 | `ascii`   | Legacy luminance-based density ramp                                           |
 | `contour` | Sobel edge detection rendered as line-art (`--edge-density` tunes line count) |
 
-In viewer mode, Tab switches between the ASCII art and the file info screen. 24-bit truecolor;
-status line shows the active mode.
+In viewer mode, Tab cycles the file's view modes (image → file info for raster; image → SVG source
+→ file info for SVG). 24-bit truecolor; status line shows the active mode.
 
 #### SVG ✅
 
 SVG (`.svg`) is vector; the `image` crate doesn't handle it. Rasterized via `resvg`.
 
-Two viewing modes (toggle with `r`):
+Two viewing modes (cycle with Tab):
 
 - **Rendered preview** (default) — rasterize, render through the image pipeline
 - **Source view** — syntax-highlighted XML (pretty or raw)

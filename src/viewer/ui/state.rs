@@ -41,19 +41,13 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::PageDown, "Page down"),
     (Action::Top, "Jump to top"),
     (Action::Bottom, "Jump to bottom"),
-    (Action::ToggleContentInfo, "Toggle content / file info"),
+    (Action::CycleView, "Cycle file's view modes"),
     (Action::SwitchInfo, "File info"),
     (Action::ToggleHelp, "Toggle help"),
     (Action::SwitchToHex, "Hex dump mode"),
     (Action::SwitchToAbout, "About / status screen"),
     (Action::CycleTheme, "Next theme"),
     (Action::CycleColorMode, "Next color mode"),
-    // `r` is dispatched globally so modes that don't handle it locally
-    // fall through to `cycle_primary` (e.g. SVG rasterized → XML view).
-    (
-        Action::ToggleRawSource,
-        "Toggle raw / pretty / cycle primary",
-    ),
 ];
 
 pub(crate) struct ViewerState<'a> {
@@ -234,8 +228,8 @@ impl<'a> ViewerState<'a> {
                 self.jump_to(ModeId::Info);
                 Outcome::Redraw
             }
-            Action::ToggleContentInfo => {
-                self.toggle_aux(ModeId::Info);
+            Action::CycleView => {
+                self.cycle_view();
                 Outcome::Redraw
             }
             Action::ToggleHelp => {
@@ -258,18 +252,12 @@ impl<'a> ViewerState<'a> {
                 self.cycle_color_mode();
                 Outcome::Redraw
             }
-            Action::ToggleRawSource => {
-                // Active mode declined `r` — cycle to the next primary mode
-                // (skipping Info/Help/Hex). For SVG, this swaps rasterized
-                // ↔ XML view; for files with one primary, no-op.
-                self.cycle_primary();
-                Outcome::Redraw
-            }
             // Mode-local actions: routed via the mode's own `handle` before
             // we get here. Listed explicitly so adding a new Action variant
             // forces a non-exhaustive-match compile error in this function
             // and a deliberate decision about which side handles it.
-            Action::PlayPause
+            Action::ToggleRawSource
+            | Action::PlayPause
             | Action::NextFrame
             | Action::PrevFrame
             | Action::CycleBackground
@@ -367,22 +355,30 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    /// Advance the active index to the next primary (non-aux) mode.
-    /// For SVG this swaps rasterized ↔ XML; for files with a single
-    /// primary mode, this is a no-op. Used as the fallback handler for
-    /// `r` when no mode consumes it.
-    fn cycle_primary(&mut self) {
+    /// Advance the active index to the next view mode in the cycle.
+    /// Bound to `Tab`. Walks every mode except the overlay-style aux
+    /// modes (Help, About) and Hex — Hex has its own dedicated key and
+    /// is not part of the document-view cycle. The exception is binary
+    /// files, where Hex *is* the data view: when no non-aux mode exists,
+    /// Hex is included so Tab still toggles Hex ↔ Info.
+    fn cycle_view(&mut self) {
         let n = self.modes.len();
+        let has_primary = self.modes.iter().any(|m| !m.is_aux());
         let mut i = self.active;
         for _ in 0..n {
             i = (i + 1) % n;
             if i == self.active {
                 break;
             }
-            if !self.modes[i].is_aux() {
-                self.set_active(i);
-                return;
+            let id = self.modes[i].id();
+            if matches!(id, ModeId::Help | ModeId::About) {
+                continue;
             }
+            if id == ModeId::Hex && has_primary {
+                continue;
+            }
+            self.set_active(i);
+            return;
         }
     }
 

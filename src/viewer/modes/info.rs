@@ -19,10 +19,6 @@ impl Mode for InfoMode {
         "Info"
     }
 
-    fn is_aux(&self) -> bool {
-        true
-    }
-
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
         let full = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
         let total = full.len();

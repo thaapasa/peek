@@ -3,8 +3,9 @@
 //! A `Mode` is one renderable view of a file (content, file info, help,
 //! hex dump, image render, structured source, etc.) plus its interactive
 //! behavior. The interactive viewer is configured with a list of modes
-//! per file type — Tab cycles between them, `i` jumps to Info, `h`
-//! toggles Help. The same mode list also drives the `--print` / pipe
+//! per file type — Tab cycles through the file's view modes (incl.
+//! Info), `i` jumps to Info, `x` toggles Hex, `h` toggles Help, `a`
+//! toggles About. The same mode list also drives the `--print` / pipe
 //! path: the first non-aux mode's `render_to_pipe` is written straight
 //! to stdout.
 
@@ -136,9 +137,11 @@ pub(crate) trait Mode {
     fn label(&self) -> &str;
 
     /// Whether this mode is auxiliary — reachable only via dedicated keys
-    /// (Tab/i, h, x), not via the `r` primary cycle. Aux modes don't show
-    /// up in `cycle_primary`, and toggling their dedicated key returns to
-    /// `last_primary`. Default `false`; Info/Help/Hex override.
+    /// (`h` Help, `x` Hex, `a` About), not part of the document content.
+    /// Aux modes are skipped by the print/pipe path's "first data mode"
+    /// pick, and toggling their dedicated key returns to `last_primary`.
+    /// Default `false`; Help/Hex/About override. (Info is *not* aux —
+    /// it joins the Tab cycle alongside the file's content views.)
     fn is_aux(&self) -> bool {
         false
     }

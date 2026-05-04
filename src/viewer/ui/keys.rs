@@ -45,8 +45,11 @@ pub(crate) enum Action {
     SwitchInfo,
     /// Toggle the help overlay.
     ToggleHelp,
-    /// Cycle between the content view and the file-info view.
-    ToggleContentInfo,
+    /// Cycle through the file's view modes (e.g. SVG: rendered → XML
+    /// source → info → rendered). Skips overlay-style aux modes (Help,
+    /// About) and Hex (which has its own dedicated key) unless Hex is
+    /// the only data view (binary files).
+    CycleView,
     /// Cycle to the next theme.
     CycleTheme,
     /// Cycle the output color mode (truecolor → 256 → 16 → grayscale → plain).
@@ -65,7 +68,9 @@ pub(crate) enum Action {
     ScrollLeft,
     /// Scroll the visible viewport one step right (FitHeight images).
     ScrollRight,
-    /// Toggle raw / pretty rendering (text + SVG source).
+    /// Toggle raw / pretty rendering inside ContentMode (structured
+    /// JSON/YAML/TOML/XML only). No global fallback — modes that don't
+    /// consume `r` ignore it.
     ToggleRawSource,
     /// Toggle the line-number gutter in text views.
     ToggleLineNumbers,
@@ -94,7 +99,7 @@ impl Action {
         const BOTTOM:         &[Binding] = &[Binding::plain(End),       Binding::plain(Char('G'))];
         const SWITCH_INFO:    &[Binding] = &[Binding::plain(Char('i'))];
         const TOGGLE_HELP:    &[Binding] = &[Binding::plain(Char('h')), Binding::plain(Char('?'))];
-        const TOGGLE_CI:      &[Binding] = &[Binding::plain(Tab)];
+        const CYCLE_VIEW:     &[Binding] = &[Binding::plain(Tab)];
         const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
         const CYCLE_COLOR:    &[Binding] = &[Binding::plain(Char('c'))];
         const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
@@ -120,7 +125,7 @@ impl Action {
             Action::Bottom            => BOTTOM,
             Action::SwitchInfo        => SWITCH_INFO,
             Action::ToggleHelp        => TOGGLE_HELP,
-            Action::ToggleContentInfo => TOGGLE_CI,
+            Action::CycleView         => CYCLE_VIEW,
             Action::CycleTheme        => CYCLE_THEME,
             Action::CycleColorMode    => CYCLE_COLOR,
             Action::SwitchToHex       => SWITCH_HEX,
@@ -151,7 +156,7 @@ impl Action {
             Action::Bottom            => "End / G",
             Action::SwitchInfo        => "i",
             Action::ToggleHelp        => "h / ?",
-            Action::ToggleContentInfo => "Tab",
+            Action::CycleView         => "Tab",
             Action::CycleTheme        => "t",
             Action::CycleColorMode    => "c",
             Action::SwitchToHex       => "x",

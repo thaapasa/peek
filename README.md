@@ -77,7 +77,7 @@ peek data.yaml
 # Image (glyph-matched ASCII art)
 peek photo.jpg
 
-# SVG (rasterized to ASCII art; r toggles XML source)
+# SVG (rasterized to ASCII art; Tab cycles to XML source / file info)
 peek icon.svg
 
 # Pipe output (no viewer, still highlighted)
@@ -137,12 +137,12 @@ stdout.
 | `PgDn` / `Space` | Page down                       |
 | `Home` / `g`     | Top                             |
 | `End` / `G`      | Bottom                          |
-| `Tab`            | Cycle content / file info       |
+| `Tab`            | Cycle file's view modes         |
 | `i`              | File info                       |
 | `h` / `?`        | Toggle help                     |
 | `t`              | Cycle theme                     |
 | `c`              | Cycle color mode                |
-| `r`              | Toggle raw / pretty             |
+| `r`              | Toggle raw / pretty (structured)|
 | `x`              | Toggle hex dump                 |
 | `a`              | About / status screen           |
 | `m`              | Cycle image render mode         |

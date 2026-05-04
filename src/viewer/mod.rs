@@ -364,8 +364,9 @@ impl Registry {
         let initial_use_pretty = pretty_target.is_some() && !args.raw;
 
         // Structured files expose `r` as a pretty/raw toggle. SVG XML
-        // doesn't — there `r` should fall through to cycle_primary so the
-        // user can flip rasterized ↔ XML. Source/text have no pretty form.
+        // doesn't — flipping between the rasterized view and the XML
+        // source is done by Tab's view cycle, not `r`. Source/text have
+        // no pretty form.
         let allow_pretty_toggle = matches!(file_type, FileType::Structured(_));
 
         let label: &'static str = match file_type {

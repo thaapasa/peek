@@ -342,21 +342,30 @@ loop {
 `redraw` calls `state.ensure_active_rendered()` (lazy mode render), composes the status line (name,
 mode label, status segments, theme), then `state.draw()`.
 
-### Toggle semantics: Tab, `i`, `h`, `x`
+### View cycle: Tab, `i`, `h`, `x`, `a`
 
-Aux modes (Info, Help, Hex) are reachable only via dedicated keys — they don't appear in the `r`
-primary cycle. Aux-ness is declared by the mode itself (`Mode::is_aux()`), not hardcoded — adding a
-new aux mode means overriding one trait method, no churn in `ViewerState`.
-`ViewerState::toggle_aux(target_id)` is shared by Tab (Info), `h` (Help), and `x` (Hex): if active
-mode *is* the target, return to `last_primary`; otherwise enter target. `i` (`SwitchInfo`) is a
-one-way jump to Info.
+Tab cycles through the file's view modes — every mode in the stack except the overlay-style aux
+modes (`Help`, `About`) and `Hex` (which has its own dedicated key). For SVG that's `ImageRender →
+ContentMode (XML source) → Info`; for text/source `Content → Info`; for an animated image
+`AnimationMode → Info`. The exception is binary files, where `Hex` *is* the data view: when the
+stack contains no non-aux mode, `cycle_view` includes `Hex` so Tab still toggles `Hex ↔ Info`.
+
+Aux modes (`Help`, `Hex`, `About`) are reachable only via dedicated keys (`h`/`?`, `x`, `a`).
+Aux-ness is declared by the mode itself (`Mode::is_aux()`), not hardcoded — adding a new aux mode
+means overriding one trait method, no churn in `ViewerState`. `ViewerState::toggle_aux(target_id)`
+is shared by `h`, `x`, and `a`: if active mode *is* the target, return to `last_primary`; otherwise
+enter target. `i` (`SwitchInfo`) is a one-way jump to Info.
+
+`r` is mode-local to `ContentMode` (toggle pretty/raw on structured JSON/YAML/TOML/XML). Modes that
+don't consume `r` ignore it — there is no global fallback.
 
 `last_primary` updates whenever the active mode lands on a non-aux mode. Aux-to-aux transitions
-(Hex → Info, Info → Hex) leave it alone, so the path back to "your actual work" survives any number
-of detours — Hex → Info → Tab returns to the original primary, not to Hex.
+(Hex → Info → Hex) leave it alone, so the path back to "your actual work" survives any number of
+detours — Hex → Info → Tab returns to the original primary, not to Hex.
 
-For binary files (stack: `[Hex, Info, Help]`, no primary), `last_primary` stays `None`; exiting an
-aux falls back to mode 0 (Hex itself), so `x` from standalone hex is a no-op.
+For binary files (stack: `[Hex, Info, About, Help]`, no primary), `last_primary` stays `None`;
+exiting an aux falls back to mode 0 (Hex itself), so `x` from standalone hex is a no-op, and Tab
+toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 
 ## Adding a new file type
 
@@ -379,8 +388,8 @@ modes.push(Box::new(PdfRenderMode::new(source.clone())? ));  // page preview
 }
 ```
 
-User gets Tab cycling between text extract ↔ Info, `r` cycling between text/render primaries, `x`
-toggling to hex — without touching `main.rs` or the event loop.
+User gets Tab cycling through `text extract → page render → Info`, `x` toggling to hex, `i` jumping
+straight to Info — without touching `main.rs` or the event loop.
 
 ## Adding a new theme
 
