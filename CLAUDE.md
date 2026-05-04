@@ -103,6 +103,7 @@ docs/
   conventions.md       — Coding conventions
   release.md           — Release pipeline, install.sh, recovery from failed runs
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
+  svg-anim-perf.md     — SVG animation memory profile + optimization options
 .github/workflows/
   release.yml          — Manual-dispatch release workflow (5-target build matrix)
 install.sh             — POSIX installer for curl | sh on macOS/Linux

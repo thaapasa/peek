@@ -239,6 +239,10 @@ The composition decision lives in `Registry::compose_modes`: `FileType::Svg` fir
 `svg_anim::try_parse` and pushes `SvgAnimationMode` if a model is found, falling back to
 `ImageRenderMode` (static) otherwise. `--no-svg-anim` bypasses parsing.
 
+Memory profile and first-loop latency analysis (plus optimization options that have *not* been
+implemented yet) live in [svg-anim-perf.md](svg-anim-perf.md). Phase 1 is the working baseline; the
+perf doc is the queue.
+
 ### ImageConfig (`viewer/image/mod.rs`)
 
 Bundles image rendering parameters (mode, width, background, margin, color mode) into one struct
