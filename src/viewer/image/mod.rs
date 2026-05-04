@@ -15,6 +15,7 @@ mod glyph_atlas;
 mod mode;
 pub mod render;
 mod svg;
+pub(crate) mod svg_anim;
 
 #[cfg(test)]
 mod tests;

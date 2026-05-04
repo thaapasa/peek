@@ -11,7 +11,7 @@ use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
-    Mode,
+    Mode, SvgAnimationMode,
 };
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
@@ -284,12 +284,21 @@ impl Registry {
                 }
                 FileType::Svg => {
                     let cfg = self.image_config(args);
-                    modes.push(Box::new(ImageRenderMode::new(
-                        source.clone(),
-                        cfg,
-                        ImageKind::Svg,
-                    )));
-                    // Pair the rasterized SVG with its XML source view.
+                    let anim = if args.no_svg_anim {
+                        None
+                    } else {
+                        image::svg_anim::try_parse(source)?
+                    };
+                    if let Some(model) = anim {
+                        modes.push(Box::new(SvgAnimationMode::new(model, cfg)));
+                    } else {
+                        modes.push(Box::new(ImageRenderMode::new(
+                            source.clone(),
+                            cfg,
+                            ImageKind::Svg,
+                        )));
+                    }
+                    // Pair the SVG view with its XML source.
                     modes.push(self.text_content_mode(source, file_type, args)?);
                 }
                 FileType::Binary => {

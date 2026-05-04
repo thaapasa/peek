@@ -116,15 +116,16 @@ raw).
 A `Mode` is one renderable + interactive view of a file. The interactive viewer drives a
 `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x` shortcuts to Info/Help/Hex). Today's modes:
 
-| Mode              | Used by                                      | Owns scroll?           | Reacts to resize? |
-|-------------------|----------------------------------------------|------------------------|-------------------|
-| `ContentMode`     | text, source, structured, SVG XML            | no                     | no                |
-| `HexMode`         | binary; reachable from any view via `x`      | **yes** (byte-aligned) | **yes**           |
-| `ImageRenderMode` | raster + rasterized SVG                      | no                     | **yes**           |
-| `AnimationMode`   | GIF / WebP (drives `next_tick`/`tick`)       | no                     | **yes**           |
-| `InfoMode`        | every file (file metadata)                   | no                     | no                |
-| `HelpMode`        | every file (keyboard-shortcut listing)       | no                     | no                |
-| `AboutMode`       | every file (logo, version, palette swatches) | no                     | no                |
+| Mode                | Used by                                       | Owns scroll?           | Reacts to resize? |
+|---------------------|-----------------------------------------------|------------------------|-------------------|
+| `ContentMode`       | text, source, structured, SVG XML             | no                     | no                |
+| `HexMode`           | binary; reachable from any view via `x`       | **yes** (byte-aligned) | **yes**           |
+| `ImageRenderMode`   | raster + rasterized SVG                       | no                     | **yes**           |
+| `AnimationMode`     | GIF / WebP (drives `next_tick`/`tick`)        | no                     | **yes**           |
+| `SvgAnimationMode`  | CSS-`@keyframes` SVG (lazy per-frame raster)  | no                     | **yes**           |
+| `InfoMode`          | every file (file metadata)                    | no                     | no                |
+| `HelpMode`          | every file (keyboard-shortcut listing)        | no                     | no                |
+| `AboutMode`         | every file (logo, version, palette swatches)  | no                     | no                |
 
 ### Pipe-mode rendering (`Mode::render_to_pipe`)
 
@@ -217,6 +218,26 @@ interactive path across file types.
 `ImageConfig`. It drives the unified event loop's timeout via `next_tick()` (remaining duration to
 next frame, or `None` when paused / on detour to Info / Help / Hex). When `event::poll` times out,
 `tick()` advances `current` and signals a redraw.
+
+### SVG animation (`viewer/modes/svg_animation.rs` + `viewer/image/svg_anim.rs`)
+
+resvg/usvg do not evaluate CSS animations. To play an animated SVG, `viewer/image/svg_anim.rs`
+extracts the animation timeline from the SVG itself: `<style>` blocks are scanned for `@keyframes`
+rules, and elements with inline `style="...animation-name:..."` references are matched to those
+rules. The parser builds an `AnimatedSvg` value: a marked SVG string with `__PEEK_ANIM_<i>__`
+placeholders inserted at each animated element's opening tag, plus a merged frame timeline (one
+entry per visible transition with its hold delay). `render_frame(model, idx)` substitutes each
+placeholder with `transform="..."` to produce a complete frame-N SVG that resvg can rasterize.
+
+`SvgAnimationMode` mirrors `AnimationMode`'s controls (play/pause, frame nav, fit, scroll) but
+rasterizes lazily per frame via `render::prepare_svg_bytes`. A bounded `VecDeque<(CacheKey,
+PreparedImage)>` of size 64 holds recently composited frames, keyed by `(frame_idx, cols, rows,
+margin, ascii, fit)`; full-loop replay after a steady state is free. Cache is cleared on
+mode/background/fit toggles since the prepared grid no longer matches.
+
+The composition decision lives in `Registry::compose_modes`: `FileType::Svg` first tries
+`svg_anim::try_parse` and pushes `SvgAnimationMode` if a model is found, falling back to
+`ImageRenderMode` (static) otherwise. `--no-svg-anim` bypasses parsing.
 
 ### ImageConfig (`viewer/image/mod.rs`)
 

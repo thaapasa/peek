@@ -27,6 +27,7 @@ mod help;
 mod hex;
 mod image_render;
 mod info;
+mod svg_animation;
 
 pub(crate) use about::AboutMode;
 pub(crate) use animation::AnimationMode;
@@ -35,6 +36,7 @@ pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;
 pub(crate) use image_render::{ImageKind, ImageRenderMode};
 pub(crate) use info::InfoMode;
+pub(crate) use svg_animation::SvgAnimationMode;
 
 /// Stable identifier for a mode. Used to look up modes in a stack and
 /// to drive view-switch keybindings (e.g. `i` → Info, `x` → Hex).

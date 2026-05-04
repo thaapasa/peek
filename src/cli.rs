@@ -93,6 +93,10 @@ pub struct Args {
     #[arg(long, default_value = "0", hide_short_help = true)]
     pub margin: u32,
 
+    /// Disable SVG animation playback; render the static SVG instead
+    #[arg(long, hide_short_help = true)]
+    pub no_svg_anim: bool,
+
     /// Show file info instead of file contents
     #[arg(long)]
     pub info: bool,

@@ -158,14 +158,18 @@ Two viewing modes (toggle with `r`):
 
 Re-renders on terminal resize.
 
-##### SVG Animation ☐
+##### SVG Animation ◐
 
-`<animate>` / `<animateMotion>` elements are silently ignored — SVG always goes through
-`ImageRenderMode` as one rasterized frame. Short term: emit a `FileInfo` warning when these
-elements are present so the static render isn't misread as the whole picture. Longer term:
-rasterize the animation timeline in `viewer/image/svg.rs` into `Vec<AnimFrame>` and route through
-`AnimationMode` like GIF / WebP. (`resvg`'s animation API surface is limited, so the full version
-is a bigger project.)
+CSS `@keyframes` animation is supported (`viewer/image/svg_anim.rs`). The parser collects each
+`@keyframes` rule plus inline-style `animation-*` references on elements, builds a merged frame
+timeline (one frame per stop for `steps()` timing, ~30 fps interpolated for `linear`), and
+`SvgAnimationMode` rasterizes each frame on demand from a per-frame patched SVG. A bounded LRU (64
+entries, keyed by `(frame, grid_cols, grid_rows)`) makes a full second loop free.
+
+Phase 1 covers what termsvg / asciinema-svg-style files use: `transform: translateX/Y/translate`
+under `steps()` or `linear` timing, inline-style targets only. SMIL (`<animate>`,
+`<animateMotion>`) and class/id-selector targets are deferred. `--no-svg-anim` forces the static
+render. The Info panel reports frame count, total duration, and looping vs one-shot.
 
 #### Transparency Handling ◐
 

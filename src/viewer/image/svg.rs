@@ -3,10 +3,35 @@
 //! calls `render::prepare_svg`); these helpers are the resvg-backed
 //! primitives behind that pipeline.
 
+use std::sync::{Arc, OnceLock};
+
 use anyhow::{Context, Result};
 use image::DynamicImage;
+use resvg::usvg::fontdb;
 
 use crate::input::InputSource;
+
+/// Lazily-initialized font database shared across all SVG parses. Loading
+/// system fonts is slow (~100 ms — 1 s on macOS); we do it once. Without
+/// it, SVGs containing `<text>` elements (notably termsvg / asciinema-svg
+/// recordings) drop their glyphs entirely.
+fn font_db() -> Arc<fontdb::Database> {
+    static FONTDB: OnceLock<Arc<fontdb::Database>> = OnceLock::new();
+    FONTDB
+        .get_or_init(|| {
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+            Arc::new(db)
+        })
+        .clone()
+}
+
+fn usvg_options() -> resvg::usvg::Options<'static> {
+    resvg::usvg::Options {
+        fontdb: font_db(),
+        ..Default::default()
+    }
+}
 
 /// Get the intrinsic dimensions of an SVG source.
 pub fn svg_dimensions(source: &InputSource) -> Result<(u32, u32)> {
@@ -18,7 +43,18 @@ pub fn svg_dimensions(source: &InputSource) -> Result<(u32, u32)> {
 /// Rasterize an SVG source to a bitmap at the given pixel dimensions.
 pub fn rasterize_svg(source: &InputSource, width: u32, height: u32) -> Result<DynamicImage> {
     let tree = load_svg(source)?;
+    rasterize_tree(&tree, width, height)
+}
 
+/// Rasterize an in-memory SVG document to a bitmap. Used by the animation
+/// path, which generates a fresh SVG per frame and feeds it directly.
+pub fn rasterize_svg_bytes(bytes: &[u8], width: u32, height: u32) -> Result<DynamicImage> {
+    let tree =
+        resvg::usvg::Tree::from_data(bytes, &usvg_options()).context("failed to parse SVG")?;
+    rasterize_tree(&tree, width, height)
+}
+
+fn rasterize_tree(tree: &resvg::usvg::Tree, width: u32, height: u32) -> Result<DynamicImage> {
     let mut pixmap =
         resvg::tiny_skia::Pixmap::new(width, height).context("failed to create pixmap")?;
 
@@ -27,7 +63,7 @@ pub fn rasterize_svg(source: &InputSource, width: u32, height: u32) -> Result<Dy
         height as f32 / tree.size().height(),
     );
 
-    resvg::render(&tree, transform, &mut pixmap.as_mut());
+    resvg::render(tree, transform, &mut pixmap.as_mut());
 
     // Convert premultiplied RGBA (tiny-skia) to straight RGBA (image crate)
     let data = pixmap.data();
@@ -52,6 +88,5 @@ pub fn rasterize_svg(source: &InputSource, width: u32, height: u32) -> Result<Dy
 
 fn load_svg(source: &InputSource) -> Result<resvg::usvg::Tree> {
     let svg_data = source.read_bytes().context("failed to read SVG")?;
-    resvg::usvg::Tree::from_data(&svg_data, &resvg::usvg::Options::default())
-        .context("failed to parse SVG")
+    resvg::usvg::Tree::from_data(&svg_data, &usvg_options()).context("failed to parse SVG")
 }

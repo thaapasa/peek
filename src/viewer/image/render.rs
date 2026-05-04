@@ -537,14 +537,47 @@ pub fn prepare_svg(
     term: TermSize,
 ) -> Result<PreparedImage> {
     let (svg_w, svg_h) = super::svg::svg_dimensions(source)?;
+    prepare_svg_inner(
+        |w, h| super::svg::rasterize_svg(source, w, h),
+        svg_w,
+        svg_h,
+        config,
+        term,
+    )
+}
+
+/// Like [`prepare_svg`] but rasterizes from in-memory SVG bytes — used by
+/// the SVG animation pipeline, which mints a fresh document per frame.
+/// The caller supplies the SVG's intrinsic pixel dimensions (typically
+/// computed once at decode time via `svg::svg_dimensions`).
+pub fn prepare_svg_bytes(
+    bytes: &[u8],
+    svg_w: u32,
+    svg_h: u32,
+    config: &ImageConfig,
+    term: TermSize,
+) -> Result<PreparedImage> {
+    prepare_svg_inner(
+        |w, h| super::svg::rasterize_svg_bytes(bytes, w, h),
+        svg_w,
+        svg_h,
+        config,
+        term,
+    )
+}
+
+fn prepare_svg_inner(
+    rasterize: impl FnOnce(u32, u32) -> Result<DynamicImage>,
+    svg_w: u32,
+    svg_h: u32,
+    config: &ImageConfig,
+    term: TermSize,
+) -> Result<PreparedImage> {
     let margin = config.margin;
-    // Account for margin in aspect ratio calculation
     let padded_w = svg_w + margin * 2;
     let padded_h = svg_h + margin * 2;
     let (cols, rows) = compute_grid(padded_w, padded_h, term, config.width, config.fit);
 
-    // Compute target pixel size, then rasterize SVG into the inner area
-    // (target minus margin) so that adding margin reaches exact target size.
     let (px_w, px_h) = match config.mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
@@ -556,8 +589,7 @@ pub fn prepare_svg(
     let inner_w = px_w.saturating_sub(target_margin_x * 2).max(1);
     let inner_h = px_h.saturating_sub(target_margin_y * 2).max(1);
 
-    let inner = super::svg::rasterize_svg(source, inner_w, inner_h)?;
-    // Place the SVG content centered in a full-size transparent canvas
+    let inner = rasterize(inner_w, inner_h)?;
     let mut canvas = image::RgbaImage::new(px_w, px_h);
     let offset_x = (px_w - inner_w) / 2;
     let offset_y = (px_h - inner_h) / 2;

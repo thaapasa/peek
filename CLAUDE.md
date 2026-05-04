@@ -71,6 +71,7 @@ src/
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       image_render.rs  — ImageRenderMode: raster + rasterized SVG
       animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
+      svg_animation.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips
@@ -84,8 +85,9 @@ src/
     image/
       mod.rs           — Module wiring + Background / ImageConfig generic types
       mode.rs          — ImageMode enum (full/block/geo/ascii/contour palette selection)
-      svg.rs           — SVG rasterization (resvg): svg_dimensions / rasterize_svg
-      render.rs        — Image → glyph-matched ASCII art with true color
+      svg.rs           — SVG rasterization (resvg): svg_dimensions / rasterize_svg / rasterize_svg_bytes
+      svg_anim.rs      — CSS @keyframes parser: AnimatedSvg model + per-frame SVG patcher
+      render.rs        — Image → glyph-matched ASCII art with true color (incl. prepare_svg_bytes)
       animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
       glyph_atlas.rs   — Precomputed glyph bitmaps
       clustering.rs    — Two-color clustering for cell rendering

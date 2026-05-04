@@ -1,4 +1,5 @@
 use super::{paint_count, push_field, push_section_header};
+use crate::info::SvgAnimationStats;
 use crate::theme::PeekTheme;
 
 #[allow(clippy::too_many_arguments)]
@@ -14,6 +15,7 @@ pub(super) fn render_section(
     text_count: usize,
     has_script: bool,
     has_external_href: bool,
+    animation: Option<&SvgAnimationStats>,
     theme: &PeekTheme,
 ) {
     lines.push(String::new());
@@ -52,5 +54,11 @@ pub(super) fn render_section(
             &theme.paint(" yes", theme.warning),
             theme,
         );
+    }
+    if let Some(a) = animation {
+        let dur_s = a.total_duration_ms as f64 / 1000.0;
+        let label = if a.infinite { "looping" } else { "one-shot" };
+        let value = format!("{} frames, {:.2}s ({label})", a.frame_count, dur_s);
+        push_field(lines, "Animation", &theme.paint_value(&value), theme);
     }
 }

@@ -54,6 +54,7 @@ pub enum FileExtras {
         text_count: usize,
         has_script: bool,
         has_external_href: bool,
+        animation: Option<SvgAnimationStats>,
     },
     Structured {
         format_name: &'static str,
@@ -71,6 +72,13 @@ pub struct AnimationStats {
     pub frame_count: Option<usize>,
     pub total_duration_ms: Option<u64>,
     pub loop_count: Option<LoopCount>,
+}
+
+/// SVG CSS-keyframe animation stats (from `viewer::image::svg_anim`).
+pub struct SvgAnimationStats {
+    pub frame_count: usize,
+    pub total_duration_ms: u64,
+    pub infinite: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
