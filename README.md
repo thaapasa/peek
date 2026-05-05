@@ -148,7 +148,9 @@ stdout.
 | `m`              | Cycle image render mode         |
 | `b`              | Cycle image background          |
 | `f`              | Cycle image fit mode            |
-| `Left` / `Right` | Pan horizontally (FitHeight)    |
+| `Left` / `Right` | Pan horizontally (text wrap-off / image FitHeight) |
+| `l`              | Toggle line numbers             |
+| `w`              | Toggle soft wrap                |
 | `p`              | Play / pause animation          |
 | `n` / `N`        | Next / previous animation frame |
 

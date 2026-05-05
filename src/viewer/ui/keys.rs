@@ -74,6 +74,10 @@ pub(crate) enum Action {
     ToggleRawSource,
     /// Toggle the line-number gutter in text views.
     ToggleLineNumbers,
+    /// Toggle soft wrap in text views. When on, vertical scroll moves
+    /// visual rows and Left/Right are inert; when off, lines truncate
+    /// and Left/Right pan the viewport horizontally.
+    ToggleSoftWrap,
     /// Play / pause an animated image.
     PlayPause,
     /// Advance to the next animation frame.
@@ -111,6 +115,7 @@ impl Action {
         const SCROLL_RIGHT:   &[Binding] = &[Binding::plain(Right)];
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
         const TOGGLE_LINENUM: &[Binding] = &[Binding::plain(Char('l'))];
+        const TOGGLE_WRAP:    &[Binding] = &[Binding::plain(Char('w'))];
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
@@ -137,6 +142,7 @@ impl Action {
             Action::ScrollRight       => SCROLL_RIGHT,
             Action::ToggleRawSource   => TOGGLE_RAW,
             Action::ToggleLineNumbers => TOGGLE_LINENUM,
+            Action::ToggleSoftWrap    => TOGGLE_WRAP,
             Action::PlayPause         => PLAY_PAUSE,
             Action::NextFrame         => NEXT_FRAME,
             Action::PrevFrame         => PREV_FRAME,
@@ -168,6 +174,7 @@ impl Action {
             Action::ScrollRight       => "Right",
             Action::ToggleRawSource   => "r",
             Action::ToggleLineNumbers => "l",
+            Action::ToggleSoftWrap    => "w",
             Action::PlayPause         => "p",
             Action::NextFrame         => "n",
             Action::PrevFrame         => "N",

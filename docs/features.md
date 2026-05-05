@@ -357,24 +357,25 @@ viewer. Gutter is right-aligned with a minimum width of 2 digits and painted in 
 color. In pretty mode the numbers count visible pretty-printed lines (the lines actually shown), not
 source byte lines.
 
-### Line Wrapping ☐
+### Line Wrapping ✅
 
-Long lines (minified JSON, log lines, prose without hard breaks) currently render verbatim — the
-terminal wraps them into extra visual rows, consuming row budget that `draw_screen`'s math doesn't
-account for, so the status line can scroll out of view and content can bleed past it.
+Soft wrap on by default for ContentMode (text, source, structured pretty/raw, SVG XML). Each
+visible logical line is sliced into visual rows of width `term_cols - gutter_width` via
+`wrap_styled`, so the row budget accounts for wrapped continuations and the status line never
+scrolls out of view.
 
-Planned: opt-in soft wrap that pre-slices each visible logical line into visual rows of width
-`term_cols`, counts wrapped rows against the row budget, and marks wrapped continuations in the
-gutter. Scroll unit stays logical-line; partial wraps at the top/bottom edge are fine.
+Toggle with `w`. Vertical scroll (`j`/`k`, PgUp/PgDn, Home/End) moves one **visual row** at a time
+when wrap is on — long lines no longer make a single keypress jump over all their wrapped rows.
+The line-number gutter shows the real (logical) line number on the first segment; continuation
+rows have a blank gutter of the same width so wrapped content aligns under its first row.
 
-Toggle with `w`; CLI `--wrap` / `--no-wrap`. Default off (matches `less` / `bat` muscle memory and
-keeps source-code alignment intact).
+Status bar shows `Wrap` only when wrap is on (default-on convention; absence means "off").
 
-### Horizontal Scrolling ❓
+### Horizontal Scrolling ✅
 
-Companion to wrap-off mode: `<` / `>` (or shift-arrows) pan a fixed-width viewport across long
-lines, with a truncation indicator in the status bar. Useful for tables and code where wrap would
-ruin alignment. Follow-up to line wrapping; both can coexist (wrap toggle wins when on).
+Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 columns per
+press (`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because
+content is already fully visible. The gutter does not pan; it stays anchored to the left edge.
 
 ### Large File Safeguards ☐
 

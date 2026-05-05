@@ -265,7 +265,8 @@ impl<'a> ViewerState<'a> {
             | Action::CycleFitMode
             | Action::ScrollLeft
             | Action::ScrollRight
-            | Action::ToggleLineNumbers => Outcome::Unhandled,
+            | Action::ToggleLineNumbers
+            | Action::ToggleSoftWrap => Outcome::Unhandled,
         })
     }
 
@@ -745,7 +746,9 @@ mod tests {
     }
 
     /// ScrollDown on the SVG source view (ContentMode pretty XML) must
-    /// advance the scroll offset and the rendered window content.
+    /// advance the rendered window content. ContentMode now owns scroll,
+    /// so the path goes through `try_active_scroll` (mirroring the
+    /// interactive event loop) rather than the global `apply` route.
     #[test]
     fn scrolldown_on_svg_source_shifts_window() {
         let source = fixture_source("test-images/airlock-demo.svg");
@@ -770,15 +773,17 @@ mod tests {
         let initial_first = state.views[idx].as_ref().unwrap().lines[0].clone();
 
         for _ in 0..5 {
-            state.apply(Action::ScrollDown).unwrap();
+            assert!(state.try_active_scroll(Action::ScrollDown));
+            state.invalidate_active();
         }
-        assert_eq!(state.scroll[idx], 5);
+        // top_logical is private to ContentMode and `position()` returns
+        // Unknown in pretty mode (line index doesn't map to source bytes),
+        // so verify the scroll took effect by comparing rendered windows.
         state.ensure_active_rendered().unwrap();
         let scrolled_first = state.views[idx].as_ref().unwrap().lines[0].clone();
         assert_ne!(
             initial_first, scrolled_first,
             "viewport content should shift after scrolling"
         );
-        assert_eq!(state.views[idx].as_ref().unwrap().scroll_at, 5);
     }
 }
