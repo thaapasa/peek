@@ -6,9 +6,10 @@ use super::{AnimatedSvg, ResolvedTarget};
 
 pub(super) fn build_marked_svg(text: &str, targets: &[ResolvedTarget]) -> String {
     // Inject `__PEEK_ANIM_OPEN_<i>__` and `__PEEK_ANIM_CLOSE_<i>__`
-    // markers around each animated element's children. Sort all
-    // injection points descending so byte offsets remain valid as we
-    // mutate.
+    // markers immediately *outside* each animated element's tag span.
+    // Sort all injection points descending so byte offsets remain valid
+    // as we mutate. Outer wrapping works uniformly for container tags
+    // (`<g>...</g>`) and self-closing leafs (`<circle .../>`).
     let mut out = text.to_string();
     let mut points: Vec<(usize, String)> = Vec::with_capacity(targets.len() * 2);
     for (i, t) in targets.iter().enumerate() {

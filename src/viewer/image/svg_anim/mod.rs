@@ -12,25 +12,28 @@
 //! 3. Sample each target's timeline into discrete frames (one per stop for
 //!    `steps()` timing, ~30 fps interpolated for `linear`/unspecified).
 //! 4. Cache a "marked SVG" string with `__PEEK_ANIM_OPEN_<i>__` /
-//!    `__PEEK_ANIM_CLOSE_<i>__` placeholders inserted just inside each
-//!    animated element, then per frame substitute the open marker with
-//!    `<g transform="...">` and the close marker with `</g>`.
+//!    `__PEEK_ANIM_CLOSE_<i>__` placeholders inserted immediately
+//!    *outside* each animated element's tag span; per frame, the open
+//!    marker becomes `<g transform="...">` and the close marker `</g>`.
 //!
 //! The `<g>` wrapper exists because resvg/usvg currently ignore the
 //! `transform` attribute when applied directly to a nested `<svg>`
 //! element (covered by `nested_svg_transform_actually_shifts_content`).
-//! Wrapping the element's children in a transformed group dodges that
-//! limitation without changing the document's coordinate semantics.
+//! Wrapping the element from outside lifts the transform onto a parent
+//! group whose effect cascades through the original element — works
+//! identically for container and self-closing leaf tags.
 //!
-//! Phase 1 scope: CSS keyframes only (no SMIL `<animate>`); inline-style
-//! targets only (no class/id selector matching); `transform: translateX/Y`
-//! and `translate(x, y)` properties only. Unknown timing functions are
-//! treated as `linear`.
+//! Scope: CSS keyframes only (no SMIL `<animate>`); inline-style and
+//! flat class/id/tag/`tag.class` selector targets; `transform:
+//! translateX/Y` and `translate(x, y)` properties only. Combinators,
+//! pseudo-classes, attribute selectors, and `*` are dropped silently.
+//! Unknown timing functions are treated as `linear`.
 //!
 //! Module layout:
-//! - [`scan`]      — quick-xml walk, byte-span collection of animated elements.
-//! - [`spec`]      — inline `animation:` / `animation-*` parser → [`spec::AnimSpec`].
+//! - [`scan`]      — quick-xml walk; collects element class/id/style + `<style>` text.
+//! - [`spec`]      — `animation:` / `animation-*` declaration parser → [`spec::AnimSpec`].
 //! - [`keyframes`] — CSS `@keyframes` rule parser → [`keyframes::KeyframeStop`].
+//! - [`selectors`] — flat-selector CSS rule parser → [`selectors::CssRule`].
 //! - [`timeline`]  — merged frame timeline construction + per-target sampling.
 //! - [`marker`]    — `__PEEK_ANIM_*__` marker injection + [`render_frame`] substitution.
 //! - [`util`]      — small shared helpers.
@@ -44,6 +47,7 @@ use crate::input::InputSource;
 mod keyframes;
 mod marker;
 mod scan;
+mod selectors;
 mod spec;
 mod timeline;
 mod util;
@@ -115,17 +119,25 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
     if kf.is_empty() {
         return None;
     }
+    let rules = selectors::parse_rules(&scanned.style_text);
 
     let mut targets: Vec<ResolvedTarget> = Vec::new();
-    for rt in scanned.targets {
-        if let Some(stops) = kf.get(&rt.spec.name) {
-            targets.push(ResolvedTarget {
-                open_at: rt.open_at,
-                close_at: rt.close_at,
-                spec: rt.spec,
-                stops: stops.clone(),
-            });
-        }
+    for el in scanned.elements {
+        let Some(combined) = combine_decls(&rules, &el) else {
+            continue;
+        };
+        let Some(spec) = spec::parse_anim_spec(&combined) else {
+            continue;
+        };
+        let Some(stops) = kf.get(&spec.name) else {
+            continue;
+        };
+        targets.push(ResolvedTarget {
+            open_at: el.open_at,
+            close_at: el.close_at,
+            spec,
+            stops: stops.clone(),
+        });
     }
     if targets.is_empty() {
         return None;
@@ -142,6 +154,13 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
 
     let (width_px, height_px) = util::root_svg_dimensions(text).unwrap_or((1, 1));
     let frames = timeline::build_frames(&targets, duration);
+    if frames.len() < 2 {
+        // Resolved targets but no visible animation — every sampled
+        // frame produced the same per-target transforms (e.g. keyframes
+        // animate a property we don't yet support). Fall back to the
+        // static SVG render so we don't burn cycles on a fixed image.
+        return None;
+    }
     let marked = marker::build_marked_svg(text, &targets);
 
     Some(AnimatedSvg {
@@ -152,6 +171,39 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
         width_px,
         height_px,
     })
+}
+
+/// Concatenate declaration blocks that apply to `el`: every matching
+/// rule's body in CSS source order, then the element's inline `style=`
+/// (if any). The result is fed straight to [`spec::parse_anim_spec`],
+/// whose declaration walk is order-sensitive — the inline style trails
+/// the rule decls so its longhands take precedence.
+fn combine_decls(rules: &[selectors::CssRule], el: &scan::RawElement) -> Option<String> {
+    let mut parts: Vec<&str> = Vec::new();
+    for rule in rules {
+        if rule
+            .matchers
+            .iter()
+            .any(|m| m.matches(&el.tag, &el.classes, el.id.as_deref()))
+        {
+            parts.push(&rule.decls);
+        }
+    }
+    let inline_anim = el
+        .inline_style
+        .as_ref()
+        .is_some_and(|s| s.contains("animation"));
+    if parts.is_empty() && !inline_anim {
+        return None;
+    }
+    let mut out = parts.join(";");
+    if let Some(s) = &el.inline_style {
+        if !out.is_empty() && !out.ends_with(';') {
+            out.push(';');
+        }
+        out.push_str(s);
+    }
+    Some(out)
 }
 
 fn contains_anim_marker(text: &str) -> bool {
@@ -309,6 +361,76 @@ mod tests {
             diff > 1000,
             "frame 0 and frame {mid} should differ visually (sum-abs = {diff})"
         );
+    }
+
+    #[test]
+    fn class_selector_resolves_animation() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}.dot{animation:m 1s steps(1,end) infinite}</style>
+<circle class="dot" cx="10" cy="10" r="2"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert_eq!(model.duration, Duration::from_secs(1));
+        assert!(model.infinite);
+        assert!(
+            model.frames.len() >= 2,
+            "expected stepped class anim to yield multiple frames"
+        );
+        let f1 = render_frame(&model, 1);
+        assert!(
+            f1.contains("translate"),
+            "frame 1 should carry translate transform: {f1}"
+        );
+    }
+
+    #[test]
+    fn id_selector_resolves_animation() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}#a{animation:m 1s steps(1,end) infinite}</style>
+<circle id="a" cx="10" cy="10" r="2"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert!(model.frames.len() >= 2);
+    }
+
+    #[test]
+    fn tag_class_selector_resolves_animation() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}circle.foo{animation:m 1s steps(1,end) infinite}</style>
+<circle class="foo" cx="10" cy="10" r="2"/>
+<rect class="foo" width="10" height="10"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        // Only the circle matches `circle.foo`; the rect (same class
+        // but different tag) is ignored.
+        let f1 = render_frame(&model, 1);
+        assert!(f1.contains("translate"));
+    }
+
+    #[test]
+    fn unsupported_property_falls_back_to_static() {
+        // Class-resolved animation that only mutates `r` (no transform)
+        // — until attribute animation lands, every sampled frame
+        // collapses to the same empty transform vector. parse_text
+        // detects this and returns None so the viewer uses the static
+        // image render instead.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{r:0}50%{r:5px}}.dot{animation:m 1s steps(1,end) infinite}</style>
+<circle class="dot" cx="10" cy="10" r="0"/>
+</svg>"#;
+        assert!(parse_text(svg).is_none());
+    }
+
+    #[test]
+    fn merged_rules_combine_with_inline_style() {
+        // Class rule supplies `animation:` shorthand; inline style
+        // overrides duration. Verifies cascade: inline trails class.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}.dot{animation:m 5s steps(1,end) infinite}</style>
+<g class="dot" style="animation-duration:1s"></g>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert_eq!(model.duration, Duration::from_secs(1));
     }
 
     #[test]

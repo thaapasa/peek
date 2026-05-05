@@ -1,29 +1,42 @@
-//! Single-pass quick-xml walk: collects byte spans of every animated
-//! element + concatenated `<style>` text content for the CSS parser.
-
-use super::spec::{AnimSpec, parse_anim_spec};
+//! Single-pass quick-xml walk: collects byte spans + class/id/style
+//! attributes for every potentially-animated element + the
+//! concatenated `<style>` text content for the CSS parsers.
+//!
+//! Resolution of element → animation spec happens in
+//! [`super::parse_text`], which combines selector-matched rule decls
+//! (from [`super::selectors`]) with each element's inline `style=`
+//! attribute. Scanning therefore captures any element that *could* be
+//! a target — has a `class`, an `id`, or inline `animation*` style —
+//! and lets the resolver weed out non-matches.
 
 pub(super) struct XmlScan {
-    pub targets: Vec<RawTarget>,
+    pub elements: Vec<RawElement>,
     pub style_text: String,
 }
 
-pub(super) struct RawTarget {
-    /// Byte position right after the `>` closing the element's opening
-    /// tag — the open marker (later replaced with `<g transform="...">`)
-    /// is inserted here.
+pub(super) struct RawElement {
+    /// Byte position of the `<` that opens the element. Open marker
+    /// (later replaced with `<g transform="...">`) is inserted here so
+    /// the wrapper sits *outside* the element — works uniformly for
+    /// container and self-closing tags.
     pub open_at: usize,
-    /// Byte position right before the matching `</tag>` closing tag —
-    /// the close marker (replaced with `</g>`) is inserted here.
+    /// Byte position right after the element's closing tag (or `/>`
+    /// for self-closing elements). Close marker (replaced with `</g>`)
+    /// is inserted here.
     pub close_at: usize,
-    pub spec: AnimSpec,
+    pub tag: String,
+    pub classes: Vec<String>,
+    pub id: Option<String>,
+    pub inline_style: Option<String>,
 }
 
 /// Walk the SVG once with quick-xml, collecting:
-/// - Animated elements: any `Start` event whose `style="..."` attribute
-///   contains an `animation-*` reference. Records open/close byte spans
-///   tracking nesting depth so the matching `</tag>` is found correctly.
-/// - `<style>` block text content (used by the CSS keyframe parser).
+/// - Candidate elements: any `Start` or `Empty` event with a `class`,
+///   `id`, or inline `style="…animation…"` attribute. Records open/close
+///   byte spans tracking nesting depth so the matching `</tag>` is
+///   found correctly.
+/// - `<style>` block text content (used by the CSS keyframe + rule
+///   parsers).
 pub(super) fn scan_svg(text: &str) -> XmlScan {
     use quick_xml::Reader;
     use quick_xml::events::Event;
@@ -34,12 +47,15 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
     struct Pending {
         depth: i32,
         open_at: usize,
-        spec: AnimSpec,
+        tag: String,
+        classes: Vec<String>,
+        id: Option<String>,
+        inline_style: Option<String>,
     }
 
     let mut depth: i32 = 0;
     let mut pending: Vec<Pending> = Vec::new();
-    let mut targets: Vec<RawTarget> = Vec::new();
+    let mut elements: Vec<RawElement> = Vec::new();
     let mut style_text = String::new();
     let mut in_style_depth: i32 = 0;
 
@@ -54,15 +70,37 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
         match event {
             Event::Start(e) => {
                 depth += 1;
-                let local = e.local_name();
-                if local.as_ref().eq_ignore_ascii_case(b"style") {
+                let tag = std::str::from_utf8(e.local_name().as_ref())
+                    .unwrap_or("")
+                    .to_string();
+                if tag.eq_ignore_ascii_case("style") {
                     in_style_depth = depth;
                 }
-                if let Some(spec) = anim_spec_from_attrs(&e) {
+                let attrs = read_target_attrs(&e);
+                if attrs.is_candidate() {
                     pending.push(Pending {
                         depth,
-                        open_at: pos_after,
-                        spec,
+                        open_at: pos_before,
+                        tag,
+                        classes: attrs.classes,
+                        id: attrs.id,
+                        inline_style: attrs.style,
+                    });
+                }
+            }
+            Event::Empty(e) => {
+                let tag = std::str::from_utf8(e.local_name().as_ref())
+                    .unwrap_or("")
+                    .to_string();
+                let attrs = read_target_attrs(&e);
+                if attrs.is_candidate() {
+                    elements.push(RawElement {
+                        open_at: pos_before,
+                        close_at: pos_after,
+                        tag,
+                        classes: attrs.classes,
+                        id: attrs.id,
+                        inline_style: attrs.style,
                     });
                 }
             }
@@ -70,10 +108,13 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                 while let Some(top) = pending.last() {
                     if top.depth == depth {
                         let p = pending.pop().unwrap();
-                        targets.push(RawTarget {
+                        elements.push(RawElement {
                             open_at: p.open_at,
-                            close_at: pos_before,
-                            spec: p.spec,
+                            close_at: pos_after,
+                            tag: p.tag,
+                            classes: p.classes,
+                            id: p.id,
+                            inline_style: p.inline_style,
                         });
                     } else {
                         break;
@@ -103,25 +144,42 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
     }
 
     XmlScan {
-        targets,
+        elements,
         style_text,
     }
 }
 
-fn anim_spec_from_attrs(e: &quick_xml::events::BytesStart<'_>) -> Option<AnimSpec> {
-    for attr in e.attributes().with_checks(false) {
-        let attr = attr.ok()?;
-        if attr
-            .key
-            .local_name()
-            .as_ref()
-            .eq_ignore_ascii_case(b"style")
-        {
-            let val = std::str::from_utf8(&attr.value).ok()?;
-            if let Some(spec) = parse_anim_spec(val) {
-                return Some(spec);
-            }
+struct TargetAttrs {
+    classes: Vec<String>,
+    id: Option<String>,
+    style: Option<String>,
+}
+
+impl TargetAttrs {
+    fn is_candidate(&self) -> bool {
+        !self.classes.is_empty()
+            || self.id.is_some()
+            || self.style.as_ref().is_some_and(|s| s.contains("animation"))
+    }
+}
+
+fn read_target_attrs(e: &quick_xml::events::BytesStart<'_>) -> TargetAttrs {
+    let mut classes = Vec::new();
+    let mut id = None;
+    let mut style = None;
+    for attr in e.attributes().with_checks(false).flatten() {
+        let key = attr.key.local_name();
+        let key_bytes = key.as_ref();
+        let Ok(value) = std::str::from_utf8(&attr.value) else {
+            continue;
+        };
+        if key_bytes.eq_ignore_ascii_case(b"class") {
+            classes = value.split_whitespace().map(|s| s.to_string()).collect();
+        } else if key_bytes.eq_ignore_ascii_case(b"id") {
+            id = Some(value.to_string());
+        } else if key_bytes.eq_ignore_ascii_case(b"style") {
+            style = Some(value.to_string());
         }
     }
-    None
+    TargetAttrs { classes, id, style }
 }
