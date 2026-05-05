@@ -41,12 +41,16 @@
 //! and `*` are dropped silently. Unknown timing functions are treated
 //! as `linear`.
 //!
-//! `animation-delay` (longhand and as the second time token in the
-//! `animation:` shorthand) is honored — pre-delay holds the un-animated
-//! state, then the iteration begins. Caveat: delay applies *each* loop
-//! pass in our merged-timeline model, where CSS only applies it once
-//! before the first iteration. For staggered fixtures the visual
-//! effect is correct on the first cycle and mostly so on repeats.
+//! `animation-delay` is honored differently depending on iteration
+//! count. For one-shot (finite) animations the pre-delay state holds
+//! the un-animated rendering until `delay` elapses. For infinite
+//! animations — peek's common case — `delay` only sets the
+//! steady-state phase: each target samples
+//! `(t - delay) mod duration`, the merged timeline is sized to
+//! `max(duration)` (not `max(duration + delay)`), and the loop wraps
+//! seamlessly so the user never sees a "back-to-the-start" stutter
+//! at the cycle boundary. This matches what the browser actually
+//! displays after the first iteration of an infinite animation.
 //!
 //! Module layout:
 //! - [`scan`]      — quick-xml walk; collects element class/id/style + `<style>` text.
@@ -219,14 +223,27 @@ fn parse_text(text: &str) -> ParseOutcome {
         );
     }
 
-    let duration = targets
-        .iter()
-        .map(|t| t.spec.duration + t.spec.delay)
-        .fold(Duration::from_millis(0), |a, b| if b > a { b } else { a });
+    let infinite = targets.iter().any(|t| t.spec.infinite);
+    // Infinite animations loop seamlessly in the browser by re-using each
+    // target's *steady-state* phase: `delay` only shifts where the cycle
+    // starts, it isn't replayed every loop. Match that by sizing the
+    // merged timeline to max(duration) so frame 0 and the wrap point
+    // share the same per-target phases. One-shot animations keep the
+    // delay+duration model so the pre-delay frame is visible.
+    let duration = if infinite {
+        targets
+            .iter()
+            .map(|t| t.spec.duration)
+            .fold(Duration::from_millis(0), |a, b| if b > a { b } else { a })
+    } else {
+        targets
+            .iter()
+            .map(|t| t.spec.duration + t.spec.delay)
+            .fold(Duration::from_millis(0), |a, b| if b > a { b } else { a })
+    };
     if duration.is_zero() {
         return ParseOutcome::Unsupported("animation duration is zero".into());
     }
-    let infinite = targets.iter().any(|t| t.spec.infinite);
 
     let (width_px, height_px) = util::root_svg_dimensions(text).unwrap_or((1, 1));
     let frames = timeline::build_frames(&targets, duration);
@@ -699,15 +716,15 @@ mod tests {
     }
 
     #[test]
-    fn animation_delay_longhand_extends_total() {
+    fn animation_delay_finite_pre_delay_extends_total() {
+        // One-shot (finite) animations keep pre-delay semantics: total
+        // grows to delay+duration, frame 0 is the un-animated state.
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-<style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation-name:m;animation-duration:1s;animation-delay:500ms;animation-iteration-count:infinite}</style>
+<style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation-name:m;animation-duration:1s;animation-delay:500ms;animation-iteration-count:1}</style>
 <circle class="dot" cx="10" cy="10" r="2"/>
 </svg>"#;
         let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_millis(1500));
-        // Frame 0 is pre-delay → empty transform; some later frame
-        // carries the post-delay translate.
         assert_eq!(model.frames[0].targets[0].transform, "");
         assert!(
             model
@@ -719,35 +736,39 @@ mod tests {
     }
 
     #[test]
-    fn animation_delay_shorthand_second_time_token() {
+    fn animation_delay_infinite_phase_offset_only() {
+        // Infinite animations collapse delay into a steady-state phase
+        // shift so the merged loop wraps seamlessly. Total = duration,
+        // and frame 0 samples (0 - delay) mod duration — for a 0.5s
+        // delay on a 1s linear anim, that's the 50% point, mid-cycle.
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
-<style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation:m 1s 0.5s linear infinite}</style>
-<circle class="dot" cx="10" cy="10" r="2"/>
+<style>@keyframes m{0%{transform:translate(0,0)}100%{transform:translate(10,0)}}.dot{animation:m 1s 0.5s linear infinite}</style>
+<g class="dot"></g>
 </svg>"#;
         let model = must_parse(svg);
-        assert_eq!(model.duration, Duration::from_millis(1500));
+        assert_eq!(model.duration, Duration::from_secs(1));
+        let f0_tr = &model.frames[0].targets[0].transform;
+        assert!(
+            f0_tr.starts_with("translate(5"),
+            "frame 0 should be mid-cycle (~translate(5,0)), got {f0_tr}"
+        );
     }
 
     #[test]
-    fn delay_creates_phase_offset_across_targets() {
+    fn delay_phase_offset_across_infinite_targets() {
+        // `.a` no delay, `.b` half-cycle delay. Stepped keyframe with
+        // stops at 0% and 50%. At t=0: a phase=0 (stop[0]=identity),
+        // b phase=0.5=50% (stop[1]=translate(-5,0)).
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
 <style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-5px)}}.a{animation:m 1s steps(1,end) infinite}.b{animation:m 1s 0.5s steps(1,end) infinite}</style>
 <circle class="a" cx="10" cy="10" r="2"/>
 <circle class="b" cx="20" cy="10" r="2"/>
 </svg>"#;
         let model = must_parse(svg);
-        // Total = max(1s+0, 1s+0.5s) = 1.5s.
-        assert_eq!(model.duration, Duration::from_millis(1500));
-        // Find a frame in which target a is animating but target b is
-        // still pre-delay (proves the phase offset is preserved).
-        let mid = model
-            .frames
-            .iter()
-            .find(|f| !f.targets[0].transform.is_empty() && f.targets[1].transform.is_empty());
-        assert!(
-            mid.is_some(),
-            "expected at least one frame with a animating, b pre-delay"
-        );
+        assert_eq!(model.duration, Duration::from_secs(1));
+        let f0 = &model.frames[0];
+        assert_eq!(f0.targets[0].transform, "");
+        assert_eq!(f0.targets[1].transform, "translate(-5,0)");
     }
 
     #[test]

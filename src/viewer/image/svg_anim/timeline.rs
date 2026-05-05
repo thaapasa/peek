@@ -28,37 +28,45 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
         return Vec::new();
     }
 
-    // Collect candidate sample times in [0, dur_s). Stepped targets only
-    // need stop times; linear targets fill the gaps at FPS resolution.
+    // Collect candidate sample times in [0, dur_s). For infinite
+    // targets, stops are mapped through the steady-state phase
+    // `(delay + stop_pct*duration) mod duration` and replicated across
+    // every cycle that fits in the merged total. Finite targets keep
+    // the delay+stop_pct*duration absolute mapping (one cycle).
     const FPS: f64 = 30.0;
     let mut times: Vec<f64> = vec![0.0];
+    // Uniform global FPS sampling — ensures linear interpolation has
+    // dense enough samples even when no target's stops land in a given
+    // segment of the merged timeline.
+    let n_uniform = (dur_s * FPS).ceil() as usize;
+    for k in 1..n_uniform {
+        let t = k as f64 / FPS;
+        if t < dur_s {
+            times.push(t);
+        }
+    }
     for tg in targets {
         let target_dur = tg.spec.duration.as_secs_f64();
         let delay = tg.spec.delay.as_secs_f64();
-        if delay > 0.0 && delay < dur_s {
-            times.push(delay);
-        }
-        for stop in &tg.stops {
-            let t = delay + (stop.percent / 100.0) * target_dur;
-            if t < dur_s {
-                times.push(t);
-            }
-        }
-        if !tg.spec.stepped {
-            let stops_in_range: Vec<f64> = tg
-                .stops
-                .iter()
-                .map(|s| delay + (s.percent / 100.0) * target_dur)
-                .filter(|t| *t <= dur_s)
-                .collect();
-            for w in stops_in_range.windows(2) {
-                let gap = (w[1] - w[0]).max(0.0);
-                let n = (gap * FPS).floor() as usize;
-                for k in 1..n {
-                    let t = w[0] + (k as f64 / FPS);
+        if tg.spec.infinite {
+            let cycles = (dur_s / target_dur).ceil() as usize + 1;
+            for stop in &tg.stops {
+                let phase = (delay + stop.percent / 100.0 * target_dur).rem_euclid(target_dur);
+                for k in 0..cycles {
+                    let t = phase + k as f64 * target_dur;
                     if t < dur_s {
                         times.push(t);
                     }
+                }
+            }
+        } else {
+            if delay > 0.0 && delay < dur_s {
+                times.push(delay);
+            }
+            for stop in &tg.stops {
+                let t = delay + stop.percent / 100.0 * target_dur;
+                if t < dur_s {
+                    times.push(t);
                 }
             }
         }
@@ -102,7 +110,11 @@ fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> FrameTarget {
     if target_dur <= 0.0 || target.stops.is_empty() {
         return FrameTarget::default();
     }
-    if t_global_s < delay {
+    let local = if target.spec.infinite {
+        // Steady-state phase: delay shifts the start position only, no
+        // pre-delay re-entry. Lets the merged loop wrap seamlessly.
+        (t_global_s - delay).rem_euclid(target_dur)
+    } else if t_global_s < delay {
         // Pre-delay: no transform, slots restore the element's
         // pre-animation state (original attribute values, or absent
         // entirely when the element didn't have the attribute).
@@ -118,12 +130,8 @@ fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> FrameTarget {
                 })
                 .collect(),
         };
-    }
-    let t_local = t_global_s - delay;
-    let local = if target.spec.infinite {
-        t_local.rem_euclid(target_dur)
     } else {
-        t_local.min(target_dur)
+        (t_global_s - delay).min(target_dur)
     };
     let pct = (local / target_dur) * 100.0;
 
