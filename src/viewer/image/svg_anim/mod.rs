@@ -29,6 +29,13 @@
 //! pseudo-classes, attribute selectors, and `*` are dropped silently.
 //! Unknown timing functions are treated as `linear`.
 //!
+//! `animation-delay` (longhand and as the second time token in the
+//! `animation:` shorthand) is honored — pre-delay holds the un-animated
+//! state, then the iteration begins. Caveat: delay applies *each* loop
+//! pass in our merged-timeline model, where CSS only applies it once
+//! before the first iteration. For staggered fixtures the visual
+//! effect is correct on the first cycle and mostly so on repeats.
+//!
 //! Module layout:
 //! - [`scan`]      — quick-xml walk; collects element class/id/style + `<style>` text.
 //! - [`spec`]      — `animation:` / `animation-*` declaration parser → [`spec::AnimSpec`].
@@ -145,7 +152,7 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
 
     let duration = targets
         .iter()
-        .map(|t| t.spec.duration)
+        .map(|t| t.spec.duration + t.spec.delay)
         .fold(Duration::from_millis(0), |a, b| if b > a { b } else { a });
     if duration.is_zero() {
         return None;
@@ -431,6 +438,60 @@ mod tests {
 </svg>"#;
         let model = parse_text(svg).expect("parsed");
         assert_eq!(model.duration, Duration::from_secs(1));
+    }
+
+    #[test]
+    fn animation_delay_longhand_extends_total() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation-name:m;animation-duration:1s;animation-delay:500ms;animation-iteration-count:infinite}</style>
+<circle class="dot" cx="10" cy="10" r="2"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert_eq!(model.duration, Duration::from_millis(1500));
+        // Frame 0 is pre-delay → empty transform; some later frame
+        // carries the post-delay translate.
+        assert_eq!(model.frames[0].transforms[0], "");
+        assert!(
+            model.frames.iter().any(|f| !f.transforms[0].is_empty()),
+            "expected at least one post-delay frame with translate"
+        );
+    }
+
+    #[test]
+    fn animation_delay_shorthand_second_time_token() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation:m 1s 0.5s linear infinite}</style>
+<circle class="dot" cx="10" cy="10" r="2"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert_eq!(model.duration, Duration::from_millis(1500));
+    }
+
+    #[test]
+    fn delay_creates_phase_offset_across_targets() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-5px)}}.a{animation:m 1s steps(1,end) infinite}.b{animation:m 1s 0.5s steps(1,end) infinite}</style>
+<circle class="a" cx="10" cy="10" r="2"/>
+<circle class="b" cx="20" cy="10" r="2"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        // Total = max(1s+0, 1s+0.5s) = 1.5s.
+        assert_eq!(model.duration, Duration::from_millis(1500));
+        // Find a frame in which target a is animating but target b is
+        // still pre-delay (proves the phase offset is preserved).
+        let mid = model
+            .frames
+            .iter()
+            .find(|f| !f.transforms[0].is_empty() && f.transforms[1].is_empty());
+        assert!(
+            mid.is_some(),
+            "expected at least one frame with a animating, b pre-delay; got frames: {:?}",
+            model
+                .frames
+                .iter()
+                .map(|f| f.transforms.clone())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]

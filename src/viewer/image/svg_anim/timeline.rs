@@ -18,8 +18,14 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
     let mut times: Vec<f64> = vec![0.0];
     for tg in targets {
         let target_dur = tg.spec.duration.as_secs_f64();
+        let delay = tg.spec.delay.as_secs_f64();
+        // Sample the delay→animate boundary so the pre-delay frame is
+        // distinguishable from the first stop when they share a value.
+        if delay > 0.0 && delay < dur_s {
+            times.push(delay);
+        }
         for stop in &tg.stops {
-            let t = (stop.percent / 100.0) * target_dur;
+            let t = delay + (stop.percent / 100.0) * target_dur;
             if t < dur_s {
                 times.push(t);
             }
@@ -28,7 +34,7 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
             let stops_in_range: Vec<f64> = tg
                 .stops
                 .iter()
-                .map(|s| (s.percent / 100.0) * target_dur)
+                .map(|s| delay + (s.percent / 100.0) * target_dur)
                 .filter(|t| *t <= dur_s)
                 .collect();
             for w in stops_in_range.windows(2) {
@@ -78,13 +84,21 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
 
 fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> String {
     let target_dur = target.spec.duration.as_secs_f64();
+    let delay = target.spec.delay.as_secs_f64();
     if target_dur <= 0.0 || target.stops.is_empty() {
         return String::new();
     }
+    if t_global_s < delay {
+        // Pre-delay: hold the un-animated state. Matches CSS
+        // `animation-fill-mode: none` (the default) — no transform
+        // applied until the iteration begins.
+        return String::new();
+    }
+    let t_local = t_global_s - delay;
     let local = if target.spec.infinite {
-        t_global_s.rem_euclid(target_dur)
+        t_local.rem_euclid(target_dur)
     } else {
-        t_global_s.min(target_dur)
+        t_local.min(target_dur)
     };
     let pct = (local / target_dur) * 100.0;
 
