@@ -427,6 +427,25 @@ mod tests {
         );
     }
 
+    /// Diagnostic: probe loader-dots — print per-frame slot for each
+    /// target so we can see whether `r` actually transitions.
+    #[test]
+    fn probe_loader_dots_slots() {
+        if std::env::var("PEEK_PROBE_LOADER").is_err() {
+            return;
+        }
+        let bytes = std::fs::read(format!(
+            "{}/test-images/loader-dots.svg",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let m = try_parse_bytes(&bytes).expect("animated");
+        for (idx, f) in m.frames.iter().enumerate() {
+            let summary: Vec<String> = f.targets.iter().map(|t| t.slots[0].clone()).collect();
+            eprintln!("frame {idx} delay={:?} slots={:?}", f.delay, summary);
+        }
+    }
+
     /// Diagnostic: dump loader-dots marked SVG.
     #[test]
     fn dump_loader_dots() {
@@ -618,6 +637,27 @@ mod tests {
         assert!(
             p_small[3] == 0 || (p_small[0] < 50 && p_small[3] < 50),
             "r=0 frame should leave centre transparent, got {p_small:?}"
+        );
+    }
+
+    #[test]
+    fn linear_interpolates_unitless_zero_with_unit_value() {
+        // CSS allows `0` to stand in for any length unit. peek's first
+        // pass rejected `r:0` ↔ `r:2px` interpolation as a unit
+        // mismatch, leaving the loader-dots fixture pulsing 0/2 with
+        // no in-between frames; this test pins the smooth-interp fix.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{r:0}50%{r:2px}}.dot{animation:m 1s linear infinite}</style>
+<circle class="dot" cx="10" cy="10" r="0"/>
+</svg>"#;
+        let model = must_parse(svg);
+        let intermediate = model.frames.iter().any(|f| {
+            let s = &f.targets[0].slots[0];
+            s.contains("r=\"0.") || s.contains("r=\"1.")
+        });
+        assert!(
+            intermediate,
+            "expected at least one frame with sub-pixel r between 0 and 2px"
         );
     }
 

@@ -231,9 +231,10 @@ fn build_slots_linear(
                 (
                     Some(PropValue::Numeric { value: a, unit: ua }),
                     Some(PropValue::Numeric { value: b, unit: ub }),
-                ) if ua == ub => {
+                ) if compatible_units(ua, ub) => {
                     let v = a + (b - a) * alpha;
-                    Some(format!("{}{}", fmt_num(v), ua))
+                    let unit = if !ua.is_empty() { ua } else { ub };
+                    Some(format!("{}{}", fmt_num(v), unit))
                 }
                 (Some(p), _) => Some(p.render()),
                 (None, _) => orig.clone(),
@@ -252,6 +253,13 @@ fn transform_to_attr(v: Option<TransformValue>) -> String {
         Some(t) if t.tx == 0.0 && t.ty == 0.0 => String::new(),
         Some(t) => format!("translate({},{})", fmt_num(t.tx), fmt_num(t.ty)),
     }
+}
+
+/// CSS allows `0` (unitless) to stand in for any length unit — so
+/// `r:0`→`r:2px` should interpolate, picking up the `px` unit. Returns
+/// true when the two unit strings can interp together.
+fn compatible_units(a: &str, b: &str) -> bool {
+    a == b || a.is_empty() || b.is_empty()
 }
 
 fn fmt_num(n: f64) -> String {
