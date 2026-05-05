@@ -99,7 +99,8 @@ themes/
   vscode-monokai.tmTheme      — VS Code Monokai theme
 docs/
   architecture.md      — Design, data flow, key abstractions, extension guide
-  features.md          — Feature specification and status tracking
+  features.md          — Currently shipped features (✅ implemented + ◐ partial)
+  planned.md           — Planned features and ideas (☐ planned + ❓ open)
   conventions.md       — Coding conventions
   release.md           — Release pipeline, install.sh, recovery from failed runs
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
@@ -155,7 +156,8 @@ Keep these in sync with code changes:
 
 - **README.md** — project overview, feature summary, usage examples
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/features.md** — feature specification and status
+- **docs/features.md** — currently shipped features (✅ + ◐)
+- **docs/planned.md** — planned features and open ideas (☐ + ❓)
 - **docs/conventions.md** — coding conventions
 - **docs/release.md** — release pipeline and recovery
 - **CLAUDE.md** — architecture map (when files / modules are added, moved, or removed)

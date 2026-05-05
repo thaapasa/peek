@@ -1,6 +1,9 @@
 # peek — Feature Specification
 
-Status legend: ✅ implemented · ◐ partial · ☐ planned · ❓ idea / open
+Covers what peek currently does (✅ implemented and ◐ partial). For planned and open ideas
+(☐ / ❓), see [planned.md](planned.md).
+
+Status legend: ✅ implemented · ◐ partial
 
 ## Operating Modes
 
@@ -28,7 +31,6 @@ Direct stdout, no interactivity (`cat`-like). Default output by file type:
   highlighted unless `--plain`)
 - **Images** — ASCII art at contain ratio
 - **SVG** — rendered preview (ASCII art)
-- **Documents** — extracted text content
 - **Binary / unknown** — hex dump (streaming, `hexdump -C` layout, terminal-width aware)
 
 Active when `--print` / `-p` is set or stdout isn't a TTY.
@@ -95,9 +97,8 @@ Features: syntax-colored source with theme support; toggleable line numbers (✅
 | HTML   | `.html`, `.htm` | ✅      |
 | CSV    | `.csv`, `.tsv`  | ☐      |
 
-JSONC and JSON5 need parsers that handle comments and extended syntax. HTML may benefit from both
-highlighted source and a rendered text view. CSV/TSV could render as a formatted table with column
-alignment.
+Pending entries (JSONC, JSON5, HTML rendered view, CSV/TSV) live in
+[planned.md](planned.md#structured-data-additions-).
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):
 
@@ -105,16 +106,6 @@ Two viewing sub-modes (toggle with `r`; CLI `--raw`):
 - **Raw** — verbatim source with syntax highlighting only
 
 `--plain` / `-P` disables all styling.
-
-### Markup / Documentation ☐
-
-| Format   | Extensions |
-|----------|------------|
-| Markdown | `.md`      |
-| SQL      | `.sql`     |
-
-Markdown: rendered view (styled headings, bold, lists) + highlighted source, cyclable with Tab. SQL:
-syntax highlighting.
 
 ### Image Files ✅
 
@@ -192,11 +183,11 @@ is present (no per-image opt-out).
 
 #### Image Sizing Modes ◐
 
-| Mode         | Behavior                                                                |
-|--------------|-------------------------------------------------------------------------|
-| `Contain`    | Fit within both width and height — whole image always shown (default)   |
-| `FitWidth`   | Width fills the terminal; height grows freely → vertical scroll         |
-| `FitHeight`  | Height fills the terminal; width grows freely → horizontal scroll       |
+| Mode        | Behavior                                                              |
+|-------------|-----------------------------------------------------------------------|
+| `Contain`   | Fit within both width and height — whole image always shown (default) |
+| `FitWidth`  | Width fills the terminal; height grows freely → vertical scroll       |
+| `FitHeight` | Height fills the terminal; width grows freely → horizontal scroll     |
 
 Cycle interactively with `f` (image / SVG render views). Pipe / `--print`
 output always uses `Contain` (rows are unbounded, so the other modes are
@@ -212,53 +203,11 @@ Scroll keys in image views:
 Toggling fit mode resets the scroll offset (the old position has no
 meaning in the new grid). No `--sizing` CLI flag yet.
 
-#### Zoom ☐
-
-`+`/`-` to scale up/down from the current sizing baseline. Height overflow is naturally handled by
-viewer scrolling. Width overflow is the open question — terminals typically wrap or truncate long
-lines, which can look messy.
-
-**Open question:** how to handle width overflow. One approach: viewport-based rendering, where only
-the visible portion is rendered (output is always exactly terminal-sized) and the user pans with
-arrow keys. Fits naturally with the interactive image viewer (own event loop, handles resize). A
-position indicator (`[3,2]/[5,4]`) could show viewport location. Under this model, zoom + pan would
-be interactive-only — print mode wouldn't support it. Other options: truncation with an indicator,
-or capping zoom so width never exceeds the terminal.
-
 ### Animated Images (GIF, WebP) ✅
 
 Auto-plays at native frame rate. `p` toggles play/pause; `n`/`N` and Left/Right step frames; `b`
 cycles background. Status line shows frame counter and play/pause. Print mode renders the first
 frame. Frame count appears in the file info screen. Transparency handling applies.
-
-### Video Files ❓
-
-Render video as ASCII art in real-time — decode frames and run through the image pipeline. Stretch
-goal; may not be practical due to decode performance and terminal refresh-rate limits. Would need an
-ffmpeg binding.
-
-In print mode: file metadata (duration, resolution, codec, bitrate), possibly a single frame.
-
-### Document Files ☐
-
-| Format        | Extensions |
-|---------------|------------|
-| PDF           | `.pdf`     |
-| Word (OOXML)  | `.docx`    |
-| Excel (OOXML) | `.xlsx`    |
-
-Modern XML-based Office formats only — legacy `.doc` / `.xls` not planned.
-
-Document files should support multiple modes (cyclable with Tab):
-
-- **Text extraction** — primary mode; show what's in the document as plain text.
-- **Source browsing** — for OOXML (which is ZIP + XML), browse the internal XML files. Useful for
-  debugging or inspecting structure.
-- **Rendered preview** (PDF only) — render PDF pages to images, convert to ASCII art. Mostly
-  novelty, but useful for seeing page layout at a glance.
-
-File info screen should show document-specific metadata: page count, word count, author, creation
-date.
 
 ### Binary and Archive Files ◐
 
@@ -343,12 +292,6 @@ scraped from head bytes for Dublin Core / XMP fields (title, subject, descriptio
 rating, label). Structured-data stats from a parse pass. Text stats from a single streaming pass
 that also detects BOM-based encoding. HDR detection scans for Ultra HDR gain map markers.
 
-### Text Search ☐
-
-`/` opens search prompt; type pattern, Enter searches. `n` / `N` jump to next / previous. Matches
-highlighted in content. Regex is desirable; plain text is the minimum. Applies to all text-based
-views (source, structured, document text, file info).
-
 ### Line Numbers ✅
 
 Toggleable line numbers for text-based views (ContentMode: source, structured raw/pretty, plain
@@ -376,12 +319,6 @@ Status bar shows `Wrap` only when wrap is on (default-on convention; absence mea
 Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 columns per
 press (`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because
 content is already fully visible. The gutter does not pan; it stays anchored to the left edge.
-
-### Large File Safeguards ☐
-
-For large files: viewer mode defaults to the file info screen instead of loading full contents.
-Display a size warning. Keyboard shortcut to opt in to loading. File info (size, type) obtainable
-without reading the whole file.
 
 ### Help Screen ◐
 
@@ -442,25 +379,25 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 ### Image Views *(context)*
 
-| Key              | Action                                                       |
-|------------------|--------------------------------------------------------------|
-| `m`              | Cycle rendering mode (full/block/geo/ascii/contour)          |
-| `b`              | Cycle background (auto/black/white/checkerboard)             |
-| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)              |
-| `Left` / `Right` | Pan horizontally (FitHeight)                                 |
-| `+` / `=`        | Zoom in (planned)                                            |
-| `-`              | Zoom out (planned)                                           |
+| Key              | Action                                              |
+|------------------|-----------------------------------------------------|
+| `m`              | Cycle rendering mode (full/block/geo/ascii/contour) |
+| `b`              | Cycle background (auto/black/white/checkerboard)    |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)     |
+| `Left` / `Right` | Pan horizontally (FitHeight)                        |
+| `+` / `=`        | Zoom in (planned)                                   |
+| `-`              | Zoom out (planned)                                  |
 
 ### Animated Image Views *(context: GIF, WebP)*
 
-| Key              | Action                                                 |
-|------------------|--------------------------------------------------------|
-| `p`              | Play / pause animation                                 |
-| `n` / `N`        | Next / previous frame                                  |
-| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)        |
-| `Left` / `Right` | Pan horizontally under `FitHeight`                     |
-| `b`              | Cycle background                                       |
-| `m`              | Cycle render mode                                      |
+| Key              | Action                                          |
+|------------------|-------------------------------------------------|
+| `p`              | Play / pause animation                          |
+| `n` / `N`        | Next / previous frame                           |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight) |
+| `Left` / `Right` | Pan horizontally under `FitHeight`              |
+| `b`              | Cycle background                                |
+| `m`              | Cycle render mode                               |
 
 `Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
 `n` / `N` exclusively (the previous Left/Right frame-step bindings are gone).
@@ -610,22 +547,3 @@ download the `.zip` manually. Releases are cut by dispatching `.github/workflows
 workflow reads the version from `Cargo.toml`, refuses to run if `vX.Y.Z` already exists on `origin`,
 and creates+pushes the tag itself.
 
-## Future / Optional Features
-
-### Block Collapsing / Folding ❓
-
-Collapse blocks (objects, arrays, nested structures) in the interactive viewer. Mainly for
-structured data (JSON, YAML, TOML, XML) but could extend to code (folding functions, blocks).
-
-**Challenges:** the current pipeline produces a flat `Vec<String>` of ANSI-escaped lines with no
-structural metadata. Folding would require:
-
-- Line metadata layer (fold level, block boundaries, visibility state) replacing bare `String` lines
-- Virtual line mapping so scroll offsets work with collapsed regions
-- Preserving fold state across re-renders (theme toggle, raw/pretty toggle)
-- For structured data: retaining parsed structure or using indentation heuristics
-- For code: language-aware block detection via syntect scopes (significantly harder,
-  language-dependent)
-
-Indentation-based folding for structured data (JSON/YAML) would be the most practical starting
-point — pretty-printed output has reliable indentation levels.
