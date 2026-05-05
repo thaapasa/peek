@@ -42,12 +42,15 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::Top, "Jump to top"),
     (Action::Bottom, "Jump to bottom"),
     (Action::CycleView, "Cycle file's view modes"),
+    (Action::CycleViewBack, "Cycle view modes (reverse)"),
     (Action::SwitchInfo, "File info"),
     (Action::ToggleHelp, "Toggle help"),
     (Action::SwitchToHex, "Hex dump mode"),
     (Action::SwitchToAbout, "About / status screen"),
     (Action::CycleTheme, "Next theme"),
+    (Action::CycleThemeBack, "Previous theme"),
     (Action::CycleColorMode, "Next color mode"),
+    (Action::CycleColorModeBack, "Previous color mode"),
 ];
 
 pub(crate) struct ViewerState<'a> {
@@ -229,7 +232,11 @@ impl<'a> ViewerState<'a> {
                 Outcome::Redraw
             }
             Action::CycleView => {
-                self.cycle_view();
+                self.cycle_view(1);
+                Outcome::Redraw
+            }
+            Action::CycleViewBack => {
+                self.cycle_view(-1);
                 Outcome::Redraw
             }
             Action::ToggleHelp => {
@@ -245,11 +252,19 @@ impl<'a> ViewerState<'a> {
                 Outcome::Redraw
             }
             Action::CycleTheme => {
-                self.cycle_theme();
+                self.cycle_theme(1);
+                Outcome::Redraw
+            }
+            Action::CycleThemeBack => {
+                self.cycle_theme(-1);
                 Outcome::Redraw
             }
             Action::CycleColorMode => {
-                self.cycle_color_mode();
+                self.cycle_color_mode(1);
+                Outcome::Redraw
+            }
+            Action::CycleColorModeBack => {
+                self.cycle_color_mode(-1);
                 Outcome::Redraw
             }
             // Mode-local actions: routed via the mode's own `handle` before
@@ -266,7 +281,9 @@ impl<'a> ViewerState<'a> {
             | Action::ScrollLeft
             | Action::ScrollRight
             | Action::ToggleLineNumbers
-            | Action::ToggleSoftWrap => Outcome::Unhandled,
+            | Action::ToggleSoftWrap
+            | Action::CycleBackgroundBack
+            | Action::CycleImageModeBack => Outcome::Unhandled,
         })
     }
 
@@ -356,18 +373,26 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    /// Advance the active index to the next view mode in the cycle.
-    /// Bound to `Tab`. Walks every mode except the overlay-style aux
-    /// modes (Help, About) and Hex — Hex has its own dedicated key and
-    /// is not part of the document-view cycle. The exception is binary
-    /// files, where Hex *is* the data view: when no non-aux mode exists,
-    /// Hex is included so Tab still toggles Hex ↔ Info.
-    fn cycle_view(&mut self) {
+    /// Advance the active index by one view mode in the cycle.
+    /// `direction` is `1` for Tab (forward) or `-1` for Shift+Tab
+    /// (reverse). Walks every mode except the overlay-style aux modes
+    /// (Help, About) and Hex — Hex has its own dedicated key and is not
+    /// part of the document-view cycle. The exception is binary files,
+    /// where Hex *is* the data view: when no non-aux mode exists, Hex
+    /// is included so Tab still toggles Hex ↔ Info.
+    fn cycle_view(&mut self, direction: isize) {
         let n = self.modes.len();
+        if n == 0 {
+            return;
+        }
         let has_primary = self.modes.iter().any(|m| !m.is_aux());
         let mut i = self.active;
         for _ in 0..n {
-            i = (i + 1) % n;
+            i = if direction >= 0 {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
             if i == self.active {
                 break;
             }
@@ -383,8 +408,12 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    fn cycle_theme(&mut self) {
-        self.current_theme = self.current_theme.next();
+    fn cycle_theme(&mut self, direction: isize) {
+        self.current_theme = if direction >= 0 {
+            self.current_theme.next()
+        } else {
+            self.current_theme.prev()
+        };
         self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.color_mode);
         // All themed views are stale.
         for slot in &mut self.views {
@@ -392,8 +421,12 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    fn cycle_color_mode(&mut self) {
-        self.peek_theme.color_mode = self.peek_theme.color_mode.next();
+    fn cycle_color_mode(&mut self, direction: isize) {
+        self.peek_theme.color_mode = if direction >= 0 {
+            self.peek_theme.color_mode.next()
+        } else {
+            self.peek_theme.color_mode.prev()
+        };
         // Every cached line embeds escape sequences keyed to the previous
         // mode — invalidate them all so the next draw re-paints in the new
         // encoding.

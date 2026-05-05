@@ -50,18 +50,28 @@ pub(crate) enum Action {
     /// About) and Hex (which has its own dedicated key) unless Hex is
     /// the only data view (binary files).
     CycleView,
+    /// Cycle through the file's view modes in reverse (Shift+Tab).
+    CycleViewBack,
     /// Cycle to the next theme.
     CycleTheme,
+    /// Cycle to the previous theme (`T`).
+    CycleThemeBack,
     /// Cycle the output color mode (truecolor → 256 → 16 → grayscale → plain).
     CycleColorMode,
+    /// Cycle the color mode backward (`C`).
+    CycleColorModeBack,
     /// Enter hex view from another viewer (or exit, in toggle mode).
     SwitchToHex,
     /// Toggle the about / status screen.
     SwitchToAbout,
     /// Cycle the image-render background (auto/black/white/checkerboard).
     CycleBackground,
+    /// Cycle the image-render background backward (`B`).
+    CycleBackgroundBack,
     /// Cycle the image rendering mode (full/block/geo/ascii).
     CycleImageMode,
+    /// Cycle the image rendering mode backward (`M`).
+    CycleImageModeBack,
     /// Cycle the image fit mode (contain / fit-width / fit-height).
     CycleFitMode,
     /// Scroll the visible viewport one step left (FitHeight images).
@@ -104,12 +114,17 @@ impl Action {
         const SWITCH_INFO:    &[Binding] = &[Binding::plain(Char('i'))];
         const TOGGLE_HELP:    &[Binding] = &[Binding::plain(Char('h')), Binding::plain(Char('?'))];
         const CYCLE_VIEW:     &[Binding] = &[Binding::plain(Tab)];
+        const CYCLE_VIEW_BACK:&[Binding] = &[Binding::plain(BackTab)];
         const CYCLE_THEME:    &[Binding] = &[Binding::plain(Char('t'))];
+        const CYCLE_THEME_BK: &[Binding] = &[Binding::plain(Char('T'))];
         const CYCLE_COLOR:    &[Binding] = &[Binding::plain(Char('c'))];
+        const CYCLE_COLOR_BK: &[Binding] = &[Binding::plain(Char('C'))];
         const SWITCH_HEX:     &[Binding] = &[Binding::plain(Char('x'))];
         const SWITCH_ABOUT:   &[Binding] = &[Binding::plain(Char('a'))];
         const CYCLE_BG:       &[Binding] = &[Binding::plain(Char('b'))];
+        const CYCLE_BG_BACK:  &[Binding] = &[Binding::plain(Char('B'))];
         const CYCLE_IMG_MODE: &[Binding] = &[Binding::plain(Char('m'))];
+        const CYCLE_IMG_BACK: &[Binding] = &[Binding::plain(Char('M'))];
         const CYCLE_FIT:      &[Binding] = &[Binding::plain(Char('f'))];
         const SCROLL_LEFT:    &[Binding] = &[Binding::plain(Left)];
         const SCROLL_RIGHT:   &[Binding] = &[Binding::plain(Right)];
@@ -131,12 +146,17 @@ impl Action {
             Action::SwitchInfo        => SWITCH_INFO,
             Action::ToggleHelp        => TOGGLE_HELP,
             Action::CycleView         => CYCLE_VIEW,
+            Action::CycleViewBack     => CYCLE_VIEW_BACK,
             Action::CycleTheme        => CYCLE_THEME,
+            Action::CycleThemeBack    => CYCLE_THEME_BK,
             Action::CycleColorMode    => CYCLE_COLOR,
+            Action::CycleColorModeBack=> CYCLE_COLOR_BK,
             Action::SwitchToHex       => SWITCH_HEX,
             Action::SwitchToAbout     => SWITCH_ABOUT,
             Action::CycleBackground   => CYCLE_BG,
+            Action::CycleBackgroundBack => CYCLE_BG_BACK,
             Action::CycleImageMode    => CYCLE_IMG_MODE,
+            Action::CycleImageModeBack=> CYCLE_IMG_BACK,
             Action::CycleFitMode      => CYCLE_FIT,
             Action::ScrollLeft        => SCROLL_LEFT,
             Action::ScrollRight       => SCROLL_RIGHT,
@@ -163,12 +183,17 @@ impl Action {
             Action::SwitchInfo        => "i",
             Action::ToggleHelp        => "h / ?",
             Action::CycleView         => "Tab",
+            Action::CycleViewBack     => "Shift+Tab",
             Action::CycleTheme        => "t",
+            Action::CycleThemeBack    => "T",
             Action::CycleColorMode    => "c",
+            Action::CycleColorModeBack=> "C",
             Action::SwitchToHex       => "x",
             Action::SwitchToAbout     => "a",
             Action::CycleBackground   => "b",
+            Action::CycleBackgroundBack => "B",
             Action::CycleImageMode    => "m",
+            Action::CycleImageModeBack => "M",
             Action::CycleFitMode      => "f",
             Action::ScrollLeft        => "Left",
             Action::ScrollRight       => "Right",

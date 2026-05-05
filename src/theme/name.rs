@@ -53,6 +53,16 @@ impl PeekThemeName {
         }
     }
 
+    /// Cycle to the previous theme.
+    pub fn prev(self) -> Self {
+        match self {
+            Self::IdeaDark => Self::VscodeMonokai,
+            Self::VscodeDarkModern => Self::IdeaDark,
+            Self::VscodeDark2026 => Self::VscodeDarkModern,
+            Self::VscodeMonokai => Self::VscodeDark2026,
+        }
+    }
+
     pub fn help_text(self) -> &'static str {
         match self {
             Self::IdeaDark => "JetBrains IDEA default Dark theme",

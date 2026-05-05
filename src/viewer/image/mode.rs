@@ -37,6 +37,16 @@ impl ImageMode {
         }
     }
 
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Full => Self::Contour,
+            Self::Block => Self::Full,
+            Self::Geo => Self::Block,
+            Self::Ascii => Self::Geo,
+            Self::Contour => Self::Ascii,
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Full => "full",

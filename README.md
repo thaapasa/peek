@@ -137,16 +137,16 @@ stdout.
 | `PgDn` / `Space` | Page down                       |
 | `Home` / `g`     | Top                             |
 | `End` / `G`      | Bottom                          |
-| `Tab`            | Cycle file's view modes         |
+| `Tab` / `Shift+Tab` | Cycle file's view modes (forward / reverse) |
 | `i`              | File info                       |
 | `h` / `?`        | Toggle help                     |
-| `t`              | Cycle theme                     |
-| `c`              | Cycle color mode                |
+| `t` / `T`        | Cycle theme (forward / reverse) |
+| `c` / `C`        | Cycle color mode (forward / reverse) |
 | `r`              | Toggle raw / pretty (structured)|
 | `x`              | Toggle hex dump                 |
 | `a`              | About / status screen           |
-| `m`              | Cycle image render mode         |
-| `b`              | Cycle image background          |
+| `m` / `M`        | Cycle image render mode (forward / reverse) |
+| `b` / `B`        | Cycle image background (forward / reverse) |
 | `f`              | Cycle image fit mode            |
 | `Left` / `Right` | Pan horizontally (text wrap-off / image FitHeight) |
 | `l`              | Toggle line numbers             |

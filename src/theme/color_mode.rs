@@ -51,6 +51,16 @@ impl ColorMode {
         }
     }
 
+    pub fn prev(self) -> Self {
+        match self {
+            Self::TrueColor => Self::Plain,
+            Self::Ansi256 => Self::TrueColor,
+            Self::Ansi16 => Self::Ansi256,
+            Self::Grayscale => Self::Ansi16,
+            Self::Plain => Self::Grayscale,
+        }
+    }
+
     pub fn help_text(self) -> &'static str {
         match self {
             Self::TrueColor => "24-bit RGB (default)",

@@ -53,6 +53,15 @@ impl Background {
             Self::Checkerboard => Self::Auto,
         }
     }
+
+    pub fn prev(self) -> Self {
+        match self {
+            Self::Auto => Self::Checkerboard,
+            Self::Black => Self::Auto,
+            Self::White => Self::Black,
+            Self::Checkerboard => Self::White,
+        }
+    }
 }
 
 /// Which axis constrains the rendered image grid relative to the terminal

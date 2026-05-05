@@ -37,7 +37,9 @@ const ANIM_ACTIONS: &[(Action, &str)] = &[
     (Action::NextFrame, "Next frame"),
     (Action::PrevFrame, "Previous frame"),
     (Action::CycleBackground, "Cycle background (images)"),
+    (Action::CycleBackgroundBack, "Cycle background backward"),
     (Action::CycleImageMode, "Cycle render mode (images)"),
+    (Action::CycleImageModeBack, "Cycle render mode backward"),
     (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
     (Action::ScrollLeft, "Scroll left (FitHeight)"),
     (Action::ScrollRight, "Scroll right (FitHeight)"),
@@ -199,8 +201,16 @@ impl Mode for AnimationMode {
                 self.config.background = self.config.background.next();
                 Handled::Yes
             }
+            Action::CycleBackgroundBack => {
+                self.config.background = self.config.background.prev();
+                Handled::Yes
+            }
             Action::CycleImageMode => {
                 self.config.mode = self.config.mode.next();
+                Handled::Yes
+            }
+            Action::CycleImageModeBack => {
+                self.config.mode = self.config.mode.prev();
                 Handled::Yes
             }
             Action::CycleFitMode => {
