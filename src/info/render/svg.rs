@@ -16,6 +16,7 @@ pub(super) fn render_section(
     has_script: bool,
     has_external_href: bool,
     animation: Option<&SvgAnimationStats>,
+    animation_warning: Option<&str>,
     theme: &PeekTheme,
 ) {
     lines.push(String::new());
@@ -60,5 +61,8 @@ pub(super) fn render_section(
         let label = if a.infinite { "looping" } else { "one-shot" };
         let value = format!("{} frames, {:.2}s ({label})", a.frame_count, dur_s);
         push_field(lines, "Animation", &theme.paint_value(&value), theme);
+    } else if let Some(reason) = animation_warning {
+        let painted = theme.paint(&format!(" {reason}"), theme.warning);
+        push_field(lines, "Animation", &painted, theme);
     }
 }

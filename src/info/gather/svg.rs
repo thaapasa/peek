@@ -3,7 +3,7 @@
 //! stricter than necessary for what amounts to "is the script tag here".
 
 use super::super::{FileExtras, SvgAnimationStats, TextStats};
-use crate::viewer::image::svg_anim;
+use crate::viewer::image::svg_anim::{self, ParseOutcome};
 
 pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
     let s = match std::str::from_utf8(bytes) {
@@ -22,6 +22,7 @@ pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
                 has_script: false,
                 has_external_href: false,
                 animation: None,
+                animation_warning: None,
             };
         }
     };
@@ -36,11 +37,18 @@ pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
     let text_count = count_open_tag(s, "text");
     let has_script = s.contains("<script");
     let has_external_href = has_external_href(s);
-    let animation = svg_anim::try_parse_bytes(bytes).map(|m| SvgAnimationStats {
-        frame_count: m.frames.len(),
-        total_duration_ms: m.duration.as_millis() as u64,
-        infinite: m.infinite,
-    });
+    let (animation, animation_warning) = match svg_anim::diagnose_bytes(bytes) {
+        ParseOutcome::Animated(m) => (
+            Some(SvgAnimationStats {
+                frame_count: m.frames.len(),
+                total_duration_ms: m.duration.as_millis() as u64,
+                infinite: m.infinite,
+            }),
+            None,
+        ),
+        ParseOutcome::Unsupported(reason) => (None, Some(reason)),
+        ParseOutcome::NotAnimated => (None, None),
+    };
 
     FileExtras::Svg {
         text,
@@ -55,6 +63,7 @@ pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
         has_script,
         has_external_href,
         animation,
+        animation_warning,
     }
 }
 

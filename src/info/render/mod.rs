@@ -83,6 +83,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             has_script,
             has_external_href,
             animation,
+            animation_warning,
         } => {
             svg::render_section(
                 lines,
@@ -97,6 +98,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
                 *has_script,
                 *has_external_href,
                 animation.as_ref(),
+                animation_warning.as_deref(),
                 theme,
             );
             lines.push(String::new());

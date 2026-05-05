@@ -55,6 +55,10 @@ pub enum FileExtras {
         has_script: bool,
         has_external_href: bool,
         animation: Option<SvgAnimationStats>,
+        /// Set when the SVG declared an animation peek can't play
+        /// (unsupported feature, malformed, or rasterization probe
+        /// failed). Surfaced as a warning row in the info view.
+        animation_warning: Option<String>,
     },
     Structured {
         format_name: &'static str,

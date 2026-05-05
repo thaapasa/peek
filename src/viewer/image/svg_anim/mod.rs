@@ -126,9 +126,23 @@ struct ResolvedTarget {
     original_values: Vec<Option<String>>,
 }
 
-/// Try to extract a CSS animation model from an SVG source. Returns
-/// `Ok(None)` when no animation references are found, or when none of
-/// them resolve to known `@keyframes` rules.
+/// Outcome of attempting to interpret an SVG as a peek-renderable
+/// animation. The plain `try_parse_*` wrappers below collapse this
+/// into `Option<AnimatedSvg>` for the viewer; the info path wants the
+/// `Unsupported` reason to surface as a warning.
+pub enum ParseOutcome {
+    /// SVG had no animation hints (no `@keyframes`, no `animation:`,
+    /// no `animation-name`).
+    NotAnimated,
+    /// SVG declared an animation that peek can play.
+    Animated(AnimatedSvg),
+    /// SVG declared an animation that peek cannot play (unsupported
+    /// feature, malformed, or rasterization probe failed). The reason
+    /// is human-readable for the info-view warning row.
+    Unsupported(String),
+}
+
+/// Try to extract a CSS animation model from an SVG source.
 pub fn try_parse(source: &InputSource) -> Result<Option<AnimatedSvg>> {
     let bytes = source
         .read_bytes()
@@ -138,18 +152,36 @@ pub fn try_parse(source: &InputSource) -> Result<Option<AnimatedSvg>> {
 
 /// Same as [`try_parse`] but operates on an in-memory SVG byte buffer.
 pub fn try_parse_bytes(bytes: &[u8]) -> Option<AnimatedSvg> {
-    let text = std::str::from_utf8(bytes).ok()?;
+    match diagnose_bytes(bytes) {
+        ParseOutcome::Animated(m) => Some(m),
+        _ => None,
+    }
+}
+
+/// Diagnostic variant: returns the rich [`ParseOutcome`] so callers
+/// (like the info gatherer) can surface why an animation was rejected.
+pub fn diagnose_bytes(bytes: &[u8]) -> ParseOutcome {
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return ParseOutcome::NotAnimated;
+    };
     parse_text(text)
 }
 
-fn parse_text(text: &str) -> Option<AnimatedSvg> {
+fn parse_text(text: &str) -> ParseOutcome {
     if !contains_anim_marker(text) {
-        return None;
+        if contains_smil(text) {
+            return ParseOutcome::Unsupported(
+                "SMIL animation (<animate>, <animateMotion>, ...) not supported yet".into(),
+            );
+        }
+        return ParseOutcome::NotAnimated;
     }
     let scanned = scan::scan_svg(text);
     let kf = keyframes::parse_keyframes(&scanned.style_text);
     if kf.is_empty() {
-        return None;
+        return ParseOutcome::Unsupported(
+            "animation references found but no parseable @keyframes rule".into(),
+        );
     }
     let rules = selectors::parse_rules(&scanned.style_text);
 
@@ -182,7 +214,9 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
         });
     }
     if targets.is_empty() {
-        return None;
+        return ParseOutcome::Unsupported(
+            "no element matches a known @keyframes rule (selectors / SMIL not supported)".into(),
+        );
     }
 
     let duration = targets
@@ -190,7 +224,7 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
         .map(|t| t.spec.duration + t.spec.delay)
         .fold(Duration::from_millis(0), |a, b| if b > a { b } else { a });
     if duration.is_zero() {
-        return None;
+        return ParseOutcome::Unsupported("animation duration is zero".into());
     }
     let infinite = targets.iter().any(|t| t.spec.infinite);
 
@@ -198,20 +232,32 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
     let frames = timeline::build_frames(&targets, duration);
     if frames.len() < 2 {
         // Resolved targets but no visible animation — every sample
-        // produced an identical FrameTarget vector. Fall back to the
-        // static SVG render so we don't burn cycles on a fixed image.
-        return None;
+        // produced an identical FrameTarget vector. Probably an
+        // unsupported keyframe property (rotate, scale, color, ...).
+        return ParseOutcome::Unsupported(
+            "keyframes mutate properties peek can't animate yet (only transform translate, \
+             plus numeric/length CSS properties via attribute substitution)"
+                .into(),
+        );
     }
     let marked = marker::build_marked_svg(text, &targets);
 
-    Some(AnimatedSvg {
+    // Sanity-probe: rasterize frame 0 at a small size. If this fails
+    // the markup is broken (out of our control or ours) — refuse to
+    // ship the animation rather than letting the viewer crash mid-play.
+    let model = AnimatedSvg {
         marked,
         duration,
         infinite,
         frames,
         width_px,
         height_px,
-    })
+    };
+    let probe = marker::render_frame(&model, 0);
+    if let Err(e) = super::svg::rasterize_svg_bytes(probe.as_bytes(), 32, 32) {
+        return ParseOutcome::Unsupported(format!("animated SVG fails to rasterize: {e}"));
+    }
+    ParseOutcome::Animated(model)
 }
 
 /// Concatenate declaration blocks that apply to `el`: every matching
@@ -251,6 +297,14 @@ fn contains_anim_marker(text: &str) -> bool {
     text.contains("@keyframes") || text.contains("animation:") || text.contains("animation-name")
 }
 
+/// True when the SVG carries a SMIL animation element (`<animate>`,
+/// `<animateMotion>`, `<animateTransform>`, `<animateColor>`, `<set>`).
+/// peek doesn't model SMIL — used only to surface a "not supported"
+/// warning in the info view.
+fn contains_smil(text: &str) -> bool {
+    text.contains("<animate") || text.contains("<set ") || text.contains("<set/")
+}
+
 /// Collect distinct CSS property names that appear in any stop's
 /// `props` list, preserving the order they were first encountered.
 fn collect_animated_props(stops: &[keyframes::KeyframeStop]) -> Vec<String> {
@@ -277,9 +331,19 @@ mod tests {
 </g>
 </svg>"#;
 
+    fn must_parse(text: &str) -> AnimatedSvg {
+        match parse_text(text) {
+            ParseOutcome::Animated(m) => m,
+            ParseOutcome::NotAnimated => panic!("expected animation, got NotAnimated"),
+            ParseOutcome::Unsupported(reason) => {
+                panic!("expected animation, got Unsupported: {reason}")
+            }
+        }
+    }
+
     #[test]
     fn detects_keyframes_and_targets() {
-        let model = parse_text(SAMPLE).expect("parsed");
+        let model = must_parse(SAMPLE);
         assert_eq!(model.duration, Duration::from_secs(3));
         assert!(model.infinite);
         assert_eq!(model.frames.len(), 3);
@@ -287,7 +351,7 @@ mod tests {
 
     #[test]
     fn stepped_holds_value_until_next_stop() {
-        let model = parse_text(SAMPLE).expect("parsed");
+        let model = must_parse(SAMPLE);
         assert_eq!(model.frames[0].targets[0].transform, "");
         assert_eq!(model.frames[1].targets[0].transform, "translate(-100,0)");
         assert_eq!(model.frames[2].targets[0].transform, "translate(-200,0)");
@@ -295,7 +359,7 @@ mod tests {
 
     #[test]
     fn render_frame_substitutes_marker() {
-        let model = parse_text(SAMPLE).expect("parsed");
+        let model = must_parse(SAMPLE);
         let f1 = render_frame(&model, 1);
         assert!(f1.contains("transform=\"translate(-100,0)\""));
         assert!(!f1.contains("__PEEK_ANIM_"));
@@ -304,12 +368,15 @@ mod tests {
     #[test]
     fn no_keyframes_returns_none() {
         let plain = r#"<svg><rect/></svg>"#;
-        assert!(parse_text(plain).is_none());
+        assert!(matches!(
+            parse_text(plain),
+            ParseOutcome::NotAnimated | ParseOutcome::Unsupported(_)
+        ));
     }
 
     #[test]
     fn patched_svg_parses_with_resvg() {
-        let model = parse_text(SAMPLE).expect("parsed");
+        let model = must_parse(SAMPLE);
         for i in 0..model.frames.len() {
             let bytes = render_frame(&model, i);
             // Round-trip through resvg/usvg to confirm injection produced
@@ -338,7 +405,7 @@ mod tests {
 <rect x="100" y="0" width="100" height="40" fill="rgb(255,0,0)"/>
 </svg>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.frames.len(), 2, "expected two distinct frames");
         let f0 = render_frame(&model, 0);
         let f1 = render_frame(&model, 1);
@@ -404,6 +471,36 @@ mod tests {
         );
     }
 
+    #[test]
+    fn smil_only_svg_returns_unsupported_warning() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="5"><animate attributeName="r" from="0" to="5" dur="1s" repeatCount="indefinite"/></circle></svg>"#;
+        match parse_text(svg) {
+            ParseOutcome::Unsupported(reason) => {
+                assert!(reason.contains("SMIL"), "got: {reason}");
+            }
+            other => panic!("expected Unsupported, got {:?}", outcome_label(&other)),
+        }
+    }
+
+    #[test]
+    fn malformed_keyframes_returns_unsupported() {
+        // `@keyframes` declared but the body is unparseable — there are
+        // no stops, so kf is empty and parse_text bails with a reason.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><style>@keyframes m {}</style><circle class="dot" style="animation:m 1s infinite" cx="10" cy="10" r="5"/></svg>"#;
+        match parse_text(svg) {
+            ParseOutcome::Unsupported(_) => {}
+            other => panic!("expected Unsupported, got {:?}", outcome_label(&other)),
+        }
+    }
+
+    fn outcome_label(o: &ParseOutcome) -> &'static str {
+        match o {
+            ParseOutcome::NotAnimated => "NotAnimated",
+            ParseOutcome::Animated(_) => "Animated",
+            ParseOutcome::Unsupported(_) => "Unsupported",
+        }
+    }
+
     /// Sanity-check the airlock demo fixture: frame 0 should differ
     /// visually from a mid-animation frame.
     #[test]
@@ -443,7 +540,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}.dot{animation:m 1s steps(1,end) infinite}</style>
 <circle class="dot" cx="10" cy="10" r="2"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_secs(1));
         assert!(model.infinite);
         assert!(
@@ -463,7 +560,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}#a{animation:m 1s steps(1,end) infinite}</style>
 <circle id="a" cx="10" cy="10" r="2"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert!(model.frames.len() >= 2);
     }
 
@@ -474,7 +571,7 @@ mod tests {
 <circle class="foo" cx="10" cy="10" r="2"/>
 <rect class="foo" width="10" height="10"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         // Only the circle matches `circle.foo`; the rect (same class
         // but different tag) is ignored.
         let f1 = render_frame(&model, 1);
@@ -491,7 +588,7 @@ mod tests {
 <style>@keyframes m{0%{r:0}50%{r:5px}}.dot{animation:m 1s steps(1,end) infinite}</style>
 <circle class="dot" cx="10" cy="10" r="0" fill="red"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert!(
             model.frames.len() >= 2,
             "stepped r animation should yield multiple frames"
@@ -532,7 +629,7 @@ mod tests {
 <style>@keyframes m{0%{r:0}100%{r:10}}.dot{animation:m 1s linear infinite}</style>
 <circle class="dot" cx="10" cy="10" r="0"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         // FPS sampling produces ~30 frames; some frame should land near
         // r=5 ± a touch.
         let mid_hit = model.frames.iter().any(|f| {
@@ -557,7 +654,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-10px)}}.dot{animation:m 5s steps(1,end) infinite}</style>
 <g class="dot" style="animation-duration:1s"></g>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_secs(1));
     }
 
@@ -567,7 +664,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation-name:m;animation-duration:1s;animation-delay:500ms;animation-iteration-count:infinite}</style>
 <circle class="dot" cx="10" cy="10" r="2"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_millis(1500));
         // Frame 0 is pre-delay → empty transform; some later frame
         // carries the post-delay translate.
@@ -587,7 +684,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translateX(0)}100%{transform:translateX(-10px)}}.dot{animation:m 1s 0.5s linear infinite}</style>
 <circle class="dot" cx="10" cy="10" r="2"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_millis(1500));
     }
 
@@ -598,7 +695,7 @@ mod tests {
 <circle class="a" cx="10" cy="10" r="2"/>
 <circle class="b" cx="20" cy="10" r="2"/>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         // Total = max(1s+0, 1s+0.5s) = 1.5s.
         assert_eq!(model.duration, Duration::from_millis(1500));
         // Find a frame in which target a is animating but target b is
@@ -619,7 +716,7 @@ mod tests {
 <style>@keyframes m{0%{transform:translate(0,0)}100%{transform:translate(10,5)}}</style>
 <g style="animation:m 1s linear infinite"></g>
 </svg>"#;
-        let model = parse_text(svg).expect("parsed");
+        let model = must_parse(svg);
         assert_eq!(model.duration, Duration::from_secs(1));
         assert!(model.infinite);
         // Linear timing, infinite loop → last sample approaches (but does
