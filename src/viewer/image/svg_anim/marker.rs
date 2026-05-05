@@ -21,27 +21,46 @@ use super::{AnimatedSvg, ResolvedTarget};
 /// Build the marked SVG. Replaces each target's original opening tag
 /// with a slotted version and wraps the whole element in an outer
 /// `<g>` carrying the transform placeholder.
+///
+/// Edits can collide at byte boundaries — for adjacent self-closing
+/// elements without whitespace between them (`<circle/><circle/>`),
+/// the previous element's `close_at` and the next's `open_at` are the
+/// same byte. Iterating `replace_range` in any order ends up
+/// clobbering one of the edits because indices into the *current*
+/// buffer drift after each mutation. Instead we sort all edits
+/// ascending and build the output in a single forward pass: the
+/// natural order of zero-length inserts at the same byte (close of N,
+/// then open of N+1, then patched-open of N+1) falls out for free
+/// from the stable push order below.
 pub(super) fn build_marked_svg(text: &str, targets: &[ResolvedTarget]) -> String {
-    // Edits accumulate as `(span_start, span_end, replacement)` so we
-    // can apply them all at once in descending order without
-    // invalidating later byte offsets.
     let mut edits: Vec<(usize, usize, String)> = Vec::new();
-
     for (i, t) in targets.iter().enumerate() {
         let original_open = &text[t.open_at..t.open_tag_end];
         let patched_open = patch_opening_tag(original_open, i, &t.animated_props);
-        edits.push((t.open_at, t.open_tag_end, patched_open));
 
-        // Outer transform wrapper. The open marker sits *before* the
-        // element's `<` and the close marker *after* `</tag>` /`/>`.
+        // Push order at same start byte must be: wrap-open (insert) →
+        // patched-open (replace) so the final output reads
+        // `<g …><circle …/></g>` not `<circle …/><g …></g>`.
         edits.push((t.open_at, t.open_at, format!("<g __PEEK_ANIM_TR_{i}__>")));
+        edits.push((t.open_at, t.open_tag_end, patched_open));
         edits.push((t.close_at, t.close_at, "</g>".to_string()));
     }
+    edits.sort_by_key(|(s, _, _)| *s);
 
-    edits.sort_by_key(|(s, _, _)| std::cmp::Reverse(*s));
-    let mut out = text.to_string();
+    let mut out = String::with_capacity(text.len() + edits.len() * 32);
+    let mut cursor = 0;
     for (start, end, replacement) in edits {
-        out.replace_range(start..end, &replacement);
+        // Copy any source between the previous edit and this one.
+        if cursor < start {
+            out.push_str(&text[cursor..start]);
+        }
+        out.push_str(&replacement);
+        if end > cursor {
+            cursor = end;
+        }
+    }
+    if cursor < text.len() {
+        out.push_str(&text[cursor..]);
     }
     out
 }

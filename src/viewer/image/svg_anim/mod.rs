@@ -360,6 +360,25 @@ mod tests {
         );
     }
 
+    /// Diagnostic: dump loader-dots marked SVG.
+    #[test]
+    fn dump_loader_dots() {
+        if std::env::var("PEEK_DUMP_LOADER").is_err() {
+            return;
+        }
+        let bytes = std::fs::read(format!(
+            "{}/test-images/loader-dots.svg",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let m = try_parse_bytes(&bytes).expect("parsed");
+        eprintln!("MARKED:\n{}\n", m.marked);
+        for i in 0..m.frames.len().min(3) {
+            let r = render_frame(&m, i);
+            eprintln!("FRAME {i}:\n{r}\n");
+        }
+    }
+
     /// Diagnostic: dump a specific demo frame to `/tmp/peek-frame.png`.
     /// Off by default; enable with `PEEK_DUMP_FRAME=N cargo test
     /// dump_demo_frame_for_inspection`.
