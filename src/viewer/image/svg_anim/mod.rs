@@ -11,23 +11,35 @@
 //!    via `animation-name: NAME` / `animation: NAME ...`.
 //! 3. Sample each target's timeline into discrete frames (one per stop for
 //!    `steps()` timing, ~30 fps interpolated for `linear`/unspecified).
-//! 4. Cache a "marked SVG" string with `__PEEK_ANIM_OPEN_<i>__` /
-//!    `__PEEK_ANIM_CLOSE_<i>__` placeholders inserted immediately
-//!    *outside* each animated element's tag span; per frame, the open
-//!    marker becomes `<g transform="...">` and the close marker `</g>`.
+//! 4. Build a "marked SVG" once. For each animated element:
+//!    - Outer wrapper `<g __PEEK_ANIM_TR_<i>__>...</g>` carries the
+//!      per-frame transform.
+//!    - Property animations are baked in by rewriting the original
+//!      opening tag: each animated attribute (`r`, `cx`, ...) is
+//!      excised and a `__PEEK_ANIM_S_<i>_<j>__` slot placeholder is
+//!      added before the closing `>`/`/>`. [`render_frame`] then
+//!      substitutes ` name="value"` (or restores the original) per
+//!      sample.
 //!
 //! The `<g>` wrapper exists because resvg/usvg currently ignore the
 //! `transform` attribute when applied directly to a nested `<svg>`
 //! element (covered by `nested_svg_transform_actually_shifts_content`).
-//! Wrapping the element from outside lifts the transform onto a parent
-//! group whose effect cascades through the original element — works
-//! identically for container and self-closing leaf tags.
+//! Self-closing leaves and container tags wrap uniformly.
+//!
+//! Property animation can't go through CSS: usvg 0.47 does not honor
+//! `<style>` rules for SVG geometric properties (verified
+//! experimentally — `<style>circle{r:5px}</style>` doesn't change `r`).
+//! Direct attribute substitution sidesteps that limitation.
 //!
 //! Scope: CSS keyframes only (no SMIL `<animate>`); inline-style and
-//! flat class/id/tag/`tag.class` selector targets; `transform:
-//! translateX/Y` and `translate(x, y)` properties only. Combinators,
-//! pseudo-classes, attribute selectors, and `*` are dropped silently.
-//! Unknown timing functions are treated as `linear`.
+//! flat class/id/tag/`tag.class` selector targets. Animatable
+//! properties: `transform: translateX/Y` and `translate(x, y)` plus
+//! arbitrary CSS properties (`r`, `cx`, `cy`, `opacity`,
+//! `stroke-width`, ...) — numeric+unit values interpolate between
+//! stops on `linear` timing, and any value steps under `steps()`
+//! timing. Selector combinators, pseudo-classes, attribute selectors,
+//! and `*` are dropped silently. Unknown timing functions are treated
+//! as `linear`.
 //!
 //! `animation-delay` (longhand and as the second time token in the
 //! `animation:` shorthand) is honored — pre-delay holds the un-animated
@@ -61,12 +73,14 @@ mod util;
 
 pub use marker::render_frame;
 
+use timeline::FrameTarget;
+
 /// Parsed animation model + a pre-marked SVG string ready for per-frame
 /// substitution.
 pub struct AnimatedSvg {
-    /// SVG source with `__PEEK_ANIM_<i>__` markers injected at each
-    /// target's opening-tag attribute slot. Per-frame rendering replaces
-    /// each marker with ` transform="..."` (or empty string).
+    /// SVG source with `__PEEK_ANIM_TR_<i>__` (transform) and
+    /// `__PEEK_ANIM_S_<i>_<j>__` (per-prop attribute slot) placeholders
+    /// pre-injected. Per-frame rendering replaces every placeholder.
     pub marked: String,
     /// Total animation duration (one iteration).
     pub duration: Duration,
@@ -86,19 +100,30 @@ pub struct Frame {
     /// Time the frame holds before advancing (saturates against duration
     /// for the final frame so a full loop totals `duration`).
     pub delay: Duration,
-    /// Per-target SVG `transform` attribute value at this frame. Empty
-    /// string = no transform attribute injected.
-    pub transforms: Vec<String>,
+    /// Per-target render state at this frame, parallel to the target
+    /// list resolved during parse. Private — only consumed by the
+    /// marker submodule and the in-module tests.
+    targets: Vec<FrameTarget>,
 }
 
-/// Per-target join of [`scan::RawTarget`] (byte spans + spec) with the
-/// keyframe stops referenced by name. Built in [`parse_text`], consumed
-/// by [`timeline::build_frames`] and [`marker::build_marked_svg`].
+/// Per-target join of [`scan::RawElement`] (byte spans + tag) with the
+/// keyframe stops referenced by name + per-target prop bookkeeping.
+/// Built in [`parse_text`], consumed by [`timeline::build_frames`]
+/// (sampling) and [`marker::build_marked_svg`] (opening-tag rewrite).
 struct ResolvedTarget {
     open_at: usize,
     close_at: usize,
+    open_tag_end: usize,
     spec: spec::AnimSpec,
     stops: Vec<keyframes::KeyframeStop>,
+    /// Distinct CSS property names mutated by any keyframe stop, in
+    /// source order. Each entry corresponds to one `__PEEK_ANIM_S_<i>_<j>__`
+    /// placeholder in the marked SVG.
+    animated_props: Vec<String>,
+    /// Original attribute value per `animated_props` index, captured
+    /// from the element's opening tag. `None` = attribute was not
+    /// present originally; pre-delay frames render no slot at all.
+    original_values: Vec<Option<String>>,
 }
 
 /// Try to extract a CSS animation model from an SVG source. Returns
@@ -139,11 +164,21 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
         let Some(stops) = kf.get(&spec.name) else {
             continue;
         };
+        let stops = stops.clone();
+        let animated_props = collect_animated_props(&stops);
+        let opening_tag = &text[el.open_at..el.open_tag_end];
+        let original_values: Vec<Option<String>> = animated_props
+            .iter()
+            .map(|name| marker::find_attr_value(opening_tag, name))
+            .collect();
         targets.push(ResolvedTarget {
             open_at: el.open_at,
             close_at: el.close_at,
+            open_tag_end: el.open_tag_end,
             spec,
-            stops: stops.clone(),
+            stops,
+            animated_props,
+            original_values,
         });
     }
     if targets.is_empty() {
@@ -162,9 +197,8 @@ fn parse_text(text: &str) -> Option<AnimatedSvg> {
     let (width_px, height_px) = util::root_svg_dimensions(text).unwrap_or((1, 1));
     let frames = timeline::build_frames(&targets, duration);
     if frames.len() < 2 {
-        // Resolved targets but no visible animation — every sampled
-        // frame produced the same per-target transforms (e.g. keyframes
-        // animate a property we don't yet support). Fall back to the
+        // Resolved targets but no visible animation — every sample
+        // produced an identical FrameTarget vector. Fall back to the
         // static SVG render so we don't burn cycles on a fixed image.
         return None;
     }
@@ -217,6 +251,20 @@ fn contains_anim_marker(text: &str) -> bool {
     text.contains("@keyframes") || text.contains("animation:") || text.contains("animation-name")
 }
 
+/// Collect distinct CSS property names that appear in any stop's
+/// `props` list, preserving the order they were first encountered.
+fn collect_animated_props(stops: &[keyframes::KeyframeStop]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for s in stops {
+        for p in &s.props {
+            if !out.iter().any(|n| n.eq_ignore_ascii_case(&p.name)) {
+                out.push(p.name.clone());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -240,9 +288,9 @@ mod tests {
     #[test]
     fn stepped_holds_value_until_next_stop() {
         let model = parse_text(SAMPLE).expect("parsed");
-        assert_eq!(model.frames[0].transforms[0], "");
-        assert_eq!(model.frames[1].transforms[0], "translate(-100,0)");
-        assert_eq!(model.frames[2].transforms[0], "translate(-200,0)");
+        assert_eq!(model.frames[0].targets[0].transform, "");
+        assert_eq!(model.frames[1].targets[0].transform, "translate(-100,0)");
+        assert_eq!(model.frames[2].targets[0].transform, "translate(-200,0)");
     }
 
     #[test]
@@ -415,17 +463,71 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_property_falls_back_to_static() {
-        // Class-resolved animation that only mutates `r` (no transform)
-        // — until attribute animation lands, every sampled frame
-        // collapses to the same empty transform vector. parse_text
-        // detects this and returns None so the viewer uses the static
-        // image render instead.
+    fn property_animation_resolves_and_renders() {
+        // Class-resolved animation that only mutates `r` (no transform).
+        // The per-frame style block targets the wrapper id; resvg
+        // applies the `r` override over the element's presentation
+        // attribute, producing a visible animation.
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
 <style>@keyframes m{0%{r:0}50%{r:5px}}.dot{animation:m 1s steps(1,end) infinite}</style>
+<circle class="dot" cx="10" cy="10" r="0" fill="red"/>
+</svg>"#;
+        let model = parse_text(svg).expect("parsed");
+        assert!(
+            model.frames.len() >= 2,
+            "stepped r animation should yield multiple frames"
+        );
+        // Slot strings carry the rebuilt attribute (e.g. ` r="5"`).
+        let zero_idx = model
+            .frames
+            .iter()
+            .position(|f| f.targets[0].slots[0].contains("r=\"0\""));
+        let big_idx = model
+            .frames
+            .iter()
+            .position(|f| f.targets[0].slots[0].contains("r=\"5"));
+        assert!(zero_idx.is_some() && big_idx.is_some());
+        // Pixel-level check: at the small-r frame the centre is red,
+        // at the r=0 frame nothing draws there.
+        let big = render_frame(&model, big_idx.unwrap());
+        let small = render_frame(&model, zero_idx.unwrap());
+        let img_big = super::super::svg::rasterize_svg_bytes(big.as_bytes(), 20, 20).unwrap();
+        let img_small = super::super::svg::rasterize_svg_bytes(small.as_bytes(), 20, 20).unwrap();
+        let p_big = img_big.to_rgba8().get_pixel(10, 10).0;
+        let p_small = img_small.to_rgba8().get_pixel(10, 10).0;
+        assert!(
+            p_big[0] > 200 && p_big[1] < 50,
+            "r=5 frame should paint red at centre, got {p_big:?}"
+        );
+        assert!(
+            p_small[3] == 0 || (p_small[0] < 50 && p_small[3] < 50),
+            "r=0 frame should leave centre transparent, got {p_small:?}"
+        );
+    }
+
+    #[test]
+    fn linear_property_interpolation_between_stops() {
+        // 0%→100% linear `r:0`→`r:10`. At ~half the timeline `r` should
+        // be ≈5. We assert the literal substring appears in some frame.
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20">
+<style>@keyframes m{0%{r:0}100%{r:10}}.dot{animation:m 1s linear infinite}</style>
 <circle class="dot" cx="10" cy="10" r="0"/>
 </svg>"#;
-        assert!(parse_text(svg).is_none());
+        let model = parse_text(svg).expect("parsed");
+        // FPS sampling produces ~30 frames; some frame should land near
+        // r=5 ± a touch.
+        let mid_hit = model.frames.iter().any(|f| {
+            f.targets[0].slots[0].contains("r=\"4") || f.targets[0].slots[0].contains("r=\"5")
+        });
+        assert!(
+            mid_hit,
+            "expected an interpolated frame with r near 5; slots: {:?}",
+            model
+                .frames
+                .iter()
+                .map(|f| f.targets[0].slots.clone())
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -450,9 +552,12 @@ mod tests {
         assert_eq!(model.duration, Duration::from_millis(1500));
         // Frame 0 is pre-delay → empty transform; some later frame
         // carries the post-delay translate.
-        assert_eq!(model.frames[0].transforms[0], "");
+        assert_eq!(model.frames[0].targets[0].transform, "");
         assert!(
-            model.frames.iter().any(|f| !f.transforms[0].is_empty()),
+            model
+                .frames
+                .iter()
+                .any(|f| !f.targets[0].transform.is_empty()),
             "expected at least one post-delay frame with translate"
         );
     }
@@ -482,15 +587,10 @@ mod tests {
         let mid = model
             .frames
             .iter()
-            .find(|f| !f.transforms[0].is_empty() && f.transforms[1].is_empty());
+            .find(|f| !f.targets[0].transform.is_empty() && f.targets[1].transform.is_empty());
         assert!(
             mid.is_some(),
-            "expected at least one frame with a animating, b pre-delay; got frames: {:?}",
-            model
-                .frames
-                .iter()
-                .map(|f| f.transforms.clone())
-                .collect::<Vec<_>>()
+            "expected at least one frame with a animating, b pre-delay"
         );
     }
 
@@ -506,6 +606,6 @@ mod tests {
         // Linear timing, infinite loop → last sample approaches (but does
         // not reach) the 100% value, since reaching 100% would wrap to 0.
         let last = model.frames.last().unwrap();
-        assert!(last.transforms[0].starts_with("translate(9."));
+        assert!(last.targets[0].transform.starts_with("translate(9."));
     }
 }

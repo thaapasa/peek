@@ -1,6 +1,8 @@
-//! CSS `@keyframes` rule parser. Produces per-rule stop lists with
-//! optional transform values; understands `translateX`, `translateY`,
-//! `translate`.
+//! CSS `@keyframes` rule parser. Produces per-rule stop lists with an
+//! optional `transform` value plus arbitrary CSS property changes
+//! (`r`, `cx`, `opacity`, `stroke-width`, ...). Numeric values keep
+//! their unit so the timeline sampler can interpolate; non-numeric
+//! values are kept as raw strings and step through stops.
 
 use std::collections::HashMap;
 
@@ -10,12 +12,42 @@ use super::util::{find_matching_brace, find_substr, parse_length, skip_ws};
 pub(super) struct KeyframeStop {
     pub percent: f64,
     pub transform: Option<TransformValue>,
+    pub props: Vec<PropChange>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(super) struct TransformValue {
     pub tx: f64,
     pub ty: f64,
+}
+
+#[derive(Clone)]
+pub(super) struct PropChange {
+    pub name: String,
+    pub value: PropValue,
+}
+
+#[derive(Clone)]
+pub(super) enum PropValue {
+    Numeric { value: f64, unit: String },
+    Raw(String),
+}
+
+impl PropValue {
+    pub fn render(&self) -> String {
+        match self {
+            PropValue::Numeric { value, unit } => format!("{}{}", fmt_num(*value), unit),
+            PropValue::Raw(s) => s.clone(),
+        }
+    }
+}
+
+fn fmt_num(n: f64) -> String {
+    if n.fract() == 0.0 {
+        format!("{:.0}", n)
+    } else {
+        format!("{:.4}", n)
+    }
 }
 
 pub(super) fn parse_keyframes(css: &str) -> HashMap<String, Vec<KeyframeStop>> {
@@ -100,11 +132,12 @@ fn parse_keyframe_stops(body: &str) -> Vec<KeyframeStop> {
         };
         let close = cursor + close_rel;
         let decls = &body[cursor..close];
-        let transform = parse_transform_decl(decls);
+        let (transform, props) = parse_decls(decls);
         for p in percents {
             out.push(KeyframeStop {
                 percent: p,
                 transform,
+                props: props.clone(),
             });
         }
         cursor = close + 1;
@@ -126,20 +159,51 @@ fn parse_percent_token(tok: &str) -> Option<f64> {
     tok.parse::<f64>().ok()
 }
 
-fn parse_transform_decl(decls: &str) -> Option<TransformValue> {
-    // Walk `prop:value;` pairs; only `transform:` is consumed.
+/// Walk `prop:value;` pairs; pull `transform:` into a [`TransformValue`]
+/// and capture every other declaration as a [`PropChange`]. `animation-*`
+/// declarations (e.g. per-stop `animation-timing-function`) are ignored
+/// — peek doesn't model per-stop timing curves.
+fn parse_decls(decls: &str) -> (Option<TransformValue>, Vec<PropChange>) {
+    let mut transform = None;
+    let mut props: Vec<PropChange> = Vec::new();
     for chunk in decls.split(';') {
         let Some(colon) = chunk.find(':') else {
             continue;
         };
-        let prop = chunk[..colon].trim();
-        if !prop.eq_ignore_ascii_case("transform") {
+        let name = chunk[..colon].trim();
+        let value = chunk[colon + 1..].trim();
+        if name.is_empty() || value.is_empty() {
             continue;
         }
-        let value = chunk[colon + 1..].trim();
-        return parse_transform_value(value);
+        if name.eq_ignore_ascii_case("transform") {
+            transform = parse_transform_value(value);
+            continue;
+        }
+        if name.to_ascii_lowercase().starts_with("animation-") {
+            continue;
+        }
+        props.push(PropChange {
+            name: name.to_string(),
+            value: parse_prop_value(value),
+        });
     }
-    None
+    (transform, props)
+}
+
+fn parse_prop_value(v: &str) -> PropValue {
+    let v = v.trim();
+    let split = v
+        .find(|c: char| {
+            !(c == '-' || c == '+' || c == '.' || c.is_ascii_digit() || c == 'e' || c == 'E')
+        })
+        .unwrap_or(v.len());
+    if split > 0
+        && let Ok(num) = v[..split].parse::<f64>()
+    {
+        let unit = v[split..].trim().to_string();
+        return PropValue::Numeric { value: num, unit };
+    }
+    PropValue::Raw(v.to_string())
 }
 
 fn parse_transform_value(value: &str) -> Option<TransformValue> {

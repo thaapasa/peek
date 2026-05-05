@@ -15,15 +15,17 @@ pub(super) struct XmlScan {
 }
 
 pub(super) struct RawElement {
-    /// Byte position of the `<` that opens the element. Open marker
-    /// (later replaced with `<g transform="...">`) is inserted here so
-    /// the wrapper sits *outside* the element — works uniformly for
-    /// container and self-closing tags.
+    /// Byte position of the `<` that opens the element. Outer marker
+    /// for transform wrapping is inserted here.
     pub open_at: usize,
     /// Byte position right after the element's closing tag (or `/>`
-    /// for self-closing elements). Close marker (replaced with `</g>`)
-    /// is inserted here.
+    /// for self-closing elements). Outer close marker is inserted here.
     pub close_at: usize,
+    /// Byte position right after the `>` (or `/>`) that closes the
+    /// element's opening tag — `text[open_at..open_tag_end]` is the
+    /// opening-tag slice. Marker phase rewrites this slice when the
+    /// target carries property animations.
+    pub open_tag_end: usize,
     pub tag: String,
     pub classes: Vec<String>,
     pub id: Option<String>,
@@ -47,6 +49,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
     struct Pending {
         depth: i32,
         open_at: usize,
+        open_tag_end: usize,
         tag: String,
         classes: Vec<String>,
         id: Option<String>,
@@ -81,6 +84,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                     pending.push(Pending {
                         depth,
                         open_at: pos_before,
+                        open_tag_end: pos_after,
                         tag,
                         classes: attrs.classes,
                         id: attrs.id,
@@ -97,6 +101,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                     elements.push(RawElement {
                         open_at: pos_before,
                         close_at: pos_after,
+                        open_tag_end: pos_after,
                         tag,
                         classes: attrs.classes,
                         id: attrs.id,
@@ -111,6 +116,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                         elements.push(RawElement {
                             open_at: p.open_at,
                             close_at: pos_after,
+                            open_tag_end: p.open_tag_end,
                             tag: p.tag,
                             classes: p.classes,
                             id: p.id,

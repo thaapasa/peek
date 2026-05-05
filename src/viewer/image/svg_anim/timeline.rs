@@ -4,7 +4,23 @@ use std::time::Duration;
 
 use super::Frame;
 use super::ResolvedTarget;
-use super::keyframes::TransformValue;
+use super::keyframes::{PropChange, PropValue, TransformValue};
+
+/// Per-target render state at a single sampled time. Carried inside
+/// [`Frame::targets`]; coalescing in [`build_frames`] uses full-equality
+/// so a frame is only emitted when *any* target's state changes.
+#[derive(Clone, PartialEq, Eq, Default)]
+pub(super) struct FrameTarget {
+    /// `transform` attribute value to inject on the wrapper `<g>` (or
+    /// empty string for "no transform").
+    pub transform: String,
+    /// Per-animated-property attribute slots. Index parallel to
+    /// `ResolvedTarget::animated_props`. Each entry is the full slot
+    /// text (e.g. ` r="5"`) or empty (no override — use whatever the
+    /// element's own opening tag has, after slot-rewrite that means
+    /// "no attribute at all").
+    pub slots: Vec<String>,
+}
 
 pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<Frame> {
     let dur_s = total.as_secs_f64();
@@ -19,8 +35,6 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
     for tg in targets {
         let target_dur = tg.spec.duration.as_secs_f64();
         let delay = tg.spec.delay.as_secs_f64();
-        // Sample the delay→animate boundary so the pre-delay frame is
-        // distinguishable from the first stop when they share a value.
         if delay > 0.0 && delay < dur_s {
             times.push(delay);
         }
@@ -52,14 +66,14 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
     times.sort_by(|a, b| a.partial_cmp(b).unwrap());
     times.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
 
-    // For each candidate time, compute per-target transforms; coalesce
-    // consecutive samples whose transform vectors are identical.
-    let mut samples: Vec<(f64, Vec<String>)> = Vec::new();
+    // For each candidate time, compute per-target FrameTargets; coalesce
+    // consecutive samples whose vectors are bit-identical.
+    let mut samples: Vec<(f64, Vec<FrameTarget>)> = Vec::new();
     for &t in &times {
-        let xforms: Vec<String> = targets.iter().map(|tg| sample_target(tg, t)).collect();
+        let row: Vec<FrameTarget> = targets.iter().map(|tg| sample_target(tg, t)).collect();
         match samples.last() {
-            Some((_, prev)) if prev == &xforms => {}
-            _ => samples.push((t, xforms)),
+            Some((_, prev)) if prev == &row => {}
+            _ => samples.push((t, row)),
         }
     }
 
@@ -76,23 +90,34 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
         let delay_s = (next - now).max(0.020);
         out.push(Frame {
             delay: Duration::from_secs_f64(delay_s),
-            transforms: std::mem::take(&mut samples[i].1),
+            targets: std::mem::take(&mut samples[i].1),
         });
     }
     out
 }
 
-fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> String {
+fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> FrameTarget {
     let target_dur = target.spec.duration.as_secs_f64();
     let delay = target.spec.delay.as_secs_f64();
     if target_dur <= 0.0 || target.stops.is_empty() {
-        return String::new();
+        return FrameTarget::default();
     }
     if t_global_s < delay {
-        // Pre-delay: hold the un-animated state. Matches CSS
-        // `animation-fill-mode: none` (the default) — no transform
-        // applied until the iteration begins.
-        return String::new();
+        // Pre-delay: no transform, slots restore the element's
+        // pre-animation state (original attribute values, or absent
+        // entirely when the element didn't have the attribute).
+        return FrameTarget {
+            transform: String::new(),
+            slots: target
+                .animated_props
+                .iter()
+                .zip(target.original_values.iter())
+                .map(|(name, orig)| match orig {
+                    Some(v) => format!(" {name}=\"{v}\""),
+                    None => String::new(),
+                })
+                .collect(),
+        };
     }
     let t_local = t_global_s - delay;
     let local = if target.spec.infinite {
@@ -103,8 +128,6 @@ fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> String {
     let pct = (local / target_dur) * 100.0;
 
     if target.spec.stepped {
-        // Hold the most recent stop whose percent ≤ pct (CSS `steps(N, end)`
-        // semantics: at the boundary, the new value takes effect).
         let mut current = &target.stops[0];
         for stop in &target.stops {
             if stop.percent <= pct + 1e-9 {
@@ -113,39 +136,114 @@ fn sample_target(target: &ResolvedTarget, t_global_s: f64) -> String {
                 break;
             }
         }
-        return transform_to_attr(current.transform);
+        return FrameTarget {
+            transform: transform_to_attr(current.transform),
+            slots: build_slots_step(target, &current.props),
+        };
     }
 
     // Linear interpolation: find segment [prev, next] with prev.percent ≤
     // pct < next.percent.
-    let mut prev = &target.stops[0];
-    let mut next = &target.stops[target.stops.len() - 1];
+    let mut prev_stop = &target.stops[0];
+    let mut next_stop = &target.stops[target.stops.len() - 1];
     let mut found = false;
     for w in target.stops.windows(2) {
         if w[0].percent <= pct && pct < w[1].percent {
-            prev = &w[0];
-            next = &w[1];
+            prev_stop = &w[0];
+            next_stop = &w[1];
             found = true;
             break;
         }
     }
     if !found {
-        if pct < target.stops[0].percent {
-            return transform_to_attr(target.stops[0].transform);
-        }
-        return transform_to_attr(target.stops.last().unwrap().transform);
+        let s = if pct < target.stops[0].percent {
+            &target.stops[0]
+        } else {
+            target.stops.last().unwrap()
+        };
+        return FrameTarget {
+            transform: transform_to_attr(s.transform),
+            slots: build_slots_step(target, &s.props),
+        };
     }
-    let span = (next.percent - prev.percent).max(1e-6);
-    let alpha = ((pct - prev.percent) / span).clamp(0.0, 1.0);
-    let p = prev
+    let span = (next_stop.percent - prev_stop.percent).max(1e-6);
+    let alpha = ((pct - prev_stop.percent) / span).clamp(0.0, 1.0);
+    let p = prev_stop
         .transform
         .unwrap_or(TransformValue { tx: 0.0, ty: 0.0 });
-    let n = next
+    let n = next_stop
         .transform
         .unwrap_or(TransformValue { tx: 0.0, ty: 0.0 });
     let tx = p.tx + (n.tx - p.tx) * alpha;
     let ty = p.ty + (n.ty - p.ty) * alpha;
-    transform_to_attr(Some(TransformValue { tx, ty }))
+
+    FrameTarget {
+        transform: transform_to_attr(Some(TransformValue { tx, ty })),
+        slots: build_slots_linear(target, &prev_stop.props, &next_stop.props, alpha),
+    }
+}
+
+/// Build slot strings using one stop's props (stepped semantics). For
+/// each animated prop name: if the stop defines a value, render it;
+/// otherwise fall back to the element's original attribute value (or
+/// empty when no original was present).
+fn build_slots_step(target: &ResolvedTarget, props: &[PropChange]) -> Vec<String> {
+    target
+        .animated_props
+        .iter()
+        .zip(target.original_values.iter())
+        .map(|(name, orig)| {
+            let value = props
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .map(|p| p.value.render())
+                .or_else(|| orig.clone());
+            match value {
+                Some(v) => format!(" {name}=\"{v}\""),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
+/// Linear interpolation between two stops' props for matching numeric
+/// values; otherwise mirrors [`build_slots_step`] on the previous stop.
+fn build_slots_linear(
+    target: &ResolvedTarget,
+    prev: &[PropChange],
+    next: &[PropChange],
+    alpha: f64,
+) -> Vec<String> {
+    target
+        .animated_props
+        .iter()
+        .zip(target.original_values.iter())
+        .map(|(name, orig)| {
+            let p_match = prev
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .map(|p| &p.value);
+            let n_match = next
+                .iter()
+                .find(|p| p.name.eq_ignore_ascii_case(name))
+                .map(|p| &p.value);
+            let value = match (p_match, n_match) {
+                (
+                    Some(PropValue::Numeric { value: a, unit: ua }),
+                    Some(PropValue::Numeric { value: b, unit: ub }),
+                ) if ua == ub => {
+                    let v = a + (b - a) * alpha;
+                    Some(format!("{}{}", fmt_num(v), ua))
+                }
+                (Some(p), _) => Some(p.render()),
+                (None, _) => orig.clone(),
+            };
+            match value {
+                Some(v) => format!(" {name}=\"{v}\""),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 fn transform_to_attr(v: Option<TransformValue>) -> String {
