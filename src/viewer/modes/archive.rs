@@ -350,32 +350,28 @@ fn walk(children: &[TreeNode], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
     }
 }
 
+/// Render the 10-char `drwxr-xr-x`-style permission string. When mode
+/// is unset (implicit tree parents that don't appear in the archive's
+/// own header chain), fall back to typical defaults — `rwxr-xr-x` for
+/// dirs, `rw-r--r--` for files — so the column stays informative
+/// instead of dissolving into a wall of `?`s.
 fn format_perms(entry: Option<&ArchiveEntry>, is_dir: bool) -> String {
     let type_ch = if is_dir { 'd' } else { '-' };
-    match entry.and_then(|e| e.mode) {
-        Some(mode) => {
-            let mut s = String::with_capacity(10);
-            s.push(type_ch);
-            for (r, w, x) in [
-                (0o400, 0o200, 0o100),
-                (0o040, 0o020, 0o010),
-                (0o004, 0o002, 0o001),
-            ] {
-                s.push(if mode & r != 0 { 'r' } else { '-' });
-                s.push(if mode & w != 0 { 'w' } else { '-' });
-                s.push(if mode & x != 0 { 'x' } else { '-' });
-            }
-            s
-        }
-        None => {
-            let mut s = String::with_capacity(10);
-            s.push(type_ch);
-            for _ in 0..9 {
-                s.push('?');
-            }
-            s
-        }
+    let mode = entry
+        .and_then(|e| e.mode)
+        .unwrap_or(if is_dir { 0o755 } else { 0o644 });
+    let mut s = String::with_capacity(10);
+    s.push(type_ch);
+    for (r, w, x) in [
+        (0o400, 0o200, 0o100),
+        (0o040, 0o020, 0o010),
+        (0o004, 0o002, 0o001),
+    ] {
+        s.push(if mode & r != 0 { 'r' } else { '-' });
+        s.push(if mode & w != 0 { 'w' } else { '-' });
+        s.push(if mode & x != 0 { 'x' } else { '-' });
     }
+    s
 }
 
 fn format_size(entry: Option<&ArchiveEntry>, is_dir: bool) -> String {
@@ -415,7 +411,6 @@ fn paint_perms(perms: &str, theme: &PeekTheme) -> String {
             'x' => theme.heading,
             'd' | 'l' => theme.heading,
             '-' => lerp_color(theme.muted, theme.background, 0.3),
-            '?' => theme.muted,
             _ => theme.foreground,
         };
         out.push_str(&theme.paint(&ch.to_string(), color));
