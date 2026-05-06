@@ -14,6 +14,7 @@ use anyhow::{Context, Result};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 
+mod sevenz_listing;
 mod tar_listing;
 mod zip_listing;
 
@@ -103,6 +104,10 @@ pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<A
         ArchiveFormat::Zip => zip_listing::list(reader),
         ArchiveFormat::Tar => tar_listing::list_plain(reader),
         ArchiveFormat::TarGz => tar_listing::list_gz(reader),
+        ArchiveFormat::TarBz2 => tar_listing::list_bz2(reader),
+        ArchiveFormat::TarXz => tar_listing::list_xz(reader),
+        ArchiveFormat::TarZst => tar_listing::list_zst(reader),
+        ArchiveFormat::SevenZ => sevenz_listing::list(reader),
     }
 }
 
@@ -155,6 +160,42 @@ mod tests {
         let stats = ArchiveStats::from_entries(ArchiveFormat::TarGz, &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 3);
+        assert_eq!(stats.total_uncompressed_size, 30_683);
+    }
+
+    #[test]
+    fn list_tar_bz2_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.tar.bz2"), ArchiveFormat::TarBz2).unwrap();
+        let stats = ArchiveStats::from_entries(ArchiveFormat::TarBz2, &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 3);
+        assert_eq!(stats.total_uncompressed_size, 30_683);
+    }
+
+    #[test]
+    fn list_tar_xz_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.tar.xz"), ArchiveFormat::TarXz).unwrap();
+        let stats = ArchiveStats::from_entries(ArchiveFormat::TarXz, &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 3);
+        assert_eq!(stats.total_uncompressed_size, 30_683);
+    }
+
+    #[test]
+    fn list_tar_zst_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.tar.zst"), ArchiveFormat::TarZst).unwrap();
+        let stats = ArchiveStats::from_entries(ArchiveFormat::TarZst, &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 3);
+        assert_eq!(stats.total_uncompressed_size, 30_683);
+    }
+
+    #[test]
+    fn list_7z_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.7z"), ArchiveFormat::SevenZ).unwrap();
+        let stats = ArchiveStats::from_entries(ArchiveFormat::SevenZ, &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_uncompressed_size, 30_683);
     }
 }

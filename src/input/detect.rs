@@ -44,6 +44,10 @@ pub enum ArchiveFormat {
     Zip,
     Tar,
     TarGz,
+    TarBz2,
+    TarXz,
+    TarZst,
+    SevenZ,
 }
 
 impl ArchiveFormat {
@@ -52,6 +56,10 @@ impl ArchiveFormat {
             Self::Zip => "ZIP archive",
             Self::Tar => "tar archive",
             Self::TarGz => "tar + gzip",
+            Self::TarBz2 => "tar + bzip2",
+            Self::TarXz => "tar + xz",
+            Self::TarZst => "tar + zstd",
+            Self::SevenZ => "7-Zip archive",
         }
     }
 }
@@ -220,8 +228,20 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
         return Some(ArchiveFormat::TarGz);
     }
+    if lower.ends_with(".tar.bz2") || lower.ends_with(".tbz2") || lower.ends_with(".tbz") {
+        return Some(ArchiveFormat::TarBz2);
+    }
+    if lower.ends_with(".tar.xz") || lower.ends_with(".txz") {
+        return Some(ArchiveFormat::TarXz);
+    }
+    if lower.ends_with(".tar.zst") || lower.ends_with(".tzst") {
+        return Some(ArchiveFormat::TarZst);
+    }
     if lower.ends_with(".tar") {
         return Some(ArchiveFormat::Tar);
+    }
+    if lower.ends_with(".7z") {
+        return Some(ArchiveFormat::SevenZ);
     }
     if lower.ends_with(".zip")
         || lower.ends_with(".jar")
@@ -240,6 +260,7 @@ fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     match mime {
         "application/zip" => Some(ArchiveFormat::Zip),
         "application/x-tar" => Some(ArchiveFormat::Tar),
+        "application/x-7z-compressed" => Some(ArchiveFormat::SevenZ),
         _ => None,
     }
 }

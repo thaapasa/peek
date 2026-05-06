@@ -132,10 +132,10 @@ In print mode: file metadata (duration, resolution, codec, bitrate), possibly a 
 | ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅      |
 | Tar         | `.tar`                         | ✅      |
 | Tar + gzip  | `.tar.gz`, `.tgz`              | ✅      |
-| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ☐      |
-| Tar + xz    | `.tar.xz`, `.txz`              | ☐      |
-| Tar + zstd  | `.tar.zst`, `.tzst`            | ☐      |
-| 7-Zip       | `.7z`                          | ☐      |
+| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅      |
+| Tar + xz    | `.tar.xz`, `.txz`              | ✅      |
+| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅      |
+| 7-Zip       | `.7z`                          | ✅      |
 | RAR         | `.rar`                         | ☐      |
 
 Listing-only mode — primary view is a file tree with per-entry size, mode, and mtime. No

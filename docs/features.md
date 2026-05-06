@@ -237,7 +237,11 @@ TOC ↔ Info; `x` still drops into the raw hex dump of the archive bytes.
 | ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅      |
 | Tar         | `.tar`                         | ✅      |
 | Tar + gzip  | `.tar.gz`, `.tgz`              | ✅      |
-| Tar + bzip2 / xz / zstd, 7-Zip, RAR |                  | ☐ planned |
+| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅      |
+| Tar + xz    | `.tar.xz`, `.txz`              | ✅      |
+| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅      |
+| 7-Zip       | `.7z`                          | ✅      |
+| RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
 (corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.

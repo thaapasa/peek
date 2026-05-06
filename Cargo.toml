@@ -51,6 +51,10 @@ gif = "0.14"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
+bzip2-rs = "0.1"
+lzma-rs = "0.3"
+zstd = "0.13"
+sevenz-rust2 = { version = "0.18", default-features = false }
 
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]

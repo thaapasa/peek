@@ -1,11 +1,16 @@
-//! Tar TOC listing. Walks the tar header chain via the `tar` crate; for
-//! gzip-compressed tarballs, decompresses on the fly through `flate2`.
+//! Tar TOC listing. Walks the tar header chain via the `tar` crate;
+//! compressed tarballs decompress on the fly through a per-codec
+//! streaming `Read` adapter (gzip, bzip2, zstd) or a one-shot batch
+//! decompress for codecs lacking a streaming wrapper (xz via `lzma-rs`).
 //!
-//! Only headers are read — entry payloads are skipped via `Archive`'s
-//! built-in seek, so listing a multi-GB tarball doesn't decompress the
-//! payload bodies.
+//! Only headers are read for streaming codecs — entry payloads are
+//! skipped via tar's seek, so listing a multi-GB tarball doesn't
+//! decompress payload bodies. The xz path is the exception: `lzma-rs`
+//! exposes only batch decompression, so the full plaintext is buffered
+//! before tar parses it. Acceptable for typical archive sizes; can be
+//! optimized later by switching to a streaming xz crate.
 
-use std::io::Read;
+use std::io::{Cursor, Read};
 
 use anyhow::{Context, Result};
 use tar::EntryType;
@@ -19,6 +24,27 @@ pub(super) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>>
 pub(super) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let dec = flate2::read::GzDecoder::new(reader);
     list_from_read(dec)
+}
+
+pub(super) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+    let dec = bzip2_rs::DecoderReader::new(reader);
+    list_from_read(dec)
+}
+
+pub(super) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+    let dec = zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?;
+    list_from_read(dec)
+}
+
+pub(super) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+    let mut compressed = Vec::new();
+    reader
+        .read_to_end(&mut compressed)
+        .context("failed to read xz stream")?;
+    let mut plain = Vec::new();
+    lzma_rs::xz_decompress(&mut Cursor::new(compressed), &mut plain)
+        .context("failed to decompress xz")?;
+    list_from_read(Cursor::new(plain))
 }
 
 fn list_from_read<R: Read>(reader: R) -> Result<Vec<ArchiveEntry>> {

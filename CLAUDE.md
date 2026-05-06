@@ -65,9 +65,10 @@ src/
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   archive/
-    mod.rs             — ArchiveEntry / ArchiveStats / list_entries dispatch + ReadSeek helper
+    mod.rs             — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper
     zip_listing.rs     — Zip TOC via central directory (no decompression)
-    tar_listing.rs     — Tar TOC via header walk; tar.gz wraps in flate2::GzDecoder
+    tar_listing.rs     — Tar TOC via header walk; gz/bz2/zst stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
+    sevenz_listing.rs  — 7-Zip TOC via sevenz-rust2 (header-only)
   viewer/
     mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
