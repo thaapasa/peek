@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::input::detect::{FileType, StructuredFormat};
+use crate::input::detect::{DiskImageFormat, FileType, StructuredFormat};
 
 /// How official a MIME type is — drives display markers in the info view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,7 +104,9 @@ pub fn mimes_for_path(
     if out.is_empty() {
         // Last-resort fallback so the info view always shows something.
         out.push(MimeInfo::new(match file_type {
-            FileType::Binary | FileType::Archive(_) => "application/octet-stream",
+            FileType::Binary | FileType::Archive(_) | FileType::DiskImage(_) => {
+                "application/octet-stream"
+            }
             _ => "text/plain",
         }));
     }
@@ -167,6 +169,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Toml) => "application/toml",
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
+        FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         // For Image, Archive, and Binary, the magic-byte MIME is more
         // specific than any generic registered fallback would be.
         FileType::Image | FileType::Archive(_) | FileType::Binary => return None,

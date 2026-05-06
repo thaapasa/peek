@@ -27,6 +27,9 @@ pub enum FileType {
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
+    /// Disk image (ISO / DMG / etc). Drives a metadata-only info view —
+    /// volume descriptor / trailer parsing, no filesystem walk.
+    DiskImage(DiskImageFormat),
     /// Binary / unknown
     Binary,
 }
@@ -70,6 +73,19 @@ impl ArchiveFormat {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiskImageFormat {
+    Iso,
+}
+
+impl DiskImageFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Iso => "ISO 9660 image",
+        }
+    }
+}
+
 /// Result of file-type detection. Carries the magic-byte MIME forward so
 /// `info::gather` doesn't need to re-read the file and re-run `infer`.
 #[derive(Debug, Clone)]
@@ -102,6 +118,17 @@ fn detect_file(path: &Path) -> Result<Detected> {
     {
         return Ok(Detected {
             file_type: FileType::Archive(fmt),
+            magic_mime: None,
+        });
+    }
+
+    // Disk-image extensions resolve before the structured/text fallback so
+    // the single-extension match below doesn't ever see them.
+    if let Some(ext) = path.extension().and_then(|e| e.to_str())
+        && let Some(fmt) = disk_image_format_from_ext(&ext.to_lowercase())
+    {
+        return Ok(Detected {
+            file_type: FileType::DiskImage(fmt),
             magic_mime: None,
         });
     }
@@ -260,6 +287,14 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
         return Some(ArchiveFormat::Zip);
     }
     None
+}
+
+/// Map a single file extension to a disk-image format.
+fn disk_image_format_from_ext(ext: &str) -> Option<DiskImageFormat> {
+    match ext {
+        "iso" => Some(DiskImageFormat::Iso),
+        _ => None,
+    }
 }
 
 /// Map an `infer` magic-byte MIME to an archive format. `application/gzip`

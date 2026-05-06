@@ -111,6 +111,11 @@ src/
         zip.rs         — Zip TOC via central directory (no decompression)
         tar.rs         — Tar TOC via header walk; gz/bz2/zst stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
+    disk_image/
+      mod.rs           — Module wiring (ISO today; DMG planned)
+      iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan
+      info_gather.rs   — gather_extras: read 16 KiB descriptor area at offset 32768, parse PVD
+      info_render.rs   — render_section (Disk Image info section)
   viewer/
     mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack

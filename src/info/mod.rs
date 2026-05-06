@@ -87,6 +87,51 @@ pub enum FileExtras {
         /// the info view shows this in place of stats.
         error: Option<String>,
     },
+    DiskImage {
+        format_name: &'static str,
+        /// Populated for ISO 9660 images. `None` when parsing the volume
+        /// descriptor failed or the format isn't ISO.
+        iso: Option<IsoVolumeMeta>,
+        /// Set when descriptor parsing failed (corrupt / truncated image).
+        /// Surfaced in place of normal volume rows.
+        error: Option<String>,
+    },
+}
+
+/// ISO 9660 Primary Volume Descriptor metadata (PVD-only — no directory
+/// walk). Trailing-space-padded text fields arrive trimmed; all-zero or
+/// blank fields land as `None`.
+pub struct IsoVolumeMeta {
+    pub system_id: Option<String>,
+    pub volume_label: Option<String>,
+    pub volume_set_id: Option<String>,
+    pub publisher: Option<String>,
+    pub data_preparer: Option<String>,
+    pub application: Option<String>,
+    pub block_size: u32,
+    pub block_count: u32,
+    pub creation: Option<IsoDateTime>,
+    pub modification: Option<IsoDateTime>,
+    pub expiration: Option<IsoDateTime>,
+    pub effective: Option<IsoDateTime>,
+    pub joliet: bool,
+    pub el_torito: bool,
+    pub el_torito_id: Option<String>,
+}
+
+/// ISO 9660 ASCII timestamp (`YYYYMMDDHHMMSSHH±qq`). Hundredths of a
+/// second are dropped on display; offset is held as 15-minute quarters
+/// from GMT (range −48..=+52). All-zero source means "unset" and is
+/// represented by `Option::None` rather than this struct.
+pub struct IsoDateTime {
+    pub year: u16,
+    pub month: u8,
+    pub day: u8,
+    pub hour: u8,
+    pub minute: u8,
+    pub second: u8,
+    /// Quarter-hour offset from GMT.
+    pub gmt_offset_quarters: i8,
 }
 
 /// Animation playback stats. Counts/durations may be `None` when the format

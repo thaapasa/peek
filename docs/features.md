@@ -235,16 +235,16 @@ frame. Frame count appears in the file info screen. Transparency handling applie
 
 ### Binary and Archive Files ◐
 
-For files peek doesn't have a specialized viewer for — ISOs, DMGs, executables — the baseline
+For files peek doesn't have a specialized viewer for — DMGs, executables — the baseline
 shows the **file info screen**:
 
 - File type / MIME (detected via magic bytes through the `infer` crate)
 - Size (exact + human-readable)
 - Filesystem metadata (permissions, timestamps)
 
-`infer` provides MIME only (e.g. `application/x-iso9660-image`, `application/x-apple-diskimage`) —
-no deeper metadata. Format-specific details (ISO volume label, partition table, executable
-architecture) could be added later with dedicated parsers.
+`infer` provides MIME only (e.g. `application/x-apple-diskimage`) — no deeper metadata.
+Format-specific details (partition table, executable architecture) could be added later with
+dedicated parsers.
 
 Binary files open in the hex-dump viewer by default (`hexdump -C`-style, terminal-width aware,
 streaming via `ByteSource`). File info reachable via Tab / `i` from within hex, and via `--info`.
@@ -269,6 +269,23 @@ TOC ↔ Info; `x` still drops into the raw hex dump of the archive bytes.
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
 (corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.
+
+#### Disk Images ◐
+
+| Format | Extensions | Status    |
+|--------|------------|-----------|
+| ISO    | `.iso`     | ✅         |
+| DMG    | `.dmg`     | ☐ planned |
+
+Disk images open straight to the **file info screen** with a Disk Image section — no TOC view. ISO
+9660 metadata comes from the Primary Volume Descriptor (sector 16): volume label, volume set, system
+ID, publisher, data preparer, application, volume size in blocks, and the four PVD timestamps
+(creation / modification / expiration / effective). Joliet extension and El Torito boot record
+presence are surfaced from the descriptor walk; Rock Ridge presence (which lives in SUSP fields
+inside the root directory) is not yet detected.
+
+PVD parsing is hand-rolled — only the descriptor area (16 KiB starting at offset 32768) is read, so
+multi-GB images list cheaply. Hex view (`x`) still works on the raw image bytes.
 
 #### Hex Dump Mode ✅
 

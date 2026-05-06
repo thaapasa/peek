@@ -244,9 +244,12 @@ impl Registry {
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
 
         if self.plain_mode {
-            // Binary/Archive in --plain still goes to Hex (the universal
-            // tail); ContentMode requires UTF-8 input.
-            if !matches!(file_type, FileType::Binary | FileType::Archive(_)) {
+            // Binary/Archive/DiskImage in --plain still goes to Hex (the
+            // universal tail); ContentMode requires UTF-8 input.
+            if !matches!(
+                file_type,
+                FileType::Binary | FileType::Archive(_) | FileType::DiskImage(_)
+            ) {
                 modes.push(self.text_content_mode(source, file_type, args)?);
             }
         } else {
@@ -296,6 +299,13 @@ impl Registry {
                 FileType::Archive(fmt) => {
                     modes.push(Box::new(ArchiveMode::new(source, *fmt)));
                 }
+                FileType::DiskImage(_) => {
+                    // No content / TOC view — push Info as the primary so
+                    // disk-image metadata is what the user lands on. The
+                    // universal block below dedupes by ModeId, so the
+                    // tail Info append becomes a no-op.
+                    modes.push(Box::new(InfoMode::new()));
+                }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended
                     // below in the always-present block.
@@ -304,9 +314,12 @@ impl Registry {
         }
 
         // Hex/Info/Help/About are universal — every file gets these views.
-        modes.push(Box::new(HexMode::new(source, 0)?));
-        modes.push(Box::new(InfoMode::new()));
-        modes.push(Box::new(AboutMode::new()));
+        // Dedupe by ModeId so a file-type arm that pre-pushes one of these
+        // (e.g. DiskImage → Info) doesn't end up with two copies in the
+        // mode list (which would break `i:Info` jump and Tab cycle).
+        push_unique_mode(&mut modes, Box::new(HexMode::new(source, 0)?));
+        push_unique_mode(&mut modes, Box::new(InfoMode::new()));
+        push_unique_mode(&mut modes, Box::new(AboutMode::new()));
 
         // Help action union: globals + every preceding mode's extras,
         // deduped. Help itself contributes nothing new.
@@ -399,6 +412,18 @@ impl Registry {
             fit: FitMode::Contain,
         }
     }
+}
+
+/// Push `mode` onto `modes` only if no entry with the same `ModeId` is
+/// already present. Used in `compose_modes` so the universal Hex/Info/About
+/// tail can run unconditionally without doubling up on a mode a file-type
+/// arm has already pushed.
+fn push_unique_mode(modes: &mut Vec<Box<dyn Mode>>, mode: Box<dyn Mode>) {
+    let id = mode.id();
+    if modes.iter().any(|m| m.id() == id) {
+        return;
+    }
+    modes.push(mode);
 }
 
 /// Resolve a syntect syntax token for a file. Priority: explicit

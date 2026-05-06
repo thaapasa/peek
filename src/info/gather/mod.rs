@@ -184,6 +184,9 @@ fn gather_extras_stdin(
             crate::types::image::info_gather::gather_extras(&stdin_source, magic_mime)
         }
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
+        FileType::DiskImage(fmt) => {
+            crate::types::disk_image::info_gather::gather_extras(&stdin_source, *fmt)
+        }
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }
@@ -223,6 +226,10 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::Archive(fmt) => {
             crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)
         }
+        FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
+            &InputSource::File(path.to_path_buf()),
+            *fmt,
+        ),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }

@@ -168,29 +168,21 @@ instantly via streaming through the existing `ByteSource`.
 RAR is the awkward one — closed format, library wrap. Defer behind a Cargo feature flag (`rar`),
 off by default. Everything else is pure Rust or low-friction C bindings.
 
-### Disk Images ☐
+### Disk Images ◐
 
-| Format | Extensions |
-|--------|------------|
-| ISO    | `.iso`     |
-| DMG    | `.dmg`     |
+| Format | Extensions | Status    |
+|--------|------------|-----------|
+| ISO    | `.iso`     | ✅ PVD-only metadata (no directory walk) |
+| DMG    | `.dmg`     | ☐ planned |
 
-Same shape as Archive Files — file info shows container metadata; primary content view is a tree
-listing of the contained filesystem. Streams via `ByteSource`, no extraction.
+ISO ships today as a metadata-only viewer: the Primary Volume Descriptor at sector 16 is hand-parsed
+for volume label / volume set / system ID / publisher / data preparer / application / volume size /
+the four PVD timestamps. Joliet (UCS-2 names) and El Torito (boot record) presence are flagged from
+a bounded descriptor walk. Rock Ridge presence (POSIX perms / symlinks via SUSP fields in the root
+directory) is not yet detected — needs an extra read pass through the root directory record.
 
-**ISO 9660 metadata** (from the Primary Volume Descriptor at sector 16 / offset 32768):
-
-- Volume label, volume set ID
-- Publisher, data preparer, application
-- Creation, modification, expiration, effective timestamps
-- Volume size (sector count × 2048)
-- Filesystem extensions present: Joliet (Unicode names), Rock Ridge (POSIX perms/symlinks),
-  El Torito (boot record)
-- Bootable flag + boot loader description (El Torito)
-- Root directory tree → reuses the archive listing primitive
-
-PVD is a fixed-layout 2048-byte block — trivial to parse by hand if only header metadata is needed.
-Full directory walk + extensions wants a crate.
+Still planned: directory tree listing for ISO (reuse the archive TOC primitive once a crate like
+`cdfs` is pulled in), and DMG support.
 
 **DMG metadata** — UDIF trailer ("koly" block) at the end of file: format version, payload
 checksum, partition map offsets, embedded property list. Compressed/encrypted DMGs are harder;
@@ -199,11 +191,11 @@ available.
 
 #### Implementation Libraries
 
-| Format | Crate       | Notes                                                               |
-|--------|-------------|---------------------------------------------------------------------|
-| ISO    | `cdfs`      | Pure Rust ISO 9660 + Joliet + Rock Ridge reader. Current.           |
-| ISO    | hand-rolled | PVD-only metadata — ~50 lines, no crate needed if listing deferred. |
-| DMG    | `dmgwiz`    | Pure Rust UDIF reader. Read-only flat DMGs.                         |
+| Format    | Crate       | Notes                                                               |
+|-----------|-------------|---------------------------------------------------------------------|
+| ISO (PVD) | hand-rolled | Current implementation — ~150 lines, no crate dependency.           |
+| ISO (TOC) | `cdfs`      | Pure Rust ISO 9660 + Joliet + Rock Ridge reader. For directory walk. |
+| DMG       | `dmgwiz`    | Pure Rust UDIF reader. Read-only flat DMGs.                         |
 
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 

@@ -6,6 +6,7 @@
 
 pub mod archive;
 pub mod binary;
+pub mod disk_image;
 pub mod image;
 pub mod markdown;
 pub mod sql;

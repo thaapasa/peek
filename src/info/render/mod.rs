@@ -144,6 +144,19 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
                 theme,
             );
         }
+        FileExtras::DiskImage {
+            format_name,
+            iso,
+            error,
+        } => {
+            crate::types::disk_image::info_render::render_section(
+                lines,
+                format_name,
+                iso.as_ref(),
+                error.as_deref(),
+                theme,
+            );
+        }
     }
 }
 
