@@ -5,7 +5,6 @@ use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
 mod image;
-mod structured;
 mod svg;
 mod text;
 
@@ -105,7 +104,12 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             text::push_text_stats(lines, text_stats, theme);
         }
         FileExtras::Structured { format_name, stats } => {
-            structured::render_section(lines, format_name, stats.as_ref(), theme);
+            crate::types::structured::info::render_section(
+                lines,
+                format_name,
+                stats.as_ref(),
+                theme,
+            );
         }
         FileExtras::Binary { format } => {
             crate::types::binary::info::render_section(lines, format.as_deref(), theme);

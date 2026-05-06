@@ -43,9 +43,7 @@ src/
       xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
       animation.rs     — GIF/WebP animation stats (frames, duration, loop)
       text.rs          — Streaming text stats + BOM-based encoding
-      structured.rs    — JSON/YAML/TOML/XML stats (depth, counts, XML root/ns)
       svg.rs           — SVG-specific extras (viewBox, element counts, security)
-      binary.rs        — Friendly format label from magic-byte MIME
       tests.rs         — Fixture-based tests against test-images / test-data
     render/            — Themed terminal rendering of FileInfo, split per section
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
@@ -53,8 +51,6 @@ src/
       image.rs         — Image section: dimensions, megapixels, animation, EXIF/XMP
       svg.rs           — SVG section: viewBox, element counts, security flags
       text.rs          — Text/Source section: line/word counts, encoding, indent labels
-      structured.rs    — Format section for JSON/YAML/TOML/XML structured stats
-      binary.rs        — Format section for friendly binary format label
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
     mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
@@ -67,6 +63,10 @@ src/
     binary/
       mod.rs           — Module wiring
       info.rs          — gather_extras (friendly format label) + render_section (Format)
+    structured/
+      mod.rs           — Module wiring
+      info.rs          — gather_extras (per-format stats) + render_section (Format)
+      pretty.rs        — JSON / YAML / TOML / XML pretty-printers (used by ContentMode)
     archive/
       mod.rs           — Module wiring; re-exports ArchiveMode
       reader.rs        — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper

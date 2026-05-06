@@ -1,12 +1,16 @@
-//! Structured-data stats (JSON / YAML / TOML / XML). Each parser walks
-//! the document once to collect top-level kind + count, max depth, and
-//! total node count. XML additionally records the root element name and
-//! any namespaces declared on the root.
+//! Structured-data stats (JSON / YAML / TOML / XML) plus the Format
+//! info section. Each parser walks the document once to collect
+//! top-level kind + count, max depth, and total node count. XML
+//! additionally records the root element name and any namespaces
+//! declared on the root.
 
-use super::super::{FileExtras, StructuredStats, TopLevelKind};
+use crate::info::{
+    FileExtras, StructuredStats, TopLevelKind, paint_count, push_field, push_section_header,
+};
 use crate::input::detect::StructuredFormat;
+use crate::theme::PeekTheme;
 
-pub(super) fn format_name(fmt: StructuredFormat) -> &'static str {
+pub fn format_name(fmt: StructuredFormat) -> &'static str {
     match fmt {
         StructuredFormat::Json => "JSON",
         StructuredFormat::Yaml => "YAML",
@@ -15,7 +19,7 @@ pub(super) fn format_name(fmt: StructuredFormat) -> &'static str {
     }
 }
 
-pub(super) fn structured_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
+pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
     let format_name = format_name(fmt);
     let stats = match std::str::from_utf8(bytes) {
         Ok(s) => match fmt {
@@ -27,6 +31,69 @@ pub(super) fn structured_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtr
         Err(_) => None,
     };
     FileExtras::Structured { format_name, stats }
+}
+
+pub fn render_section(
+    lines: &mut Vec<String>,
+    format_name: &str,
+    stats: Option<&StructuredStats>,
+    theme: &PeekTheme,
+) {
+    lines.push(String::new());
+    push_section_header(lines, "Format", theme);
+    push_field(lines, "Type", &theme.paint_accent(format_name), theme);
+    if let Some(stats) = stats {
+        push_structured_stats(lines, stats, theme);
+    }
+}
+
+fn push_structured_stats(lines: &mut Vec<String>, stats: &StructuredStats, theme: &PeekTheme) {
+    let (kind_label, count_label) = match &stats.top_level_kind {
+        TopLevelKind::Object => ("Object", "Keys"),
+        TopLevelKind::Array => ("Array", "Items"),
+        TopLevelKind::Scalar => ("Scalar", "Items"),
+        TopLevelKind::Table => ("Table", "Keys"),
+        TopLevelKind::MultiDoc(_) => ("Multi-doc", "Top-level"),
+        TopLevelKind::Document => ("Document", "Top-level"),
+    };
+    let kind_text = match &stats.top_level_kind {
+        TopLevelKind::MultiDoc(n) => format!("Multi-doc ({n})"),
+        _ => kind_label.to_string(),
+    };
+    push_field(lines, "Top-level", &theme.paint_value(&kind_text), theme);
+    if stats.top_level_count > 0 {
+        push_field(
+            lines,
+            count_label,
+            &paint_count(stats.top_level_count, theme),
+            theme,
+        );
+    }
+    if stats.max_depth > 0 {
+        push_field(
+            lines,
+            "Max Depth",
+            &paint_count(stats.max_depth, theme),
+            theme,
+        );
+    }
+    if stats.total_nodes > 0 {
+        push_field(
+            lines,
+            "Total Nodes",
+            &paint_count(stats.total_nodes, theme),
+            theme,
+        );
+    }
+    if let Some(root) = &stats.xml_root {
+        push_field(lines, "Root Element", &theme.paint_accent(root), theme);
+    }
+    if !stats.xml_namespaces.is_empty() {
+        for (i, ns) in stats.xml_namespaces.iter().enumerate() {
+            let label = if i == 0 { "Namespaces" } else { "" };
+            push_field(lines, label, &theme.paint_muted(ns), theme);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

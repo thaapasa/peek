@@ -19,7 +19,6 @@ pub mod hex;
 pub mod image;
 pub mod interactive;
 pub(crate) mod modes;
-pub mod structured;
 pub(crate) mod ui;
 
 /// Highlight text content as colored terminal lines.

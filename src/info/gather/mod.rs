@@ -26,7 +26,6 @@ use crate::input::mime;
 mod animation;
 mod exif;
 mod image;
-mod structured;
 mod svg;
 mod text;
 mod xmp;
@@ -122,7 +121,7 @@ fn gather_extras_stdin(
             Some(stats) => svg::svg_extras(stats, data),
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
-        FileType::Structured(fmt) => structured::structured_extras(*fmt, data),
+        FileType::Structured(fmt) => crate::types::structured::info::gather_extras(*fmt, data),
         FileType::Image => image::gather_image_extras(&stdin_source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
@@ -148,9 +147,9 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             }
         }
         FileType::Structured(fmt) => match fs::read(path) {
-            Ok(bytes) => structured::structured_extras(*fmt, &bytes),
+            Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
             Err(_) => FileExtras::Structured {
-                format_name: structured::format_name(*fmt),
+                format_name: crate::types::structured::info::format_name(*fmt),
                 stats: None,
             },
         },

@@ -8,7 +8,7 @@ use crate::input::detect::StructuredFormat;
 use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
-use crate::viewer::structured;
+use crate::types::structured::pretty;
 use crate::viewer::ui::{Action, count_wrap_segments, slice_styled_h, wrap_styled};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
@@ -455,7 +455,7 @@ impl ContentMode {
                 return;
             }
         };
-        self.pretty = Some(match structured::pretty_print(&raw, target) {
+        self.pretty = Some(match pretty::pretty_print(&raw, target) {
             Ok(s) => Ok(s),
             Err(e) => {
                 let format_name = match target {
