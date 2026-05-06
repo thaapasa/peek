@@ -354,9 +354,13 @@ impl Registry {
             syntax_token_for(args.language.as_deref(), source, file_type)
         };
 
-        // Pretty-print is the default whenever it's available; --raw flips
-        // structured/SVG views back to the raw source.
-        let initial_use_pretty = pretty_target.is_some() && !args.raw;
+        // Pretty-print is the default whenever it's available *and* the
+        // round-trip is lossless. `--raw` always flips structured/SVG views
+        // back to the raw source. JSONC and JSON5 have lossy pretty paths
+        // (comments dropped, JSON5 syntax collapsed) so they default to raw —
+        // `r` still toggles for users who want the strict-JSON view.
+        let initial_use_pretty =
+            pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
 
         // Structured formats and SVG (which is XML) both expose `r` as a
         // pretty/raw toggle on the Source view. Source code / plain text
@@ -420,7 +424,10 @@ pub(crate) fn syntax_token_for(
             }),
         FileType::Structured(fmt) => Some(
             match fmt {
-                StructuredFormat::Json => "JSON",
+                StructuredFormat::Json
+                | StructuredFormat::Jsonc
+                | StructuredFormat::Json5
+                | StructuredFormat::Jsonl => "JSON",
                 StructuredFormat::Yaml => "YAML",
                 StructuredFormat::Toml => "TOML",
                 StructuredFormat::Xml => "XML",
@@ -430,6 +437,12 @@ pub(crate) fn syntax_token_for(
         FileType::Svg => Some("XML".to_string()),
         _ => None,
     }
+}
+
+/// True when pretty-printing the format drops information from the source
+/// (comments / JSON5 features / etc.), so raw should be the default view.
+fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
+    matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5)
 }
 
 /// Map file extensions that syntect doesn't natively support to the closest

@@ -31,9 +31,15 @@ pub enum FileType {
     Binary,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StructuredFormat {
     Json,
+    /// JSON with comments (VS Code flavor): `//` and `/* … */` allowed.
+    Jsonc,
+    /// JSON5: comments, unquoted keys, trailing commas, single quotes, hex.
+    Json5,
+    /// JSON Lines / NDJSON: one JSON value per line.
+    Jsonl,
     Yaml,
     Toml,
     Xml,
@@ -103,7 +109,10 @@ fn detect_file(path: &Path) -> Result<Detected> {
     // Check extension first for structured formats
     if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
         let file_type = match ext.to_lowercase().as_str() {
-            "json" | "geojson" | "jsonl" => Some(FileType::Structured(StructuredFormat::Json)),
+            "json" | "geojson" => Some(FileType::Structured(StructuredFormat::Json)),
+            "jsonc" => Some(FileType::Structured(StructuredFormat::Jsonc)),
+            "json5" => Some(FileType::Structured(StructuredFormat::Json5)),
+            "jsonl" | "ndjson" => Some(FileType::Structured(StructuredFormat::Jsonl)),
             "yaml" | "yml" => Some(FileType::Structured(StructuredFormat::Yaml)),
             "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
             "svg" => Some(FileType::Svg),

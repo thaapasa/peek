@@ -321,13 +321,13 @@ fn java_http_server_indent_eight_spaces() {
 }
 
 #[test]
-fn tsconfig_json5_treated_as_text() {
-    // .json5 isn't in the strict-JSON whitelist; it falls through to the
-    // text path with a syntax hint. We verify the fall-through here.
+fn tsconfig_json5_routed_as_structured() {
     let info = gather_fixture("test-data/tsconfig.json5");
-    assert!(
-        matches!(info.extras, FileExtras::Text(_)),
-        "json5 should be treated as text, got {:?}",
-        std::mem::discriminant(&info.extras),
-    );
+    let FileExtras::Structured { format_name, .. } = &info.extras else {
+        panic!(
+            "expected Structured extras, got {:?}",
+            std::mem::discriminant(&info.extras)
+        );
+    };
+    assert_eq!(*format_name, "JSON5");
 }

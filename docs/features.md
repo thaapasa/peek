@@ -106,18 +106,22 @@ formatter / outline mode still planned.
 
 ### Structured Data / Config Files
 
-| Format | Extensions      | Status |
-|--------|-----------------|--------|
-| JSON   | `.json`         | ✅      |
-| JSONC  | `.jsonc`        | ☐      |
-| JSON5  | `.json5`        | ☐      |
-| YAML   | `.yaml`, `.yml` | ✅      |
-| TOML   | `.toml`         | ✅      |
-| XML    | `.xml`          | ✅      |
-| HTML   | `.html`, `.htm` | ✅      |
-| CSV    | `.csv`, `.tsv`  | ☐      |
+| Format     | Extensions          | Status |
+|------------|---------------------|--------|
+| JSON       | `.json`, `.geojson` | ✅      |
+| JSONC      | `.jsonc`            | ✅      |
+| JSON5      | `.json5`            | ✅      |
+| JSON Lines | `.jsonl`, `.ndjson` | ✅      |
+| YAML       | `.yaml`, `.yml`     | ✅      |
+| TOML       | `.toml`             | ✅      |
+| XML        | `.xml`              | ✅      |
+| HTML       | `.html`, `.htm`     | ✅      |
+| CSV        | `.csv`, `.tsv`      | ☐      |
 
-Pending entries (JSONC, JSON5, HTML rendered view, CSV/TSV) live in
+JSONC and JSON5 default to **raw** (the pretty path collapses comments / JSON5 syntax, so
+defaulting to it would silently lose information); `r` toggles into the strict-JSON pretty form
+when needed. JSON Lines defaults to pretty: each non-empty line round-trips through serde_json
+and is separated by a blank line. Pending entries (HTML rendered view, CSV/TSV) live in
 [planned.md](planned.md#structured-data-additions-).
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):

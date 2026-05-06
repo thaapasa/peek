@@ -1,0 +1,26 @@
+// VS Code-style settings.json — JSON with comments.
+{
+  // Editor
+  "editor.fontFamily": "JetBrains Mono, monospace",
+  "editor.fontSize": 13,
+  "editor.tabSize": 2,
+  "editor.formatOnSave": true,
+
+  /* Files
+     ---- */
+  "files.eol": "\n",
+  "files.trimTrailingWhitespace": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/node_modules": true,
+    "**/target": true
+  },
+
+  // Workbench
+  "workbench.colorTheme": "Default Dark Modern",
+  "workbench.startupEditor": "none",
+
+  // Terminal
+  "terminal.integrated.fontSize": 12,
+  "terminal.integrated.scrollback": 10000
+}

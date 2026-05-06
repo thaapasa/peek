@@ -156,6 +156,11 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
     Some(match file_type {
         FileType::SourceCode { .. } => "text/plain",
         FileType::Structured(StructuredFormat::Json) => "application/json",
+        // No registered MIME for these JSON variants; the JSON one is the
+        // closest semantic match.
+        FileType::Structured(StructuredFormat::Jsonc) => "application/json",
+        FileType::Structured(StructuredFormat::Json5) => "application/json5",
+        FileType::Structured(StructuredFormat::Jsonl) => "application/x-ndjson",
         // text/yaml is not formally registered; application/yaml was registered
         // in 2024 (RFC 9512). Use the new registration.
         FileType::Structured(StructuredFormat::Yaml) => "application/yaml",

@@ -1,0 +1,21 @@
+// JSON5 sample — covers the syntactic features that distinguish it from JSON.
+{
+  // Trailing commas, unquoted keys, single-quoted strings.
+  name: 'peek',
+  version: 0.1,
+  // Hex / leading-decimal numerics
+  flags: 0xFF,
+  ratio: .25,
+  /* Block comment.
+     Multi-line. */
+  authors: [
+    'Tuukka',
+    'Claude',
+  ],
+  paths: {
+    bin: '~/bin',
+    cache: '~/.cache/peek',
+  },
+  // Reserved words allowed as keys
+  default: true,
+}

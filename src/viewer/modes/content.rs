@@ -458,12 +458,7 @@ impl ContentMode {
         self.pretty = Some(match pretty::pretty_print(&raw, target) {
             Ok(s) => Ok(s),
             Err(e) => {
-                let format_name = match target {
-                    StructuredFormat::Json => "JSON",
-                    StructuredFormat::Yaml => "YAML",
-                    StructuredFormat::Toml => "TOML",
-                    StructuredFormat::Xml => "XML",
-                };
+                let format_name = crate::types::structured::info::format_name(target);
                 self.pending_warnings.push(format!(
                     "{format_name} parse failed ({e}); showing raw source"
                 ));

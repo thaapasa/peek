@@ -27,13 +27,12 @@ Highlighted source + format-aware Info section ship today (see
 
 Pending entries from the Structured Data table in [features.md](features.md):
 
-- **JSONC** (`.jsonc`) and **JSON5** (`.json5`) — need parsers that handle comments and extended
-  syntax.
-- **JSONL / NDJSON** (`.jsonl`, `.ndjson`) — line-delimited JSON. Pretty-print each line through
-  the existing JSON pipeline; treat the file as a stream so multi-GB log files stay viewable.
 - **HTML rendered text view** — `.html` source highlighting works today; a rendered text mode is
   planned (see Document Files → Implementation Libraries below for the library choice).
 - **CSV / TSV** (`.csv`, `.tsv`) — render as a formatted table with column alignment.
+
+JSONL streaming for multi-GB logs is also still pending — the current implementation reads the
+whole file into memory, which is fine for most logs but breaks down for very large ones.
 
 ### Document Files ☐
 

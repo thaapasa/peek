@@ -13,6 +13,9 @@ use crate::theme::PeekTheme;
 pub fn format_name(fmt: StructuredFormat) -> &'static str {
     match fmt {
         StructuredFormat::Json => "JSON",
+        StructuredFormat::Jsonc => "JSONC",
+        StructuredFormat::Json5 => "JSON5",
+        StructuredFormat::Jsonl => "JSON Lines",
         StructuredFormat::Yaml => "YAML",
         StructuredFormat::Toml => "TOML",
         StructuredFormat::Xml => "XML",
@@ -24,6 +27,9 @@ pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
     let stats = match std::str::from_utf8(bytes) {
         Ok(s) => match fmt {
             StructuredFormat::Json => json_stats(s),
+            StructuredFormat::Jsonc => jsonc_stats(s),
+            StructuredFormat::Json5 => json5_stats(s),
+            StructuredFormat::Jsonl => jsonl_stats(s),
             StructuredFormat::Yaml => yaml_stats(s),
             StructuredFormat::Toml => toml_stats(s),
             StructuredFormat::Xml => xml_stats(s),
@@ -138,6 +144,133 @@ fn walk_json(v: &serde_json::Value, depth: usize, max_depth: &mut usize, total: 
         }
         _ => {}
     }
+}
+
+// ---------------------------------------------------------------------------
+// JSONC (JSON with `//` + `/* … */` comments)
+// ---------------------------------------------------------------------------
+
+fn jsonc_stats(s: &str) -> Option<StructuredStats> {
+    let stripped = strip_json_comments(s);
+    json_stats(&stripped)
+}
+
+/// Remove `//` line comments and `/* … */` block comments outside of
+/// string literals. Preserves all other bytes verbatim so JSON parsing
+/// after the strip doesn't shift offsets in user-visible ways.
+pub fn strip_json_comments(src: &str) -> String {
+    let bytes = src.as_bytes();
+    let mut out = String::with_capacity(bytes.len());
+    let mut i = 0;
+    let mut in_str = false;
+    let mut esc = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if in_str {
+            out.push(b as char);
+            if esc {
+                esc = false;
+            } else if b == b'\\' {
+                esc = true;
+            } else if b == b'"' {
+                in_str = false;
+            }
+            i += 1;
+            continue;
+        }
+        if b == b'"' {
+            in_str = true;
+            out.push('"');
+            i += 1;
+            continue;
+        }
+        if b == b'/' && i + 1 < bytes.len() {
+            match bytes[i + 1] {
+                b'/' => {
+                    i += 2;
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'*' => {
+                    i += 2;
+                    while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                        // Preserve newlines so line-based stats below stay sensible.
+                        if bytes[i] == b'\n' {
+                            out.push('\n');
+                        }
+                        i += 1;
+                    }
+                    if i + 1 < bytes.len() {
+                        i += 2;
+                    } else {
+                        i = bytes.len();
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(b as char);
+        i += 1;
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// JSON5
+// ---------------------------------------------------------------------------
+
+fn json5_stats(s: &str) -> Option<StructuredStats> {
+    let value: serde_json::Value = json5::from_str(s).ok()?;
+    let (kind, count) = match &value {
+        serde_json::Value::Object(o) => (TopLevelKind::Object, o.len()),
+        serde_json::Value::Array(a) => (TopLevelKind::Array, a.len()),
+        _ => (TopLevelKind::Scalar, 0),
+    };
+    let mut max_depth = 0;
+    let mut total_nodes = 0;
+    walk_json(&value, 1, &mut max_depth, &mut total_nodes);
+    Some(StructuredStats {
+        top_level_kind: kind,
+        top_level_count: count,
+        max_depth,
+        total_nodes,
+        xml_root: None,
+        xml_namespaces: Vec::new(),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// JSON Lines / NDJSON
+// ---------------------------------------------------------------------------
+
+fn jsonl_stats(s: &str) -> Option<StructuredStats> {
+    let mut docs = 0usize;
+    let mut max_depth = 0usize;
+    let mut total_nodes = 0usize;
+    for line in s.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(trimmed) {
+            docs += 1;
+            walk_json(&v, 1, &mut max_depth, &mut total_nodes);
+        }
+    }
+    if docs == 0 {
+        return None;
+    }
+    Some(StructuredStats {
+        top_level_kind: TopLevelKind::MultiDoc(docs),
+        top_level_count: docs,
+        max_depth,
+        total_nodes,
+        xml_root: None,
+        xml_namespaces: Vec::new(),
+    })
 }
 
 // ---------------------------------------------------------------------------
