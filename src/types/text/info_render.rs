@@ -1,8 +1,7 @@
-use super::super::{Encoding, IndentStyle, LineEndings, TextStats};
-use super::{paint_count, push_field};
+use crate::info::{Encoding, IndentStyle, LineEndings, TextStats, paint_count, push_field};
 use crate::theme::PeekTheme;
 
-pub(super) fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
+pub fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
     push_field(lines, "Lines", &paint_count(stats.line_count, theme), theme);
     if stats.blank_lines > 0 {
         push_field(

@@ -9,3 +9,4 @@ pub mod binary;
 pub mod image;
 pub mod structured;
 pub mod svg;
+pub mod text;

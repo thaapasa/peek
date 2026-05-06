@@ -5,7 +5,7 @@
 //! whole-file path because the chunked UTF-8 path can't validate split
 //! 16-bit code units.
 
-use super::super::{Encoding, IndentStyle, LineEndings, TextStats};
+use crate::info::{Encoding, IndentStyle, LineEndings, TextStats};
 use crate::input::{ByteSource, InputSource};
 
 /// Chunk size for streaming text-extras counting.
@@ -14,7 +14,7 @@ const TEXT_SCAN_CHUNK: usize = 64 * 1024;
 /// Stream the source and collect [`TextStats`]. Returns `None` if the
 /// content isn't valid UTF-8 (or its UTF-16 BOM-prefixed equivalent) — the
 /// caller treats that as a binary file.
-pub(super) fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
+pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
     let bs = source.open_byte_source().ok()?;
     let total = bs.len();
     if total == 0 {

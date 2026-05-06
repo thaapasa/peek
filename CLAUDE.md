@@ -38,12 +38,10 @@ src/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
     gather/            — FileInfo collection, split per general file type
       mod.rs           — Per-source dispatch (gather() entry point)
-      text.rs          — Streaming text stats + BOM-based encoding
       tests.rs         — Fixture-based tests against test-images / test-data
     render/            — Themed terminal rendering of FileInfo, split per section
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
-      text.rs          — Text/Source section: line/word counts, encoding, indent labels
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
     mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
@@ -56,6 +54,10 @@ src/
     binary/
       mod.rs           — Module wiring
       info.rs          — gather_extras (friendly format label) + render_section (Format)
+    text/
+      mod.rs           — Module wiring
+      info_gather.rs   — gather_text_stats: streaming UTF-8/UTF-16 stats (lines/words/encoding/indent/shebang)
+      info_render.rs   — push_text_stats: Content/Source section content
     structured/
       mod.rs           — Module wiring
       info.rs          — gather_extras (per-format stats) + render_section (Format)

@@ -23,10 +23,10 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::input::mime;
 
-mod text;
-
 #[cfg(test)]
 mod tests;
+
+use crate::types::text::info_gather::gather_text_stats;
 
 /// Gather metadata for the given input source and detection result.
 ///
@@ -108,11 +108,11 @@ fn gather_extras_stdin(
         data: Arc::clone(data),
     };
     match file_type {
-        FileType::SourceCode { .. } => match text::gather_text_stats(&stdin_source) {
+        FileType::SourceCode { .. } => match gather_text_stats(&stdin_source) {
             Some(stats) => FileExtras::Text(stats),
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
-        FileType::Svg => match text::gather_text_stats(&stdin_source) {
+        FileType::Svg => match gather_text_stats(&stdin_source) {
             Some(stats) => crate::types::svg::info_gather::gather_extras(stats, data),
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
@@ -132,14 +132,14 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             magic_mime,
         ),
         FileType::SourceCode { .. } => {
-            match text::gather_text_stats(&InputSource::File(path.to_path_buf())) {
+            match gather_text_stats(&InputSource::File(path.to_path_buf())) {
                 Some(stats) => FileExtras::Text(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
         FileType::Svg => {
             let source = InputSource::File(path.to_path_buf());
-            match (text::gather_text_stats(&source), source.read_bytes()) {
+            match (gather_text_stats(&source), source.read_bytes()) {
                 (Some(stats), Ok(bytes)) => {
                     crate::types::svg::info_gather::gather_extras(stats, &bytes)
                 }

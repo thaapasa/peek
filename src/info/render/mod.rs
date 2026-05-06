@@ -4,7 +4,8 @@ use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
-mod text;
+
+use crate::types::text::info_render::push_text_stats;
 
 /// Per-render options for the Info view.
 #[derive(Clone, Copy, Default)]
@@ -64,7 +65,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Text(stats) => {
             lines.push(String::new());
             push_section_header(lines, "Content", theme);
-            text::push_text_stats(lines, stats, theme);
+            push_text_stats(lines, stats, theme);
         }
         FileExtras::Svg {
             text: text_stats,
@@ -99,7 +100,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             );
             lines.push(String::new());
             push_section_header(lines, "Source", theme);
-            text::push_text_stats(lines, text_stats, theme);
+            push_text_stats(lines, text_stats, theme);
         }
         FileExtras::Structured { format_name, stats } => {
             crate::types::structured::info::render_section(
