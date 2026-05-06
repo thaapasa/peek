@@ -1,11 +1,21 @@
-//! Binary fallback: friendly format label from a magic-byte MIME, or
-//! `None` if the type is genuinely unknown.
+//! Binary info: friendly format label from a magic-byte MIME, or `None`
+//! if the type is genuinely unknown. Render emits a single Format
+//! section when a label is available.
 
-use super::super::FileExtras;
+use crate::info::{FileExtras, push_field, push_section_header};
+use crate::theme::PeekTheme;
 
-pub(super) fn binary_extras(magic_mime: Option<&str>) -> FileExtras {
+pub fn gather_extras(magic_mime: Option<&str>) -> FileExtras {
     FileExtras::Binary {
         format: magic_mime.map(format_label_for_mime),
+    }
+}
+
+pub fn render_section(lines: &mut Vec<String>, format: Option<&str>, theme: &PeekTheme) {
+    if let Some(fmt) = format {
+        lines.push(String::new());
+        push_section_header(lines, "Format", theme);
+        push_field(lines, "Type", &theme.paint_value(fmt), theme);
     }
 }
 

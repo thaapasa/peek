@@ -8,7 +8,7 @@ use std::sync::Arc;
 use ::image::ImageDecoder;
 
 use super::super::FileExtras;
-use super::{animation, binary, exif, xmp};
+use super::{animation, exif, xmp};
 use crate::input::InputSource;
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
@@ -16,7 +16,7 @@ pub(super) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
 
 pub(super) fn gather_image_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtras {
     let Some(decoder) = image_decoder_for(source) else {
-        return binary::binary_extras(magic_mime);
+        return crate::types::binary::info::gather_extras(magic_mime);
     };
     let head = read_source_head(source, IMAGE_HEAD_SCAN);
     let anim = match source {

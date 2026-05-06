@@ -64,6 +64,9 @@ src/
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
+    binary/
+      mod.rs           — Module wiring
+      info.rs          — gather_extras (friendly format label) + render_section (Format)
     archive/
       mod.rs           — Module wiring; re-exports ArchiveMode
       reader.rs        — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper

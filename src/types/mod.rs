@@ -5,3 +5,4 @@
 //! here.
 
 pub mod archive;
+pub mod binary;

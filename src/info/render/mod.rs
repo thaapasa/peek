@@ -3,7 +3,6 @@ use syntect::highlighting::Color;
 use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
-mod binary;
 mod file;
 mod image;
 mod structured;
@@ -109,7 +108,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             structured::render_section(lines, format_name, stats.as_ref(), theme);
         }
         FileExtras::Binary { format } => {
-            binary::render_section(lines, format.as_deref(), theme);
+            crate::types::binary::info::render_section(lines, format.as_deref(), theme);
         }
         FileExtras::Archive {
             format_name,

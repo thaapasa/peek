@@ -24,7 +24,6 @@ use crate::input::detect::{Detected, FileType};
 use crate::input::mime;
 
 mod animation;
-mod binary;
 mod exif;
 mod image;
 mod structured;
@@ -117,16 +116,16 @@ fn gather_extras_stdin(
     match file_type {
         FileType::SourceCode { .. } => match text::gather_text_stats(&stdin_source) {
             Some(stats) => FileExtras::Text(stats),
-            None => binary::binary_extras(magic_mime),
+            None => crate::types::binary::info::gather_extras(magic_mime),
         },
         FileType::Svg => match text::gather_text_stats(&stdin_source) {
             Some(stats) => svg::svg_extras(stats, data),
-            None => binary::binary_extras(magic_mime),
+            None => crate::types::binary::info::gather_extras(magic_mime),
         },
         FileType::Structured(fmt) => structured::structured_extras(*fmt, data),
         FileType::Image => image::gather_image_extras(&stdin_source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
-        FileType::Binary => binary::binary_extras(magic_mime),
+        FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }
 
@@ -138,14 +137,14 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::SourceCode { .. } => {
             match text::gather_text_stats(&InputSource::File(path.to_path_buf())) {
                 Some(stats) => FileExtras::Text(stats),
-                None => binary::binary_extras(magic_mime),
+                None => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
         FileType::Svg => {
             let source = InputSource::File(path.to_path_buf());
             match (text::gather_text_stats(&source), source.read_bytes()) {
                 (Some(stats), Ok(bytes)) => svg::svg_extras(stats, &bytes),
-                _ => binary::binary_extras(magic_mime),
+                _ => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
         FileType::Structured(fmt) => match fs::read(path) {
@@ -158,6 +157,6 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::Archive(fmt) => {
             crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)
         }
-        FileType::Binary => binary::binary_extras(magic_mime),
+        FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }
