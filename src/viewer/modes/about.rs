@@ -128,6 +128,7 @@ fn terminal_dimensions() -> (u16, u16) {
 
 /// Peak resident set size for the current process, in bytes.
 /// `ru_maxrss` is bytes on macOS, kilobytes on Linux/BSD.
+#[cfg(unix)]
 fn peak_rss_bytes() -> Option<u64> {
     let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
     let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
@@ -140,6 +141,11 @@ fn peak_rss_bytes() -> Option<u64> {
     } else {
         raw.saturating_mul(1024)
     })
+}
+
+#[cfg(not(unix))]
+fn peak_rss_bytes() -> Option<u64> {
+    None
 }
 
 fn format_bytes(bytes: u64) -> String {
