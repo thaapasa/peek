@@ -4,7 +4,6 @@ use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
-mod svg;
 mod text;
 
 /// Per-render options for the Info view.
@@ -82,7 +81,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             animation,
             animation_warning,
         } => {
-            svg::render_section(
+            crate::types::svg::info_render::render_section(
                 lines,
                 view_box.as_deref(),
                 declared_width.as_deref(),

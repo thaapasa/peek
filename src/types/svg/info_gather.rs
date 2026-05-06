@@ -1,11 +1,11 @@
-//! SVG-specific extras (alongside the source-text stats from
-//! [`super::text`]). Substring-based extraction — quick_xml would be
-//! stricter than necessary for what amounts to "is the script tag here".
+//! SVG-specific extras (alongside source-text stats from `info::gather::text`).
+//! Substring-based extraction — quick_xml would be stricter than necessary
+//! for what amounts to "is the script tag here".
 
-use super::super::{FileExtras, SvgAnimationStats, TextStats};
+use crate::info::{FileExtras, SvgAnimationStats, TextStats};
 use crate::types::image::pipeline::svg_anim::{self, ParseOutcome};
 
-pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
+pub fn gather_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
     let s = match std::str::from_utf8(bytes) {
         Ok(s) => s,
         Err(_) => {

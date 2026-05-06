@@ -39,12 +39,10 @@ src/
     gather/            — FileInfo collection, split per general file type
       mod.rs           — Per-source dispatch (gather() entry point)
       text.rs          — Streaming text stats + BOM-based encoding
-      svg.rs           — SVG-specific extras (viewBox, element counts, security)
       tests.rs         — Fixture-based tests against test-images / test-data
     render/            — Themed terminal rendering of FileInfo, split per section
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
-      svg.rs           — SVG section: viewBox, element counts, security flags
       text.rs          — Text/Source section: line/word counts, encoding, indent labels
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
@@ -88,6 +86,11 @@ src/
           timeline.rs  — Merged frame timeline: build_frames, sample_target (steps + linear)
           marker.rs    — __PEEK_ANIM_*__ marker injection + per-frame substitution
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
+    svg/
+      mod.rs           — Module wiring; re-exports SvgAnimationMode
+      info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)
+      info_render.rs   — render_section (SVG info section)
+      animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
     archive/
       mod.rs           — Module wiring; re-exports ArchiveMode
       reader.rs        — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper
@@ -105,7 +108,6 @@ src/
       mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
-      svg_animation.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips

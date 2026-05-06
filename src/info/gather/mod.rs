@@ -23,7 +23,6 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::input::mime;
 
-mod svg;
 mod text;
 
 #[cfg(test)]
@@ -114,7 +113,7 @@ fn gather_extras_stdin(
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
         FileType::Svg => match text::gather_text_stats(&stdin_source) {
-            Some(stats) => svg::svg_extras(stats, data),
+            Some(stats) => crate::types::svg::info_gather::gather_extras(stats, data),
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
         FileType::Structured(fmt) => crate::types::structured::info::gather_extras(*fmt, data),
@@ -141,7 +140,9 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::Svg => {
             let source = InputSource::File(path.to_path_buf());
             match (text::gather_text_stats(&source), source.read_bytes()) {
-                (Some(stats), Ok(bytes)) => svg::svg_extras(stats, &bytes),
+                (Some(stats), Ok(bytes)) => {
+                    crate::types::svg::info_gather::gather_extras(stats, &bytes)
+                }
                 _ => crate::types::binary::info::gather_extras(magic_mime),
             }
         }

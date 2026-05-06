@@ -10,9 +10,8 @@ use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::types::archive::ArchiveMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
-use crate::viewer::modes::{
-    AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode, SvgAnimationMode,
-};
+use crate::types::svg::SvgAnimationMode;
+use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 pub mod hex;

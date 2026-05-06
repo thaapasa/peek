@@ -13,11 +13,11 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::theme::PeekTheme;
 use crate::types::image::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
 use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Maximum number of (frame, grid) prepared images held in memory.

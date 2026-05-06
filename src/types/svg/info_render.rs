@@ -1,9 +1,8 @@
-use super::{paint_count, push_field, push_section_header};
-use crate::info::SvgAnimationStats;
+use crate::info::{SvgAnimationStats, paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn render_section(
+pub fn render_section(
     lines: &mut Vec<String>,
     view_box: Option<&str>,
     declared_width: Option<&str>,

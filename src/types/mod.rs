@@ -8,3 +8,4 @@ pub mod archive;
 pub mod binary;
 pub mod image;
 pub mod structured;
+pub mod svg;
