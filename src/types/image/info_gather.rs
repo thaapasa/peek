@@ -1,5 +1,5 @@
 //! Image metadata: dimensions, color, ICC profile, HDR marker, plus
-//! delegation to [`super::exif`], [`super::xmp`], [`super::animation`].
+//! delegation to [`super::exif`], [`super::xmp`], [`super::animation_stats`].
 
 use std::fs;
 use std::path::Path;
@@ -7,21 +7,21 @@ use std::sync::Arc;
 
 use ::image::ImageDecoder;
 
-use super::super::FileExtras;
-use super::{animation, exif, xmp};
+use super::{animation_stats, exif, xmp};
+use crate::info::FileExtras;
 use crate::input::InputSource;
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
-pub(super) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
+pub(crate) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
 
-pub(super) fn gather_image_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtras {
+pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtras {
     let Some(decoder) = image_decoder_for(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
     let head = read_source_head(source, IMAGE_HEAD_SCAN);
     let anim = match source {
-        InputSource::File(path) => animation::animation_stats_path(path, magic_mime),
-        InputSource::Stdin { data } => animation::animation_stats_bytes(data, magic_mime),
+        InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
+        InputSource::Stdin { data } => animation_stats::animation_stats_bytes(data, magic_mime),
     };
     image_extras_from_decoder(decoder, &head, anim)
 }
@@ -53,7 +53,7 @@ fn read_source_head(source: &InputSource, max: usize) -> Vec<u8> {
 fn image_extras_from_decoder(
     mut decoder: Box<dyn ImageDecoder>,
     head: &[u8],
-    animation: Option<super::super::AnimationStats>,
+    animation: Option<crate::info::AnimationStats>,
 ) -> FileExtras {
     let (width, height) = decoder.dimensions();
     let ct = decoder.color_type();
@@ -85,7 +85,7 @@ fn image_extras_from_decoder(
 
 /// Read up to `max` bytes from the head of `path`. Errors are swallowed —
 /// callers handle a short / empty buffer the same way as a present one.
-pub(super) fn read_head(path: &Path, max: usize) -> Vec<u8> {
+pub(crate) fn read_head(path: &Path, max: usize) -> Vec<u8> {
     let Ok(mut file) = fs::File::open(path) else {
         return Vec::new();
     };

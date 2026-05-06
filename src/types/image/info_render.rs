@@ -1,9 +1,8 @@
-use super::super::{AnimationStats, LoopCount};
-use super::{push_field, push_section_header};
+use crate::info::{AnimationStats, LoopCount, push_field, push_section_header};
 use crate::theme::{PeekTheme, lerp_color};
 
 #[allow(clippy::too_many_arguments)]
-pub(super) fn render_section(
+pub fn render_section(
     lines: &mut Vec<String>,
     width: u32,
     height: u32,

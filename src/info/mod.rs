@@ -90,7 +90,7 @@ pub struct AnimationStats {
     pub loop_count: Option<LoopCount>,
 }
 
-/// SVG CSS-keyframe animation stats (from `viewer::image::svg_anim`).
+/// SVG CSS-keyframe animation stats (from `types::image::pipeline::svg_anim`).
 pub struct SvgAnimationStats {
     pub frame_count: usize,
     pub total_duration_ms: u64,

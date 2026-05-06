@@ -23,12 +23,8 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::input::mime;
 
-mod animation;
-mod exif;
-mod image;
 mod svg;
 mod text;
-mod xmp;
 
 #[cfg(test)]
 mod tests;
@@ -122,7 +118,9 @@ fn gather_extras_stdin(
             None => crate::types::binary::info::gather_extras(magic_mime),
         },
         FileType::Structured(fmt) => crate::types::structured::info::gather_extras(*fmt, data),
-        FileType::Image => image::gather_image_extras(&stdin_source, magic_mime),
+        FileType::Image => {
+            crate::types::image::info_gather::gather_extras(&stdin_source, magic_mime)
+        }
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
@@ -130,9 +128,10 @@ fn gather_extras_stdin(
 
 fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) -> FileExtras {
     match file_type {
-        FileType::Image => {
-            image::gather_image_extras(&InputSource::File(path.to_path_buf()), magic_mime)
-        }
+        FileType::Image => crate::types::image::info_gather::gather_extras(
+            &InputSource::File(path.to_path_buf()),
+            magic_mime,
+        ),
         FileType::SourceCode { .. } => {
             match text::gather_text_stats(&InputSource::File(path.to_path_buf())) {
                 Some(stats) => FileExtras::Text(stats),

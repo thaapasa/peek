@@ -12,15 +12,15 @@ pub(crate) mod animate;
 mod clustering;
 mod contour;
 mod glyph_atlas;
-mod mode;
+mod image_mode;
 pub mod render;
-mod svg;
+pub(crate) mod svg;
 pub(crate) mod svg_anim;
 
 #[cfg(test)]
 mod tests;
 
-pub use mode::ImageMode;
+pub use image_mode::ImageMode;
 
 /// Background mode for transparency compositing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

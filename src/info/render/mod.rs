@@ -4,7 +4,6 @@ use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
-mod image;
 mod svg;
 mod text;
 
@@ -49,7 +48,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             exif,
             xmp,
         } => {
-            image::render_section(
+            crate::types::image::info_render::render_section(
                 lines,
                 *width,
                 *height,

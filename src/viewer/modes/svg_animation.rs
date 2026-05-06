@@ -15,9 +15,9 @@ use syntect::highlighting::Color;
 
 use super::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::theme::PeekTheme;
-use crate::viewer::image::render::{self, GridWindow, PreparedImage, TermSize};
-use crate::viewer::image::svg_anim::{self, AnimatedSvg};
-use crate::viewer::image::{FitMode, ImageConfig};
+use crate::types::image::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
+use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
+use crate::types::image::pipeline::{FitMode, ImageConfig};
 use crate::viewer::ui::Action;
 
 /// Maximum number of (frame, grid) prepared images held in memory.
@@ -93,7 +93,10 @@ impl SvgAnimationMode {
             cols: probe_cols,
             rows: probe_rows,
             margin: self.config.margin,
-            ascii: matches!(self.config.mode, crate::viewer::image::ImageMode::Ascii),
+            ascii: matches!(
+                self.config.mode,
+                crate::types::image::pipeline::ImageMode::Ascii
+            ),
             fit: self.config.fit,
         };
 

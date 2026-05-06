@@ -9,14 +9,13 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::types::archive::ArchiveMode;
+use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
 use crate::viewer::modes::{
-    AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
-    Mode, SvgAnimationMode,
+    AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode, SvgAnimationMode,
 };
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 pub mod hex;
-pub mod image;
 pub mod interactive;
 pub(crate) mod modes;
 pub(crate) mod ui;
@@ -262,7 +261,10 @@ impl Registry {
                     // and drives ticks via the Mode trait. Static image:
                     // ImageRenderMode renders on demand.
                     if let Some(frames) =
-                        image::animate::decode_anim_frames(source, detected.magic_mime.as_deref())?
+                        crate::types::image::pipeline::animate::decode_anim_frames(
+                            source,
+                            detected.magic_mime.as_deref(),
+                        )?
                     {
                         modes.push(Box::new(AnimationMode::new(frames, cfg)));
                     } else {
@@ -278,7 +280,7 @@ impl Registry {
                     let anim = if args.no_svg_anim {
                         None
                     } else {
-                        image::svg_anim::try_parse(source)?
+                        crate::types::image::pipeline::svg_anim::try_parse(source)?
                     };
                     if let Some(model) = anim {
                         modes.push(Box::new(SvgAnimationMode::new(model, cfg)));
@@ -382,15 +384,16 @@ impl Registry {
         )))
     }
 
-    fn image_config(&self, args: &Args) -> image::ImageConfig {
-        image::ImageConfig {
-            mode: image::ImageMode::from_str(&args.image_mode),
+    fn image_config(&self, args: &Args) -> crate::types::image::ImageConfig {
+        use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
+        ImageConfig {
+            mode: ImageMode::from_str(&args.image_mode),
             width: args.width,
-            background: image::Background::from_str(&args.background),
+            background: Background::from_str(&args.background),
             margin: args.margin,
             color_mode: args.color,
             edge_density: args.edge_density,
-            fit: image::FitMode::Contain,
+            fit: FitMode::Contain,
         }
     }
 }

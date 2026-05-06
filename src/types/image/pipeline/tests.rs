@@ -13,10 +13,10 @@
 
 use std::path::PathBuf;
 
+use super::render::{self, GridWindow, TermSize};
+use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
-use crate::viewer::image::render::{self, GridWindow, TermSize};
-use crate::viewer::image::{Background, FitMode, ImageConfig, ImageMode};
 
 const TERM: TermSize = TermSize { cols: 40, rows: 20 };
 

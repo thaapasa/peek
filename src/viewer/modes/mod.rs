@@ -22,20 +22,16 @@ use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
 
 mod about;
-mod animation;
 mod content;
 mod help;
 mod hex;
-mod image_render;
 mod info;
 mod svg_animation;
 
 pub(crate) use about::AboutMode;
-pub(crate) use animation::AnimationMode;
 pub(crate) use content::ContentMode;
 pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;
-pub(crate) use image_render::{ImageKind, ImageRenderMode};
 pub(crate) use info::InfoMode;
 pub(crate) use svg_animation::SvgAnimationMode;
 

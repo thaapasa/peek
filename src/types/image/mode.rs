@@ -1,11 +1,11 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Handled, Mode, ModeId, RenderCtx, Window};
+use super::pipeline::render::GridWindow;
+use super::pipeline::{Background, FitMode, ImageConfig, ImageMode, render};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
-use crate::viewer::image::render::GridWindow;
-use crate::viewer::image::{Background, FitMode, ImageConfig, ImageMode, render};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 #[derive(Copy, Clone)]

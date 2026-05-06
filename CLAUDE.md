@@ -38,17 +38,12 @@ src/
     mod.rs             — FileInfo, FileExtras data types and shared permission helpers
     gather/            — FileInfo collection, split per general file type
       mod.rs           — Per-source dispatch (gather() entry point)
-      image.rs         — Image extras: dimensions, color, ICC, HDR
-      exif.rs          — EXIF field extraction
-      xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
-      animation.rs     — GIF/WebP animation stats (frames, duration, loop)
       text.rs          — Streaming text stats + BOM-based encoding
       svg.rs           — SVG-specific extras (viewBox, element counts, security)
       tests.rs         — Fixture-based tests against test-images / test-data
     render/            — Themed terminal rendering of FileInfo, split per section
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
-      image.rs         — Image section: dimensions, megapixels, animation, EXIF/XMP
       svg.rs           — SVG section: viewBox, element counts, security flags
       text.rs          — Text/Source section: line/word counts, encoding, indent labels
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
@@ -67,6 +62,32 @@ src/
       mod.rs           — Module wiring
       info.rs          — gather_extras (per-format stats) + render_section (Format)
       pretty.rs        — JSON / YAML / TOML / XML pretty-printers (used by ContentMode)
+    image/
+      mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
+      info_gather.rs   — gather_extras (dimensions, color, ICC, HDR) + IMAGE_HEAD_SCAN/read_head
+      info_render.rs   — render_section (Image, EXIF, XMP, Animation)
+      exif.rs          — EXIF field extraction
+      xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
+      animation_stats.rs — GIF/WebP animation stats (frames, duration, loop)
+      mode.rs          — ImageRenderMode: static raster + rasterized SVG view
+      animation_mode.rs — AnimationMode: GIF/WebP playback (next_tick / tick driven)
+      pipeline/        — Rasterization → ASCII-art rendering core
+        mod.rs         — Module wiring + Background / FitMode / ImageConfig
+        image_mode.rs  — ImageMode enum (full/block/geo/ascii/contour palette selection)
+        render.rs      — Image → glyph-matched ASCII art with true color
+        animate.rs     — GIF/WebP frame decoding + frame counting + render_frame
+        glyph_atlas.rs — Precomputed glyph bitmaps
+        clustering.rs  — Two-color clustering for cell rendering
+        contour.rs     — Sobel + Otsu edge detection for ImageMode::Contour
+        svg.rs         — SVG rasterization (resvg): svg_dimensions / rasterize_svg
+        svg_anim/      — CSS `@keyframes` SVG parser + per-frame rasterizer
+          mod.rs       — Public API: try_parse / try_parse_bytes / render_frame
+          scan.rs      — quick-xml walk: byte-span collection of animated elements + <style>
+          spec.rs      — Inline-style `animation-*` parser → AnimSpec
+          keyframes.rs — CSS @keyframes rule parser → KeyframeStop, TransformValue
+          timeline.rs  — Merged frame timeline: build_frames, sample_target (steps + linear)
+          marker.rs    — __PEEK_ANIM_*__ marker injection + per-frame substitution
+          util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
     archive/
       mod.rs           — Module wiring; re-exports ArchiveMode
       reader.rs        — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper
@@ -84,8 +105,6 @@ src/
       mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
-      image_render.rs  — ImageRenderMode: raster + rasterized SVG
-      animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
       svg_animation.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
@@ -96,23 +115,6 @@ src/
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
-    image/
-      mod.rs           — Module wiring + Background / ImageConfig generic types
-      mode.rs          — ImageMode enum (full/block/geo/ascii/contour palette selection)
-      svg.rs           — SVG rasterization (resvg): svg_dimensions / rasterize_svg / rasterize_svg_bytes
-      svg_anim/
-        mod.rs         — Public API: try_parse / try_parse_bytes / render_frame, AnimatedSvg, Frame; parse_text orchestrator
-        scan.rs        — quick-xml walk: byte-span collection of animated elements + <style> text
-        spec.rs        — Inline-style animation: / animation-* parser → AnimSpec
-        keyframes.rs   — CSS @keyframes rule parser → KeyframeStop, TransformValue
-        timeline.rs    — Merged frame timeline: build_frames, sample_target (steps + linear)
-        marker.rs      — __PEEK_ANIM_*__ marker injection + per-frame substitution
-        util.rs        — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
-      render.rs        — Image → glyph-matched ASCII art with true color (incl. prepare_svg_bytes)
-      animate.rs       — GIF/WebP frame decoding + frame counting + render_frame
-      glyph_atlas.rs   — Precomputed glyph bitmaps
-      clustering.rs    — Two-color clustering for cell rendering
-      contour.rs       — Sobel + Otsu edge detection for ImageMode::Contour
 themes/
   idea-dark.tmTheme           — JetBrains IDEA default Dark theme (default)
   vscode-dark-modern.tmTheme  — VS Code Dark Modern theme

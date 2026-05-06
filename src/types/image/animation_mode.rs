@@ -3,11 +3,11 @@ use std::time::{Duration, Instant};
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::{Handled, Mode, ModeId, RenderCtx, Window};
+use super::pipeline::animate::AnimFrame;
+use super::pipeline::render::{self, GridWindow, TermSize};
+use super::pipeline::{FitMode, ImageConfig};
 use crate::theme::PeekTheme;
-use crate::viewer::image::animate::AnimFrame;
-use crate::viewer::image::render::{self, GridWindow, TermSize};
-use crate::viewer::image::{FitMode, ImageConfig};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Animated image view (GIF/WebP). Owns the decoded frame list, current

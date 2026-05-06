@@ -3,7 +3,7 @@
 //! stricter than necessary for what amounts to "is the script tag here".
 
 use super::super::{FileExtras, SvgAnimationStats, TextStats};
-use crate::viewer::image::svg_anim::{self, ParseOutcome};
+use crate::types::image::pipeline::svg_anim::{self, ParseOutcome};
 
 pub(super) fn svg_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
     let s = match std::str::from_utf8(bytes) {
