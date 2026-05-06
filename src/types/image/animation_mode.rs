@@ -6,6 +6,7 @@ use syntect::highlighting::Color;
 use super::pipeline::animate::AnimFrame;
 use super::pipeline::render::{self, GridWindow, TermSize};
 use super::pipeline::{FitMode, ImageConfig};
+use super::scroll::{self, ScrollBounds};
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
@@ -132,45 +133,13 @@ impl Mode for AnimationMode {
         // change on every tick), so this handler just nudges the offsets
         // optimistically. The real clamp lives in `render_window`, which
         // computes max_scroll against the live frame and pulls the
-        // saturated-add value back to the actual bound.
-        const HSTEP: u32 = 4;
-        const VPAGE: u32 = 20;
-        match action {
-            Action::ScrollUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(1);
-                true
-            }
-            Action::ScrollDown => {
-                self.scroll_y = self.scroll_y.saturating_add(1);
-                true
-            }
-            Action::PageUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(VPAGE);
-                true
-            }
-            Action::PageDown => {
-                self.scroll_y = self.scroll_y.saturating_add(VPAGE);
-                true
-            }
-            Action::Top => {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                true
-            }
-            Action::Bottom => {
-                self.scroll_y = u32::MAX;
-                true
-            }
-            Action::ScrollLeft => {
-                self.scroll_x = self.scroll_x.saturating_sub(HSTEP);
-                true
-            }
-            Action::ScrollRight => {
-                self.scroll_x = self.scroll_x.saturating_add(HSTEP);
-                true
-            }
-            _ => false,
-        }
+        // saturated value back to the actual bound.
+        scroll::apply(
+            &mut self.scroll_x,
+            &mut self.scroll_y,
+            action,
+            ScrollBounds::unbounded(),
+        )
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {

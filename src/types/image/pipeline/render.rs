@@ -85,7 +85,7 @@ pub struct GridWindow {
 }
 
 impl GridWindow {
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn full(cols: u32, rows: u32) -> Self {
         Self {
             col_start: 0,

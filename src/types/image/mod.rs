@@ -21,6 +21,7 @@ pub mod info_gather;
 pub mod info_render;
 pub mod mode;
 pub mod pipeline;
+pub(crate) mod scroll;
 pub mod xmp;
 
 pub(crate) use animation_mode::AnimationMode;

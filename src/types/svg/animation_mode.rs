@@ -17,6 +17,7 @@ use crate::theme::PeekTheme;
 use crate::types::image::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
 use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
+use crate::types::image::scroll::{self, ScrollBounds};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
@@ -44,6 +45,9 @@ pub(crate) struct SvgAnimationMode {
     /// Bounded LRU of prepared frames. We push fresh entries to the back
     /// and evict from the front when full.
     cache: VecDeque<(CacheKey, PreparedImage)>,
+    /// Last terminal size seen by `render_window`. Used by `scroll` to
+    /// clamp authoritatively against the live grid + viewport.
+    last_term: Option<TermSize>,
 }
 
 const SVG_ANIM_ACTIONS: &[(Action, &str)] = &[
@@ -74,6 +78,7 @@ impl SvgAnimationMode {
             scroll_x: 0,
             scroll_y: 0,
             cache: VecDeque::with_capacity(FRAME_CACHE),
+            last_term: None,
         }
     }
 
@@ -102,25 +107,26 @@ impl SvgAnimationMode {
 
         if let Some(pos) = self.cache.iter().position(|(k, _)| *k == key) {
             // Move to back (mark MRU) by removing + re-inserting.
-            let entry = self.cache.remove(pos).unwrap();
-            self.cache.push_back(entry);
-            return Ok(&self.cache.back().unwrap().1);
-        }
+            if let Some(entry) = self.cache.remove(pos) {
+                self.cache.push_back(entry);
+            }
+        } else {
+            let svg_text = svg_anim::render_frame(&self.model, self.current);
+            let prep = render::prepare_svg_bytes(
+                svg_text.as_bytes(),
+                self.model.width_px,
+                self.model.height_px,
+                &self.config,
+                term,
+            )?;
 
-        let svg_text = svg_anim::render_frame(&self.model, self.current);
-        let prep = render::prepare_svg_bytes(
-            svg_text.as_bytes(),
-            self.model.width_px,
-            self.model.height_px,
-            &self.config,
-            term,
-        )?;
-
-        if self.cache.len() == FRAME_CACHE {
-            self.cache.pop_front();
+            if self.cache.len() == FRAME_CACHE {
+                self.cache.pop_front();
+            }
+            self.cache.push_back((key, prep));
         }
-        self.cache.push_back((key, prep));
-        Ok(&self.cache.back().unwrap().1)
+        let (_, prep) = self.cache.back().expect("just pushed or promoted");
+        Ok(prep)
     }
 
     /// Drop cached frames whose grid no longer matches the current
@@ -145,9 +151,11 @@ impl Mode for SvgAnimationMode {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,
         };
-        self.prepare_current(term)?;
-        let prep = &self.cache.back().unwrap().1;
-        let (cols, rows) = (prep.cols, prep.rows);
+        self.last_term = Some(term);
+        let (cols, rows) = {
+            let prep = self.prepare_current(term)?;
+            (prep.cols, prep.rows)
+        };
 
         let (max_x, max_y) = render::max_scroll(cols, rows, term.cols, term.rows);
         self.scroll_x = self.scroll_x.min(max_x);
@@ -161,7 +169,7 @@ impl Mode for SvgAnimationMode {
             row_end: self.scroll_y + visible_rows,
         };
 
-        let prep = &self.cache.back().unwrap().1;
+        let (_, prep) = self.cache.back().expect("prepare_current pushed");
         let lines = render::render_prepared(prep, &self.config, window);
         let total = rows as usize;
         Ok(Window { lines, total })
@@ -197,44 +205,18 @@ impl Mode for SvgAnimationMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        const HSTEP: u32 = 4;
-        const VPAGE: u32 = 20;
-        match action {
-            Action::ScrollUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(1);
-                true
+        // If we've rendered at least once, prep dims for the current
+        // frame are stable per (frame_idx, term, fit) — clamp like
+        // ImageRenderMode does. Before first render, fall back to the
+        // optimistic path; render_window will clamp on next draw.
+        let bounds = match (self.last_term, self.cache.back()) {
+            (Some(term), Some((_, prep))) => {
+                let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
+                ScrollBounds::clamped(max_x, max_y, term.rows.saturating_sub(1))
             }
-            Action::ScrollDown => {
-                self.scroll_y = self.scroll_y.saturating_add(1);
-                true
-            }
-            Action::PageUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(VPAGE);
-                true
-            }
-            Action::PageDown => {
-                self.scroll_y = self.scroll_y.saturating_add(VPAGE);
-                true
-            }
-            Action::Top => {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                true
-            }
-            Action::Bottom => {
-                self.scroll_y = u32::MAX;
-                true
-            }
-            Action::ScrollLeft => {
-                self.scroll_x = self.scroll_x.saturating_sub(HSTEP);
-                true
-            }
-            Action::ScrollRight => {
-                self.scroll_x = self.scroll_x.saturating_add(HSTEP);
-                true
-            }
-            _ => false,
-        }
+            _ => ScrollBounds::unbounded(),
+        };
+        scroll::apply(&mut self.scroll_x, &mut self.scroll_y, action, bounds)
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {

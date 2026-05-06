@@ -3,6 +3,7 @@ use syntect::highlighting::Color;
 
 use super::pipeline::render::GridWindow;
 use super::pipeline::{Background, FitMode, ImageConfig, ImageMode, render};
+use super::scroll::{self, ScrollBounds};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
@@ -182,8 +183,7 @@ impl Mode for ImageRenderMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        // Compute current bounds from the cache. Without a cache the user
-        // hasn't seen anything yet; ignore scroll until first render.
+        // Without a cache the user hasn't seen anything yet — ignore scroll.
         let Some(cache) = &self.cache else {
             return false;
         };
@@ -193,47 +193,13 @@ impl Mode for ImageRenderMode {
             cache.key.term_cols,
             cache.key.term_rows,
         );
-        let page_y = cache.key.term_rows.saturating_sub(1).max(1);
-        // Arrow-key horizontal step: small enough to feel responsive, big
-        // enough to make progress across a wide image. Page-equivalent is
-        // not bound on the horizontal axis (PgUp/PgDn stay vertical).
-        const HSTEP: u32 = 4;
-        match action {
-            Action::ScrollUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(1);
-                true
-            }
-            Action::ScrollDown => {
-                self.scroll_y = (self.scroll_y + 1).min(max_y);
-                true
-            }
-            Action::PageUp => {
-                self.scroll_y = self.scroll_y.saturating_sub(page_y);
-                true
-            }
-            Action::PageDown => {
-                self.scroll_y = (self.scroll_y + page_y).min(max_y);
-                true
-            }
-            Action::Top => {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                true
-            }
-            Action::Bottom => {
-                self.scroll_y = max_y;
-                true
-            }
-            Action::ScrollLeft => {
-                self.scroll_x = self.scroll_x.saturating_sub(HSTEP);
-                true
-            }
-            Action::ScrollRight => {
-                self.scroll_x = (self.scroll_x + HSTEP).min(max_x);
-                true
-            }
-            _ => false,
-        }
+        let page_y = cache.key.term_rows.saturating_sub(1);
+        scroll::apply(
+            &mut self.scroll_x,
+            &mut self.scroll_y,
+            action,
+            ScrollBounds::clamped(max_x, max_y, page_y),
+        )
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {

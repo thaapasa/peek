@@ -3,7 +3,6 @@
 //! no payload extraction.
 
 use anyhow::Result;
-use crossterm::terminal;
 use syntect::highlighting::Color;
 
 use super::reader::{ArchiveEntry, ArchiveMtime, list_entries};
@@ -64,14 +63,16 @@ impl ArchiveMode {
         } else {
             flatten_tree(build_tree(&entries))
         };
-        let (_, term_rows) = terminal::size().unwrap_or((80, 24));
         Self {
             format,
             entries,
             rows,
             pending_warnings: warnings,
             top_index: 0,
-            cached_rows: (term_rows as usize).saturating_sub(1),
+            // Set on first render_window / on_resize. `scroll` and
+            // `status_segments` guard with `.max(1)` for the brief window
+            // before the first render.
+            cached_rows: 0,
             label: "TOC".to_string(),
         }
     }
