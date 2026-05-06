@@ -3,7 +3,6 @@ use syntect::highlighting::Color;
 use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
-mod archive;
 mod binary;
 mod file;
 mod image;
@@ -120,7 +119,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
             total_uncompressed_size,
             error,
         } => {
-            archive::render_section(
+            crate::types::archive::info::render_section(
                 lines,
                 format_name,
                 *entry_count,
@@ -134,7 +133,7 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
     }
 }
 
-pub(super) fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) {
+pub(crate) fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) {
     let rule_len = 40usize.saturating_sub(title.len() + 4);
     let rule = "\u{2500}".repeat(rule_len);
     lines.push(format!(
@@ -147,7 +146,7 @@ pub(super) fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &
 
 /// Push a field with a themed label and a pre-colored value.
 /// Guarantees at least one space between label and value.
-pub(super) fn push_field(
+pub(crate) fn push_field(
     lines: &mut Vec<String>,
     label: &str,
     colored_value: &str,
@@ -163,7 +162,7 @@ pub(super) fn push_field(
 }
 
 /// Paint a count with magnitude-based intensity.
-pub(super) fn paint_count(count: usize, theme: &PeekTheme) -> String {
+pub(crate) fn paint_count(count: usize, theme: &PeekTheme) -> String {
     let color = count_color(count, theme);
     theme.paint(&thousands_sep(count as u64), color)
 }

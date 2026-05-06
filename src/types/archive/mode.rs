@@ -6,13 +6,13 @@ use anyhow::Result;
 use crossterm::terminal;
 use syntect::highlighting::Color;
 
-use super::{Mode, ModeId, Position, RenderCtx, Window};
-use crate::archive::{ArchiveEntry, ArchiveMtime};
+use super::reader::{ArchiveEntry, ArchiveMtime, list_entries};
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
+use crate::viewer::modes::{Mode, ModeId, Position, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Width (chars) of the size column, including thousands separators.
@@ -55,7 +55,7 @@ struct TreeRow {
 
 impl ArchiveMode {
     pub(crate) fn new(source: &InputSource, format: ArchiveFormat) -> Self {
-        let (entries, warnings) = match crate::archive::list_entries(source, format) {
+        let (entries, warnings) = match list_entries(source, format) {
             Ok(e) => (e, Vec::new()),
             Err(e) => (Vec::new(), vec![format!("Failed to list archive: {e:#}")]),
         };

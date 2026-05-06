@@ -23,7 +23,6 @@ use crate::viewer::ui::Action;
 
 mod about;
 mod animation;
-mod archive;
 mod content;
 mod help;
 mod hex;
@@ -33,7 +32,6 @@ mod svg_animation;
 
 pub(crate) use about::AboutMode;
 pub(crate) use animation::AnimationMode;
-pub(crate) use archive::ArchiveMode;
 pub(crate) use content::ContentMode;
 pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;

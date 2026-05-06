@@ -2,15 +2,15 @@
 //! list) without decompressing any payloads.
 
 use anyhow::{Context, Result};
-
-use super::{ArchiveEntry, ArchiveMtime, ReadSeek};
 use sevenz_rust2::{ArchiveReader, Password};
+
+use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek};
 
 /// Windows file-attribute bit for read-only files. Used to translate the
 /// 7z native attribute set into a meaningful Unix permission preview.
 const FILE_ATTRIBUTE_READONLY: u32 = 0x0000_0001;
 
-pub(super) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let archive_reader =
         ArchiveReader::new(reader, Password::empty()).context("failed to read 7z archive")?;
     let archive = archive_reader.archive();

@@ -9,6 +9,7 @@ mod time;
 
 pub use gather::gather;
 pub use render::{RenderOptions, render, thousands_sep};
+pub(crate) use render::{paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;
 
 /// Collected file metadata.

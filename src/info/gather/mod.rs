@@ -24,7 +24,6 @@ use crate::input::detect::{Detected, FileType};
 use crate::input::mime;
 
 mod animation;
-mod archive;
 mod binary;
 mod exif;
 mod image;
@@ -126,7 +125,7 @@ fn gather_extras_stdin(
         },
         FileType::Structured(fmt) => structured::structured_extras(*fmt, data),
         FileType::Image => image::gather_image_extras(&stdin_source, magic_mime),
-        FileType::Archive(fmt) => archive::archive_extras(&stdin_source, *fmt),
+        FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
         FileType::Binary => binary::binary_extras(magic_mime),
     }
 }
@@ -157,7 +156,7 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             },
         },
         FileType::Archive(fmt) => {
-            archive::archive_extras(&InputSource::File(path.to_path_buf()), *fmt)
+            crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)
         }
         FileType::Binary => binary::binary_extras(magic_mime),
     }

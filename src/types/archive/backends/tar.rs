@@ -15,28 +15,28 @@ use std::io::{Cursor, Read};
 use anyhow::{Context, Result};
 use tar::EntryType;
 
-use super::{ArchiveEntry, ArchiveMtime, ReadSeek, time_from_epoch_secs};
+use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek, time_from_epoch_secs};
 
-pub(super) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     list_from_read(reader)
 }
 
-pub(super) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let dec = flate2::read::GzDecoder::new(reader);
     list_from_read(dec)
 }
 
-pub(super) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let dec = bzip2_rs::DecoderReader::new(reader);
     list_from_read(dec)
 }
 
-pub(super) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let dec = zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?;
     list_from_read(dec)
 }
 
-pub(super) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let mut compressed = Vec::new();
     reader
         .read_to_end(&mut compressed)

@@ -3,9 +3,9 @@
 
 use anyhow::{Context, Result};
 
-use super::{ArchiveEntry, ArchiveMtime, ReadSeek};
+use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek};
 
-pub(super) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
     let mut archive = zip::ZipArchive::new(reader).context("failed to read zip archive")?;
     let mut out = Vec::with_capacity(archive.len());
     for i in 0..archive.len() {

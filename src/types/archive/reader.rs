@@ -1,9 +1,6 @@
-//! Archive table-of-contents listing.
-//!
-//! Listing-only — no payload extraction. Each backend reads just enough of
-//! the archive structure (zip central directory, tar header chain) to
-//! enumerate entries with size, mtime, and unix mode. The TOC viewer mode
-//! and the info-view stats both consume `list_entries()`.
+//! Shared archive data shapes plus the format-dispatching `list_entries`
+//! entry point. Backends in `super::backends` decode each format; this
+//! module owns the public types they produce.
 
 use std::io::{Cursor, Read, Seek};
 use std::sync::Arc;
@@ -13,10 +10,6 @@ use anyhow::{Context, Result};
 
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
-
-mod sevenz_listing;
-mod tar_listing;
-mod zip_listing;
 
 /// One entry in an archive TOC.
 pub struct ArchiveEntry {
@@ -99,15 +92,16 @@ pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
 
 /// Enumerate the archive's table of contents.
 pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<ArchiveEntry>> {
+    use super::backends::{sevenz, tar, zip};
     let reader = open_seekable(source)?;
     match format {
-        ArchiveFormat::Zip => zip_listing::list(reader),
-        ArchiveFormat::Tar => tar_listing::list_plain(reader),
-        ArchiveFormat::TarGz => tar_listing::list_gz(reader),
-        ArchiveFormat::TarBz2 => tar_listing::list_bz2(reader),
-        ArchiveFormat::TarXz => tar_listing::list_xz(reader),
-        ArchiveFormat::TarZst => tar_listing::list_zst(reader),
-        ArchiveFormat::SevenZ => sevenz_listing::list(reader),
+        ArchiveFormat::Zip => zip::list(reader),
+        ArchiveFormat::Tar => tar::list_plain(reader),
+        ArchiveFormat::TarGz => tar::list_gz(reader),
+        ArchiveFormat::TarBz2 => tar::list_bz2(reader),
+        ArchiveFormat::TarXz => tar::list_xz(reader),
+        ArchiveFormat::TarZst => tar::list_zst(reader),
+        ArchiveFormat::SevenZ => sevenz::list(reader),
     }
 }
 
