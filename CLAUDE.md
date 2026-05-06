@@ -95,7 +95,6 @@ src/
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
-    structured.rs      — JSON/YAML/TOML/XML pretty-print helpers (used by ContentMode)
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
     image/
       mod.rs           — Module wiring + Background / ImageConfig generic types
