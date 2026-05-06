@@ -1,4 +1,5 @@
 use anyhow::Result;
+use crossterm::terminal;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::help::paint_logo;
@@ -63,6 +64,19 @@ impl Mode for AboutMode {
         lines.push(kv_line(pt, "Color mode", color_mode));
         lines.push(String::new());
 
+        // Live system state
+        lines.push(pt.paint_heading("SYSTEM"));
+        let (term_cols, term_rows) = terminal_dimensions();
+        lines.push(kv_line(
+            pt,
+            "Terminal",
+            &format!("{term_cols} × {term_rows}"),
+        ));
+        if let Some(rss) = peak_rss_bytes() {
+            lines.push(kv_line(pt, "Peak memory", &format_bytes(rss)));
+        }
+        lines.push(String::new());
+
         // Palette swatches: the colors the active theme actually paints.
         // Useful side-by-side readout when cycling themes with `t`.
         lines.push(pt.paint_heading("PALETTE"));
@@ -106,6 +120,42 @@ fn tip_line(pt: &PeekTheme, key: &str, desc: &str) -> String {
         pt.paint_accent(&format!("{key:<11}")),
         pt.paint_muted(desc),
     )
+}
+
+fn terminal_dimensions() -> (u16, u16) {
+    terminal::size().unwrap_or((80, 24))
+}
+
+/// Peak resident set size for the current process, in bytes.
+/// `ru_maxrss` is bytes on macOS, kilobytes on Linux/BSD.
+fn peak_rss_bytes() -> Option<u64> {
+    let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+    let ret = unsafe { libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr()) };
+    if ret != 0 {
+        return None;
+    }
+    let raw = unsafe { usage.assume_init() }.ru_maxrss as u64;
+    Some(if cfg!(target_os = "macos") {
+        raw
+    } else {
+        raw.saturating_mul(1024)
+    })
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
+    let mut value = bytes as f64;
+    for unit in UNITS {
+        if value < 1024.0 {
+            return if *unit == "B" {
+                format!("{value:.0} {unit}")
+            } else {
+                format!("{value:.2} {unit}")
+            };
+        }
+        value /= 1024.0;
+    }
+    format!("{value:.2} PiB")
 }
 
 /// One line showing a swatch + label for each semantic color slot.
