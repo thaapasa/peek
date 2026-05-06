@@ -2,13 +2,16 @@
 //! plug into this same section header by adding their own block here
 //! and a matching arm in `gather_extras`.
 
-use crate::info::{IsoDateTime, IsoVolumeMeta, push_field, push_section_header, thousands_sep};
+use crate::info::{
+    DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta, push_field,
+    push_section_header, thousands_sep,
+};
 use crate::theme::PeekTheme;
 
 pub fn render_section(
     lines: &mut Vec<String>,
     format_name: &str,
-    iso: Option<&IsoVolumeMeta>,
+    meta: Option<&DiskImageMeta>,
     error: Option<&str>,
     theme: &PeekTheme,
 ) {
@@ -21,8 +24,10 @@ pub fn render_section(
         return;
     }
 
-    if let Some(iso) = iso {
-        render_iso(lines, iso, theme);
+    match meta {
+        Some(DiskImageMeta::Iso(iso)) => render_iso(lines, iso, theme),
+        Some(DiskImageMeta::Dmg(dmg)) => render_dmg(lines, dmg, theme),
+        None => {}
     }
 }
 
@@ -84,6 +89,111 @@ fn render_iso(lines: &mut Vec<String>, iso: &IsoVolumeMeta, theme: &PeekTheme) {
         && let Some(id) = &iso.el_torito_id
     {
         push_field(lines, "Boot loader", &theme.paint_value(id), theme);
+    }
+}
+
+fn render_dmg(lines: &mut Vec<String>, dmg: &DmgMeta, theme: &PeekTheme) {
+    push_field(
+        lines,
+        "UDIF version",
+        &theme.paint_value(&dmg.udif_version.to_string()),
+        theme,
+    );
+    push_field(
+        lines,
+        "Variant",
+        &theme.paint_value(variant_label(dmg.variant)),
+        theme,
+    );
+    push_field(
+        lines,
+        "Volume size",
+        &theme.paint_value(&format!("{} bytes", thousands_sep(dmg.total_size_bytes))),
+        theme,
+    );
+    push_field(
+        lines,
+        "Data fork",
+        &theme.paint_value(&format!("{} bytes", thousands_sep(dmg.data_fork_length))),
+        theme,
+    );
+    push_field(
+        lines,
+        "Plist",
+        &theme.paint_value(&plist_label(dmg.plist_present, dmg.plist_length)),
+        theme,
+    );
+    if dmg.segment_count > 1 {
+        push_field(
+            lines,
+            "Segments",
+            &theme.paint_value(&format!("{} of {}", dmg.segment_number, dmg.segment_count)),
+            theme,
+        );
+    }
+    push_field(
+        lines,
+        "Data checksum",
+        &theme.paint_value(checksum_label(dmg.data_checksum_type)),
+        theme,
+    );
+    push_field(
+        lines,
+        "Master checksum",
+        &theme.paint_value(checksum_label(dmg.master_checksum_type)),
+        theme,
+    );
+    let flags = format_dmg_flags(dmg.flags);
+    push_field(lines, "Flags", &theme.paint_value(&flags), theme);
+}
+
+fn variant_label(variant: DmgVariant) -> &'static str {
+    match variant {
+        DmgVariant::Device => "device image",
+        DmgVariant::Partition => "partition",
+        DmgVariant::MountedSystem => "mounted system",
+        DmgVariant::Other(_) => "unknown",
+    }
+}
+
+fn checksum_label(kind: DmgChecksumKind) -> &'static str {
+    match kind {
+        DmgChecksumKind::None => "none",
+        DmgChecksumKind::Crc32 => "CRC-32",
+        DmgChecksumKind::Md5 => "MD5",
+        DmgChecksumKind::Sha1 => "SHA-1",
+        DmgChecksumKind::Sha256 => "SHA-256",
+        DmgChecksumKind::Sha512 => "SHA-512",
+        DmgChecksumKind::Other(_) => "unknown",
+    }
+}
+
+fn plist_label(present: bool, length: u64) -> String {
+    if !present {
+        return "none".to_string();
+    }
+    format!("{} bytes (XML partition map)", thousands_sep(length))
+}
+
+/// Decode the few flag bits Apple actually documents for the UDIF
+/// trailer. Unknown bits are reported as a hex tail so unfamiliar
+/// images don't get silently flattened to "(none)".
+fn format_dmg_flags(raw: u32) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if raw & 0x1 != 0 {
+        parts.push("flattened".into());
+    }
+    if raw & 0x4 != 0 {
+        parts.push("internet-enabled".into());
+    }
+    let unknown = raw & !0x5;
+    if unknown != 0 {
+        parts.push(format!("0x{unknown:x}"));
+    }
+    if parts.is_empty() {
+        "none".to_string()
+    } else {
+        parts.join(", ")
     }
 }
 
@@ -152,5 +262,22 @@ mod tests {
             gmt_offset_quarters: 0,
         };
         assert_eq!(format_dt(&dt), "2025-01-15 14:30:00 +00:00");
+    }
+
+    #[test]
+    fn dmg_flags_zero_is_none() {
+        assert_eq!(format_dmg_flags(0), "none");
+    }
+
+    #[test]
+    fn dmg_flags_known_bits() {
+        assert_eq!(format_dmg_flags(0x1), "flattened");
+        assert_eq!(format_dmg_flags(0x5), "flattened, internet-enabled");
+    }
+
+    #[test]
+    fn dmg_flags_unknown_bits_surface_as_hex() {
+        assert_eq!(format_dmg_flags(0x12), "0x12");
+        assert_eq!(format_dmg_flags(0x11), "flattened, 0x10");
     }
 }

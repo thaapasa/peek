@@ -146,13 +146,13 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         }
         FileExtras::DiskImage {
             format_name,
-            iso,
+            meta,
             error,
         } => {
             crate::types::disk_image::info_render::render_section(
                 lines,
                 format_name,
-                iso.as_ref(),
+                meta.as_ref(),
                 error.as_deref(),
                 theme,
             );

@@ -170,6 +170,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
+        FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         // For Image, Archive, and Binary, the magic-byte MIME is more
         // specific than any generic registered fallback would be.
         FileType::Image | FileType::Archive(_) | FileType::Binary => return None,

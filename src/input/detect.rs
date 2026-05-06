@@ -76,12 +76,14 @@ impl ArchiveFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiskImageFormat {
     Iso,
+    Dmg,
 }
 
 impl DiskImageFormat {
     pub fn label(self) -> &'static str {
         match self {
             Self::Iso => "ISO 9660 image",
+            Self::Dmg => "Apple Disk Image (UDIF)",
         }
     }
 }
@@ -293,6 +295,7 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
 fn disk_image_format_from_ext(ext: &str) -> Option<DiskImageFormat> {
     match ext {
         "iso" => Some(DiskImageFormat::Iso),
+        "dmg" => Some(DiskImageFormat::Dmg),
         _ => None,
     }
 }

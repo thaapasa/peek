@@ -170,32 +170,32 @@ off by default. Everything else is pure Rust or low-friction C bindings.
 
 ### Disk Images ◐
 
-| Format | Extensions | Status    |
-|--------|------------|-----------|
-| ISO    | `.iso`     | ✅ PVD-only metadata (no directory walk) |
-| DMG    | `.dmg`     | ☐ planned |
+| Format | Extensions | Status                                       |
+|--------|------------|----------------------------------------------|
+| ISO    | `.iso`     | ✅ PVD-only metadata (no directory walk)      |
+| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)  |
 
-ISO ships today as a metadata-only viewer: the Primary Volume Descriptor at sector 16 is hand-parsed
-for volume label / volume set / system ID / publisher / data preparer / application / volume size /
-the four PVD timestamps. Joliet (UCS-2 names) and El Torito (boot record) presence are flagged from
-a bounded descriptor walk. Rock Ridge presence (POSIX perms / symlinks via SUSP fields in the root
-directory) is not yet detected — needs an extra read pass through the root directory record.
+Both formats ship as metadata-only viewers today. See
+[features.md → Disk Images](features.md#disk-images-) for what's surfaced.
 
-Still planned: directory tree listing for ISO (reuse the archive TOC primitive once a crate like
-`cdfs` is pulled in), and DMG support.
+Still planned:
 
-**DMG metadata** — UDIF trailer ("koly" block) at the end of file: format version, payload
-checksum, partition map offsets, embedded property list. Compressed/encrypted DMGs are harder;
-flat read-only images are feasible. Bonus: nested HFS+/APFS volume metadata if a parser is
-available.
+- **ISO directory tree** — reuse the archive TOC primitive once a crate like `cdfs` is pulled in.
+- **ISO Rock Ridge detection** — needs a SUSP scan inside the root directory record; one extra
+  read pass.
+- **DMG partition map** — parse the embedded XML plist for the blkx tables (partition list with
+  per-partition name, type, size). Adds a `plist` crate dependency.
+- **DMG nested filesystem metadata** — HFS+ / APFS volume names inside the partition payload.
+  Significant work; probably never worth it for peek.
 
 #### Implementation Libraries
 
-| Format    | Crate       | Notes                                                               |
-|-----------|-------------|---------------------------------------------------------------------|
-| ISO (PVD) | hand-rolled | Current implementation — ~150 lines, no crate dependency.           |
-| ISO (TOC) | `cdfs`      | Pure Rust ISO 9660 + Joliet + Rock Ridge reader. For directory walk. |
-| DMG       | `dmgwiz`    | Pure Rust UDIF reader. Read-only flat DMGs.                         |
+| Format          | Crate       | Notes                                                               |
+|-----------------|-------------|---------------------------------------------------------------------|
+| ISO (PVD)       | hand-rolled | Current implementation — ~150 lines, no crate dependency.           |
+| ISO (TOC)       | `cdfs`      | Pure Rust ISO 9660 + Joliet + Rock Ridge reader. For directory walk. |
+| DMG (trailer)   | hand-rolled | Current implementation — ~80 lines, no crate dependency.            |
+| DMG (partition) | `plist`     | For decoding the embedded XML partition map.                        |
 
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 

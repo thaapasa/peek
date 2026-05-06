@@ -89,13 +89,20 @@ pub enum FileExtras {
     },
     DiskImage {
         format_name: &'static str,
-        /// Populated for ISO 9660 images. `None` when parsing the volume
-        /// descriptor failed or the format isn't ISO.
-        iso: Option<IsoVolumeMeta>,
-        /// Set when descriptor parsing failed (corrupt / truncated image).
-        /// Surfaced in place of normal volume rows.
+        /// Per-format payload. `None` when parsing failed; the `error`
+        /// field then carries a user-facing reason.
+        meta: Option<DiskImageMeta>,
+        /// Set when descriptor / trailer parsing failed (corrupt or
+        /// truncated image). Surfaced in place of normal volume rows.
         error: Option<String>,
     },
+}
+
+/// Format-specific disk-image metadata. Each variant owns the parsed
+/// shape its parser produces; the renderer picks the matching block.
+pub enum DiskImageMeta {
+    Iso(IsoVolumeMeta),
+    Dmg(DmgMeta),
 }
 
 /// ISO 9660 Primary Volume Descriptor metadata (PVD-only — no directory
@@ -132,6 +139,53 @@ pub struct IsoDateTime {
     pub second: u8,
     /// Quarter-hour offset from GMT.
     pub gmt_offset_quarters: i8,
+}
+
+/// UDIF (Apple Disk Image) trailer fields. The 512-byte trailer at the
+/// end of every flat DMG carries the structural information; partition
+/// payload sits in an embedded plist that's not parsed at this level.
+pub struct DmgMeta {
+    pub udif_version: u32,
+    pub flags: u32,
+    pub variant: DmgVariant,
+    /// Sector count from the trailer × 512. Logical (uncompressed) size.
+    pub total_size_bytes: u64,
+    pub data_fork_length: u64,
+    /// Whether the trailer references an embedded XML plist (typical;
+    /// the plist holds the partition map / blkx tables).
+    pub plist_present: bool,
+    pub plist_length: u64,
+    pub segment_number: u32,
+    pub segment_count: u32,
+    pub data_checksum_type: DmgChecksumKind,
+    pub master_checksum_type: DmgChecksumKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DmgVariant {
+    /// Whole-device image (variant 1) — the common case.
+    Device,
+    /// Single-partition image (variant 2).
+    Partition,
+    /// Mounted-system image (variant 3).
+    MountedSystem,
+    /// Anything else — surface the raw value so the user can spot
+    /// unfamiliar variants without us silently lying.
+    Other(u32),
+}
+
+/// Apple's documented checksum-type tags used by both data and master
+/// checksum fields in the UDIF trailer. Values outside the known set
+/// surface as `Other(_)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DmgChecksumKind {
+    None,
+    Crc32,
+    Md5,
+    Sha1,
+    Sha256,
+    Sha512,
+    Other(u32),
 }
 
 /// Animation playback stats. Counts/durations may be `None` when the format
