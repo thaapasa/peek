@@ -8,7 +8,8 @@ mod render;
 mod time;
 
 pub use gather::gather;
-pub use render::{RenderOptions, render};
+pub use render::{RenderOptions, render, thousands_sep};
+pub use time::format_archive_mtime_zoned;
 
 /// Collected file metadata.
 pub struct FileInfo {
@@ -66,6 +67,16 @@ pub enum FileExtras {
     },
     Binary {
         format: Option<String>,
+    },
+    Archive {
+        format_name: &'static str,
+        entry_count: usize,
+        file_count: usize,
+        dir_count: usize,
+        total_uncompressed_size: u64,
+        /// Set when listing failed (e.g. corrupt archive). When present,
+        /// the info view shows this in place of stats.
+        error: Option<String>,
     },
 }
 

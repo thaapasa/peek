@@ -211,20 +211,36 @@ frame. Frame count appears in the file info screen. Transparency handling applie
 
 ### Binary and Archive Files ◐
 
-For files peek doesn't have a specialized viewer for — ISOs, DMGs, compressed archives,
-executables — the baseline shows the **file info screen**:
+For files peek doesn't have a specialized viewer for — ISOs, DMGs, executables — the baseline
+shows the **file info screen**:
 
 - File type / MIME (detected via magic bytes through the `infer` crate)
 - Size (exact + human-readable)
 - Filesystem metadata (permissions, timestamps)
 
 `infer` provides MIME only (e.g. `application/x-iso9660-image`, `application/x-apple-diskimage`) —
-no deeper metadata. Format-specific details (ISO volume label, partition table, archive listing,
-executable architecture) could be added later with dedicated parsers.
+no deeper metadata. Format-specific details (ISO volume label, partition table, executable
+architecture) could be added later with dedicated parsers.
 
 Binary files open in the hex-dump viewer by default (`hexdump -C`-style, terminal-width aware,
 streaming via `ByteSource`). File info reachable via Tab / `i` from within hex, and via `--info`.
 `--plain` / `-P` still uses hex for binary. No format-specific deep metadata yet.
+
+#### Archive Listing ◐
+
+Container archives open in a **TOC view** — one row per entry with permissions, uncompressed
+size, mtime, and path. No payload extraction; only the per-entry headers are read. Tab cycles
+TOC ↔ Info; `x` still drops into the raw hex dump of the archive bytes.
+
+| Format      | Extensions                     | Status |
+|-------------|--------------------------------|--------|
+| ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅      |
+| Tar         | `.tar`                         | ✅      |
+| Tar + gzip  | `.tar.gz`, `.tgz`              | ✅      |
+| Tar + bzip2 / xz / zstd, 7-Zip, RAR |                  | ☐ planned |
+
+Info view shows entry / file / directory counts and total uncompressed size. Listing failures
+(corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.
 
 #### Hex Dump Mode ✅
 

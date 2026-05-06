@@ -53,6 +53,71 @@ pub(super) fn format_time(time: SystemTime, utc: bool) -> String {
     format_iso_utc(secs)
 }
 
+/// Compact UTC stamp `YYYY-MM-DD HH:MM` for column-aligned listings
+/// (archive TOC, etc.). Returns a fixed-width 16-char string; on overflow
+/// or formatting failure, returns a 16-char `-` filler so column widths
+/// don't shift.
+pub fn format_archive_mtime(secs: u64) -> String {
+    let iso = format_iso_utc(secs as i64);
+    if iso.len() >= 16 {
+        format!("{} {}", &iso[..10], &iso[11..16])
+    } else {
+        format!("{:<16}", "-")
+    }
+}
+
+/// Compact archive mtime with timezone marker. UTC-mode appends ` Z`;
+/// local-mode appends a short offset (`+3`, `-5:30`, `+0`). Falls back
+/// to UTC when `localtime_r` fails (extreme date or broken tzdata).
+pub fn format_archive_mtime_zoned(secs: u64, utc: bool) -> String {
+    if utc {
+        return format!("{} Z", format_archive_mtime(secs));
+    }
+    #[cfg(unix)]
+    {
+        if let Some(s) = format_local_short(secs as i64) {
+            return s;
+        }
+    }
+    format!("{} Z", format_archive_mtime(secs))
+}
+
+#[cfg(unix)]
+fn format_local_short(secs: i64) -> Option<String> {
+    // SAFETY: localtime_r writes a caller-provided struct; null return =
+    // failure (out-of-range date or tzdata problem). Same pattern as
+    // `format_local_with_offset`.
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let t: libc::time_t = secs;
+    let result = unsafe { libc::localtime_r(&t, &mut tm) };
+    if result.is_null() {
+        return None;
+    }
+    let year = tm.tm_year as i64 + 1900;
+    let month = tm.tm_mon + 1;
+    let day = tm.tm_mday;
+    let hours = tm.tm_hour;
+    let minutes = tm.tm_min;
+    let offset = format_offset_short(tm.tm_gmtoff);
+    Some(format!(
+        "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02} {offset}"
+    ))
+}
+
+/// Short timezone offset: `+3`, `-5`, `+0` for whole-hour zones; the
+/// minute component appears only when nonzero (`+5:30`).
+fn format_offset_short(secs: i64) -> String {
+    let sign = if secs >= 0 { '+' } else { '-' };
+    let abs = secs.unsigned_abs();
+    let h = abs / 3600;
+    let m = (abs % 3600) / 60;
+    if m == 0 {
+        format!("{sign}{h}")
+    } else {
+        format!("{sign}{h}:{m:02}")
+    }
+}
+
 /// Format `secs` (Unix epoch seconds) as `YYYY-MM-DDTHH:MM:SSZ`.
 ///
 /// Pure proleptic-Gregorian arithmetic — no tz data needed, since UTC

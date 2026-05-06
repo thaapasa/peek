@@ -3,6 +3,7 @@ use syntect::highlighting::Color;
 use super::{FileExtras, FileInfo};
 use crate::theme::{PeekTheme, lerp_color};
 
+mod archive;
 mod binary;
 mod file;
 mod image;
@@ -111,6 +112,25 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Binary { format } => {
             binary::render_section(lines, format.as_deref(), theme);
         }
+        FileExtras::Archive {
+            format_name,
+            entry_count,
+            file_count,
+            dir_count,
+            total_uncompressed_size,
+            error,
+        } => {
+            archive::render_section(
+                lines,
+                format_name,
+                *entry_count,
+                *file_count,
+                *dir_count,
+                *total_uncompressed_size,
+                error.as_deref(),
+                theme,
+            );
+        }
     }
 }
 
@@ -158,7 +178,7 @@ fn count_color(count: usize, theme: &PeekTheme) -> Color {
     lerp_color(theme.muted, theme.value, t)
 }
 
-pub(super) fn thousands_sep(n: u64) -> String {
+pub fn thousands_sep(n: u64) -> String {
     let s = n.to_string();
     let mut result = String::with_capacity(s.len() + s.len() / 3);
     for (i, ch) in s.chars().rev().enumerate() {

@@ -45,6 +45,7 @@ src/
       text.rs          — Streaming text stats + BOM-based encoding
       structured.rs    — JSON/YAML/TOML/XML stats (depth, counts, XML root/ns)
       svg.rs           — SVG-specific extras (viewBox, element counts, security)
+      archive.rs       — Archive TOC stats (entry / file / dir counts, total uncompressed size)
       binary.rs        — Friendly format label from magic-byte MIME
       tests.rs         — Fixture-based tests against test-images / test-data
     render/            — Themed terminal rendering of FileInfo, split per section
@@ -54,6 +55,7 @@ src/
       svg.rs           — SVG section: viewBox, element counts, security flags
       text.rs          — Text/Source section: line/word counts, encoding, indent labels
       structured.rs    — Format section for JSON/YAML/TOML/XML structured stats
+      archive.rs       — Archive section: entry / file / dir counts, total size
       binary.rs        — Format section for friendly binary format label
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
@@ -62,6 +64,10 @@ src/
     color_mode.rs      — ColorMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
+  archive/
+    mod.rs             — ArchiveEntry / ArchiveStats / list_entries dispatch + ReadSeek helper
+    zip_listing.rs     — Zip TOC via central directory (no decompression)
+    tar_listing.rs     — Tar TOC via header walk; tar.gz wraps in flate2::GzDecoder
   viewer/
     mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
@@ -69,6 +75,7 @@ src/
       mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
+      archive.rs       — ArchiveMode: TOC listing for zip / tar / tar.gz (perms, size, mtime, path)
       image_render.rs  — ImageRenderMode: raster + rasterized SVG
       animation.rs     — AnimationMode: GIF/WebP playback (next_tick / tick driven)
       svg_animation.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)

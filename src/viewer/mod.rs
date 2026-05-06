@@ -9,8 +9,8 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
-    AboutMode, AnimationMode, ContentMode, HelpMode, HexMode, ImageKind, ImageRenderMode, InfoMode,
-    Mode, SvgAnimationMode,
+    AboutMode, AnimationMode, ArchiveMode, ContentMode, HelpMode, HexMode, ImageKind,
+    ImageRenderMode, InfoMode, Mode, SvgAnimationMode,
 };
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
@@ -246,9 +246,9 @@ impl Registry {
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
 
         if self.plain_mode {
-            // Binary in --plain still goes to Hex (the universal tail);
-            // ContentMode requires UTF-8 input.
-            if !matches!(file_type, FileType::Binary) {
+            // Binary/Archive in --plain still goes to Hex (the universal
+            // tail); ContentMode requires UTF-8 input.
+            if !matches!(file_type, FileType::Binary | FileType::Archive(_)) {
                 modes.push(self.text_content_mode(source, file_type, args)?);
             }
         } else {
@@ -291,6 +291,9 @@ impl Registry {
                     }
                     // Pair the SVG view with its XML source.
                     modes.push(self.text_content_mode(source, file_type, args)?);
+                }
+                FileType::Archive(fmt) => {
+                    modes.push(Box::new(ArchiveMode::new(source, *fmt)));
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended

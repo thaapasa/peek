@@ -3,6 +3,7 @@ use std::io::IsTerminal;
 use anyhow::{Context, Result};
 use clap::Parser;
 
+mod archive;
 mod cli;
 mod info;
 mod input;

@@ -46,6 +46,12 @@ anyhow = "1"
 unicode-width = "0.2.2"
 gif = "0.14"
 
+# Archive listing (TOC viewer). Listing-only paths read just the entry
+# headers — no payload decompression — so multi-GB archives list cheaply.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+tar = "0.4"
+flate2 = "1"
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

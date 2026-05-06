@@ -24,6 +24,9 @@ pub enum FileType {
     Image,
     /// SVG vector image (rasterized for preview, XML source for raw view)
     Svg,
+    /// Container archive (zip / tar / compressed tar). Drives the
+    /// listing-only TOC viewer — no payload decompression.
+    Archive(ArchiveFormat),
     /// Binary / unknown
     Binary,
 }
@@ -34,6 +37,23 @@ pub enum StructuredFormat {
     Yaml,
     Toml,
     Xml,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArchiveFormat {
+    Zip,
+    Tar,
+    TarGz,
+}
+
+impl ArchiveFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Zip => "ZIP archive",
+            Self::Tar => "tar archive",
+            Self::TarGz => "tar + gzip",
+        }
+    }
 }
 
 /// Result of file-type detection. Carries the magic-byte MIME forward so
@@ -58,6 +78,18 @@ pub fn detect(source: &InputSource) -> Result<Detected> {
 fn detect_file(path: &Path) -> Result<Detected> {
     if !path.exists() {
         bail!("file not found: {}", path.display());
+    }
+
+    // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file
+    // name, so they win over the single-extension fallback below for files
+    // like `archive.tar.gz` where `extension()` would only see `.gz`.
+    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && let Some(fmt) = archive_format_from_name(name)
+    {
+        return Ok(Detected {
+            file_type: FileType::Archive(fmt),
+            magic_mime: None,
+        });
     }
 
     // Check extension first for structured formats
@@ -95,10 +127,15 @@ fn detect_file(path: &Path) -> Result<Detected> {
                 magic_mime,
             });
         }
+        if let Some(fmt) = archive_format_from_mime(mime) {
+            return Ok(Detected {
+                file_type: FileType::Archive(fmt),
+                magic_mime,
+            });
+        }
         // Known binary types that aren't text
         if mime.starts_with("video/")
             || mime.starts_with("audio/")
-            || mime.starts_with("application/zip")
             || mime.starts_with("application/gzip")
             || mime.starts_with("application/x-executable")
         {
@@ -175,6 +212,38 @@ fn is_utf8_streaming<R: Read>(head: Vec<u8>, reader: &mut R) -> Result<bool> {
     }
 }
 
+/// Match a filename against archive double-extensions (e.g. `.tar.gz`,
+/// `.tgz`) and single archive extensions (e.g. `.zip`). Returns `None`
+/// for non-archive names. Case-insensitive.
+fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
+    let lower = name.to_ascii_lowercase();
+    if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
+        return Some(ArchiveFormat::TarGz);
+    }
+    if lower.ends_with(".tar") {
+        return Some(ArchiveFormat::Tar);
+    }
+    if lower.ends_with(".zip")
+        || lower.ends_with(".jar")
+        || lower.ends_with(".war")
+        || lower.ends_with(".apk")
+    {
+        return Some(ArchiveFormat::Zip);
+    }
+    None
+}
+
+/// Map an `infer` magic-byte MIME to an archive format. `application/gzip`
+/// is intentionally absent: a bare `.gz` isn't necessarily a tarball, so
+/// only the extension path treats `*.tar.gz` as `TarGz`.
+fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
+    match mime {
+        "application/zip" => Some(ArchiveFormat::Zip),
+        "application/x-tar" => Some(ArchiveFormat::Tar),
+        _ => None,
+    }
+}
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
@@ -192,9 +261,14 @@ fn detect_bytes(data: &[u8]) -> Detected {
                 magic_mime,
             };
         }
+        if let Some(fmt) = archive_format_from_mime(mime) {
+            return Detected {
+                file_type: FileType::Archive(fmt),
+                magic_mime,
+            };
+        }
         if mime.starts_with("video/")
             || mime.starts_with("audio/")
-            || mime.starts_with("application/zip")
             || mime.starts_with("application/gzip")
             || mime.starts_with("application/x-executable")
         {

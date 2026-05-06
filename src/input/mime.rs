@@ -104,7 +104,7 @@ pub fn mimes_for_path(
     if out.is_empty() {
         // Last-resort fallback so the info view always shows something.
         out.push(MimeInfo::new(match file_type {
-            FileType::Binary => "application/octet-stream",
+            FileType::Binary | FileType::Archive(_) => "application/octet-stream",
             _ => "text/plain",
         }));
     }
@@ -162,9 +162,9 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Toml) => "application/toml",
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
-        // For Image and Binary, the magic-byte MIME is more specific than
-        // any generic registered fallback would be. Skip the fallback.
-        FileType::Image | FileType::Binary => return None,
+        // For Image, Archive, and Binary, the magic-byte MIME is more
+        // specific than any generic registered fallback would be.
+        FileType::Image | FileType::Archive(_) | FileType::Binary => return None,
     })
 }
 
