@@ -58,6 +58,14 @@ src/
       mod.rs           — Module wiring
       info_gather.rs   — gather_text_stats: streaming UTF-8/UTF-16 stats (lines/words/encoding/indent/shebang)
       info_render.rs   — push_text_stats: Content/Source section content
+    markdown/
+      mod.rs           — Module wiring
+      info_gather.rs   — Single-pass MD stats: headings by level, fenced blocks + langs, links/images/tables/lists, task progress, frontmatter, prose word count, reading time
+      info_render.rs   — Render Markdown info section
+    sql/
+      mod.rs           — Module wiring
+      info_gather.rs   — Statement scanner with string/comment/dollar-quote state; classifies DDL/DML/DQL/TCL, records created objects, guesses dialect
+      info_render.rs   — Render SQL info section
     structured/
       mod.rs           — Module wiring
       info.rs          — gather_extras (per-format stats) + render_section (Format)

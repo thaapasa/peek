@@ -28,6 +28,64 @@ mod tests;
 
 use crate::types::text::info_gather::gather_text_stats;
 
+/// Cap on bytes parsed for the per-language sidecar stats (markdown / SQL).
+/// Above this we keep the streaming text stats and skip the language-specific
+/// pass — so multi-GB SQL dumps stay openable without burning RAM on a parse
+/// that would just be noise anyway.
+const LANG_STATS_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
+
+fn is_markdown_syntax(syntax: Option<&str>) -> bool {
+    matches!(
+        syntax,
+        Some("md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn")
+    )
+}
+
+fn is_sql_syntax(syntax: Option<&str>) -> bool {
+    matches!(syntax, Some("sql" | "ddl" | "dml" | "psql" | "pgsql"))
+}
+
+fn syntax_of(file_type: &FileType) -> Option<&str> {
+    match file_type {
+        FileType::SourceCode { syntax } => syntax.as_deref(),
+        _ => None,
+    }
+}
+
+/// Try the language-specific sidecar parse for a SourceCode file. Returns
+/// `None` if `file_type` isn't a recognised flavour, the source is too big,
+/// or the read fails.
+fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<FileExtras> {
+    let syntax = syntax_of(file_type)?;
+    let is_md = is_markdown_syntax(Some(syntax));
+    let is_sql = is_sql_syntax(Some(syntax));
+    if !is_md && !is_sql {
+        return None;
+    }
+
+    let bs = source.open_byte_source().ok()?;
+    if bs.len() > LANG_STATS_BYTE_LIMIT {
+        return None;
+    }
+
+    let text_stats = gather_text_stats(source)?;
+    let text = source.read_text().ok()?;
+
+    if is_md {
+        let stats = crate::types::markdown::info_gather::gather(&text);
+        Some(FileExtras::Markdown {
+            text: text_stats,
+            stats,
+        })
+    } else {
+        let stats = crate::types::sql::info_gather::gather(&text);
+        Some(FileExtras::Sql {
+            text: text_stats,
+            stats,
+        })
+    }
+}
+
 /// Gather metadata for the given input source and detection result.
 ///
 /// `detected.magic_mime` is reused (no re-read of the file) to build the
@@ -108,10 +166,15 @@ fn gather_extras_stdin(
         data: Arc::clone(data),
     };
     match file_type {
-        FileType::SourceCode { .. } => match gather_text_stats(&stdin_source) {
-            Some(stats) => FileExtras::Text(stats),
-            None => crate::types::binary::info::gather_extras(magic_mime),
-        },
+        FileType::SourceCode { .. } => {
+            if let Some(extras) = gather_code_extras(&stdin_source, file_type) {
+                return extras;
+            }
+            match gather_text_stats(&stdin_source) {
+                Some(stats) => FileExtras::Text(stats),
+                None => crate::types::binary::info::gather_extras(magic_mime),
+            }
+        }
         FileType::Svg => match gather_text_stats(&stdin_source) {
             Some(stats) => crate::types::svg::info_gather::gather_extras(stats, data),
             None => crate::types::binary::info::gather_extras(magic_mime),
@@ -132,7 +195,11 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             magic_mime,
         ),
         FileType::SourceCode { .. } => {
-            match gather_text_stats(&InputSource::File(path.to_path_buf())) {
+            let source = InputSource::File(path.to_path_buf());
+            if let Some(extras) = gather_code_extras(&source, file_type) {
+                return extras;
+            }
+            match gather_text_stats(&source) {
                 Some(stats) => FileExtras::Text(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             }

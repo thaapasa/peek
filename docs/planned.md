@@ -6,15 +6,22 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 
 ## File Types
 
-### Markup / Documentation ☐
+### Markup / Documentation ◐
 
-| Format   | Extensions |
-|----------|------------|
-| Markdown | `.md`      |
-| SQL      | `.sql`     |
+| Format   | Extensions                            | Status |
+|----------|---------------------------------------|--------|
+| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`  | ◐      |
+| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`       | ◐      |
 
-Markdown: rendered view (styled headings, bold, lists) + highlighted source, cyclable with Tab. SQL:
-syntax highlighting.
+Highlighted source + format-aware Info section ship today (see
+[features.md → Markdown / SQL](features.md#markdown-)). Still planned:
+
+- Markdown: rendered "read mode" (styled headings, bold, lists, tables, blockquotes, per-language
+  dispatch into syntect inside fenced code blocks). Cyclable with Tab against the highlighted
+  source.
+- SQL: pretty-print / formatter, statement-outline aux mode, distinct PL/pgSQL grammar dispatch
+  inside `$$ … $$` bodies.
+- Outline aux mode shared between Markdown headings and SQL statements (mode + key binding TBD).
 
 ### Structured Data Additions ☐
 

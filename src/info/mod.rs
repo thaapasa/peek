@@ -66,6 +66,14 @@ pub enum FileExtras {
         format_name: &'static str,
         stats: Option<StructuredStats>,
     },
+    Markdown {
+        text: TextStats,
+        stats: MarkdownStats,
+    },
+    Sql {
+        text: TextStats,
+        stats: SqlStats,
+    },
     Binary {
         format: Option<String>,
     },
@@ -155,6 +163,65 @@ pub enum TopLevelKind {
     Table,
     MultiDoc(usize),
     Document,
+}
+
+pub struct MarkdownStats {
+    /// Counts for H1..H6 (index 0 = H1).
+    pub heading_counts: [usize; 6],
+    pub code_block_count: usize,
+    /// Distinct fenced-code-block languages, in first-seen order.
+    pub code_block_languages: Vec<String>,
+    pub inline_code_count: usize,
+    pub link_count: usize,
+    pub image_count: usize,
+    pub table_count: usize,
+    pub list_item_count: usize,
+    pub task_done: usize,
+    pub task_total: usize,
+    pub blockquote_lines: usize,
+    pub footnote_def_count: usize,
+    pub frontmatter: Option<FrontmatterKind>,
+    /// Words outside fenced code blocks. Inline code spans aren't stripped
+    /// (they usually carry meaningful content for prose).
+    pub prose_words: usize,
+    /// Reading time at 230 wpm, rounded up to whole minutes (0 = under 1 min).
+    pub reading_minutes: u32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FrontmatterKind {
+    Yaml,
+    Toml,
+}
+
+pub struct SqlStats {
+    pub statement_count: usize,
+    pub ddl_count: usize,
+    pub dml_count: usize,
+    pub dql_count: usize,
+    pub tcl_count: usize,
+    pub other_count: usize,
+    /// Distinct objects created/altered/dropped, by kind, in first-seen order.
+    pub created_tables: Vec<String>,
+    pub created_views: Vec<String>,
+    pub created_indexes: Vec<String>,
+    pub created_functions: Vec<String>,
+    pub created_triggers: Vec<String>,
+    /// Comment lines (any of `--`, `#`, `/* … */`).
+    pub comment_lines: usize,
+    /// Heuristic dialect guess.
+    pub dialect: SqlDialect,
+    /// True if any `$$ … $$` body found (PL/pgSQL or Postgres anonymous block).
+    pub has_dollar_quoted: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SqlDialect {
+    Generic,
+    PostgreSql,
+    MySql,
+    Sqlite,
+    TSql,
 }
 
 #[cfg(unix)]

@@ -7,6 +7,8 @@
 pub mod archive;
 pub mod binary;
 pub mod image;
+pub mod markdown;
+pub mod sql;
 pub mod structured;
 pub mod svg;
 pub mod text;

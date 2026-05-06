@@ -84,6 +84,26 @@ Dockerfile.
 Features: syntax-colored source with theme support; toggleable line numbers (✅, `--line-numbers` /
 `-n` / `l`).
 
+#### Markdown ◐
+
+`.md` / `.markdown` / `.mdown` / `.mkd` files render as syntax-highlighted source today. The Info
+view adds a Markdown section: heading counts by level (H1..H6), fenced code-block count + declared
+languages, inline-code / link / image / table / list-item counts, task-list progress (`done /
+total + percent`), blockquote lines, footnote definitions, frontmatter detection (YAML / TOML),
+prose word count (excludes fenced code), and reading-time estimate at 230 wpm. Rendered "read mode"
+(styled headings, bold, lists, per-language dispatch inside fenced code) is still planned — see
+[planned.md](planned.md#markup--documentation-).
+
+#### SQL ◐
+
+`.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info
+view adds an SQL section: heuristic dialect guess (PostgreSQL / MySQL / SQLite / T-SQL / generic),
+statement count broken down by category (DDL / DML / DQL / TCL / Other), inventories of created
+objects (tables, views, indexes, functions, triggers — with names), comment-line count, and a
+flag when an inline `$$ … $$` PL/pgSQL block is present. The scanner tracks string / comment /
+dollar-quoted state so semicolons inside strings or procedural bodies don't false-split. Real
+formatter / outline mode still planned.
+
 ### Structured Data / Config Files
 
 | Format | Extensions      | Status |
@@ -298,6 +318,11 @@ colors, per-character permission coloring).
   stats, EXIF, XMP
 - **Documents/text** — line/word/char counts, blank lines, longest line, line endings, indent style,
   encoding, shebang
+- **Markdown** — heading counts per level, fenced code-block count + languages, inline code, links,
+  images, tables, list items, task progress, blockquote lines, footnotes, frontmatter kind, prose
+  word count, reading-time estimate
+- **SQL** — dialect guess, statement count by category (DDL/DML/DQL/TCL), created-object inventory
+  (tables, views, indexes, functions, triggers), comment-line count, PL/pgSQL block flag
 - **Structured data** — top-level kind, key/element count, max nesting depth, total node count, XML
   root + namespaces
 - **SVG** — viewBox, declared dimensions, element counts (paths, groups, rects, circles, text),

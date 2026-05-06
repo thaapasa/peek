@@ -110,6 +110,18 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
                 theme,
             );
         }
+        FileExtras::Markdown { text, stats } => {
+            lines.push(String::new());
+            push_section_header(lines, "Content", theme);
+            push_text_stats(lines, text, theme);
+            crate::types::markdown::info_render::render_section(lines, stats, theme);
+        }
+        FileExtras::Sql { text, stats } => {
+            lines.push(String::new());
+            push_section_header(lines, "Content", theme);
+            push_text_stats(lines, text, theme);
+            crate::types::sql::info_render::render_section(lines, stats, theme);
+        }
         FileExtras::Binary { format } => {
             crate::types::binary::info::render_section(lines, format.as_deref(), theme);
         }
