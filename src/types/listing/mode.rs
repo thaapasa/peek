@@ -1,14 +1,17 @@
-//! Archive table-of-contents view. Tree-style listing with permissions,
-//! size, mtime, and path — like `tree` joined with `tar -tv`. Listing-only:
-//! no payload extraction.
+//! Listing table-of-contents view: tree-style hierarchical listing
+//! with permissions, size, mtime, and name. Generic over the source —
+//! used by archives, ISO 9660 disk images, and any future container
+//! type that produces a [`super::entry::Entry`] tree.
+//!
+//! Listing-only: no payload extraction. The mode owns the tree, a
+//! pre-flattened row index for O(1) scrolling, and the format label.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::reader::{ArchiveEntry, ArchiveMtime, list_entries};
+use super::entry::{Entry, EntryKind, EntryMtime};
 use crate::info::RenderOptions;
 use crate::input::InputSource;
-use crate::input::detect::ArchiveFormat;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{Mode, ModeId, Position, RenderCtx, Window};
@@ -23,57 +26,50 @@ const PERMS_COL_WIDTH: usize = 10;
 /// gutters` ≈ what fits comfortably without mtime.
 const MTIME_HIDE_BELOW_COLS: usize = 80;
 
-pub(crate) struct ArchiveMode {
-    format: ArchiveFormat,
-    entries: Vec<ArchiveEntry>,
+pub struct ListingMode {
+    format_name: String,
+    label: String,
     /// Pre-flattened tree-walk rows. Populated once at construction;
     /// scrolling slices into this without rebuilding.
     rows: Vec<TreeRow>,
     pending_warnings: Vec<String>,
     top_index: usize,
     cached_rows: usize,
-    label: String,
 }
 
-/// One rendered row in the TOC. Implicit directories (a parent path
-/// referenced by a child entry but not stored explicitly in the archive
-/// header chain) carry `entry_idx = None` and render with `?` perms.
+/// One rendered row in the TOC. Holds enough metadata to render
+/// without traversing the source tree again.
 struct TreeRow {
-    /// Index into `ArchiveMode::entries`, or `None` for synthesized
-    /// rows (the archive root, implicit parent dirs).
-    entry_idx: Option<usize>,
     /// Composed tree prefix: concatenation of `│   ` / `    ` ancestor
     /// segments plus this row's `├── ` / `└── ` connector. Empty for
-    /// the root row.
+    /// top-level rows.
     prefix: String,
-    /// Last path segment shown alone — the tree prefix conveys depth,
-    /// so prior segments would only repeat parent rows.
+    /// Last path segment shown alone — the tree prefix conveys depth.
     leaf: String,
     is_dir: bool,
+    size: u64,
+    mode: Option<u32>,
+    mtime: Option<EntryMtime>,
 }
 
-impl ArchiveMode {
-    pub(crate) fn new(source: &InputSource, format: ArchiveFormat) -> Self {
-        let (entries, warnings) = match list_entries(source, format) {
-            Ok(e) => (e, Vec::new()),
-            Err(e) => (Vec::new(), vec![format!("Failed to list archive: {e:#}")]),
-        };
-        let rows = if entries.is_empty() {
-            Vec::new()
-        } else {
-            flatten_tree(build_tree(&entries))
-        };
+impl ListingMode {
+    pub fn new(
+        format_name: impl Into<String>,
+        label: impl Into<String>,
+        entries: Vec<Entry>,
+        warnings: Vec<String>,
+    ) -> Self {
+        let rows = flatten(&entries);
         Self {
-            format,
-            entries,
+            format_name: format_name.into(),
+            label: label.into(),
             rows,
             pending_warnings: warnings,
             top_index: 0,
             // Set on first render_window / on_resize. `scroll` and
-            // `status_segments` guard with `.max(1)` for the brief window
-            // before the first render.
+            // `status_segments` guard with `.max(1)` for the brief
+            // window before the first render.
             cached_rows: 0,
-            label: "TOC".to_string(),
         }
     }
 
@@ -87,11 +83,10 @@ impl ArchiveMode {
         theme: &PeekTheme,
         mtime_text: Option<(&str, usize)>,
     ) -> String {
-        let entry = row.entry_idx.and_then(|i| self.entries.get(i));
-        let perms = format_perms(entry, row.is_dir);
-        let size = format_size(entry, row.is_dir);
+        let perms = format_perms(row.mode, row.is_dir);
+        let size = format_size(row.size, row.is_dir);
         let painted_perms = paint_perms(&perms, theme);
-        let painted_size = paint_size(&size, entry, row.is_dir, theme);
+        let painted_size = paint_size(&size, row.size, row.is_dir, theme);
         let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme);
         match mtime_text {
             Some((text, width)) => {
@@ -123,10 +118,7 @@ impl ArchiveMode {
         }
         let mtimes: Vec<String> = slice
             .iter()
-            .map(|r| {
-                let entry = r.entry_idx.and_then(|i| self.entries.get(i));
-                format_mtime(entry, opts.utc)
-            })
+            .map(|r| format_mtime(r.mtime.as_ref(), opts.utc))
             .collect();
         let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
         slice
@@ -137,9 +129,9 @@ impl ArchiveMode {
     }
 }
 
-impl Mode for ArchiveMode {
+impl Mode for ListingMode {
     fn id(&self) -> ModeId {
-        ModeId::Archive
+        ModeId::Listing
     }
 
     fn label(&self) -> &str {
@@ -227,9 +219,9 @@ impl Mode for ArchiveMode {
         let total = self.rows.len();
         let viewport = self.cached_rows.max(1);
         let s = if total <= viewport {
-            format!("{} ({})", total, self.format.label())
+            format!("{} ({})", total, self.format_name)
         } else {
-            format!("{}/{} ({})", self.top_index + 1, total, self.format.label())
+            format!("{}/{} ({})", self.top_index + 1, total, self.format_name)
         };
         vec![(s, theme.muted)]
     }
@@ -239,100 +231,30 @@ impl Mode for ArchiveMode {
     }
 }
 
-/// Tree node assembled from archive entries. Implicit directories
-/// (referenced by child paths but not in the archive header chain) get
-/// `entry_idx = None` and surface as `?`-perms rows.
-struct TreeNode {
-    name: String,
-    is_dir: bool,
-    entry_idx: Option<usize>,
-    children: Vec<TreeNode>,
-}
-
-fn build_tree(entries: &[ArchiveEntry]) -> TreeNode {
-    let mut root = TreeNode {
-        name: ".".to_string(),
-        is_dir: true,
-        entry_idx: None,
-        children: Vec::new(),
-    };
-    for (idx, entry) in entries.iter().enumerate() {
-        let trimmed = entry.path.trim_start_matches("./").trim_end_matches('/');
-        if trimmed.is_empty() {
-            root.entry_idx = Some(idx);
-            continue;
-        }
-        let parts: Vec<&str> = trimmed.split('/').collect();
-        insert(&mut root, &parts, idx, entry.is_dir);
-    }
-    sort_tree(&mut root);
-    root
-}
-
-fn insert(node: &mut TreeNode, parts: &[&str], idx: usize, is_dir: bool) {
-    let (head, tail) = parts.split_first().expect("non-empty parts");
-    let pos = match node.children.iter().position(|c| c.name == *head) {
-        Some(p) => p,
-        None => {
-            node.children.push(TreeNode {
-                name: head.to_string(),
-                is_dir: !tail.is_empty() || is_dir,
-                entry_idx: if tail.is_empty() { Some(idx) } else { None },
-                children: Vec::new(),
-            });
-            node.children.len() - 1
-        }
-    };
-    let child = &mut node.children[pos];
-    if tail.is_empty() {
-        child.entry_idx = Some(idx);
-        child.is_dir = is_dir;
-    } else {
-        insert(child, tail, idx, is_dir);
-    }
-}
-
-/// Sort children: directories first, then files, alphabetical within
-/// each group. Matches `tree --dirsfirst` for predictable layout.
-fn sort_tree(node: &mut TreeNode) {
-    node.children.sort_by(|a, b| match (a.is_dir, b.is_dir) {
-        (true, false) => std::cmp::Ordering::Less,
-        (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.cmp(&b.name),
-    });
-    for c in &mut node.children {
-        sort_tree(c);
-    }
-}
-
-fn flatten_tree(root: TreeNode) -> Vec<TreeRow> {
+fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
+    // Top level: render flush-left without tree connectors. Every
+    // depth-1 row would otherwise carry the same `├── ` / `└── ` at
+    // column 0, which is visual noise without payload.
     let mut rows = Vec::new();
-    rows.push(TreeRow {
-        entry_idx: root.entry_idx,
-        prefix: String::new(),
-        leaf: root.name.clone(),
-        is_dir: true,
-    });
-    // Skip the first-level tree art: every non-deep entry would otherwise
-    // carry the same `├── ` / `└── ` connector at column 0, which is
-    // visual noise without payload. Depth-1 rows render flush-left;
-    // grandchildren and below still get connectors relative to their
-    // top-level parent.
-    for child in &root.children {
+    for entry in entries {
         rows.push(TreeRow {
-            entry_idx: child.entry_idx,
             prefix: String::new(),
-            leaf: child.name.clone(),
-            is_dir: child.is_dir,
+            leaf: entry.name.clone(),
+            is_dir: entry.is_dir(),
+            size: entry.size,
+            mode: entry.mode,
+            mtime: entry.mtime.clone(),
         });
-        walk(&child.children, "", &mut rows);
+        if let EntryKind::Dir { children } = &entry.kind {
+            walk(children, "", &mut rows);
+        }
     }
     rows
 }
 
-fn walk(children: &[TreeNode], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
-    let count = children.len();
-    for (i, child) in children.iter().enumerate() {
+fn walk(entries: &[Entry], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
+    let count = entries.len();
+    for (i, entry) in entries.iter().enumerate() {
         let is_last = i + 1 == count;
         let connector = if is_last {
             "\u{2514}\u{2500}\u{2500} "
@@ -340,27 +262,30 @@ fn walk(children: &[TreeNode], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
             "\u{251c}\u{2500}\u{2500} "
         };
         rows.push(TreeRow {
-            entry_idx: child.entry_idx,
             prefix: format!("{parent_prefix}{connector}"),
-            leaf: child.name.clone(),
-            is_dir: child.is_dir,
+            leaf: entry.name.clone(),
+            is_dir: entry.is_dir(),
+            size: entry.size,
+            mode: entry.mode,
+            mtime: entry.mtime.clone(),
         });
-        let cont = if is_last { "    " } else { "\u{2502}   " };
-        let next_prefix = format!("{parent_prefix}{cont}");
-        walk(&child.children, &next_prefix, rows);
+        if let EntryKind::Dir { children } = &entry.kind {
+            let cont = if is_last { "    " } else { "\u{2502}   " };
+            let next_prefix = format!("{parent_prefix}{cont}");
+            walk(children, &next_prefix, rows);
+        }
     }
 }
 
 /// Render the 10-char `drwxr-xr-x`-style permission string. When mode
-/// is unset (implicit tree parents that don't appear in the archive's
-/// own header chain), fall back to typical defaults — `rwxr-xr-x` for
-/// dirs, `rw-r--r--` for files — so the column stays informative
-/// instead of dissolving into a wall of `?`s.
-fn format_perms(entry: Option<&ArchiveEntry>, is_dir: bool) -> String {
+/// is unset (implicit tree parents that don't appear in the source's
+/// own entry list, or sources that don't carry mode bits at all), fall
+/// back to typical defaults — `rwxr-xr-x` for dirs, `rw-r--r--` for
+/// files — so the column stays informative instead of dissolving into
+/// a wall of `?`s.
+fn format_perms(mode: Option<u32>, is_dir: bool) -> String {
     let type_ch = if is_dir { 'd' } else { '-' };
-    let mode = entry
-        .and_then(|e| e.mode)
-        .unwrap_or(if is_dir { 0o755 } else { 0o644 });
+    let mode = mode.unwrap_or(if is_dir { 0o755 } else { 0o644 });
     let mut s = String::with_capacity(10);
     s.push(type_ch);
     for (r, w, x) in [
@@ -375,25 +300,26 @@ fn format_perms(entry: Option<&ArchiveEntry>, is_dir: bool) -> String {
     s
 }
 
-fn format_size(entry: Option<&ArchiveEntry>, is_dir: bool) -> String {
-    let raw = match (is_dir, entry) {
-        (true, _) | (_, None) => "-".to_string(),
-        (false, Some(e)) => crate::info::thousands_sep(e.size),
+fn format_size(size: u64, is_dir: bool) -> String {
+    let raw = if is_dir {
+        "-".to_string()
+    } else {
+        crate::info::thousands_sep(size)
     };
     format!("{raw:>w$}", w = SIZE_COL_WIDTH)
 }
 
-fn format_mtime(entry: Option<&ArchiveEntry>, utc: bool) -> String {
+fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
     use std::time::SystemTime;
-    let Some(mtime) = entry.and_then(|e| e.mtime.as_ref()) else {
+    let Some(mtime) = mtime else {
         return "-".to_string();
     };
     match mtime {
-        ArchiveMtime::Utc(t) => match t.duration_since(SystemTime::UNIX_EPOCH) {
+        EntryMtime::Utc(t) => match t.duration_since(SystemTime::UNIX_EPOCH) {
             Ok(d) => crate::info::format_archive_mtime_zoned(d.as_secs(), utc),
             Err(_) => "-".to_string(),
         },
-        ArchiveMtime::LocalNaive {
+        EntryMtime::LocalNaive {
             year,
             month,
             day,
@@ -422,8 +348,7 @@ fn paint_perms(perms: &str, theme: &PeekTheme) -> String {
     out
 }
 
-fn paint_size(text: &str, entry: Option<&ArchiveEntry>, is_dir: bool, theme: &PeekTheme) -> String {
-    let size = entry.map(|e| e.size).unwrap_or(0);
+fn paint_size(text: &str, size: u64, is_dir: bool, theme: &PeekTheme) -> String {
     if is_dir || size == 0 {
         theme.paint(text, theme.muted)
     } else {
@@ -451,7 +376,7 @@ fn paint_tree_path(prefix: &str, leaf: &str, is_dir: bool, theme: &PeekTheme) ->
     } else {
         theme.foreground
     };
-    let trailing = if is_dir && leaf != "." { "/" } else { "" };
+    let trailing = if is_dir { "/" } else { "" };
     format!(
         "{}{}{}",
         theme.paint(prefix, theme.muted),

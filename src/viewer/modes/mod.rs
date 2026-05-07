@@ -45,7 +45,7 @@ pub(crate) enum ModeId {
     ImageRender,
     Animation,
     StructuredSource,
-    Archive,
+    Listing,
     About,
 }
 

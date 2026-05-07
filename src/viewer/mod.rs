@@ -8,8 +8,9 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
-use crate::types::archive::ArchiveMode;
+use crate::types::archive;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
+use crate::types::listing::ListingMode;
 use crate::types::svg::SvgAnimationMode;
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
@@ -297,7 +298,16 @@ impl Registry {
                     modes.push(self.text_content_mode(source, file_type, args)?);
                 }
                 FileType::Archive(fmt) => {
-                    modes.push(Box::new(ArchiveMode::new(source, *fmt)));
+                    let (entries, warnings) = match archive::reader::list_entries(source, *fmt) {
+                        Ok(e) => (e, Vec::new()),
+                        Err(e) => (Vec::new(), vec![format!("Failed to list archive: {e:#}")]),
+                    };
+                    modes.push(Box::new(ListingMode::new(
+                        fmt.label(),
+                        "TOC",
+                        entries,
+                        warnings,
+                    )));
                 }
                 FileType::DiskImage(_) => {
                     // No content / TOC view — push Info as the primary so

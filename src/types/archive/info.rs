@@ -2,22 +2,23 @@
 //! section. On listing failure the format name is preserved and the
 //! error is surfaced as a warning row.
 
-use super::reader::{ArchiveStats, list_entries};
+use super::reader::list_entries;
 use crate::info::{FileExtras, paint_count, push_field, push_section_header, thousands_sep};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::theme::PeekTheme;
+use crate::types::listing::Stats;
 
 pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> FileExtras {
     match list_entries(source, format) {
         Ok(entries) => {
-            let stats = ArchiveStats::from_entries(format, &entries);
+            let stats = Stats::from_root(format.label(), &entries);
             FileExtras::Archive {
                 format_name: stats.format_name,
                 entry_count: stats.entry_count,
                 file_count: stats.file_count,
                 dir_count: stats.dir_count,
-                total_uncompressed_size: stats.total_uncompressed_size,
+                total_uncompressed_size: stats.total_size,
                 error: None,
             }
         }

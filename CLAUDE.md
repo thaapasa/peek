@@ -103,15 +103,20 @@ src/
       info_render.rs   — render_section (SVG info section)
       animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
     archive/
-      mod.rs           — Module wiring; re-exports ArchiveMode
-      reader.rs        — ArchiveEntry / ArchiveMtime / ArchiveStats / list_entries dispatch + ReadSeek helper
-      info.rs          — gather_extras (TOC stats) + render_section (Archive info section)
-      mode.rs          — ArchiveMode: tree-style TOC view (perms, size, mtime, path)
+      mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info)
+      reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
+      info.rs          — gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
       backends/
         mod.rs         — Backend module wiring
-        zip.rs         — Zip TOC via central directory (no decompression)
+        zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
         tar.rs         — Tar TOC via header walk; gz/bz2/zst stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
+    listing/
+      mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
+      entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
+      stats.rs         — Stats: aggregate counts / sizes computed by tree walk
+      build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
+      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) used by archive + ISO
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan

@@ -15,28 +15,29 @@ use std::io::{Cursor, Read};
 use anyhow::{Context, Result};
 use tar::EntryType;
 
-use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek, time_from_epoch_secs};
+use crate::types::archive::reader::ReadSeek;
+use crate::types::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
-pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     list_from_read(reader)
 }
 
-pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let dec = flate2::read::GzDecoder::new(reader);
     list_from_read(dec)
 }
 
-pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let dec = bzip2::read::BzDecoder::new(reader);
     list_from_read(dec)
 }
 
-pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let dec = zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?;
     list_from_read(dec)
 }
 
-pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let mut compressed = Vec::new();
     reader
         .read_to_end(&mut compressed)
@@ -47,7 +48,7 @@ pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>
     list_from_read(Cursor::new(plain))
 }
 
-fn list_from_read<R: Read>(reader: R) -> Result<Vec<ArchiveEntry>> {
+fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
     let mut archive = tar::Archive::new(reader);
     let mut out = Vec::new();
     for entry in archive.entries().context("failed to read tar archive")? {
@@ -65,10 +66,10 @@ fn list_from_read<R: Read>(reader: R) -> Result<Vec<ArchiveEntry>> {
             .mtime()
             .ok()
             .and_then(time_from_epoch_secs)
-            .map(ArchiveMtime::Utc);
+            .map(EntryMtime::Utc);
         let mode = header.mode().ok();
-        out.push(ArchiveEntry {
-            path: normalize(&path_cow),
+        out.push(FlatEntry {
+            path: path_cow,
             size,
             mtime,
             mode,
@@ -76,14 +77,4 @@ fn list_from_read<R: Read>(reader: R) -> Result<Vec<ArchiveEntry>> {
         });
     }
     Ok(out)
-}
-
-/// Strip a redundant `./` prefix so paths line up with the zip backend.
-/// Bare `.` / `./` (the archive root) is preserved as `./` — stripping it
-/// would render as `/` and look like a Unix root path.
-fn normalize(p: &str) -> String {
-    match p {
-        "." | "./" => "./".to_string(),
-        _ => p.strip_prefix("./").unwrap_or(p).to_string(),
-    }
 }

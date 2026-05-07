@@ -8,6 +8,7 @@ pub mod archive;
 pub mod binary;
 pub mod disk_image;
 pub mod image;
+pub mod listing;
 pub mod markdown;
 pub mod sql;
 pub mod structured;

@@ -3,43 +3,34 @@
 
 use anyhow::{Context, Result};
 
-use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek};
+use crate::types::archive::reader::ReadSeek;
+use crate::types::listing::{EntryMtime, FlatEntry};
 
-pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let mut archive = zip::ZipArchive::new(reader).context("failed to read zip archive")?;
     let mut out = Vec::with_capacity(archive.len());
     for i in 0..archive.len() {
         let file = archive
             .by_index(i)
             .with_context(|| format!("failed to read zip entry {i}"))?;
-        let raw_name = file.name().to_string();
-        let is_dir = file.is_dir();
-        let path = normalize_path(&raw_name);
         // Zip MS-DOS dates store wall-clock without a zone — the archiver's
         // local time. Keeping it naive (rather than pretending it's UTC and
         // letting `localtime_r` add another offset) preserves the original
         // wall clock for the user's display.
-        let mtime = file.last_modified().map(|dt| ArchiveMtime::LocalNaive {
+        let mtime = file.last_modified().map(|dt| EntryMtime::LocalNaive {
             year: dt.year(),
             month: dt.month(),
             day: dt.day(),
             hour: dt.hour(),
             minute: dt.minute(),
         });
-        out.push(ArchiveEntry {
-            path,
+        out.push(FlatEntry {
+            path: file.name().to_string(),
             size: file.size(),
             mtime,
             mode: file.unix_mode(),
-            is_dir,
+            is_dir: file.is_dir(),
         });
     }
     Ok(out)
-}
-
-/// Normalize zip names to forward-slash paths. Zip stores forward slashes
-/// already; this strips a redundant leading `./` so display matches the
-/// tar backend.
-fn normalize_path(name: &str) -> String {
-    name.strip_prefix("./").unwrap_or(name).to_string()
 }

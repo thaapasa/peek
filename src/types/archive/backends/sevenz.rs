@@ -4,13 +4,14 @@
 use anyhow::{Context, Result};
 use sevenz_rust2::{ArchiveReader, Password};
 
-use crate::types::archive::reader::{ArchiveEntry, ArchiveMtime, ReadSeek};
+use crate::types::archive::reader::ReadSeek;
+use crate::types::listing::{EntryMtime, FlatEntry};
 
 /// Windows file-attribute bit for read-only files. Used to translate the
 /// 7z native attribute set into a meaningful Unix permission preview.
 const FILE_ATTRIBUTE_READONLY: u32 = 0x0000_0001;
 
-pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let archive_reader =
         ArchiveReader::new(reader, Password::empty()).context("failed to read 7z archive")?;
     let archive = archive_reader.archive();
@@ -19,7 +20,7 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
         let path = normalize(entry.name());
         let is_dir = entry.is_directory();
         let mtime = if entry.has_last_modified_date {
-            Some(ArchiveMtime::Utc(entry.last_modified_date().into()))
+            Some(EntryMtime::Utc(entry.last_modified_date().into()))
         } else {
             None
         };
@@ -34,7 +35,7 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
         } else {
             0o644
         });
-        out.push(ArchiveEntry {
+        out.push(FlatEntry {
             path,
             size: entry.size(),
             mtime,
