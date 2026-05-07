@@ -269,6 +269,12 @@ TOC ↔ Info; `x` still drops into the raw hex dump of the archive bytes.
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
 (corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.
 
+A **sticky parent breadcrumb** pins the current top row's ancestor chain to the upper rows of the
+viewport when scrolled — so even mid-tree the path back to root stays visible. Same TOC code path
+serves disk-image listings, so the behavior matches there too. Capped to one third of the viewport
+height, suppressed when scroll is at the top or the top row is a top-level entry. Toggle with `s`;
+when off the status bar shows `sticky off`.
+
 #### Disk Images ✅
 
 | Format | Extensions | Status                                                  |

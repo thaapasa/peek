@@ -14,7 +14,7 @@ use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
-use crate::viewer::modes::{Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Width (chars) of the size column, including thousands separators.
@@ -35,14 +35,20 @@ pub struct ListingMode {
     pending_warnings: Vec<String>,
     top_index: usize,
     cached_rows: usize,
+    /// When true, the ancestor chain of the top visible row is pinned
+    /// to the upper rows of the viewport so deeply-scrolled trees keep
+    /// their breadcrumb visible. Toggled by `s`. Suppressed
+    /// automatically when the top row has no parent (i.e. scroll is at
+    /// a top-level entry) or when there's no scroll at all.
+    sticky_enabled: bool,
 }
 
 /// One rendered row in the TOC. Holds enough metadata to render
 /// without traversing the source tree again.
+#[derive(Clone)]
 struct TreeRow {
-    /// Composed tree prefix: concatenation of `│   ` / `    ` ancestor
-    /// segments plus this row's `├── ` / `└── ` connector. Empty for
-    /// top-level rows.
+    /// Composed tree prefix: ancestor segments (`│ ` / `  `) plus this
+    /// row's `├╴` / `└╴` connector. Empty for top-level rows.
     prefix: String,
     /// Last path segment shown alone — the tree prefix conveys depth.
     leaf: String,
@@ -50,6 +56,10 @@ struct TreeRow {
     size: u64,
     mode: Option<u32>,
     mtime: Option<EntryMtime>,
+    /// Index of the row representing this entry's parent directory in
+    /// `ListingMode::rows`, or `None` for top-level entries. Used to
+    /// build the sticky breadcrumb chain on scroll.
+    parent_row: Option<usize>,
 }
 
 impl ListingMode {
@@ -70,7 +80,32 @@ impl ListingMode {
             // `status_segments` guard with `.max(1)` for the brief
             // window before the first render.
             cached_rows: 0,
+            sticky_enabled: true,
         }
+    }
+
+    /// Ancestor row indices for the row currently at the top of the
+    /// viewport, ordered root-most first. Empty when sticky is off, when
+    /// there's no scroll, or when the top row is a top-level entry.
+    /// Capped to `(viewport / 3).max(1)` so sticky never eats more than
+    /// a third of the visible content.
+    fn sticky_chain(&self, viewport: usize) -> Vec<usize> {
+        if !self.sticky_enabled || self.top_index == 0 || self.rows.is_empty() {
+            return Vec::new();
+        }
+        let cap = (viewport / 3).max(1);
+        let mut chain = Vec::new();
+        let mut cur = self.rows[self.top_index].parent_row;
+        while let Some(p) = cur {
+            chain.push(p);
+            cur = self.rows[p].parent_row;
+        }
+        chain.reverse();
+        if chain.len() > cap {
+            let drop = chain.len() - cap;
+            chain.drain(..drop);
+        }
+        chain
     }
 
     fn max_top(&self) -> usize {
@@ -145,13 +180,21 @@ impl Mode for ListingMode {
             self.top_index = max;
         }
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        let end = self.top_index.saturating_add(rows).min(self.rows.len());
-        let lines = self.render_slice(
-            &self.rows[self.top_index..end],
-            ctx.peek_theme,
-            ctx.render_opts,
-            show_mtime,
-        );
+        let sticky = self.sticky_chain(rows);
+        let content_rows = rows.saturating_sub(sticky.len()).max(1);
+        let end = self
+            .top_index
+            .saturating_add(content_rows)
+            .min(self.rows.len());
+        // Compose sticky breadcrumb rows + content slice into one
+        // buffer so render_slice computes mtime column width across
+        // the full visible window — keeps columns aligned.
+        let mut combined: Vec<TreeRow> = Vec::with_capacity(sticky.len() + (end - self.top_index));
+        for idx in &sticky {
+            combined.push(self.rows[*idx].clone());
+        }
+        combined.extend(self.rows[self.top_index..end].iter().cloned());
+        let lines = self.render_slice(&combined, ctx.peek_theme, ctx.render_opts, show_mtime);
         Ok(Window {
             lines,
             total: self.rows.len(),
@@ -218,12 +261,31 @@ impl Mode for ListingMode {
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
         let total = self.rows.len();
         let viewport = self.cached_rows.max(1);
+        let mut segs = Vec::new();
         let s = if total <= viewport {
             format!("{} ({})", total, self.format_name)
         } else {
             format!("{}/{} ({})", self.top_index + 1, total, self.format_name)
         };
-        vec![(s, theme.muted)]
+        segs.push((s, theme.muted));
+        // Sticky on is the default — only call out the off state.
+        if !self.sticky_enabled {
+            segs.push(("sticky off".to_string(), theme.muted));
+        }
+        segs
+    }
+
+    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+        const ACTIONS: &[(Action, &str)] = &[(Action::ToggleStickyParents, "Pin parent path")];
+        ACTIONS
+    }
+
+    fn handle(&mut self, action: Action) -> Handled {
+        if action == Action::ToggleStickyParents {
+            self.sticky_enabled = !self.sticky_enabled;
+            return Handled::Yes;
+        }
+        Handled::No
     }
 
     fn take_warnings(&mut self) -> Vec<String> {
@@ -233,7 +295,7 @@ impl Mode for ListingMode {
 
 fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
     // Top level: render flush-left without tree connectors. Every
-    // depth-1 row would otherwise carry the same `├── ` / `└── ` at
+    // depth-1 row would otherwise carry the same `├╴` / `└╴` at
     // column 0, which is visual noise without payload.
     let mut rows = Vec::new();
     for entry in entries {
@@ -244,15 +306,22 @@ fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
             size: entry.size,
             mode: entry.mode,
             mtime: entry.mtime.clone(),
+            parent_row: None,
         });
         if let EntryKind::Dir { children } = &entry.kind {
-            walk(children, "", &mut rows);
+            let parent = rows.len() - 1;
+            walk(children, Some(parent), "", &mut rows);
         }
     }
     rows
 }
 
-fn walk(entries: &[Entry], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
+fn walk(
+    entries: &[Entry],
+    parent_row: Option<usize>,
+    parent_prefix: &str,
+    rows: &mut Vec<TreeRow>,
+) {
     let count = entries.len();
     for (i, entry) in entries.iter().enumerate() {
         let is_last = i + 1 == count;
@@ -273,11 +342,13 @@ fn walk(entries: &[Entry], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
             size: entry.size,
             mode: entry.mode,
             mtime: entry.mtime.clone(),
+            parent_row,
         });
         if let EntryKind::Dir { children } = &entry.kind {
             let cont = if is_last { "  " } else { "\u{2502} " };
             let next_prefix = format!("{parent_prefix}{cont}");
-            walk(children, &next_prefix, rows);
+            let new_parent = rows.len() - 1;
+            walk(children, Some(new_parent), &next_prefix, rows);
         }
     }
 }
@@ -388,4 +459,107 @@ fn paint_tree_path(prefix: &str, leaf: &str, is_dir: bool, theme: &PeekTheme) ->
         theme.paint(leaf, leaf_color),
         theme.paint(trailing, theme.muted),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Build a minimal listing tree:
+    ///   sub/                  (row 0)
+    ///     deeper/             (row 1, parent=0)
+    ///       deep.txt          (row 2, parent=1)
+    ///     inner.txt           (row 3, parent=0)
+    ///   README.txt            (row 4, parent=None)
+    fn sample() -> ListingMode {
+        let entries = vec![
+            Entry {
+                name: "sub".into(),
+                size: 0,
+                mtime: None,
+                mode: None,
+                kind: EntryKind::Dir {
+                    children: vec![
+                        Entry {
+                            name: "deeper".into(),
+                            size: 0,
+                            mtime: None,
+                            mode: None,
+                            kind: EntryKind::Dir {
+                                children: vec![Entry {
+                                    name: "deep.txt".into(),
+                                    size: 4,
+                                    mtime: None,
+                                    mode: None,
+                                    kind: EntryKind::File,
+                                }],
+                            },
+                        },
+                        Entry {
+                            name: "inner.txt".into(),
+                            size: 5,
+                            mtime: None,
+                            mode: None,
+                            kind: EntryKind::File,
+                        },
+                    ],
+                },
+            },
+            Entry {
+                name: "README.txt".into(),
+                size: 8,
+                mtime: None,
+                mode: None,
+                kind: EntryKind::File,
+            },
+        ];
+        ListingMode::new("test", "TOC", entries, Vec::new())
+    }
+
+    #[test]
+    fn parent_row_indices_populated() {
+        let lm = sample();
+        let parents: Vec<Option<usize>> = lm.rows.iter().map(|r| r.parent_row).collect();
+        assert_eq!(parents, vec![None, Some(0), Some(1), Some(0), None]);
+    }
+
+    #[test]
+    fn sticky_chain_empty_at_top() {
+        let mut lm = sample();
+        lm.top_index = 0;
+        assert!(lm.sticky_chain(20).is_empty());
+    }
+
+    #[test]
+    fn sticky_chain_walks_ancestors_root_first() {
+        let mut lm = sample();
+        // Top of viewport is `deep.txt` (row 2). Ancestors: sub/ (0)
+        // → deeper/ (1).
+        lm.top_index = 2;
+        assert_eq!(lm.sticky_chain(20), vec![0, 1]);
+    }
+
+    #[test]
+    fn sticky_chain_capped_to_viewport_third() {
+        let mut lm = sample();
+        lm.top_index = 2;
+        // Viewport 3 → cap = 1 → keep only the deepest ancestor.
+        assert_eq!(lm.sticky_chain(3), vec![1]);
+    }
+
+    #[test]
+    fn sticky_chain_empty_when_disabled() {
+        let mut lm = sample();
+        lm.top_index = 2;
+        lm.sticky_enabled = false;
+        assert!(lm.sticky_chain(20).is_empty());
+    }
+
+    #[test]
+    fn sticky_chain_empty_for_top_level_row() {
+        let mut lm = sample();
+        // Row 4 is `README.txt`, a top-level entry with parent_row = None.
+        lm.top_index = 4;
+        assert!(lm.sticky_chain(20).is_empty());
+    }
 }

@@ -284,7 +284,8 @@ impl<'a> ViewerState<'a> {
             | Action::ToggleLineNumbers
             | Action::ToggleSoftWrap
             | Action::CycleBackgroundBack
-            | Action::CycleImageModeBack => Outcome::Unhandled,
+            | Action::CycleImageModeBack
+            | Action::ToggleStickyParents => Outcome::Unhandled,
         })
     }
 

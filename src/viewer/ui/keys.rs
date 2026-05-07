@@ -94,6 +94,9 @@ pub(crate) enum Action {
     NextFrame,
     /// Step back to the previous animation frame.
     PrevFrame,
+    /// Toggle the sticky parent-directory breadcrumb at the top of a
+    /// scrolled listing TOC view.
+    ToggleStickyParents,
 }
 
 impl Action {
@@ -134,6 +137,7 @@ impl Action {
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
+        const STICKY_PARENTS: &[Binding] = &[Binding::plain(Char('s'))];
 
         match self {
             Action::Quit              => QUIT,
@@ -166,6 +170,7 @@ impl Action {
             Action::PlayPause         => PLAY_PAUSE,
             Action::NextFrame         => NEXT_FRAME,
             Action::PrevFrame         => PREV_FRAME,
+            Action::ToggleStickyParents => STICKY_PARENTS,
         }
     }
 
@@ -203,6 +208,7 @@ impl Action {
             Action::PlayPause         => "p",
             Action::NextFrame         => "n",
             Action::PrevFrame         => "N",
+            Action::ToggleStickyParents => "s",
         }
     }
 
