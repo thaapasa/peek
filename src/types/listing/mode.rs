@@ -256,10 +256,15 @@ fn walk(entries: &[Entry], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
     let count = entries.len();
     for (i, entry) in entries.iter().enumerate() {
         let is_last = i + 1 == count;
+        // 2-column connectors: corner/tee + thin half-line ("╴", U+2574)
+        // that ends at the cell boundary so the leaf abuts cleanly
+        // without a separator space. Continuation columns are 2 chars
+        // wide as well — vertical bar + space, or two spaces under the
+        // last child of a parent.
         let connector = if is_last {
-            "\u{2514}\u{2500}\u{2500} "
+            "\u{2514}\u{2574}"
         } else {
-            "\u{251c}\u{2500}\u{2500} "
+            "\u{251c}\u{2574}"
         };
         rows.push(TreeRow {
             prefix: format!("{parent_prefix}{connector}"),
@@ -270,7 +275,7 @@ fn walk(entries: &[Entry], parent_prefix: &str, rows: &mut Vec<TreeRow>) {
             mtime: entry.mtime.clone(),
         });
         if let EntryKind::Dir { children } = &entry.kind {
-            let cont = if is_last { "    " } else { "\u{2502}   " };
+            let cont = if is_last { "  " } else { "\u{2502} " };
             let next_prefix = format!("{parent_prefix}{cont}");
             walk(children, &next_prefix, rows);
         }
