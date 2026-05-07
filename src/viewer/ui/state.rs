@@ -79,6 +79,13 @@ pub(crate) struct ViewerState<'a> {
     pub current_theme: PeekThemeName,
     pub peek_theme: PeekTheme,
 
+    /// Last frame's content rows + status, byte-identical to what's on
+    /// the terminal. Used by `draw_screen` to skip writes for unchanged
+    /// rows. Cleared on resize (terminal width change invalidates the
+    /// per-row equality assumption).
+    prev_lines: Vec<String>,
+    prev_status: String,
+
     source: &'a InputSource,
     detected: &'a Detected,
     file_info: FileInfo,
@@ -112,6 +119,8 @@ impl<'a> ViewerState<'a> {
             position: Position::Unknown,
             current_theme: theme_name,
             peek_theme,
+            prev_lines: Vec::new(),
+            prev_status: String::new(),
             source,
             detected,
             file_info,
@@ -448,6 +457,11 @@ impl<'a> ViewerState<'a> {
                 self.views[i] = None;
             }
         }
+        // Width change invalidates per-row equality (a "same" string in
+        // a wider terminal would still need EL to clear stale tail
+        // cells). Drop the diff cache so next draw repaints every row.
+        self.prev_lines.clear();
+        self.prev_status.clear();
     }
 
     // ---------------------------------------------------------------------
@@ -508,13 +522,6 @@ impl<'a> ViewerState<'a> {
             rows_at: rows,
             total: window.total,
         })
-    }
-
-    fn current_lines(&self) -> &[String] {
-        self.views[self.active]
-            .as_ref()
-            .map(|v| v.lines.as_slice())
-            .unwrap_or(&[])
     }
 
     // ---------------------------------------------------------------------
@@ -593,52 +600,69 @@ impl<'a> ViewerState<'a> {
     // Drawing
     // ---------------------------------------------------------------------
 
-    pub(crate) fn draw(&self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
-        draw_screen(
-            stdout,
-            self.current_lines(),
-            status,
-            self.peek_theme.color_mode.reset_bytes(),
-        )
+    /// Draw the active mode's window + status. Per-row overwrite with
+    /// clear-to-EOL, no full clear (avoids the white-flash gap visible
+    /// during animation playback). Skips writes for rows that match
+    /// the previous frame byte-for-byte; status row likewise.
+    pub(crate) fn draw(&mut self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
+        let reset_bytes = self.peek_theme.color_mode.reset_bytes();
+        let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
+        let rows = (total_rows as usize).saturating_sub(1);
+
+        // Split borrow: read current_lines from views, then prev_lines
+        // mutably below. Held immutably only inside the loop.
+        {
+            let lines: &[String] = self.views[self.active]
+                .as_ref()
+                .map(|v| v.lines.as_slice())
+                .unwrap_or(&[]);
+            let end = lines.len().min(rows);
+
+            for (i, line) in lines[..end].iter().enumerate() {
+                if self.prev_lines.get(i).is_some_and(|p| p == line) {
+                    continue;
+                }
+                execute!(stdout, cursor::MoveTo(0, i as u16))?;
+                stdout.write_all(line.as_bytes())?;
+                // Reset before EL so clear-to-EOL paints with default bg,
+                // not the line's trailing color attribute.
+                stdout.write_all(reset_bytes)?;
+                execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+            }
+            // Blank any trailing rows the previous frame populated.
+            // Rows beyond prev_lines.len() were already empty, so skip.
+            let prev_end = self.prev_lines.len().min(rows);
+            for i in end..prev_end {
+                execute!(stdout, cursor::MoveTo(0, i as u16))?;
+                stdout.write_all(reset_bytes)?;
+                execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+            }
+
+            if status != self.prev_status {
+                execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
+                stdout.write_all(reset_bytes)?;
+                execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+                stdout.write_all(status.as_bytes())?;
+            }
+
+            stdout.flush()?;
+        }
+
+        // Update prev cache. Re-fetch lines through immutable borrow,
+        // clone strings into prev (cheap relative to terminal write
+        // cost we already paid).
+        self.prev_lines.clear();
+        if let Some(view) = self.views[self.active].as_ref() {
+            let end = view.lines.len().min(rows);
+            self.prev_lines.extend_from_slice(&view.lines[..end]);
+        }
+        if status != self.prev_status {
+            self.prev_status.clear();
+            self.prev_status.push_str(status);
+        }
+
+        Ok(())
     }
-}
-
-/// Render the screen: per-row overwrite with clear-to-EOL, no full
-/// clear. Avoids the white-flash gap between Clear(All) and repaint
-/// (especially visible during animation playback).
-fn draw_screen(
-    stdout: &mut io::Stdout,
-    lines: &[String],
-    status: &str,
-    reset_bytes: &[u8],
-) -> Result<()> {
-    let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
-    let rows = (total_rows as usize).saturating_sub(1);
-
-    let end = lines.len().min(rows);
-    for (i, line) in lines[..end].iter().enumerate() {
-        execute!(stdout, cursor::MoveTo(0, i as u16))?;
-        stdout.write_all(line.as_bytes())?;
-        // Reset before EL so clear-to-EOL paints with default bg, not
-        // the line's trailing color attribute.
-        stdout.write_all(reset_bytes)?;
-        execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-    }
-    // Blank any trailing rows the previous frame may have populated.
-    for i in end..rows {
-        execute!(stdout, cursor::MoveTo(0, i as u16))?;
-        stdout.write_all(reset_bytes)?;
-        execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-    }
-
-    // Status line on the last row.
-    execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
-    stdout.write_all(reset_bytes)?;
-    execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-    stdout.write_all(status.as_bytes())?;
-
-    stdout.flush()?;
-    Ok(())
 }
 
 #[cfg(test)]
