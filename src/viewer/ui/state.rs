@@ -603,9 +603,9 @@ impl<'a> ViewerState<'a> {
     }
 }
 
-/// Render the screen: clear, draw the pre-windowed `lines` (already
-/// sliced by the active mode for the current scroll), draw status bar
-/// on last row.
+/// Render the screen: per-row overwrite with clear-to-EOL, no full
+/// clear. Avoids the white-flash gap between Clear(All) and repaint
+/// (especially visible during animation playback).
 fn draw_screen(
     stdout: &mut io::Stdout,
     lines: &[String],
@@ -615,27 +615,26 @@ fn draw_screen(
     let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
     let rows = (total_rows as usize).saturating_sub(1);
 
-    // Reset all attributes before clearing so the clear doesn't fill the
-    // screen with a leftover background color. (Empty in Plain mode —
-    // there's nothing to reset.)
-    stdout.write_all(reset_bytes)?;
-    execute!(
-        stdout,
-        terminal::Clear(ClearType::All),
-        cursor::MoveTo(0, 0),
-    )?;
-
     let end = lines.len().min(rows);
     for (i, line) in lines[..end].iter().enumerate() {
-        if i > 0 {
-            stdout.write_all(b"\r\n")?;
-        }
+        execute!(stdout, cursor::MoveTo(0, i as u16))?;
         stdout.write_all(line.as_bytes())?;
+        // Reset before EL so clear-to-EOL paints with default bg, not
+        // the line's trailing color attribute.
+        stdout.write_all(reset_bytes)?;
+        execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+    }
+    // Blank any trailing rows the previous frame may have populated.
+    for i in end..rows {
+        execute!(stdout, cursor::MoveTo(0, i as u16))?;
+        stdout.write_all(reset_bytes)?;
+        execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
     }
 
-    // Reset all attributes, then draw the status line on the last row.
-    stdout.write_all(reset_bytes)?;
+    // Status line on the last row.
     execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
+    stdout.write_all(reset_bytes)?;
+    execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
     stdout.write_all(status.as_bytes())?;
 
     stdout.flush()?;
