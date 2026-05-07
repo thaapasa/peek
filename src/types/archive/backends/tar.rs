@@ -27,7 +27,7 @@ pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
 }
 
 pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<ArchiveEntry>> {
-    let dec = bzip2_rs::DecoderReader::new(reader);
+    let dec = bzip2::read::BzDecoder::new(reader);
     list_from_read(dec)
 }
 
