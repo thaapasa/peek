@@ -109,7 +109,48 @@ impl ListingMode {
     }
 
     fn max_top(&self) -> usize {
-        self.rows.len().saturating_sub(self.cached_rows.max(1))
+        let viewport = self.cached_rows.max(1);
+        let total = self.rows.len();
+        if total <= viewport {
+            return 0;
+        }
+        // Sticky takes some upper rows of the viewport, so the content
+        // slot is `viewport - sticky_len`. The naive bound
+        // `total - viewport` would leave the bottom `sticky_len` rows
+        // unreachable. Sticky depends on which row is at top, so this
+        // is a fixed-point search: try the naive bound, see if the tail
+        // still fits, advance by one if not. Bounded by the sticky cap
+        // (viewport / 3 + 1) — a handful of iterations at worst.
+        let max_iter = (viewport / 3).max(1) + 1;
+        let mut top = total - viewport;
+        for _ in 0..max_iter {
+            let sticky_len = self.sticky_chain_len_at(top);
+            let content = viewport.saturating_sub(sticky_len).max(1);
+            if top + content >= total {
+                return top;
+            }
+            top = (top + 1).min(total - 1);
+        }
+        top
+    }
+
+    /// Length of the sticky chain that would render with `top` as the
+    /// viewport's top row. Same suppression rules as `sticky_chain`
+    /// (off when sticky disabled, top is row 0, or the row has no
+    /// parent). Used by `max_top` to make scroll math sticky-aware
+    /// without allocating the full chain vector.
+    fn sticky_chain_len_at(&self, top: usize) -> usize {
+        if !self.sticky_enabled || top == 0 || self.rows.is_empty() {
+            return 0;
+        }
+        let cap = (self.cached_rows.max(1) / 3).max(1);
+        let mut len = 0usize;
+        let mut cur = self.rows[top].parent_row;
+        while let Some(p) = cur {
+            len += 1;
+            cur = self.rows[p].parent_row;
+        }
+        len.min(cap)
     }
 
     fn paint_row(
@@ -561,5 +602,27 @@ mod tests {
         // Row 4 is `README.txt`, a top-level entry with parent_row = None.
         lm.top_index = 4;
         assert!(lm.sticky_chain(20).is_empty());
+    }
+
+    /// With sticky on and a small viewport, max_top advances past the
+    /// naive `total - viewport` so the bottom-most rows aren't hidden
+    /// behind the breadcrumb.
+    #[test]
+    fn max_top_reserves_for_sticky() {
+        let mut lm = sample();
+        lm.cached_rows = 3;
+        // 5 rows, viewport 3. Naive max_top = 2 → with sticky_len = 1
+        // only rows 2,3 visible; row 4 would be unreachable. Iterative
+        // search lands at top = 3 (sticky_len = 1, content shows rows
+        // 3, 4 — tail visible).
+        assert_eq!(lm.max_top(), 3);
+    }
+
+    #[test]
+    fn max_top_naive_when_sticky_disabled() {
+        let mut lm = sample();
+        lm.cached_rows = 3;
+        lm.sticky_enabled = false;
+        assert_eq!(lm.max_top(), 2);
     }
 }
