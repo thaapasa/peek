@@ -24,6 +24,7 @@ No external runtime dependencies. Image rendering is built in.
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
+  update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/
     mod.rs             — re-exports InputSource, ByteSource, LineSource
     source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait

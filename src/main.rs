@@ -9,6 +9,7 @@ mod input;
 mod output;
 mod theme;
 mod types;
+mod update;
 mod viewer;
 
 pub use cli::Args;
@@ -19,6 +20,9 @@ fn main() -> Result<()> {
     if args.version {
         output::help::render_version()?;
         return Ok(());
+    }
+    if args.update {
+        return update::run();
     }
     // No args + interactive stdin → show short help instead of erroring.
     let no_input = args.file.is_none() && std::io::stdin().is_terminal();

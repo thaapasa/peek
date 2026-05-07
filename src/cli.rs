@@ -109,4 +109,8 @@ pub struct Args {
     /// local time with offset.
     #[arg(long, hide_short_help = true)]
     pub utc: bool,
+
+    /// Check GitHub for a newer release and install it via the official installer
+    #[arg(long, hide_short_help = true)]
+    pub update: bool,
 }
