@@ -131,6 +131,7 @@ src/
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
+      screen.rs        — ScreenBuffer: per-row diff against prev frame, no-flash redraw
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
