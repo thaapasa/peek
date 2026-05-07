@@ -170,19 +170,19 @@ off by default. Everything else is pure Rust or low-friction C bindings.
 
 ### Disk Images ◐
 
-| Format | Extensions | Status                                       |
-|--------|------------|----------------------------------------------|
-| ISO    | `.iso`     | ✅ PVD-only metadata (no directory walk)      |
-| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)  |
+| Format | Extensions | Status                                                  |
+|--------|------------|---------------------------------------------------------|
+| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet)   |
+| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)             |
 
-Both formats ship as metadata-only viewers today. See
-[features.md → Disk Images](features.md#disk-images-) for what's surfaced.
+ISO ships with a TOC view backed by `types::listing` (same render path as archive containers).
+DMG remains metadata-only. See [features.md → Disk Images](features.md#disk-images-) for what's
+surfaced today.
 
 Still planned:
 
-- **ISO directory tree** — reuse the archive TOC primitive once a crate like `cdfs` is pulled in.
 - **ISO Rock Ridge detection** — needs a SUSP scan inside the root directory record; one extra
-  read pass.
+  read pass. Would surface real Unix permissions in the perms column.
 - **DMG partition map** — parse the embedded XML plist for the blkx tables (partition list with
   per-partition name, type, size). Adds a `plist` crate dependency.
 - **DMG nested filesystem metadata** — HFS+ / APFS volume names inside the partition payload.
@@ -192,8 +192,7 @@ Still planned:
 
 | Format          | Crate       | Notes                                                               |
 |-----------------|-------------|---------------------------------------------------------------------|
-| ISO (PVD)       | hand-rolled | Current implementation — ~150 lines, no crate dependency.           |
-| ISO (TOC)       | `cdfs`      | Pure Rust ISO 9660 + Joliet + Rock Ridge reader. For directory walk. |
+| ISO (PVD + TOC) | hand-rolled | Current implementation — directory walker is ~250 LOC, no crate dependency. |
 | DMG (trailer)   | hand-rolled | Current implementation — ~80 lines, no crate dependency.            |
 | DMG (partition) | `plist`     | For decoding the embedded XML partition map.                        |
 

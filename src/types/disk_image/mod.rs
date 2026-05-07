@@ -8,4 +8,5 @@
 pub mod dmg_trailer;
 pub mod info_gather;
 pub mod info_render;
+pub mod iso_listing;
 pub mod iso_pvd;

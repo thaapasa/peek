@@ -309,12 +309,36 @@ impl Registry {
                         warnings,
                     )));
                 }
-                FileType::DiskImage(_) => {
-                    // No content / TOC view — push Info as the primary so
-                    // disk-image metadata is what the user lands on. The
-                    // universal block below dedupes by ModeId, so the
-                    // tail Info append becomes a no-op.
-                    modes.push(Box::new(InfoMode::new()));
+                FileType::DiskImage(fmt) => {
+                    // ISO has a directory tree we can walk → present a
+                    // TOC view first, then Info as a sidekick. DMG has
+                    // no listing path (would need a full HFS+/APFS
+                    // filesystem walker), so it stays metadata-only.
+                    match fmt {
+                        crate::input::detect::DiskImageFormat::Iso => {
+                            let (entries, warnings) =
+                                match crate::types::disk_image::iso_listing::list_iso(source) {
+                                    Ok(e) => (e, Vec::new()),
+                                    Err(e) => {
+                                        (Vec::new(), vec![format!("Failed to list ISO: {e:#}")])
+                                    }
+                                };
+                            modes.push(Box::new(ListingMode::new(
+                                fmt.label(),
+                                "TOC",
+                                entries,
+                                warnings,
+                            )));
+                        }
+                        crate::input::detect::DiskImageFormat::Dmg => {
+                            // No content / TOC view — push Info as the
+                            // primary so disk-image metadata is what
+                            // the user lands on. The universal block
+                            // below dedupes by ModeId, so the tail Info
+                            // append becomes a no-op.
+                            modes.push(Box::new(InfoMode::new()));
+                        }
+                    }
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended

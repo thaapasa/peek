@@ -16,6 +16,23 @@ use crate::info::{IsoDateTime, IsoVolumeMeta};
 /// First sector containing the Volume Descriptor Set.
 pub const PVD_OFFSET: u64 = 32768;
 
+/// Locations of the root directory extents discovered in the descriptor
+/// area. Used by the listing walker to find where to start the
+/// directory-tree read. Joliet is preferred when present (longer
+/// filenames, Unicode), otherwise the primary extent is walked.
+#[derive(Copy, Clone, Debug)]
+pub struct RootExtents {
+    /// (LBA, size in bytes) of the PVD root directory extent.
+    pub primary: (u32, u32),
+    /// (LBA, size in bytes) of the Joliet (SVD) root directory, if a
+    /// Supplementary Volume Descriptor with a Joliet escape was found.
+    pub joliet: Option<(u32, u32)>,
+    /// Logical block size from the PVD. Default is 2048; a few odd
+    /// images use other values, but the descriptor layout itself is
+    /// always 2048-byte sectors.
+    pub block_size: u32,
+}
+
 /// Bytes per logical sector in the descriptor area. ISO 9660 fixes
 /// this at 2048; the per-volume `block_size` field can differ but
 /// doesn't change the descriptor layout.
@@ -79,6 +96,47 @@ pub fn parse(data: &[u8]) -> Option<IsoVolumeMeta> {
     }
 
     Some(meta)
+}
+
+/// Extract root directory extent locations from a parsed descriptor
+/// area. Returns `None` for the same reason `parse` does: the leading
+/// sector isn't a valid PVD. Joliet is filled when an SVD with a
+/// Joliet escape is found.
+pub fn parse_root_extents(data: &[u8]) -> Option<RootExtents> {
+    let pvd = sector(data, 0)?;
+    if pvd[0] != TYPE_PRIMARY || &pvd[1..6] != STANDARD_ID {
+        return None;
+    }
+    // Root directory record sits at offset 156 in the PVD, fixed
+    // 34-byte length. Extent location is bytes 158..162 (LE half of
+    // the both-endian field), data length is bytes 166..170.
+    let primary = (
+        read_both_endian_u32(&pvd[158..166]),
+        read_both_endian_u32(&pvd[166..174]),
+    );
+    let block_size = read_both_endian_u16(&pvd[128..132]) as u32;
+    let mut joliet = None;
+    for idx in 1..MAX_DESCRIPTORS {
+        let Some(s) = sector(data, idx) else { break };
+        if &s[1..6] != STANDARD_ID {
+            break;
+        }
+        match s[0] {
+            TYPE_TERMINATOR => break,
+            TYPE_SUPPLEMENTARY if is_joliet_escape(&s[88..120]) => {
+                joliet = Some((
+                    read_both_endian_u32(&s[158..166]),
+                    read_both_endian_u32(&s[166..174]),
+                ));
+            }
+            _ => {}
+        }
+    }
+    Some(RootExtents {
+        primary,
+        joliet,
+        block_size,
+    })
 }
 
 fn sector(data: &[u8], idx: usize) -> Option<&[u8]> {

@@ -14,6 +14,6 @@ pub mod mode;
 pub mod stats;
 
 pub use build::{FlatEntry, from_flat_paths};
-pub use entry::{Entry, EntryMtime, time_from_epoch_secs};
+pub use entry::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
 pub use mode::ListingMode;
 pub use stats::Stats;

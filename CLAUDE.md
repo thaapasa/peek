@@ -119,7 +119,8 @@ src/
       mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) used by archive + ISO
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
-      iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan
+      iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
+      iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge)
       dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes)
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)

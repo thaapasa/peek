@@ -271,19 +271,26 @@ Info view shows entry / file / directory counts and total uncompressed size. Lis
 
 #### Disk Images ✅
 
-| Format | Extensions | Status                                       |
-|--------|------------|----------------------------------------------|
-| ISO    | `.iso`     | ✅ PVD-only (no directory walk yet)           |
-| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk yet) |
+| Format | Extensions | Status                                                  |
+|--------|------------|---------------------------------------------------------|
+| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet)   |
+| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk yet)        |
 
-Disk images open straight to the **file info screen** with a Disk Image section — no TOC view.
+**ISO 9660** opens to a **TOC view** (the same tree-style listing archive containers use): one row
+per file/directory with size, mtime, and 8.3 / Joliet name; depth tracked by indented tree glyphs.
+The walker reads the root directory extent from the PVD (or SVD, if Joliet is present — preferred
+for longer Unicode names) and recurses through child extents. Per-entry permissions are not
+surfaced because Rock Ridge SUSP fields aren't parsed; the renderer falls back to typical defaults
+(`rwxr-xr-x` for dirs, `rw-r--r--` for files). Bounded depth + entry caps defend against malformed
+images.
 
-**ISO 9660** metadata comes from the Primary Volume Descriptor (sector 16): volume label, volume
-set, system ID, publisher, data preparer, application, volume size in blocks, and the four PVD
-timestamps (creation / modification / expiration / effective). Joliet extension and El Torito boot
-record presence are surfaced from the descriptor walk; Rock Ridge presence (which lives in SUSP
-fields inside the root directory) is not yet detected. The descriptor area (16 KiB starting at
-offset 32768) is the only thing read.
+ISO **metadata** also remains on the info screen (`i`): volume label, volume set, system ID,
+publisher, data preparer, application, volume size in blocks, and the four PVD timestamps
+(creation / modification / expiration / effective). Joliet extension and El Torito boot record
+presence are surfaced from the descriptor walk.
+
+**DMG** opens straight to the file info screen — there's no listing path because the inner
+filesystem (HFS+ / APFS / FAT) would need its own walker.
 
 **Apple Disk Image (UDIF)** metadata comes from the 512-byte "koly" trailer at the end of the
 file: UDIF version, image variant (device / partition / mounted system), total uncompressed size,
