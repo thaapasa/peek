@@ -701,10 +701,15 @@ mod tests {
             &static_det,
         );
 
-        let anim_src = fixture_source("test-images/airlock-demo.svg");
+        // loader-dots.svg is the smallest animated fixture (1.5 KB, 11
+        // CSS keyframe rules). airlock-demo.svg also works but its
+        // 57 KB CSS keyframe payload pushes SvgAnimationMode::new into
+        // ~6 s of debug-build CSS parsing — wasted here since we only
+        // check the composed source-mode shape.
+        let anim_src = fixture_source("test-images/loader-dots.svg");
         let anim_det = crate::input::detect::detect(&anim_src).unwrap();
         let mut anim_state = build_state(
-            &["peek", "test-images/airlock-demo.svg"],
+            &["peek", "test-images/loader-dots.svg"],
             &anim_src,
             &anim_det,
         );
@@ -744,10 +749,16 @@ mod tests {
     /// interactive event loop) rather than the global `apply` route.
     #[test]
     fn scrolldown_on_svg_source_shifts_window() {
-        let source = fixture_source("test-images/airlock-demo.svg");
+        // walking-outside.svg is a static SVG with ~50 tags — pretty
+        // XML expansion comfortably exceeds the default 23-row test
+        // viewport. The earlier choice (airlock-demo.svg) also worked
+        // but its big animated payload made the test 6+ s in debug
+        // builds; this fixture has no CSS keyframes, so SvgAnimationMode
+        // is never built and the test runs in well under a second.
+        let source = fixture_source("test-images/walking-outside.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
         let mut state = build_state(
-            &["peek", "test-images/airlock-demo.svg"],
+            &["peek", "test-images/walking-outside.svg"],
             &source,
             &detected,
         );
@@ -761,7 +772,7 @@ mod tests {
         let rows = content_rows();
         assert!(
             total > rows + 5,
-            "airlock-demo.svg pretty XML must exceed viewport (total={total}, rows={rows})"
+            "walking-outside.svg pretty XML must exceed viewport (total={total}, rows={rows})"
         );
         let initial_first = state.views[idx].as_ref().unwrap().lines[0].clone();
 
