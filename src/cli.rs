@@ -11,7 +11,7 @@ use crate::theme;
 /// by default on interactive terminals.
 ///
 /// peek is a single-file viewer: it takes one path (or stdin), not a list.
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(
     name = "peek",
     about,

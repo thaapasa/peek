@@ -21,7 +21,7 @@ use crate::extract::Extracted;
 /// `scroll_at` and `rows_at` fields are the inputs the mode was given,
 /// used as the cache key. `total` is the full-source line count so
 /// scroll math (max_scroll, Bottom jump) doesn't need to re-render.
-struct RenderedView {
+pub(crate) struct RenderedView {
     lines: Vec<String>,
     scroll_at: usize,
     rows_at: usize,
@@ -33,6 +33,7 @@ struct RenderedView {
 /// help screen.
 pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::Quit, "Quit"),
+    (Action::Back, "Back / close current peek"),
     (Action::ScrollUp, "Scroll up"),
     (Action::ScrollDown, "Scroll down"),
     (Action::PageUp, "Page up"),
@@ -50,41 +51,84 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::CycleColorMode, "Next color mode"),
     (Action::CycleColorModeBack, "Previous color mode"),
     (Action::Extract, "Extract selected entry / current frame"),
+    (Action::Descend, "Descend into selected entry / frame"),
 ];
 
-pub(crate) struct ViewerState<'a> {
-    modes: Vec<Box<dyn Mode>>,
-    active: usize,
-    /// The most recent primary (non-aux) mode the user was on. Aux modes
-    /// (Info, Help, Hex) toggle back here when their dedicated key is
-    /// pressed again. Aux-to-aux transitions don't update this slot, so
-    /// the path back to "your actual work" survives any number of detours
-    /// (Hex → Info → Help → Tab still returns to the original primary).
-    /// `None` only when the stack contains no primary modes (binary
-    /// files: Hex is the default and toggling out is a no-op).
-    last_primary: Option<usize>,
-    scroll: Vec<usize>,
-    /// Per-mode rendered window cache. `None` = needs render (lazy on
-    /// first use, invalidated by scroll change, theme/color cycle, or
-    /// resize for modes that opt in via `rerender_on_resize`).
-    views: Vec<Option<RenderedView>>,
+/// Hard cap on session-stack depth. Real listings rarely nest beyond
+/// 3–4 levels; the cap exists so a hostile container that recursively
+/// resolves to itself can't grow the stack without bound.
+const MAX_STACK_DEPTH: usize = 16;
 
-    /// Last known logical position in the source. Captured from any
-    /// position-tracking mode on switch-out and pushed to the next one
-    /// on switch-in. Modes that opt out (Info/Help/Image/Animation)
-    /// pass it through unchanged.
-    position: Position,
+/// Builds the mode stack for a freshly-pushed session. Captured at
+/// `ViewerState` construction so `descend` doesn't have to know about
+/// `Registry` / `Args`.
+pub(crate) type ModeBuilder = Box<dyn Fn(&InputSource, &Detected) -> Result<Vec<Box<dyn Mode>>>>;
+
+/// One peek session — one `(source, detected, modes)` triple plus its
+/// per-mode scroll / view cache / position state. The recursive-peek
+/// stack is a `Vec<SessionFrame>`; the active session is always the
+/// last entry. Cross-session state (theme, prompt overlay, screen
+/// buffer) lives directly on `ViewerState`.
+pub(crate) struct SessionFrame {
+    pub source: InputSource,
+    pub detected: Detected,
+    pub file_info: FileInfo,
+    pub modes: Vec<Box<dyn Mode>>,
+    pub active: usize,
+    /// Most recent primary (non-aux) mode. Aux toggles return here.
+    /// `None` when no primary modes exist (binary files where Hex is
+    /// the only data view).
+    pub last_primary: Option<usize>,
+    pub scroll: Vec<usize>,
+    pub views: Vec<Option<RenderedView>>,
+    /// Last known logical position; restored when modes that track
+    /// position become active again.
+    pub position: Position,
+}
+
+impl SessionFrame {
+    fn new(
+        source: InputSource,
+        detected: Detected,
+        file_info: FileInfo,
+        modes: Vec<Box<dyn Mode>>,
+    ) -> Self {
+        assert!(!modes.is_empty(), "SessionFrame needs at least one mode");
+        let n = modes.len();
+        let last_primary = if modes[0].is_aux() { None } else { Some(0) };
+        Self {
+            source,
+            detected,
+            file_info,
+            modes,
+            active: 0,
+            last_primary,
+            scroll: vec![0; n],
+            views: (0..n).map(|_| None).collect(),
+            position: Position::Unknown,
+        }
+    }
+
+    fn mode_index(&self, id: ModeId) -> Option<usize> {
+        self.modes.iter().position(|m| m.id() == id)
+    }
+}
+
+pub(crate) struct ViewerState {
+    /// Recursive-peek stack. Always non-empty while the viewer runs;
+    /// the last `Back` on a single-frame stack returns `Outcome::Quit`.
+    frames: Vec<SessionFrame>,
+
+    /// Builds the mode stack for a freshly-pushed session. See
+    /// [`ModeBuilder`].
+    mode_builder: ModeBuilder,
 
     pub current_theme: PeekThemeName,
     pub peek_theme: PeekTheme,
 
     /// Frame buffer: caches the previous draw, skips writes for
-    /// unchanged rows. Invalidated on resize.
+    /// unchanged rows. Invalidated on resize and on stack push/pop.
     screen: ScreenBuffer,
-
-    source: &'a InputSource,
-    detected: &'a Detected,
-    file_info: FileInfo,
     render_opts: RenderOptions,
 
     /// Modal prompt overlay. While `Some`, raw key events go to the
@@ -95,42 +139,29 @@ pub(crate) struct ViewerState<'a> {
     pending_extract: Option<Extracted>,
 
     /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
-    /// one redraw. Lives here so cross-mode actions can flash from
-    /// any active mode.
+    /// one redraw.
     flash: Option<String>,
 }
 
-impl<'a> ViewerState<'a> {
+impl ViewerState {
     pub(crate) fn new(
-        source: &'a InputSource,
-        detected: &'a Detected,
+        source: InputSource,
+        detected: Detected,
         theme_name: PeekThemeName,
         color_mode: ColorMode,
         render_opts: RenderOptions,
         modes: Vec<Box<dyn Mode>>,
+        mode_builder: ModeBuilder,
     ) -> Result<Self> {
-        assert!(!modes.is_empty(), "ViewerState needs at least one mode");
-        let n = modes.len();
         let peek_theme = make_peek_theme(theme_name, color_mode);
-        let file_info = crate::info::gather(source, detected)?;
-        let last_primary = if modes[0].is_aux() { None } else { Some(0) };
-        let mut views = Vec::with_capacity(n);
-        for _ in 0..n {
-            views.push(None);
-        }
+        let file_info = crate::info::gather(&source, &detected)?;
+        let frame = SessionFrame::new(source, detected, file_info, modes);
         Ok(Self {
-            modes,
-            active: 0,
-            last_primary,
-            scroll: vec![0; n],
-            views,
-            position: Position::Unknown,
+            frames: vec![frame],
+            mode_builder,
             current_theme: theme_name,
             peek_theme,
             screen: ScreenBuffer::new(),
-            source,
-            detected,
-            file_info,
             render_opts,
             prompt: None,
             pending_extract: None,
@@ -138,53 +169,63 @@ impl<'a> ViewerState<'a> {
         })
     }
 
+    pub(crate) fn frame(&self) -> &SessionFrame {
+        self.frames.last().expect("non-empty stack")
+    }
+
+    fn frame_mut(&mut self) -> &mut SessionFrame {
+        self.frames.last_mut().expect("non-empty stack")
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn stack_depth(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Display names of every frame on the stack (root first), used
+    /// by the status line to render the breadcrumb segment.
+    pub(crate) fn breadcrumb(&self) -> Vec<String> {
+        self.frames
+            .iter()
+            .map(|f| f.source.name().to_string())
+            .collect()
+    }
+
     // ---------------------------------------------------------------------
     // Active mode access
     // ---------------------------------------------------------------------
 
     pub(crate) fn active_label(&self) -> &str {
-        self.modes[self.active].label()
+        let f = self.frame();
+        f.modes[f.active].label()
     }
 
     pub(crate) fn active_status_segments(&self) -> Vec<(String, syntect::highlighting::Color)> {
-        self.modes[self.active].status_segments(&self.peek_theme)
+        let f = self.frame();
+        f.modes[f.active].status_segments(&self.peek_theme)
     }
 
-    /// Mode-contributed hint strings for the status bar (right side).
-    /// The active mode is asked whether it has anywhere to return to,
-    /// so e.g. Hex can show `x:exit hex` only when toggling out lands
-    /// elsewhere.
     pub(crate) fn active_status_hints(&self) -> Vec<&'static str> {
-        self.modes[self.active].status_hints(self.has_return_target())
+        let has_return = self.has_return_target();
+        let f = self.frame();
+        f.modes[f.active].status_hints(has_return)
     }
 
-    /// Whether the active aux mode has somewhere meaningful to return to
-    /// when toggled off (used to decide whether to show "x:exit hex" etc.
-    /// in the status line).
     pub(crate) fn has_return_target(&self) -> bool {
-        self.last_primary.is_some_and(|i| i != self.active)
-    }
-
-    fn mode_index(&self, id: ModeId) -> Option<usize> {
-        self.modes.iter().position(|m| m.id() == id)
+        let f = self.frame();
+        f.last_primary.is_some_and(|i| i != f.active)
     }
 
     // ---------------------------------------------------------------------
     // Key dispatch
     // ---------------------------------------------------------------------
 
-    /// Resolve a key event to an `Action`. Globals always win on conflict
-    /// so a mode's extras can never accidentally shadow `Quit`, scrolling,
-    /// theme cycle, etc. (No mode shadows today, but the order makes the
-    /// invariant structural.)
     pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
-        let extras = self.modes[self.active].extra_actions();
+        let f = self.frame();
+        let extras = f.modes[f.active].extra_actions();
         keys::dispatch(key, GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
     }
 
-    /// True while the modal prompt is consuming keys. Event loop
-    /// bypasses Action dispatch and routes raw keys to
-    /// `handle_prompt_key`.
     pub(crate) fn prompt_active(&self) -> bool {
         self.prompt.is_some()
     }
@@ -193,7 +234,6 @@ impl<'a> ViewerState<'a> {
         self.prompt.as_ref()
     }
 
-    /// Drain the one-shot status flash.
     pub(crate) fn take_flash(&mut self) -> Option<String> {
         self.flash.take()
     }
@@ -243,36 +283,35 @@ impl<'a> ViewerState<'a> {
         }
     }
 
-    /// Try to consume the action via the active mode's scroll handler.
-    /// Returns `true` if consumed (caller invalidates and re-renders).
     pub(crate) fn try_active_scroll(&mut self, action: Action) -> bool {
-        let m = &mut self.modes[self.active];
+        let f = self.frame_mut();
+        let active = f.active;
+        let m = &mut f.modes[active];
         if !m.owns_scroll() {
             return false;
         }
         m.scroll(action)
     }
 
-    /// Try to consume the action via the active mode's `handle()`.
-    /// Returns whether the action was consumed; on `YesResetScroll`,
-    /// the active mode's scroll offset is also zeroed.
     pub(crate) fn try_active_handle(&mut self, action: Action) -> bool {
-        let handled = self.modes[self.active].handle(action);
+        let f = self.frame_mut();
+        let active = f.active;
+        let handled = f.modes[active].handle(action);
         if handled == Handled::YesResetScroll {
-            self.scroll[self.active] = 0;
+            f.scroll[active] = 0;
         }
         handled.was_consumed()
     }
 
-    /// Active mode's preferred next-tick deadline, if any. Drives the
-    /// event-loop timeout for animation-style modes.
     pub(crate) fn active_next_tick(&self) -> Option<Duration> {
-        self.modes[self.active].next_tick()
+        let f = self.frame();
+        f.modes[f.active].next_tick()
     }
 
-    /// Tick the active mode; returns `true` when its content changed.
     pub(crate) fn tick_active(&mut self) -> bool {
-        self.modes[self.active].tick()
+        let f = self.frame_mut();
+        let active = f.active;
+        f.modes[active].tick()
     }
 
     // ---------------------------------------------------------------------
@@ -282,6 +321,14 @@ impl<'a> ViewerState<'a> {
     pub(crate) fn apply(&mut self, action: Action) -> Result<Outcome> {
         Ok(match action {
             Action::Quit => Outcome::Quit,
+            Action::Back => {
+                if self.frames.len() > 1 {
+                    self.pop_frame();
+                    Outcome::Redraw
+                } else {
+                    Outcome::Quit
+                }
+            }
             Action::ScrollUp => {
                 self.scroll_by(-1)?;
                 Outcome::Redraw
@@ -299,12 +346,15 @@ impl<'a> ViewerState<'a> {
                 Outcome::Redraw
             }
             Action::Top => {
-                self.scroll[self.active] = 0;
+                let f = self.frame_mut();
+                f.scroll[f.active] = 0;
                 Outcome::Redraw
             }
             Action::Bottom => {
                 self.prepare_total()?;
-                self.scroll[self.active] = self.max_scroll();
+                let max = self.max_scroll();
+                let f = self.frame_mut();
+                f.scroll[f.active] = max;
                 Outcome::Redraw
             }
             Action::SwitchInfo => {
@@ -347,14 +397,18 @@ impl<'a> ViewerState<'a> {
                 self.cycle_color_mode(-1);
                 Outcome::Redraw
             }
-            // Mode-local actions: routed via the mode's own `handle` before
-            // we get here. Listed explicitly so adding a new Action variant
-            // forces a non-exhaustive-match compile error in this function
-            // and a deliberate decision about which side handles it.
             Action::Extract => {
                 self.start_extract();
                 Outcome::Redraw
             }
+            Action::Descend => {
+                self.descend()?;
+                Outcome::Redraw
+            }
+            // Mode-local actions: routed via the mode's own `handle` before
+            // we get here. Listed explicitly so adding a new Action variant
+            // forces a non-exhaustive-match compile error in this function
+            // and a deliberate decision about which side handles it.
             Action::ToggleRawSource
             | Action::PlayPause
             | Action::NextFrame
@@ -372,134 +426,145 @@ impl<'a> ViewerState<'a> {
         })
     }
 
+    fn extract_target_key(&mut self) -> Option<String> {
+        let f = self.frame();
+        let target = f.modes[f.active].extract_target()?;
+        Some(match target {
+            crate::viewer::modes::ExtractTarget::EntryPath(p) => p,
+            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
+        })
+    }
+
     /// Run extract against the active mode's selection, then open the
     /// save-to prompt. Failures flash on the status line.
     fn start_extract(&mut self) {
-        let Some(target) = self.modes[self.active].extract_target() else {
+        let Some(key) = self.extract_target_key() else {
             self.flash = Some("nothing selected to extract".to_string());
             return;
         };
-        let key = match &target {
-            crate::viewer::modes::ExtractTarget::EntryPath(p) => p.clone(),
-            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
-        };
         let opts = crate::extract::ExtractOptions::default();
-        match crate::extract::extract(self.source, self.detected, &key, &opts) {
+        let f = self.frame();
+        match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
             Ok(extracted) => self.begin_extract_prompt(extracted),
             Err(e) => self.flash = Some(format!("extract failed: {e}")),
         }
+    }
+
+    /// Recursive peek: extract the active mode's selection and push it
+    /// as a new session on the stack. Failures (no selection,
+    /// unsupported, broken entry, stack full) flash and leave the
+    /// current frame active.
+    fn descend(&mut self) -> Result<()> {
+        if self.frames.len() >= MAX_STACK_DEPTH {
+            self.flash = Some(format!("peek stack at max depth ({MAX_STACK_DEPTH})"));
+            return Ok(());
+        }
+        let Some(key) = self.extract_target_key() else {
+            self.flash = Some("nothing to descend into".to_string());
+            return Ok(());
+        };
+        let opts = crate::extract::ExtractOptions::default();
+        let extracted = {
+            let f = self.frame();
+            match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
+                Ok(e) => e,
+                Err(e) => {
+                    self.flash = Some(format!("descend failed: {e}"));
+                    return Ok(());
+                }
+            }
+        };
+        self.push_extracted(extracted)
+    }
+
+    fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {
+        let source = extracted.source;
+        let detected = match crate::input::detect::detect(&source) {
+            Ok(d) => d,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e}"));
+                return Ok(());
+            }
+        };
+        let modes = match (self.mode_builder)(&source, &detected) {
+            Ok(m) => m,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e}"));
+                return Ok(());
+            }
+        };
+        let file_info = crate::info::gather(&source, &detected)?;
+        let frame = SessionFrame::new(source, detected, file_info, modes);
+        self.frames.push(frame);
+        self.screen.invalidate();
+        Ok(())
+    }
+
+    fn pop_frame(&mut self) {
+        if self.frames.len() <= 1 {
+            return;
+        }
+        self.frames.pop();
+        self.screen.invalidate();
     }
 
     // ---------------------------------------------------------------------
     // Mode switching helpers
     // ---------------------------------------------------------------------
 
-    /// One-way jump used by `i` (SwitchInfo): land on the target if it
-    /// exists in the stack. No back-link logic — pressing `i` from Info
-    /// is a no-op.
     fn jump_to(&mut self, target: ModeId) {
-        if let Some(idx) = self.mode_index(target) {
+        let idx = self.frame().mode_index(target);
+        if let Some(idx) = idx {
             self.set_active(idx);
         }
     }
 
-    /// Aux toggle shared by Tab (→ Info), `h` (→ Help), and `x` (→ Hex).
-    /// On the target aux mode, return to `last_primary` (the user's
-    /// "actual work"). Otherwise, enter the target aux. Aux is "hidden":
-    /// it doesn't show up in Tab cycling and you can only land on it via
-    /// its dedicated key.
     fn toggle_aux(&mut self, target: ModeId) {
-        if self.modes[self.active].id() == target {
-            // Exit aux. Return to the last primary, or fall back to mode
-            // 0 (which is Hex itself for binary files — pressing `x`
-            // there is then a no-op, matching the old standalone-hex UX).
-            let dest = self.last_primary.unwrap_or(0);
-            if dest != self.active {
+        let f = self.frame();
+        if f.modes[f.active].id() == target {
+            let dest = f.last_primary.unwrap_or(0);
+            if dest != f.active {
                 self.set_active(dest);
             }
-        } else if let Some(idx) = self.mode_index(target) {
+        } else if let Some(idx) = f.mode_index(target) {
             self.set_active(idx);
         }
-        // Target not in this stack → no-op.
     }
 
-    /// Switch the active mode index. Updates `last_primary` whenever we
-    /// land on a non-aux mode, captures the outgoing mode's position (if
-    /// it tracks) and restores it on the incoming mode (if it tracks).
-    /// Modes that don't track position leave `self.position` untouched —
-    /// Hex → Info → Hex preserves the byte offset across the detour.
+    /// Switch the active mode index. Updates `last_primary` on
+    /// non-aux landings, captures the outgoing mode's position (when
+    /// it tracks) and restores it on the incoming mode.
     fn set_active(&mut self, new_idx: usize) {
-        if new_idx == self.active {
+        let f = self.frame_mut();
+        if new_idx == f.active {
             return;
         }
-        self.capture_position();
-        self.active = new_idx;
-        if !self.modes[new_idx].is_aux() {
-            self.last_primary = Some(new_idx);
+        capture_position(f);
+        f.active = new_idx;
+        if !f.modes[new_idx].is_aux() {
+            f.last_primary = Some(new_idx);
         }
-        self.restore_position();
+        restore_position(f);
     }
 
-    fn capture_position(&mut self) {
-        let mode = &self.modes[self.active];
-        if !mode.tracks_position() {
-            return;
-        }
-        let pos = if mode.owns_scroll() {
-            mode.position()
-        } else {
-            // Line-scrolled mode: the top visible line is the position.
-            Position::Line(self.scroll[self.active])
-        };
-        if !matches!(pos, Position::Unknown) {
-            self.position = pos;
-        }
-    }
-
-    fn restore_position(&mut self) {
-        let mode = &mut self.modes[self.active];
-        if !mode.tracks_position() {
-            return;
-        }
-        if mode.owns_scroll() {
-            mode.set_position(self.position, self.source);
-            return;
-        }
-        // Line-scrolled mode: convert to line and seed scroll[active].
-        let line = match self.position {
-            Position::Line(l) => Some(l),
-            Position::Byte(b) => self.source.byte_to_line(b),
-            Position::Unknown => None,
-        };
-        if let Some(l) = line {
-            self.scroll[self.active] = l;
-        }
-    }
-
-    /// Advance the active index by one view mode in the cycle.
-    /// `direction` is `1` for Tab (forward) or `-1` for Shift+Tab
-    /// (reverse). Walks every mode except the overlay-style aux modes
-    /// (Help, About) and Hex — Hex has its own dedicated key and is not
-    /// part of the document-view cycle. The exception is binary files,
-    /// where Hex *is* the data view: when no non-aux mode exists, Hex
-    /// is included so Tab still toggles Hex ↔ Info.
     fn cycle_view(&mut self, direction: isize) {
-        let n = self.modes.len();
+        let f = self.frame();
+        let n = f.modes.len();
         if n == 0 {
             return;
         }
-        let has_primary = self.modes.iter().any(|m| !m.is_aux());
-        let mut i = self.active;
+        let has_primary = f.modes.iter().any(|m| !m.is_aux());
+        let mut i = f.active;
         for _ in 0..n {
             i = if direction >= 0 {
                 (i + 1) % n
             } else {
                 (i + n - 1) % n
             };
-            if i == self.active {
+            if i == self.frame().active {
                 break;
             }
-            let id = self.modes[i].id();
+            let id = self.frame().modes[i].id();
             if matches!(id, ModeId::Help | ModeId::About) {
                 continue;
             }
@@ -518,10 +583,7 @@ impl<'a> ViewerState<'a> {
             self.current_theme.prev()
         };
         self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.color_mode);
-        // All themed views are stale.
-        for slot in &mut self.views {
-            *slot = None;
-        }
+        self.invalidate_all_views();
     }
 
     fn cycle_color_mode(&mut self, direction: isize) {
@@ -530,11 +592,16 @@ impl<'a> ViewerState<'a> {
         } else {
             self.peek_theme.color_mode.prev()
         };
-        // Every cached line embeds escape sequences keyed to the previous
-        // mode — invalidate them all so the next draw re-paints in the new
-        // encoding.
-        for slot in &mut self.views {
-            *slot = None;
+        self.invalidate_all_views();
+    }
+
+    /// Themes / color modes are global; staling every frame's view
+    /// cache stops a pop-into-old-frame from showing stale colours.
+    fn invalidate_all_views(&mut self) {
+        for frame in &mut self.frames {
+            for slot in &mut frame.views {
+                *slot = None;
+            }
         }
     }
 
@@ -545,15 +612,14 @@ impl<'a> ViewerState<'a> {
     pub(crate) fn handle_resize(&mut self) {
         let cols = terminal_cols();
         let rows = content_rows();
-        for (i, m) in self.modes.iter_mut().enumerate() {
-            m.on_resize(cols, rows);
-            if m.rerender_on_resize() {
-                self.views[i] = None;
+        for frame in &mut self.frames {
+            for (i, m) in frame.modes.iter_mut().enumerate() {
+                m.on_resize(cols, rows);
+                if m.rerender_on_resize() {
+                    frame.views[i] = None;
+                }
             }
         }
-        // Width change invalidates per-row equality (a "same" string in
-        // a wider terminal would still need EL to clear stale tail
-        // cells). Drop the diff cache so next draw repaints every row.
         self.screen.invalidate();
     }
 
@@ -561,52 +627,58 @@ impl<'a> ViewerState<'a> {
     // Rendering
     // ---------------------------------------------------------------------
 
-    /// Ensure the active mode's view is rendered for the current scroll
-    /// position and viewport height. A cached view from a previous render
-    /// is reused only when its scroll_at and rows_at match the current
-    /// request; any scroll change forces a re-render so streaming modes
-    /// (ContentMode) can fetch the new window.
     pub(crate) fn ensure_active_rendered(&mut self) -> Result<()> {
-        let scroll = self.scroll[self.active];
+        let (active, scroll) = {
+            let f = self.frame();
+            (f.active, f.scroll[f.active])
+        };
         let rows = content_rows();
-        let cache_hit = self.views[self.active]
+        let cache_hit = self.frame().views[active]
             .as_ref()
             .is_some_and(|v| v.scroll_at == scroll && v.rows_at == rows);
         if !cache_hit {
             let view = self.render_active()?;
-            self.views[self.active] = Some(view);
+            self.frame_mut().views[active] = Some(view);
         }
         Ok(())
     }
 
-    /// Mark the active mode's view as stale so the next draw re-renders.
     pub(crate) fn invalidate_active(&mut self) {
-        self.views[self.active] = None;
+        let f = self.frame_mut();
+        let active = f.active;
+        f.views[active] = None;
     }
 
     fn render_active(&mut self) -> Result<RenderedView> {
-        let scroll = self.scroll[self.active];
+        let theme_name = self.current_theme;
+        let render_opts = self.render_opts;
+        let term_cols_v = terminal_cols();
         let rows = content_rows();
-        let ctx = RenderCtx {
-            source: self.source,
-            detected: self.detected,
-            file_info: &self.file_info,
-            theme_name: self.current_theme,
-            peek_theme: &self.peek_theme,
-            render_opts: self.render_opts,
-            term_cols: terminal_cols(),
-            term_rows: rows,
+        // Borrow theme separately from the frame's mutable borrow —
+        // `peek_theme` lives on `self`, not on the frame, so the two
+        // disjoint accesses don't alias.
+        let peek_theme = self.peek_theme.clone();
+        let f = self.frame_mut();
+        let active = f.active;
+        let scroll = f.scroll[active];
+        let window = {
+            let ctx = RenderCtx {
+                source: &f.source,
+                detected: &f.detected,
+                file_info: &f.file_info,
+                theme_name,
+                peek_theme: &peek_theme,
+                render_opts,
+                term_cols: term_cols_v,
+                term_rows: rows,
+            };
+            f.modes[active].render_window(&ctx, scroll, rows)?
         };
-        let window = self.modes[self.active].render_window(&ctx, scroll, rows)?;
-        // Drain any warnings the mode raised during render (e.g. ContentMode's
-        // lazy pretty-print failure) and merge into FileInfo so InfoMode
-        // surfaces them. Invalidate Info's cache when new warnings arrived
-        // so it re-renders with the updated list.
-        let new_warnings = self.modes[self.active].take_warnings();
+        let new_warnings = f.modes[active].take_warnings();
         if !new_warnings.is_empty() {
-            self.file_info.warnings.extend(new_warnings);
-            if let Some(idx) = self.mode_index(ModeId::Info) {
-                self.views[idx] = None;
+            f.file_info.warnings.extend(new_warnings);
+            if let Some(idx) = f.mode_index(ModeId::Info) {
+                f.views[idx] = None;
             }
         }
         Ok(RenderedView {
@@ -621,50 +693,50 @@ impl<'a> ViewerState<'a> {
     // Line scrolling (used when active mode does NOT own scroll)
     // ---------------------------------------------------------------------
 
-    /// Maximum scroll offset for the active mode's last-rendered total.
-    /// Falls back to 0 when no render has happened yet — callers that
-    /// need an authoritative total (Bottom action) should ensure a
-    /// render first via `prepare_total`.
     fn max_scroll(&self) -> usize {
-        let total = self.views[self.active].as_ref().map_or(0, |v| v.total);
+        let f = self.frame();
+        let total = f.views[f.active].as_ref().map_or(0, |v| v.total);
         total.saturating_sub(content_rows())
     }
 
-    /// Ensure the active mode's `total` is known. Prefers a cheap
-    /// `Mode::total_lines()` (ContentMode answers in O(1) from its
-    /// LineSource); falls back to a render. Used by Bottom-jumps where
-    /// we need the line count before adjusting scroll.
     fn prepare_total(&mut self) -> Result<()> {
-        if let Some(n) = self.modes[self.active].total_lines() {
-            // Seed a placeholder view so max_scroll has something to read
-            // without forcing an early render. Real lines arrive on the
-            // next draw.
-            let needs_seed = self.views[self.active]
+        let (active, total_lines, has_view) = {
+            let f = self.frame();
+            (
+                f.active,
+                f.modes[f.active].total_lines(),
+                f.views[f.active].is_some(),
+            )
+        };
+        if let Some(n) = total_lines {
+            let needs_seed = self.frame().views[active]
                 .as_ref()
                 .is_none_or(|v| v.total != n);
             if needs_seed {
-                self.views[self.active] = Some(RenderedView {
+                self.frame_mut().views[active] = Some(RenderedView {
                     lines: Vec::new(),
-                    scroll_at: usize::MAX, // force re-render on next draw
+                    scroll_at: usize::MAX,
                     rows_at: content_rows(),
                     total: n,
                 });
             }
             return Ok(());
         }
-        if self.views[self.active].is_none() {
+        if !has_view {
             self.ensure_active_rendered()?;
         }
         Ok(())
     }
 
     fn scroll_by(&mut self, delta: isize) -> Result<()> {
-        if self.modes[self.active].owns_scroll() {
+        if self.frame().modes[self.frame().active].owns_scroll() {
             return Ok(());
         }
         self.prepare_total()?;
         let max = self.max_scroll();
-        let s = &mut self.scroll[self.active];
+        let f = self.frame_mut();
+        let active = f.active;
+        let s = &mut f.scroll[active];
         *s = if delta < 0 {
             s.saturating_sub((-delta) as usize)
         } else {
@@ -674,13 +746,15 @@ impl<'a> ViewerState<'a> {
     }
 
     fn page(&mut self, direction: isize) -> Result<()> {
-        if self.modes[self.active].owns_scroll() {
+        if self.frame().modes[self.frame().active].owns_scroll() {
             return Ok(());
         }
         self.prepare_total()?;
         let step = content_rows().saturating_sub(1);
         let max = self.max_scroll();
-        let s = &mut self.scroll[self.active];
+        let f = self.frame_mut();
+        let active = f.active;
+        let s = &mut f.scroll[active];
         *s = if direction < 0 {
             s.saturating_sub(step)
         } else {
@@ -695,11 +769,55 @@ impl<'a> ViewerState<'a> {
 
     pub(crate) fn draw(&mut self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
         let reset_bytes = self.peek_theme.color_mode.reset_bytes();
-        let lines: &[String] = self.views[self.active]
-            .as_ref()
-            .map(|v| v.lines.as_slice())
-            .unwrap_or(&[]);
-        self.screen.draw(stdout, lines, status, reset_bytes)
+        // Clone the visible slice into an owned Vec so the immutable
+        // frame borrow doesn't conflict with the &mut self.screen
+        // call below. Per-frame this is one shallow copy of the
+        // viewport's String pointers — no glyph data duplicated.
+        let lines: Vec<String> = {
+            let f = self.frame();
+            f.views[f.active]
+                .as_ref()
+                .map(|v| v.lines.clone())
+                .unwrap_or_default()
+        };
+        self.screen.draw(stdout, &lines, status, reset_bytes)
+    }
+}
+
+fn capture_position(f: &mut SessionFrame) {
+    let mode = &f.modes[f.active];
+    if !mode.tracks_position() {
+        return;
+    }
+    let pos = if mode.owns_scroll() {
+        mode.position()
+    } else {
+        Position::Line(f.scroll[f.active])
+    };
+    if !matches!(pos, Position::Unknown) {
+        f.position = pos;
+    }
+}
+
+fn restore_position(f: &mut SessionFrame) {
+    let pos = f.position;
+    let active = f.active;
+    let source = f.source.clone();
+    let mode = &mut f.modes[active];
+    if !mode.tracks_position() {
+        return;
+    }
+    if mode.owns_scroll() {
+        mode.set_position(pos, &source);
+        return;
+    }
+    let line = match pos {
+        Position::Line(l) => Some(l),
+        Position::Byte(b) => source.byte_to_line(b),
+        Position::Unknown => None,
+    };
+    if let Some(l) = line {
+        f.scroll[active] = l;
     }
 }
 
@@ -709,15 +827,16 @@ mod tests {
     use crate::Args;
     use crate::viewer::Registry;
     use clap::Parser;
+    use std::rc::Rc;
 
-    fn build_state<'a>(
-        args_argv: &[&str],
-        source: &'a InputSource,
-        detected: &'a Detected,
-    ) -> ViewerState<'a> {
+    fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> ViewerState {
         let args = Args::parse_from(args_argv);
-        let registry = Registry::new(&args).unwrap();
-        let modes = registry.compose_modes(source, detected, &args).unwrap();
+        let registry = Rc::new(Registry::new(&args).unwrap());
+        let modes = registry.compose_modes(&source, &detected, &args).unwrap();
+        let registry_for_builder = registry.clone();
+        let args_for_builder = args.clone();
+        let mode_builder: ModeBuilder =
+            Box::new(move |s, d| registry_for_builder.compose_modes(s, d, &args_for_builder));
         ViewerState::new(
             source,
             detected,
@@ -725,6 +844,7 @@ mod tests {
             args.color,
             RenderOptions::default(),
             modes,
+            mode_builder,
         )
         .unwrap()
     }
@@ -735,103 +855,80 @@ mod tests {
         InputSource::File(path)
     }
 
-    /// Tab on an SVG file walks ImageRender → ContentMode (XML source) →
-    /// Info → ImageRender. Hex/About/Help are skipped.
+    fn active_id(state: &ViewerState) -> ModeId {
+        let f = state.frame();
+        f.modes[f.active].id()
+    }
+
     #[test]
     fn tab_cycles_svg_view_modes() {
         let source = fixture_source("test-images/calendar.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
-        let mut state = build_state(&["peek", "test-images/calendar.svg"], &source, &detected);
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
 
-        let id_at = |s: &ViewerState| s.modes[s.active].id();
-        assert_eq!(id_at(&state), ModeId::ImageRender);
-
-        state.apply(Action::CycleView).unwrap();
-        assert_eq!(id_at(&state), ModeId::Content, "tab → XML source");
+        assert_eq!(active_id(&state), ModeId::ImageRender);
 
         state.apply(Action::CycleView).unwrap();
-        assert_eq!(id_at(&state), ModeId::Info, "tab → info");
+        assert_eq!(active_id(&state), ModeId::Content, "tab → XML source");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info, "tab → info");
 
         state.apply(Action::CycleView).unwrap();
         assert_eq!(
-            id_at(&state),
+            active_id(&state),
             ModeId::ImageRender,
             "tab wraps back to image"
         );
     }
 
-    /// After Tab from ImageRender to Info on an SVG, ScrollDown must
-    /// advance scroll[Info]. Regression guard for the Tab+scroll path.
     #[test]
     fn scrolldown_on_info_after_tab_advances_scroll() {
         let source = fixture_source("test-images/calendar.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
-        let mut state = build_state(&["peek", "test-images/calendar.svg"], &source, &detected);
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
 
-        // Land on Info (skip ContentMode in between).
         state.apply(Action::CycleView).unwrap(); // Content
         state.apply(Action::CycleView).unwrap(); // Info
-        assert_eq!(state.modes[state.active].id(), ModeId::Info);
+        assert_eq!(active_id(&state), ModeId::Info);
 
-        // Force a render so Info has a populated view + total.
         state.ensure_active_rendered().unwrap();
-        let info_idx = state.active;
-        let total = state.views[info_idx].as_ref().unwrap().total;
+        let info_idx = state.frame().active;
+        let total = state.frame().views[info_idx].as_ref().unwrap().total;
         let rows = content_rows();
-        // Sanity: only meaningful if Info has more lines than the viewport.
         if total > rows {
-            let before = state.scroll[info_idx];
+            let before = state.frame().scroll[info_idx];
             state.apply(Action::ScrollDown).unwrap();
-            let after = state.scroll[info_idx];
+            let after = state.frame().scroll[info_idx];
             assert_eq!(after, before + 1, "ScrollDown should bump scroll by 1");
         }
     }
 
-    /// Static and animated SVG must expose the same Source mode
-    /// (ContentMode for XML pretty/raw). The image-side mode differs
-    /// (ImageRender vs SvgAnimation) but the source view is identical
-    /// — same label, same allow_pretty_toggle, same Pretty/Raw status
-    /// segment behavior.
     #[test]
     fn static_and_animated_svg_share_source_mode() {
         let static_src = fixture_source("test-images/calendar.svg");
         let static_det = crate::input::detect::detect(&static_src).unwrap();
         let mut static_state = build_state(
             &["peek", "test-images/calendar.svg"],
-            &static_src,
-            &static_det,
+            static_src,
+            static_det,
         );
 
-        // loader-dots.svg is the smallest animated fixture (1.5 KB, 11
-        // CSS keyframe rules). airlock-demo.svg also works but its
-        // 57 KB CSS keyframe payload pushes SvgAnimationMode::new into
-        // ~6 s of debug-build CSS parsing — wasted here since we only
-        // check the composed source-mode shape.
         let anim_src = fixture_source("test-images/loader-dots.svg");
         let anim_det = crate::input::detect::detect(&anim_src).unwrap();
-        let mut anim_state = build_state(
-            &["peek", "test-images/loader-dots.svg"],
-            &anim_src,
-            &anim_det,
-        );
+        let mut anim_state =
+            build_state(&["peek", "test-images/loader-dots.svg"], anim_src, anim_det);
 
-        // First mode differs (Image render vs Animation).
-        assert_eq!(static_state.modes[0].id(), ModeId::ImageRender);
-        assert_eq!(anim_state.modes[0].id(), ModeId::Animation);
+        assert_eq!(static_state.frame().modes[0].id(), ModeId::ImageRender);
+        assert_eq!(anim_state.frame().modes[0].id(), ModeId::Animation);
 
-        // Tab to source on both → land on ContentMode with label "Source".
         static_state.apply(Action::CycleView).unwrap();
         anim_state.apply(Action::CycleView).unwrap();
-        assert_eq!(
-            static_state.modes[static_state.active].id(),
-            ModeId::Content
-        );
-        assert_eq!(anim_state.modes[anim_state.active].id(), ModeId::Content);
+        assert_eq!(active_id(&static_state), ModeId::Content);
+        assert_eq!(active_id(&anim_state), ModeId::Content);
         assert_eq!(static_state.active_label(), "Source");
         assert_eq!(anim_state.active_label(), "Source");
 
-        // Pretty/Raw segment is present on both (allow_pretty_toggle = true
-        // for SVG via the Structured | Svg match).
         let static_segs = static_state.active_status_segments();
         let anim_segs = anim_state.active_status_segments();
         assert!(
@@ -844,51 +941,65 @@ mod tests {
         );
     }
 
-    /// ScrollDown on the SVG source view (ContentMode pretty XML) must
-    /// advance the rendered window content. ContentMode now owns scroll,
-    /// so the path goes through `try_active_scroll` (mirroring the
-    /// interactive event loop) rather than the global `apply` route.
     #[test]
     fn scrolldown_on_svg_source_shifts_window() {
-        // walking-outside.svg is a static SVG with ~50 tags — pretty
-        // XML expansion comfortably exceeds the default 23-row test
-        // viewport. The earlier choice (airlock-demo.svg) also worked
-        // but its big animated payload made the test 6+ s in debug
-        // builds; this fixture has no CSS keyframes, so SvgAnimationMode
-        // is never built and the test runs in well under a second.
         let source = fixture_source("test-images/walking-outside.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
         let mut state = build_state(
             &["peek", "test-images/walking-outside.svg"],
-            &source,
-            &detected,
+            source,
+            detected,
         );
 
-        state.apply(Action::CycleView).unwrap(); // → Content (XML source)
-        assert_eq!(state.modes[state.active].id(), ModeId::Content);
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Content);
 
         state.ensure_active_rendered().unwrap();
-        let idx = state.active;
-        let total = state.views[idx].as_ref().unwrap().total;
+        let idx = state.frame().active;
+        let total = state.frame().views[idx].as_ref().unwrap().total;
         let rows = content_rows();
         assert!(
             total > rows + 5,
             "walking-outside.svg pretty XML must exceed viewport (total={total}, rows={rows})"
         );
-        let initial_first = state.views[idx].as_ref().unwrap().lines[0].clone();
+        let initial_first = state.frame().views[idx].as_ref().unwrap().lines[0].clone();
 
         for _ in 0..5 {
             assert!(state.try_active_scroll(Action::ScrollDown));
             state.invalidate_active();
         }
-        // top_logical is private to ContentMode and `position()` returns
-        // Unknown in pretty mode (line index doesn't map to source bytes),
-        // so verify the scroll took effect by comparing rendered windows.
         state.ensure_active_rendered().unwrap();
-        let scrolled_first = state.views[idx].as_ref().unwrap().lines[0].clone();
+        let scrolled_first = state.frame().views[idx].as_ref().unwrap().lines[0].clone();
         assert_ne!(
             initial_first, scrolled_first,
             "viewport content should shift after scrolling"
         );
+    }
+
+    /// Descending into an archive entry pushes a new frame; Back pops
+    /// it. Stack-depth counter reflects the push/pop.
+    #[test]
+    fn descend_then_back_round_trips_stack() {
+        let source = fixture_source("test-data/archive.zip");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data/archive.zip"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+
+        // Listing is the active mode for archives. Selection lands on
+        // the first file by default.
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 2, "descend pushed a frame");
+        assert_eq!(state.breadcrumb().len(), 2);
+
+        let back_outcome = state.apply(Action::Back).unwrap();
+        assert!(
+            matches!(back_outcome, Outcome::Redraw),
+            "back at depth 2 should redraw, not quit"
+        );
+        assert_eq!(state.stack_depth(), 1);
+
+        // Last back at depth 1 quits.
+        let final_back = state.apply(Action::Back).unwrap();
+        assert!(matches!(final_back, Outcome::Quit));
     }
 }
