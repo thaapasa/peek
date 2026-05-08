@@ -85,7 +85,16 @@ fn event_loop(
         while let Some(ev) = event_opt {
             match ev {
                 Event::Key(key) => {
-                    if let Some(action) = state.dispatch_key(key)
+                    // Modal prompt overlay: keys are typed into the
+                    // input field, not dispatched as Actions. Bypasses
+                    // the action coalescing too — typing the same
+                    // character twice in a row is meaningful here.
+                    if state.prompt_active() {
+                        if state.handle_prompt_key(key)? {
+                            needs_redraw = true;
+                        }
+                        last_action = None;
+                    } else if let Some(action) = state.dispatch_key(key)
                         && last_action != Some(action)
                     {
                         match dispatch_action(&mut state, action)? {
@@ -144,28 +153,44 @@ fn dispatch_action(state: &mut ViewerState, action: Action) -> Result<ActionOutc
 
 fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Result<()> {
     state.ensure_active_rendered()?;
-    let status = render_status_line(name, state);
+    let status = if let Some(prompt) = state.active_prompt() {
+        // Prompt active: replace the regular status segments with the
+        // input field. Keep the same selection-coloured background so
+        // it visually matches a status line, just with different
+        // content.
+        let theme = &state.peek_theme;
+        theme.paint_bg(&prompt.render_status_line(theme), theme.selection)
+    } else {
+        render_status_line(name, state)
+    };
     state.draw(stdout, &status)
 }
 
-fn render_status_line(name: &str, state: &ViewerState) -> String {
-    let theme = &state.peek_theme;
-    let mode_label: &str = state.active_label();
+fn render_status_line(name: &str, state: &mut ViewerState) -> String {
+    let flash = state.take_flash();
+    let mode_label: String = state.active_label().to_string();
     let mode_segs = state.active_status_segments();
+    let hints_owned: Vec<&'static str> = state.active_status_hints();
+    let theme_name = state.current_theme.cli_name();
+    let color_mode_name = state.peek_theme.color_mode.cli_name();
+    let theme = &state.peek_theme;
 
     let mut segs: Vec<(&str, syntect::highlighting::Color)> =
-        vec![(name, theme.accent), (mode_label, theme.label)];
+        vec![(name, theme.accent), (mode_label.as_str(), theme.label)];
     for (s, c) in &mode_segs {
         segs.push((s.as_str(), *c));
     }
-    segs.push((state.current_theme.cli_name(), theme.muted));
+    if let Some(msg) = flash.as_deref() {
+        segs.push((msg, theme.warning));
+    }
+    segs.push((theme_name, theme.muted));
     // Only surface color mode when it's been changed off the default —
     // keeps the status line uncluttered for the common case.
     if theme.color_mode != ColorMode::default() {
-        segs.push((theme.color_mode.cli_name(), theme.muted));
+        segs.push((color_mode_name, theme.muted));
     }
 
-    let mut hints: Vec<&str> = state.active_status_hints();
+    let mut hints: Vec<&str> = hints_owned;
     hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);
 
     render_themed_status_line(&segs, &hints, theme)
