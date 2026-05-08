@@ -33,8 +33,32 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let source = input::stdin::build_source(&args)?;
-    let detected = input::detect::detect(&source)?;
+    let mut source = input::stdin::build_source(&args)?;
+    let mut detected = input::detect::detect(&source)?;
+
+    // --extract: pull an inner item out of a container. By default the
+    // bytes are saved to disk (or streamed to stdout when stdout is a
+    // pipe / `-o -` is given). With `--print` or `--info` we instead
+    // replace the active source with the extracted one and let the rest
+    // of the pipeline render it — recursive peek.
+    if let Some(key) = args.extract.as_deref() {
+        let extracted = extract::extract(&source, &detected, key)
+            .with_context(|| format!("failed to extract {key:?} from {}", source.name()))?;
+
+        let render_extracted = args.print || args.info;
+        if !render_extracted {
+            let dest = pick_extract_output(&args, &extracted.suggested_name);
+            let written = extract::write::write_extracted(&extracted, dest)
+                .with_context(|| format!("failed to write extracted {key:?}"))?;
+            if written != std::path::PathBuf::from("-") {
+                eprintln!("wrote {}", written.display());
+            }
+            return Ok(());
+        }
+
+        source = extracted.source;
+        detected = input::detect::detect(&source)?;
+    }
 
     let interactive = !args.print && std::io::stdout().is_terminal();
 
@@ -97,6 +121,19 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Decide where extracted bytes should land when `--print` isn't set:
+/// honor an explicit `-o`, otherwise stream to stdout when it's a pipe,
+/// otherwise write to the extractor's suggested filename.
+fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
+    if let Some(path) = args.output.as_deref() {
+        return extract::write::Output::resolve(Some(path), suggested);
+    }
+    if !std::io::stdout().is_terminal() {
+        return extract::write::Output::Stdout;
+    }
+    extract::write::Output::resolve(None, suggested)
 }
 
 /// Terminal width to use for non-interactive (pipe) rendering. Honors

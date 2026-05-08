@@ -204,18 +204,6 @@ impl InputSource {
             }
         }
     }
-
-    /// In-memory bytes for sources that already have them buffered.
-    /// Returns `None` for `File` and `FileRange` (use `read_bytes` /
-    /// `open_byte_source` for those).
-    ///
-    /// Cheap clone — `Bytes::clone` bumps a refcount.
-    pub fn memory_bytes(&self) -> Option<Bytes> {
-        match self {
-            Self::Memory { bytes, .. } => Some(bytes.clone()),
-            _ => None,
-        }
-    }
 }
 
 fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
