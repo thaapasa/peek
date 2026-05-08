@@ -9,6 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::theme::{ColorMode, PeekThemeName};
 use crate::viewer::modes::Mode;
+use crate::viewer::ui::state::ModeBuilder;
 use crate::viewer::ui::{
     Action, Outcome, ViewerState, render_themed_status_line, with_alternate_screen,
 };
@@ -23,12 +24,13 @@ use crate::viewer::ui::{
 /// list is the initial active view; `Tab`, `i`, `h`, `x` switch among
 /// modes by id (Info, Help, Hex).
 pub fn run(
-    source: &InputSource,
-    detected: &Detected,
+    source: InputSource,
+    detected: Detected,
     theme_name: PeekThemeName,
     color_mode: ColorMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
+    mode_builder: ModeBuilder,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         event_loop(
@@ -39,21 +41,32 @@ pub fn run(
             color_mode,
             render_opts,
             modes,
+            mode_builder,
         )
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn event_loop(
     stdout: &mut io::Stdout,
-    source: &InputSource,
-    detected: &Detected,
+    source: InputSource,
+    detected: Detected,
     theme_name: PeekThemeName,
     color_mode: ColorMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
+    mode_builder: ModeBuilder,
 ) -> Result<()> {
-    let mut state = ViewerState::new(source, detected, theme_name, color_mode, render_opts, modes)?;
     let name = source.name().to_string();
+    let mut state = ViewerState::new(
+        source,
+        detected,
+        theme_name,
+        color_mode,
+        render_opts,
+        modes,
+        mode_builder,
+    )?;
 
     redraw(stdout, &mut state, &name)?;
 
@@ -150,7 +163,7 @@ fn dispatch_action(state: &mut ViewerState, action: Action) -> Result<ActionOutc
     })
 }
 
-fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Result<()> {
+fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, _root_name: &str) -> Result<()> {
     state.ensure_active_rendered()?;
     let status = if let Some(prompt) = state.active_prompt() {
         // Reuse the selection-coloured status background so the
@@ -158,22 +171,28 @@ fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Resul
         let theme = &state.peek_theme;
         theme.paint_bg(&prompt.render_status_line(theme), theme.selection)
     } else {
-        render_status_line(name, state)
+        render_status_line(state)
     };
     state.draw(stdout, &status)
 }
 
-fn render_status_line(name: &str, state: &mut ViewerState) -> String {
+fn render_status_line(state: &mut ViewerState) -> String {
     let flash = state.take_flash();
     let mode_label: String = state.active_label().to_string();
     let mode_segs = state.active_status_segments();
     let hints_owned: Vec<&'static str> = state.active_status_hints();
     let theme_name = state.current_theme.cli_name();
     let color_mode_name = state.peek_theme.color_mode.cli_name();
+    // Breadcrumb: at depth 1, just the source name (matches the
+    // single-session look). At depth > 1, every frame joined with
+    // " > " so the user can see how deep they've drilled.
+    let breadcrumb = state.breadcrumb().join(" > ");
     let theme = &state.peek_theme;
 
-    let mut segs: Vec<(&str, syntect::highlighting::Color)> =
-        vec![(name, theme.accent), (mode_label.as_str(), theme.label)];
+    let mut segs: Vec<(&str, syntect::highlighting::Color)> = vec![
+        (breadcrumb.as_str(), theme.accent),
+        (mode_label.as_str(), theme.label),
+    ];
     for (s, c) in &mode_segs {
         segs.push((s.as_str(), *c));
     }

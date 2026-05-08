@@ -101,6 +101,12 @@ pub(crate) enum Action {
     /// listing TOC view, or the current frame in an animation view.
     /// Modes that don't have an extractable selection ignore it.
     Extract,
+    /// Recursive peek: drill into the active mode's selection and
+    /// push it onto the session stack as a fresh viewer state.
+    Descend,
+    /// Pop the current session off the stack. At stack depth 1 this
+    /// exits the viewer; deeper, it returns to the parent session.
+    Back,
 }
 
 impl Action {
@@ -111,7 +117,8 @@ impl Action {
 
         // Each constant is the static binding list for one action. Defined
         // inside the function to keep the entire key map in one place.
-        const QUIT:           &[Binding] = &[Binding::plain(Char('q')), Binding::plain(Esc), Binding::ctrl('c')];
+        const QUIT:           &[Binding] = &[Binding::plain(Char('q')), Binding::ctrl('c')];
+        const BACK:           &[Binding] = &[Binding::plain(Esc)];
         const SCROLL_UP:      &[Binding] = &[Binding::plain(Up),        Binding::plain(Char('k'))];
         const SCROLL_DOWN:    &[Binding] = &[Binding::plain(Down),      Binding::plain(Char('j'))];
         const PAGE_UP:        &[Binding] = &[Binding::plain(PageUp)];
@@ -143,6 +150,7 @@ impl Action {
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
         const STICKY_PARENTS: &[Binding] = &[Binding::plain(Char('s'))];
         const EXTRACT:        &[Binding] = &[Binding::plain(Char('e'))];
+        const DESCEND:        &[Binding] = &[Binding::plain(Enter)];
 
         match self {
             Action::Quit              => QUIT,
@@ -177,6 +185,8 @@ impl Action {
             Action::PrevFrame         => PREV_FRAME,
             Action::ToggleStickyParents => STICKY_PARENTS,
             Action::Extract           => EXTRACT,
+            Action::Descend           => DESCEND,
+            Action::Back              => BACK,
         }
     }
 
@@ -184,7 +194,7 @@ impl Action {
     #[rustfmt::skip]
     pub fn label_keys(self) -> &'static str {
         match self {
-            Action::Quit              => "q / Esc",
+            Action::Quit              => "q",
             Action::ScrollUp          => "Up / k",
             Action::ScrollDown        => "Down / j",
             Action::PageUp            => "PgUp",
@@ -216,6 +226,8 @@ impl Action {
             Action::PrevFrame         => "N",
             Action::ToggleStickyParents => "s",
             Action::Extract           => "e",
+            Action::Descend           => "Enter",
+            Action::Back              => "Esc",
         }
     }
 

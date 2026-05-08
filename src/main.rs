@@ -102,15 +102,23 @@ fn main() -> Result<()> {
         // Interactive TTY: compose mode list per file type; one event loop.
         // compose_modes handles animation detection internally, so this
         // path is uniform across file types.
+        let viewers = std::rc::Rc::new(viewers);
+        let viewers_for_builder = viewers.clone();
+        let args_for_builder = args.clone();
+        let mode_builder: viewer::ui::state::ModeBuilder =
+            Box::new(move |s, d| viewers_for_builder.compose_modes(s, d, &args_for_builder));
+        let theme_name = viewers.theme_name();
+        let source_name = source.name().to_string();
         viewer::interactive::run(
-            &source,
-            &detected,
-            viewers.theme_name(),
+            source,
+            detected,
+            theme_name,
             args.color,
             render_opts,
             modes,
+            mode_builder,
         )
-        .with_context(|| format!("failed to render {}", source.name()))?;
+        .with_context(|| format!("failed to render {source_name}"))?;
     } else {
         // Print mode: stdout once, no event loop. Render the primary
         // (first non-aux) mode straight to stdout — for binary files,
