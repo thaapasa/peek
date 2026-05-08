@@ -33,6 +33,10 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    if let Some(aspect) = args.cell_aspect {
+        viewer::cell_size::set_override(aspect);
+    }
+
     let mut source = input::stdin::build_source(&args)?;
     let mut detected = input::detect::detect(&source)?;
 

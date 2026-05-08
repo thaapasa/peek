@@ -17,14 +17,23 @@ use crate::theme::ColorMode;
 pub struct TermSize {
     pub cols: u32,
     pub rows: u32,
+    /// Terminal cell aspect (height ÷ width). Conventional fonts hit
+    /// ~2.0; tighter programming fonts run ~1.6–2.4. Auto-detected
+    /// from the running terminal at startup, with a `--cell-aspect`
+    /// CLI override.
+    pub cell_h_over_w: f64,
 }
 
 /// Compute the rendered grid size `(cols, rows)` for an image. Aspect
 /// ratio is always preserved; the `fit` argument decides which axis
 /// constrains the result.
 ///
-/// Aspect ratio rule for terminal cells (~2:1 height:width):
-///   cols / (rows * 2) = img_w / img_h
+/// Aspect ratio rule:
+///   `cols / (rows * cell_h_over_w) = img_w / img_h`
+/// where `cell_h_over_w` is the terminal's actual cell aspect ratio
+/// (cell height ÷ cell width). The conventional 2.0 means "cell twice
+/// as tall as wide" — fonts that don't match drag the rendered image
+/// off-aspect, which is what the override exists to fix.
 ///
 /// - `forced_width > 0`: width is locked to that value, height follows
 ///   from aspect ratio. Ignores both `term` and `fit` — the CLI knob
@@ -43,29 +52,30 @@ pub fn compute_grid(
     forced_width: u32,
     fit: FitMode,
 ) -> (u32, u32) {
+    let aspect = term.cell_h_over_w.max(0.1);
     if forced_width > 0 {
-        let rows = (img_h as f64 * forced_width as f64 / (img_w as f64 * 2.0)) as u32;
+        let rows = (img_h as f64 * forced_width as f64 / (img_w as f64 * aspect)) as u32;
         return (forced_width, rows.max(1));
     }
     match fit {
-        FitMode::Contain => contain_grid(img_w, img_h, term),
+        FitMode::Contain => contain_grid(img_w, img_h, term, aspect),
         FitMode::FitWidth => {
-            let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
+            let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
             (term.cols.max(1), rows.max(1))
         }
         FitMode::FitHeight => {
-            let cols = (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
+            let cols = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
             (cols.max(1), term.rows.max(1))
         }
     }
 }
 
-fn contain_grid(img_w: u32, img_h: u32, term: TermSize) -> (u32, u32) {
-    let rows_from_width = (img_h as f64 * term.cols as f64 / (img_w as f64 * 2.0)) as u32;
+fn contain_grid(img_w: u32, img_h: u32, term: TermSize, aspect: f64) -> (u32, u32) {
+    let rows_from_width = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
     if rows_from_width <= term.rows {
         (term.cols, rows_from_width.max(1))
     } else {
-        let cols_from_height = (img_w as f64 * term.rows as f64 * 2.0 / img_h as f64) as u32;
+        let cols_from_height = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
         (cols_from_height.clamp(1, term.cols), term.rows)
     }
 }

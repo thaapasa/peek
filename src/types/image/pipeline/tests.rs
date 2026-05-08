@@ -18,7 +18,11 @@ use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::ColorMode;
 
-const TERM: TermSize = TermSize { cols: 40, rows: 20 };
+const TERM: TermSize = TermSize {
+    cols: 40,
+    rows: 20,
+    cell_h_over_w: 2.0,
+};
 
 fn fixture(rel: &str) -> InputSource {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);

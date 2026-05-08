@@ -151,6 +151,7 @@ impl Mode for SvgAnimationMode {
         let term = TermSize {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,
+            cell_h_over_w: crate::viewer::cell_size::cell_aspect_h_over_w(),
         };
         self.last_term = Some(term);
         let (cols, rows) = {

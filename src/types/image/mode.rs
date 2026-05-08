@@ -102,6 +102,7 @@ impl Mode for ImageRenderMode {
         let term = render::TermSize {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,
+            cell_h_over_w: crate::viewer::cell_size::cell_aspect_h_over_w(),
         };
         // ColorMode is interactive-cyclable, so read it from the live ctx
         // rather than the stale copy captured at construction time.

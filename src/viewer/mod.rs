@@ -15,6 +15,7 @@ use crate::types::svg::SvgAnimationMode;
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
+pub mod cell_size;
 pub mod hex;
 pub mod interactive;
 pub(crate) mod modes;

@@ -135,4 +135,12 @@ pub struct Args {
     /// non-SVG sources.
     #[arg(long = "extract-size", value_name = "PX", hide_short_help = true)]
     pub extract_size: Option<u32>,
+
+    /// Override the terminal's cell aspect ratio (cell height ÷ cell
+    /// width) used when scaling images. Auto-detected from the
+    /// terminal's reported cell pixel size; pass an explicit value
+    /// (e.g. `2.0`, `2.4`) when detection is wrong or unavailable and
+    /// images render with the wrong aspect.
+    #[arg(long = "cell-aspect", value_name = "RATIO", hide_short_help = true)]
+    pub cell_aspect: Option<f64>,
 }
