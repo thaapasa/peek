@@ -41,8 +41,17 @@ fn main() -> Result<()> {
     // to the regular pipeline (recursive peek). Otherwise save it to
     // disk or stream to stdout.
     if let Some(key) = args.extract.as_deref() {
+        // `--extract-size` wins; otherwise `--width` flows through as a
+        // view-cols hint so SVG extracts raster at the same resolution
+        // a live `--print --width N` would produce.
+        let view_cols = match (args.extract_size, args.width) {
+            (Some(_), _) => None,
+            (None, w) if w > 0 => Some(w),
+            _ => None,
+        };
         let opts = extract::ExtractOptions {
             svg_size: args.extract_size,
+            view_cols,
         };
         let extracted = extract::extract(&source, &detected, key, &opts)
             .with_context(|| format!("failed to extract {key:?} from {}", source.name()))?;

@@ -11,7 +11,7 @@ use crate::theme::ColorMode;
 pub(crate) mod animate;
 mod clustering;
 mod contour;
-mod glyph_atlas;
+pub(crate) mod glyph_atlas;
 mod image_mode;
 pub mod render;
 pub(crate) mod svg;

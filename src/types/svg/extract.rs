@@ -11,6 +11,7 @@ use image::{ImageEncoder, codecs::png::PngEncoder};
 
 use crate::extract::{ExtractError, Extracted};
 use crate::input::InputSource;
+use crate::types::image::pipeline::glyph_atlas::CELL_W;
 use crate::types::image::pipeline::svg;
 use crate::types::image::pipeline::svg_anim;
 
@@ -18,6 +19,7 @@ pub fn extract(
     source: &InputSource,
     key: &str,
     size_override: Option<u32>,
+    view_cols: Option<u32>,
 ) -> Result<Extracted, ExtractError> {
     let model = svg_anim::try_parse(source)
         .map_err(ExtractError::Other)?
@@ -37,7 +39,8 @@ pub fn extract(
     let idx = one_based - 1;
 
     let frame_svg = svg_anim::render_frame(&model, idx);
-    let (raster_w, raster_h) = target_dimensions(model.width_px, model.height_px, size_override);
+    let (raster_w, raster_h) =
+        target_dimensions(model.width_px, model.height_px, size_override, view_cols);
     let raster = svg::rasterize_svg_bytes(frame_svg.as_bytes(), raster_w, raster_h)
         .map_err(ExtractError::Other)?;
 
@@ -60,22 +63,46 @@ pub fn extract(
 /// scale them; literal-intrinsic raster would make extracts useless.
 const SVG_EXTRACT_MIN_DIM: u32 = 512;
 
-/// Override pins the longest axis; otherwise raster at intrinsic, or
-/// at the floor when intrinsic is below it.
-fn target_dimensions(intrinsic_w: u32, intrinsic_h: u32, size_override: Option<u32>) -> (u32, u32) {
+/// Resolution priority: explicit `size_override` (longest-axis pin) →
+/// `view_cols` (match what live render at that char width would
+/// produce) → intrinsic when above floor → upscale to floor.
+fn target_dimensions(
+    intrinsic_w: u32,
+    intrinsic_h: u32,
+    size_override: Option<u32>,
+    view_cols: Option<u32>,
+) -> (u32, u32) {
     let w = intrinsic_w.max(1);
     let h = intrinsic_h.max(1);
-    match size_override {
-        Some(target) if target > 0 => scale_to_longest_axis(w, h, target),
-        _ => {
-            let longest = w.max(h);
-            if longest >= SVG_EXTRACT_MIN_DIM {
-                (w, h)
-            } else {
-                scale_to_longest_axis(w, h, SVG_EXTRACT_MIN_DIM)
-            }
-        }
+    if let Some(target) = size_override
+        && target > 0
+    {
+        return scale_to_longest_axis(w, h, target);
     }
+    if let Some(cols) = view_cols
+        && cols > 0
+    {
+        return raster_for_view_cols(w, h, cols);
+    }
+    let longest = w.max(h);
+    if longest >= SVG_EXTRACT_MIN_DIM {
+        (w, h)
+    } else {
+        scale_to_longest_axis(w, h, SVG_EXTRACT_MIN_DIM)
+    }
+}
+
+/// Raster size that matches a live render at `view_cols` character
+/// columns. Live render scales the SVG so the prepared grid is
+/// `cols × rows` cells where `rows = h * cols / (w * 2)`, then
+/// rasters at `cols * CELL_W × rows * CELL_H` pixels. Aspect ratio
+/// of the result equals the SVG's intrinsic aspect ratio (the cell
+/// 2:1 ratio in `rows` cancels with `CELL_H = 2*CELL_W`), so this
+/// reduces to `(view_cols * CELL_W, view_cols * CELL_W * h / w)`.
+fn raster_for_view_cols(w: u32, h: u32, view_cols: u32) -> (u32, u32) {
+    let raster_w = view_cols.saturating_mul(CELL_W).max(1);
+    let raster_h = ((raster_w as u64 * h as u64 / w as u64) as u32).max(1);
+    (raster_w, raster_h)
 }
 
 fn scale_to_longest_axis(w: u32, h: u32, target_longest: u32) -> (u32, u32) {
@@ -122,19 +149,20 @@ mod tests {
     #[test]
     fn extract_static_svg_unsupported() {
         // unicorn.svg is a non-animated SVG.
-        let err = extract(&fixture("unicorn.svg"), "1", None).unwrap_err();
+        let err = extract(&fixture("unicorn.svg"), "1", None, None).unwrap_err();
         assert!(matches!(err, ExtractError::Unsupported(_)));
     }
 
     #[test]
     fn extract_invalid_key_errors() {
-        let err = extract(&fixture("loader-dots.svg"), "not-a-number", None).unwrap_err();
+        let err = extract(&fixture("loader-dots.svg"), "not-a-number", None, None).unwrap_err();
         assert!(matches!(err, ExtractError::InvalidKey(_)));
     }
 
     #[test]
     fn extract_loader_dots_first_frame_is_valid_png() {
-        let extracted = extract(&fixture("loader-dots.svg"), "1", None).expect("svg anim extract");
+        let extracted =
+            extract(&fixture("loader-dots.svg"), "1", None, None).expect("svg anim extract");
         assert!(extracted.suggested_name.ends_with(".png"));
         let bytes = extracted.source.read_bytes().unwrap();
         assert!(
@@ -152,22 +180,55 @@ mod tests {
     #[test]
     fn extract_honours_size_override() {
         let extracted =
-            extract(&fixture("loader-dots.svg"), "1", Some(128)).expect("override extract");
+            extract(&fixture("loader-dots.svg"), "1", Some(128), None).expect("override extract");
         let img = image::load_from_memory(&extracted.source.read_bytes().unwrap()).unwrap();
         assert_eq!(img.width(), 128);
         assert_eq!(img.height(), 128);
     }
 
     #[test]
+    fn view_cols_matches_live_render_at_same_width() {
+        // 24×24 SVG, view_cols = 200 → raster = 200*CELL_W × same.
+        let extracted =
+            extract(&fixture("loader-dots.svg"), "1", None, Some(200)).expect("view_cols extract");
+        let img = image::load_from_memory(&extracted.source.read_bytes().unwrap()).unwrap();
+        assert_eq!(img.width(), 200 * CELL_W);
+        assert_eq!(img.height(), 200 * CELL_W);
+    }
+
+    #[test]
+    fn size_override_wins_over_view_cols() {
+        let (w, h) = target_dimensions(24, 24, Some(64), Some(200));
+        assert_eq!(w, 64);
+        assert_eq!(h, 64);
+    }
+
+    #[test]
+    fn raster_for_view_cols_preserves_intrinsic_aspect() {
+        // Square: view_cols 100 → 100*CELL_W square.
+        let (w, h) = raster_for_view_cols(24, 24, 100);
+        assert_eq!(w, 100 * CELL_W);
+        assert_eq!(h, 100 * CELL_W);
+        // Wide 2:1.
+        let (w, h) = raster_for_view_cols(48, 24, 100);
+        assert_eq!(w, 100 * CELL_W);
+        assert_eq!(h, 100 * CELL_W / 2);
+        // Tall 1:2.
+        let (w, h) = raster_for_view_cols(24, 48, 100);
+        assert_eq!(w, 100 * CELL_W);
+        assert_eq!(h, 100 * CELL_W * 2);
+    }
+
+    #[test]
     fn target_dimensions_keeps_aspect_when_under_floor() {
-        let (w, h) = target_dimensions(24, 12, None);
+        let (w, h) = target_dimensions(24, 12, None, None);
         assert_eq!(w, SVG_EXTRACT_MIN_DIM);
         assert_eq!(h, SVG_EXTRACT_MIN_DIM / 2);
     }
 
     #[test]
     fn target_dimensions_passes_through_when_above_floor() {
-        let (w, h) = target_dimensions(800, 600, None);
+        let (w, h) = target_dimensions(800, 600, None, None);
         assert_eq!(w, 800);
         assert_eq!(h, 600);
     }
@@ -175,11 +236,11 @@ mod tests {
     #[test]
     fn target_dimensions_with_override_pins_longest_axis() {
         // 100×50 SVG, override = 1024 → longest axis 1024, aspect 2:1.
-        let (w, h) = target_dimensions(100, 50, Some(1024));
+        let (w, h) = target_dimensions(100, 50, Some(1024), None);
         assert_eq!(w, 1024);
         assert_eq!(h, 512);
         // Override below intrinsic also takes effect (downscale path).
-        let (w, h) = target_dimensions(2000, 1000, Some(256));
+        let (w, h) = target_dimensions(2000, 1000, Some(256), None);
         assert_eq!(w, 256);
         assert_eq!(h, 128);
     }

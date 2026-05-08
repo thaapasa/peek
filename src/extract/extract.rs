@@ -19,8 +19,15 @@ pub struct Extracted {
 /// Per-extract knobs. Extractor-specific; defaults are always sensible.
 #[derive(Debug, Default, Clone)]
 pub struct ExtractOptions {
-    /// Override SVG raster size (longest axis, px). CLI: `--extract-size`.
+    /// Explicit SVG raster size in pixels (longest axis). CLI: `--extract-size`.
+    /// Wins over `view_cols` when both are set.
     pub svg_size: Option<u32>,
+    /// Hint that the extract will be rendered at this many character
+    /// columns downstream (e.g. `--print --width N`). The SVG extractor
+    /// derives a raster size that matches what live rendering at the
+    /// same width would produce, so extract-then-render output
+    /// matches plain render output. Ignored when `svg_size` is set.
+    pub view_cols: Option<u32>,
 }
 
 /// `Unsupported` = container has no extractor; `NotFound` / `InvalidKey`
@@ -74,7 +81,9 @@ pub fn extract(
         FileType::Image => {
             crate::types::image::extract::extract(source, key, detected.magic_mime.as_deref())
         }
-        FileType::Svg => crate::types::svg::extract::extract(source, key, opts.svg_size),
+        FileType::Svg => {
+            crate::types::svg::extract::extract(source, key, opts.svg_size, opts.view_cols)
+        }
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
         FileType::SourceCode { .. } | FileType::Structured(_) | FileType::Binary => Err(
