@@ -44,7 +44,15 @@ pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<E
 }
 
 fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntry>> {
-    use super::backends::{ar, sevenz, tar, zip};
+    use super::backends::{ar, sevenz, single_stream, tar, zip};
+    // Single-stream codecs short-circuit `open_seekable` — they don't
+    // need the bytes, just the source name to derive the entry label.
+    if matches!(
+        format,
+        ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst
+    ) {
+        return Ok(single_stream::list(source.name(), format));
+    }
     let reader = open_seekable(source)?;
     match format {
         ArchiveFormat::Zip => zip::list(reader),
@@ -55,6 +63,9 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
         ArchiveFormat::TarZst => tar::list_zst(reader),
         ArchiveFormat::SevenZ => sevenz::list(reader),
         ArchiveFormat::Ar => ar::list(reader),
+        ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
+            unreachable!("single-stream formats handled above")
+        }
     }
 }
 
@@ -126,6 +137,21 @@ mod tests {
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn single_stream_listing_returns_one_entry_per_codec() {
+        for (file, fmt, expected_name) in [
+            ("single.gz", ArchiveFormat::Gz, "single"),
+            ("single.bz2", ArchiveFormat::Bz2, "single"),
+            ("single.xz", ArchiveFormat::Xz, "single"),
+            ("single.zst", ArchiveFormat::Zst, "single"),
+        ] {
+            let entries = list_entries(&fixture(file), fmt).unwrap();
+            assert_eq!(entries.len(), 1, "{file}: expected one entry");
+            assert_eq!(entries[0].name, expected_name, "{file}: stripped name");
+            assert!(!entries[0].is_dir(), "{file}: not a directory");
+        }
     }
 
     #[test]
