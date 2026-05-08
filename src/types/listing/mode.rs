@@ -14,7 +14,7 @@ use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
-use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, Position, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Width (chars) of the size column, including thousands separators.
@@ -41,6 +41,9 @@ pub struct ListingMode {
     /// automatically when the top row has no parent (i.e. scroll is at
     /// a top-level entry) or when there's no scroll at all.
     sticky_enabled: bool,
+    /// Selected file row index (or `None` for empty listings). Drives
+    /// the highlight and the extract action target.
+    selected_idx: Option<usize>,
 }
 
 /// One rendered row in the TOC. Holds enough metadata to render
@@ -60,6 +63,9 @@ struct TreeRow {
     /// `ListingMode::rows`, or `None` for top-level entries. Used to
     /// build the sticky breadcrumb chain on scroll.
     parent_row: Option<usize>,
+    /// Slash-joined inner path for file rows; `None` for directories.
+    /// Used as the extract key.
+    inner_path: Option<String>,
 }
 
 impl ListingMode {
@@ -70,6 +76,7 @@ impl ListingMode {
         warnings: Vec<String>,
     ) -> Self {
         let rows = flatten(&entries);
+        let selected_idx = rows.iter().position(|r| r.inner_path.is_some());
         Self {
             format_name: format_name.into(),
             label: label.into(),
@@ -81,6 +88,79 @@ impl ListingMode {
             // window before the first render.
             cached_rows: 0,
             sticky_enabled: true,
+            selected_idx,
+        }
+    }
+
+    /// Inner path of the selected file, surfaced via `extract_target`.
+    pub fn selected_inner_path(&self) -> Option<&str> {
+        self.selected_idx
+            .and_then(|i| self.rows.get(i).and_then(|r| r.inner_path.as_deref()))
+    }
+
+    /// File rows only, no directories.
+    fn file_count(&self) -> usize {
+        self.rows.iter().filter(|r| r.inner_path.is_some()).count()
+    }
+
+    /// 1-based position of the selection among file rows.
+    fn selected_file_pos(&self) -> Option<usize> {
+        let sel = self.selected_idx?;
+        let mut pos = 0usize;
+        for (i, row) in self.rows.iter().enumerate() {
+            if row.inner_path.is_some() {
+                pos += 1;
+                if i == sel {
+                    return Some(pos);
+                }
+            }
+        }
+        None
+    }
+
+    /// Nearest file row in the given direction (exclusive of `from`).
+    /// Returns `None` at the ends so selection stays put.
+    fn next_file_row(&self, from: usize, forward: bool) -> Option<usize> {
+        let total = self.rows.len();
+        if total == 0 {
+            return None;
+        }
+        if forward {
+            (from + 1..total).find(|&i| self.rows[i].inner_path.is_some())
+        } else {
+            (0..from).rev().find(|&i| self.rows[i].inner_path.is_some())
+        }
+    }
+
+    fn first_file_row(&self) -> Option<usize> {
+        self.rows.iter().position(|r| r.inner_path.is_some())
+    }
+
+    fn last_file_row(&self) -> Option<usize> {
+        self.rows.iter().rposition(|r| r.inner_path.is_some())
+    }
+
+    /// First file row at or after `top_index`.
+    fn first_visible_file(&self) -> Option<usize> {
+        (self.top_index..self.rows.len()).find(|&i| self.rows[i].inner_path.is_some())
+    }
+
+    /// Pull `top_index` so the selection sits inside the viewport.
+    /// Ignores sticky chain — at most a third of the viewport, worst
+    /// case one extra scroll step for the user.
+    fn scroll_to_show_selection(&mut self) {
+        let Some(sel) = self.selected_idx else {
+            return;
+        };
+        let viewport = self.cached_rows.max(1);
+        if sel < self.top_index {
+            self.top_index = sel;
+        } else if sel >= self.top_index + viewport {
+            self.top_index = sel.saturating_sub(viewport - 1);
+        }
+        let max = self.max_top();
+        if self.top_index > max {
+            self.top_index = max;
         }
     }
 
@@ -158,12 +238,13 @@ impl ListingMode {
         row: &TreeRow,
         theme: &PeekTheme,
         mtime_text: Option<(&str, usize)>,
+        selected: bool,
     ) -> String {
         let perms = format_perms(row.mode, row.is_dir);
         let size = format_size(row.size, row.is_dir);
         let painted_perms = paint_perms(&perms, theme);
         let painted_size = paint_size(&size, row.size, row.is_dir, theme);
-        let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme);
+        let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme, selected);
         match mtime_text {
             Some((text, width)) => {
                 let padded = format!("{text:<width$}");
@@ -176,33 +257,53 @@ impl ListingMode {
         }
     }
 
-    /// Render every visible row, padding the mtime column to the widest
-    /// formatted string in the slice so the path column always abuts the
-    /// mtime gutter without trailing whitespace.
-    fn render_slice(
+    /// Mtime column is padded to the widest stringified mtime in the
+    /// slice so the path column abuts cleanly. Each row carries its
+    /// `self.rows` index so selection highlighting works through the
+    /// sticky breadcrumb (parent indices fed in alongside the visible
+    /// content slice).
+    fn render_slice_with_indices(
         &self,
-        slice: &[TreeRow],
+        slice: &[(usize, TreeRow)],
         theme: &PeekTheme,
         opts: RenderOptions,
         show_mtime: bool,
     ) -> Vec<String> {
-        if !show_mtime {
-            return slice
+        let mtimes: Vec<String> = if show_mtime {
+            slice
                 .iter()
-                .map(|r| self.paint_row(r, theme, None))
-                .collect();
-        }
-        let mtimes: Vec<String> = slice
-            .iter()
-            .map(|r| format_mtime(r.mtime.as_ref(), opts.utc))
-            .collect();
+                .map(|(_, r)| format_mtime(r.mtime.as_ref(), opts.utc))
+                .collect()
+        } else {
+            Vec::new()
+        };
         let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
         slice
             .iter()
-            .zip(mtimes.iter())
-            .map(|(r, m)| self.paint_row(r, theme, Some((m, width))))
+            .enumerate()
+            .map(|(i, (row_idx, row))| {
+                let mtime_text = if show_mtime {
+                    Some((mtimes[i].as_str(), width))
+                } else {
+                    None
+                };
+                let selected = Some(*row_idx) == self.selected_idx;
+                let line = self.paint_row(row, theme, mtime_text, selected);
+                if selected {
+                    paint_selected_marker(&line, theme)
+                } else {
+                    format!("  {line}")
+                }
+            })
             .collect()
     }
+}
+
+/// Two-cell caret prefix — paired with a 2-space gutter on
+/// non-selected rows so columns stay aligned.
+fn paint_selected_marker(line: &str, theme: &PeekTheme) -> String {
+    let marker = theme.paint("\u{25b8} ", theme.accent);
+    format!("{marker}{line}")
 }
 
 impl Mode for ListingMode {
@@ -229,13 +330,20 @@ impl Mode for ListingMode {
             .min(self.rows.len());
         // Compose sticky breadcrumb rows + content slice into one
         // buffer so render_slice computes mtime column width across
-        // the full visible window — keeps columns aligned.
-        let mut combined: Vec<TreeRow> = Vec::with_capacity(sticky.len() + (end - self.top_index));
+        // the full visible window — keeps columns aligned. Carry the
+        // original row index alongside each row so the selection
+        // highlight fires for the right row regardless of sticky
+        // displacement.
+        let mut combined: Vec<(usize, TreeRow)> =
+            Vec::with_capacity(sticky.len() + (end - self.top_index));
         for idx in &sticky {
-            combined.push(self.rows[*idx].clone());
+            combined.push((*idx, self.rows[*idx].clone()));
         }
-        combined.extend(self.rows[self.top_index..end].iter().cloned());
-        let lines = self.render_slice(&combined, ctx.peek_theme, ctx.render_opts, show_mtime);
+        for idx in self.top_index..end {
+            combined.push((idx, self.rows[idx].clone()));
+        }
+        let lines =
+            self.render_slice_with_indices(&combined, ctx.peek_theme, ctx.render_opts, show_mtime);
         Ok(Window {
             lines,
             total: self.rows.len(),
@@ -243,9 +351,24 @@ impl Mode for ListingMode {
     }
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        // Non-interactive: no selection highlight, no marker prefix.
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        for line in self.render_slice(&self.rows, ctx.peek_theme, ctx.render_opts, show_mtime) {
-            out.write_line(&line)?;
+        let mtimes: Vec<String> = if show_mtime {
+            self.rows
+                .iter()
+                .map(|r| format_mtime(r.mtime.as_ref(), ctx.render_opts.utc))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
+        for (i, row) in self.rows.iter().enumerate() {
+            let mtime_text = if show_mtime {
+                Some((mtimes[i].as_str(), width))
+            } else {
+                None
+            };
+            out.write_line(&self.paint_row(row, ctx.peek_theme, mtime_text, false))?;
         }
         Ok(())
     }
@@ -261,19 +384,56 @@ impl Mode for ListingMode {
     fn scroll(&mut self, action: Action) -> bool {
         let max = self.max_top();
         let rows = self.cached_rows.max(1);
-        let new_top = match action {
-            Action::ScrollUp => self.top_index.saturating_sub(1),
-            Action::ScrollDown => self.top_index.saturating_add(1).min(max),
-            Action::PageUp => self.top_index.saturating_sub(rows.saturating_sub(1)),
-            Action::PageDown => self
-                .top_index
-                .saturating_add(rows.saturating_sub(1))
-                .min(max),
-            Action::Top => 0,
-            Action::Bottom => max,
+        match action {
+            Action::ScrollUp => {
+                if let Some(cur) = self.selected_idx
+                    && let Some(prev) = self.next_file_row(cur, false)
+                {
+                    self.selected_idx = Some(prev);
+                }
+                self.scroll_to_show_selection();
+            }
+            Action::ScrollDown => {
+                if let Some(cur) = self.selected_idx
+                    && let Some(next) = self.next_file_row(cur, true)
+                {
+                    self.selected_idx = Some(next);
+                }
+                self.scroll_to_show_selection();
+            }
+            // PageUp/Dn page-scroll, then snap selection to the first
+            // file now visible.
+            Action::PageUp => {
+                self.top_index = self.top_index.saturating_sub(rows.saturating_sub(1));
+                if let Some(idx) = self.first_visible_file() {
+                    self.selected_idx = Some(idx);
+                }
+            }
+            Action::PageDown => {
+                self.top_index = self
+                    .top_index
+                    .saturating_add(rows.saturating_sub(1))
+                    .min(max);
+                if let Some(idx) = self.first_visible_file() {
+                    self.selected_idx = Some(idx);
+                }
+            }
+            Action::Top => {
+                if let Some(idx) = self.first_file_row() {
+                    self.selected_idx = Some(idx);
+                }
+                self.top_index = 0;
+                self.scroll_to_show_selection();
+            }
+            Action::Bottom => {
+                if let Some(idx) = self.last_file_row() {
+                    self.selected_idx = Some(idx);
+                }
+                self.top_index = max;
+                self.scroll_to_show_selection();
+            }
             _ => return false,
-        };
-        self.top_index = new_top;
+        }
         true
     }
 
@@ -300,13 +460,11 @@ impl Mode for ListingMode {
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        let total = self.rows.len();
-        let viewport = self.cached_rows.max(1);
+        let files = self.file_count();
         let mut segs = Vec::new();
-        let s = if total <= viewport {
-            format!("{} ({})", total, self.format_name)
-        } else {
-            format!("{}/{} ({})", self.top_index + 1, total, self.format_name)
+        let s = match self.selected_file_pos() {
+            Some(pos) => format!("{}/{} ({})", pos, files, self.format_name),
+            None => format!("{} ({})", files, self.format_name),
         };
         segs.push((s, theme.muted));
         // Sticky on is the default — only call out the off state.
@@ -317,7 +475,10 @@ impl Mode for ListingMode {
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {
-        const ACTIONS: &[(Action, &str)] = &[(Action::ToggleStickyParents, "Pin parent path")];
+        const ACTIONS: &[(Action, &str)] = &[
+            (Action::ToggleStickyParents, "Pin parent path"),
+            (Action::Extract, "Extract selected entry"),
+        ];
         ACTIONS
     }
 
@@ -327,6 +488,11 @@ impl Mode for ListingMode {
             return Handled::Yes;
         }
         Handled::No
+    }
+
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        self.selected_inner_path()
+            .map(|p| ExtractTarget::EntryPath(p.to_string()))
     }
 
     fn take_warnings(&mut self) -> Vec<String> {
@@ -340,18 +506,21 @@ fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
     // column 0, which is visual noise without payload.
     let mut rows = Vec::new();
     for entry in entries {
+        let is_dir = entry.is_dir();
+        let inner_path = (!is_dir).then(|| entry.name.clone());
         rows.push(TreeRow {
             prefix: String::new(),
             leaf: entry.name.clone(),
-            is_dir: entry.is_dir(),
+            is_dir,
             size: entry.size,
             mode: entry.mode,
             mtime: entry.mtime.clone(),
             parent_row: None,
+            inner_path,
         });
         if let EntryKind::Dir { children } = &entry.kind {
             let parent = rows.len() - 1;
-            walk(children, Some(parent), "", &mut rows);
+            walk(children, Some(parent), "", &entry.name, &mut rows);
         }
     }
     rows
@@ -361,6 +530,7 @@ fn walk(
     entries: &[Entry],
     parent_row: Option<usize>,
     parent_prefix: &str,
+    parent_path: &str,
     rows: &mut Vec<TreeRow>,
 ) {
     let count = entries.len();
@@ -376,20 +546,24 @@ fn walk(
         } else {
             "\u{251c}\u{2574}"
         };
+        let is_dir = entry.is_dir();
+        let inner_full = format!("{parent_path}/{}", entry.name);
+        let inner_path = (!is_dir).then(|| inner_full.clone());
         rows.push(TreeRow {
             prefix: format!("{parent_prefix}{connector}"),
             leaf: entry.name.clone(),
-            is_dir: entry.is_dir(),
+            is_dir,
             size: entry.size,
             mode: entry.mode,
             mtime: entry.mtime.clone(),
             parent_row,
+            inner_path,
         });
         if let EntryKind::Dir { children } = &entry.kind {
             let cont = if is_last { "  " } else { "\u{2502} " };
             let next_prefix = format!("{parent_prefix}{cont}");
             let new_parent = rows.len() - 1;
-            walk(children, Some(new_parent), &next_prefix, rows);
+            walk(children, Some(new_parent), &next_prefix, &inner_full, rows);
         }
     }
 }
@@ -486,20 +660,39 @@ fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
 }
 
 /// Tree prefix in muted, leaf name in foreground (or accent for dirs),
-/// with a trailing `/` for directory entries.
-fn paint_tree_path(prefix: &str, leaf: &str, is_dir: bool, theme: &PeekTheme) -> String {
+/// with a trailing `/` for directory entries. When `selected`, the
+/// leaf gets a `selection`-coloured background — a stronger cue than
+/// the arrow alone for which row the next extract action will target.
+fn paint_tree_path(
+    prefix: &str,
+    leaf: &str,
+    is_dir: bool,
+    theme: &PeekTheme,
+    selected: bool,
+) -> String {
     let leaf_color = if is_dir {
         theme.accent
     } else {
         theme.foreground
     };
     let trailing = if is_dir { "/" } else { "" };
-    format!(
-        "{}{}{}",
-        theme.paint(prefix, theme.muted),
-        theme.paint(leaf, leaf_color),
-        theme.paint(trailing, theme.muted),
-    )
+    let painted_leaf = if selected {
+        // Build the leaf+trailing as one bg-painted run so the
+        // highlight covers the dir slash too without a gap.
+        let mut buf = String::new();
+        theme.paint_into(&mut buf, leaf, leaf_color);
+        if !trailing.is_empty() {
+            theme.paint_into(&mut buf, trailing, theme.muted);
+        }
+        theme.paint_bg(&buf, theme.selection)
+    } else {
+        let mut buf = theme.paint(leaf, leaf_color);
+        if !trailing.is_empty() {
+            buf.push_str(&theme.paint(trailing, theme.muted));
+        }
+        buf
+    };
+    format!("{}{painted_leaf}", theme.paint(prefix, theme.muted))
 }
 
 #[cfg(test)]
@@ -624,5 +817,98 @@ mod tests {
         lm.cached_rows = 3;
         lm.sticky_enabled = false;
         assert_eq!(lm.max_top(), 2);
+    }
+
+    #[test]
+    fn inner_path_built_for_files_only() {
+        let lm = sample();
+        let paths: Vec<Option<String>> = lm.rows.iter().map(|r| r.inner_path.clone()).collect();
+        assert_eq!(
+            paths,
+            vec![
+                None,                                    // sub/
+                None,                                    // sub/deeper/
+                Some("sub/deeper/deep.txt".to_string()), // file
+                Some("sub/inner.txt".to_string()),       // file
+                Some("README.txt".to_string()),          // file
+            ]
+        );
+    }
+
+    #[test]
+    fn initial_selection_is_first_file() {
+        let lm = sample();
+        // Row 2 is the first file row (deep.txt) in the sample tree.
+        assert_eq!(lm.selected_idx, Some(2));
+        assert_eq!(lm.selected_inner_path(), Some("sub/deeper/deep.txt"));
+    }
+
+    #[test]
+    fn scroll_down_advances_selection_to_next_file_skipping_dirs() {
+        let mut lm = sample();
+        lm.cached_rows = 10;
+        lm.scroll(Action::ScrollDown);
+        assert_eq!(lm.selected_idx, Some(3));
+        assert_eq!(lm.selected_inner_path(), Some("sub/inner.txt"));
+        lm.scroll(Action::ScrollDown);
+        assert_eq!(lm.selected_idx, Some(4));
+        assert_eq!(lm.selected_inner_path(), Some("README.txt"));
+        // Past the last file, selection sticks rather than wrapping.
+        lm.scroll(Action::ScrollDown);
+        assert_eq!(lm.selected_idx, Some(4));
+    }
+
+    #[test]
+    fn scroll_up_walks_back_through_files() {
+        let mut lm = sample();
+        lm.cached_rows = 10;
+        lm.selected_idx = Some(4); // README.txt
+        lm.scroll(Action::ScrollUp);
+        assert_eq!(lm.selected_idx, Some(3));
+        lm.scroll(Action::ScrollUp);
+        assert_eq!(lm.selected_idx, Some(2));
+        // First file: stays put.
+        lm.scroll(Action::ScrollUp);
+        assert_eq!(lm.selected_idx, Some(2));
+    }
+
+    #[test]
+    fn top_and_bottom_jump_to_first_last_file() {
+        let mut lm = sample();
+        lm.cached_rows = 10;
+        lm.scroll(Action::Bottom);
+        assert_eq!(lm.selected_idx, Some(4));
+        lm.scroll(Action::Top);
+        assert_eq!(lm.selected_idx, Some(2));
+    }
+
+    #[test]
+    fn page_down_snaps_selection_to_first_visible_file() {
+        let mut lm = sample();
+        lm.cached_rows = 2;
+        // Page down enough to scroll past the dirs at the top.
+        lm.scroll(Action::PageDown);
+        let sel = lm.selected_idx.expect("expected selection");
+        assert!(
+            sel >= lm.top_index,
+            "selection {sel} should land at or below new top_index {}",
+            lm.top_index
+        );
+        assert!(
+            lm.rows[sel].inner_path.is_some(),
+            "selection must be a file"
+        );
+    }
+
+    #[test]
+    fn status_segments_show_selected_over_files_total() {
+        let lm = sample();
+        let tm = crate::theme::ThemeManager::new(
+            crate::theme::PeekThemeName::IdeaDark,
+            crate::theme::ColorMode::Plain,
+        );
+        let segs = lm.status_segments(tm.peek_theme());
+        // 3 files in sample tree; deep.txt is selected (1st file).
+        assert_eq!(segs[0].0, "1/3 (test)");
     }
 }

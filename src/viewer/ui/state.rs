@@ -11,8 +11,10 @@ use crate::theme::{ColorMode, PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
+use super::prompt::{Prompt, PromptOutcome};
 use super::screen::ScreenBuffer;
 use super::{content_rows, make_peek_theme, terminal_cols};
+use crate::extract::Extracted;
 
 /// One mode's most recent windowed render. The `lines` field is the
 /// exact slice that should be drawn at the top of the viewport; the
@@ -47,6 +49,7 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::CycleThemeBack, "Previous theme"),
     (Action::CycleColorMode, "Next color mode"),
     (Action::CycleColorModeBack, "Previous color mode"),
+    (Action::Extract, "Extract selected entry / current frame"),
 ];
 
 pub(crate) struct ViewerState<'a> {
@@ -83,6 +86,18 @@ pub(crate) struct ViewerState<'a> {
     detected: &'a Detected,
     file_info: FileInfo,
     render_opts: RenderOptions,
+
+    /// Modal prompt overlay. While `Some`, raw key events go to the
+    /// prompt and the status line shows its render. Paired
+    /// `pending_extract` is the work to run on confirm — keeps the
+    /// Prompt widget oblivious to its purpose.
+    prompt: Option<Prompt>,
+    pending_extract: Option<Extracted>,
+
+    /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
+    /// one redraw. Lives here so cross-mode actions can flash from
+    /// any active mode.
+    flash: Option<String>,
 }
 
 impl<'a> ViewerState<'a> {
@@ -117,6 +132,9 @@ impl<'a> ViewerState<'a> {
             detected,
             file_info,
             render_opts,
+            prompt: None,
+            pending_extract: None,
+            flash: None,
         })
     }
 
@@ -162,6 +180,67 @@ impl<'a> ViewerState<'a> {
     pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
         let extras = self.modes[self.active].extra_actions();
         keys::dispatch(key, GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
+    }
+
+    /// True while the modal prompt is consuming keys. Event loop
+    /// bypasses Action dispatch and routes raw keys to
+    /// `handle_prompt_key`.
+    pub(crate) fn prompt_active(&self) -> bool {
+        self.prompt.is_some()
+    }
+
+    pub(crate) fn active_prompt(&self) -> Option<&Prompt> {
+        self.prompt.as_ref()
+    }
+
+    /// Drain the one-shot status flash.
+    pub(crate) fn take_flash(&mut self) -> Option<String> {
+        self.flash.take()
+    }
+
+    /// Open the save-to prompt; Enter writes `extracted` to the typed
+    /// path, Esc drops both without writing.
+    pub(crate) fn begin_extract_prompt(&mut self, extracted: Extracted) {
+        let prefill = extracted.suggested_name.clone();
+        self.pending_extract = Some(extracted);
+        self.prompt = Some(Prompt::new("Save to", prefill));
+    }
+
+    pub(crate) fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
+        let Some(prompt) = self.prompt.as_mut() else {
+            return Ok(false);
+        };
+        match prompt.handle_key(key) {
+            PromptOutcome::Continue => Ok(true),
+            PromptOutcome::Cancelled => {
+                self.prompt = None;
+                self.pending_extract = None;
+                self.flash = Some("extract cancelled".to_string());
+                Ok(true)
+            }
+            PromptOutcome::Confirmed(target) => {
+                self.prompt = None;
+                let Some(extracted) = self.pending_extract.take() else {
+                    return Ok(true);
+                };
+                let dest = if target.is_empty() {
+                    crate::extract::write::Output::resolve(None, &extracted.suggested_name)
+                } else if target == "-" {
+                    crate::extract::write::Output::Stdout
+                } else {
+                    crate::extract::write::Output::Path(target.into())
+                };
+                match crate::extract::write::write_extracted(&extracted, dest) {
+                    Ok(path) => {
+                        self.flash = Some(format!("wrote {}", path.display()));
+                    }
+                    Err(e) => {
+                        self.flash = Some(format!("extract failed: {e}"));
+                    }
+                }
+                Ok(true)
+            }
+        }
     }
 
     /// Try to consume the action via the active mode's scroll handler.
@@ -272,6 +351,10 @@ impl<'a> ViewerState<'a> {
             // we get here. Listed explicitly so adding a new Action variant
             // forces a non-exhaustive-match compile error in this function
             // and a deliberate decision about which side handles it.
+            Action::Extract => {
+                self.start_extract();
+                Outcome::Redraw
+            }
             Action::ToggleRawSource
             | Action::PlayPause
             | Action::NextFrame
@@ -287,6 +370,24 @@ impl<'a> ViewerState<'a> {
             | Action::CycleImageModeBack
             | Action::ToggleStickyParents => Outcome::Unhandled,
         })
+    }
+
+    /// Run extract against the active mode's selection, then open the
+    /// save-to prompt. Failures flash on the status line.
+    fn start_extract(&mut self) {
+        let Some(target) = self.modes[self.active].extract_target() else {
+            self.flash = Some("nothing selected to extract".to_string());
+            return;
+        };
+        let key = match &target {
+            crate::viewer::modes::ExtractTarget::EntryPath(p) => p.clone(),
+            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
+        };
+        let opts = crate::extract::ExtractOptions::default();
+        match crate::extract::extract(self.source, self.detected, &key, &opts) {
+            Ok(extracted) => self.begin_extract_prompt(extracted),
+            Err(e) => self.flash = Some(format!("extract failed: {e}")),
+        }
     }
 
     // ---------------------------------------------------------------------

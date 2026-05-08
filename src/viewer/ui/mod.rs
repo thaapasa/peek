@@ -9,6 +9,7 @@ use crate::theme::{ColorMode, PeekTheme, PeekThemeName, load_embedded_theme};
 
 pub(crate) mod help;
 pub(crate) mod keys;
+pub(crate) mod prompt;
 pub(crate) mod screen;
 pub(crate) mod state;
 

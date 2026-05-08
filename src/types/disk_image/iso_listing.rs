@@ -12,6 +12,8 @@
 //! default-mode preview. Bounded depth + entry caps defend against
 //! malformed images that loop or balloon.
 
+use std::path::Path;
+
 use anyhow::{Context, Result};
 
 use super::iso_pvd::{self, PVD_OFFSET};
@@ -55,6 +57,116 @@ pub fn list_iso(source: &InputSource) -> Result<Vec<Entry>> {
         0,
         &mut counter,
     )
+}
+
+/// Resolve a `/`-separated path inside the ISO to the file's byte
+/// range in the underlying source. Returns the absolute offset and
+/// size, or `None` when the path doesn't match a file (or names a
+/// directory). Used by the extract path to map an ISO entry onto a
+/// `FileRange` view without copying.
+pub fn lookup_file_range(source: &InputSource, target: &Path) -> Result<Option<(u64, u64)>> {
+    let bs = source.open_byte_source()?;
+    let head = bs.read_range(PVD_OFFSET, DESCRIPTOR_SCAN_BYTES)?;
+    let extents = iso_pvd::parse_root_extents(&head)
+        .context("ISO 9660 Primary Volume Descriptor not found")?;
+    let (root_lba, root_size, joliet) = match extents.joliet {
+        Some((lba, size)) => (lba, size, true),
+        None => (extents.primary.0, extents.primary.1, false),
+    };
+
+    let segments: Vec<&std::ffi::OsStr> = target
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => Some(s),
+            _ => None,
+        })
+        .collect();
+    if segments.is_empty() {
+        return Ok(None);
+    }
+    let segment_strs: Vec<String> = segments
+        .iter()
+        .map(|s| s.to_string_lossy().into_owned())
+        .collect();
+
+    walk_for_path(
+        bs.as_ref(),
+        root_lba,
+        root_size,
+        extents.block_size,
+        joliet,
+        &segment_strs,
+        0,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn walk_for_path(
+    bs: &dyn crate::input::source::ByteSource,
+    extent_lba: u32,
+    data_len: u32,
+    block_size: u32,
+    joliet: bool,
+    segments: &[String],
+    depth: u32,
+) -> Result<Option<(u64, u64)>> {
+    if depth > MAX_DEPTH || data_len == 0 || data_len > MAX_DIR_BYTES || segments.is_empty() {
+        return Ok(None);
+    }
+    let offset = (extent_lba as u64).saturating_mul(block_size as u64);
+    let buf = bs.read_range(offset, data_len as usize)?;
+    if buf.is_empty() {
+        return Ok(None);
+    }
+    let target = &segments[0];
+    let rest = &segments[1..];
+    let mut i = 0usize;
+    while i < buf.len() {
+        let rec_len = buf[i] as usize;
+        if rec_len == 0 {
+            let next = (i + block_size as usize) & !(block_size as usize - 1);
+            if next <= i {
+                break;
+            }
+            i = next;
+            continue;
+        }
+        if i + rec_len > buf.len() || rec_len < 33 {
+            break;
+        }
+        let rec = &buf[i..i + rec_len];
+        i += rec_len;
+        let Some(parsed) = parse_record(rec, joliet) else {
+            continue;
+        };
+        if parsed.is_self_or_parent {
+            continue;
+        }
+        if &parsed.name != target {
+            continue;
+        }
+        if rest.is_empty() {
+            // Last segment must resolve to a file.
+            if parsed.is_dir {
+                return Ok(None);
+            }
+            let abs_off = (parsed.extent_lba as u64).saturating_mul(block_size as u64);
+            return Ok(Some((abs_off, parsed.data_len as u64)));
+        }
+        if !parsed.is_dir {
+            return Ok(None);
+        }
+        return walk_for_path(
+            bs,
+            parsed.extent_lba,
+            parsed.data_len,
+            block_size,
+            joliet,
+            rest,
+            depth + 1,
+        );
+    }
+    Ok(None)
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 mod cli;
+mod extract;
 mod info;
 mod input;
 mod output;
@@ -32,8 +33,34 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    let source = input::stdin::build_source(&args)?;
-    let detected = input::detect::detect(&source)?;
+    let mut source = input::stdin::build_source(&args)?;
+    let mut detected = input::detect::detect(&source)?;
+
+    // --extract: pull an inner item out of a container. With `--print`
+    // or `--info`, swap source for the extracted one and fall through
+    // to the regular pipeline (recursive peek). Otherwise save it to
+    // disk or stream to stdout.
+    if let Some(key) = args.extract.as_deref() {
+        let opts = extract::ExtractOptions {
+            svg_size: args.extract_size,
+        };
+        let extracted = extract::extract(&source, &detected, key, &opts)
+            .with_context(|| format!("failed to extract {key:?} from {}", source.name()))?;
+
+        let render_extracted = args.print || args.info;
+        if !render_extracted {
+            let dest = pick_extract_output(&args, &extracted.suggested_name);
+            let written = extract::write::write_extracted(&extracted, dest)
+                .with_context(|| format!("failed to write extracted {key:?}"))?;
+            if written != std::path::Path::new("-") {
+                eprintln!("wrote {}", written.display());
+            }
+            return Ok(());
+        }
+
+        source = extracted.source;
+        detected = input::detect::detect(&source)?;
+    }
 
     let interactive = !args.print && std::io::stdout().is_terminal();
 
@@ -96,6 +123,17 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// `-o` wins; piped stdout → Stdout; else suggested filename in cwd.
+fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
+    if let Some(path) = args.output.as_deref() {
+        return extract::write::Output::resolve(Some(path), suggested);
+    }
+    if !std::io::stdout().is_terminal() {
+        return extract::write::Output::Stdout;
+    }
+    extract::write::Output::resolve(None, suggested)
 }
 
 /// Terminal width to use for non-interactive (pipe) rendering. Honors

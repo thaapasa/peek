@@ -1,7 +1,7 @@
 use std::io::Read;
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use bytes::Bytes;
 
 use crate::Args;
 use crate::input::InputSource;
@@ -27,9 +27,7 @@ pub fn build_source(args: &Args) -> Result<InputSource> {
             .read_to_end(&mut buf)
             .context("failed to read stdin")?;
         reopen_stdin_from_tty();
-        return Ok(InputSource::Stdin {
-            data: Arc::from(buf.into_boxed_slice()),
-        });
+        return Ok(InputSource::stdin(Bytes::from(buf)));
     }
 
     Ok(InputSource::File(args.file.clone().expect("file present")))

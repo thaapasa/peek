@@ -97,6 +97,10 @@ pub(crate) enum Action {
     /// Toggle the sticky parent-directory breadcrumb at the top of a
     /// scrolled listing TOC view.
     ToggleStickyParents,
+    /// Extract the currently-selected sub-item to disk: a file in a
+    /// listing TOC view, or the current frame in an animation view.
+    /// Modes that don't have an extractable selection ignore it.
+    Extract,
 }
 
 impl Action {
@@ -138,6 +142,7 @@ impl Action {
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
         const STICKY_PARENTS: &[Binding] = &[Binding::plain(Char('s'))];
+        const EXTRACT:        &[Binding] = &[Binding::plain(Char('e'))];
 
         match self {
             Action::Quit              => QUIT,
@@ -171,6 +176,7 @@ impl Action {
             Action::NextFrame         => NEXT_FRAME,
             Action::PrevFrame         => PREV_FRAME,
             Action::ToggleStickyParents => STICKY_PARENTS,
+            Action::Extract           => EXTRACT,
         }
     }
 
@@ -209,6 +215,7 @@ impl Action {
             Action::NextFrame         => "n",
             Action::PrevFrame         => "N",
             Action::ToggleStickyParents => "s",
+            Action::Extract           => "e",
         }
     }
 

@@ -10,6 +10,7 @@
 //! section.
 
 pub mod animation_mode;
+pub mod extract;
 pub mod info_gather;
 pub mod info_render;
 

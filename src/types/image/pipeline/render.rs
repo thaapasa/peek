@@ -520,12 +520,13 @@ pub fn render_prepared(
     }
 }
 
-/// Load an image from a File path or buffered Stdin bytes.
+/// Load an image from a file path or in-memory / ranged byte source.
 pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
     match source {
         InputSource::File(path) => image::open(path).context("failed to open image"),
-        InputSource::Stdin { data } => {
-            image::load_from_memory(data).context("failed to decode image from stdin")
+        _ => {
+            let buf = source.read_bytes()?;
+            image::load_from_memory(&buf).context("failed to decode image")
         }
     }
 }

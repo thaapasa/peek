@@ -4,7 +4,6 @@
 //! seekable reader over the source.
 
 use std::io::{Cursor, Read, Seek};
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
@@ -18,8 +17,9 @@ use crate::types::listing::{Entry, FlatEntry, from_flat_paths};
 pub(crate) trait ReadSeek: Read + Seek {}
 impl<T: Read + Seek> ReadSeek for T {}
 
-/// Open a `Read + Seek` over the source. Files re-open the underlying
-/// path; stdin shares the buffered bytes via Arc → no copy.
+/// Open a `Read + Seek` over the source. File-backed sources open the
+/// underlying path (and seek to the range start when needed); in-memory
+/// sources share their `Bytes` via cheap clone.
 pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
     match source {
         InputSource::File(path) => {
@@ -27,7 +27,13 @@ pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
                 .with_context(|| format!("failed to open {}", path.display()))?;
             Ok(Box::new(f))
         }
-        InputSource::Stdin { data } => Ok(Box::new(Cursor::new(Arc::clone(data)))),
+        InputSource::Memory { bytes, .. } => Ok(Box::new(Cursor::new(bytes.clone()))),
+        InputSource::FileRange { .. } => {
+            // Archive over a range view (e.g. recursive peek into an
+            // archive embedded in an ISO entry): read bytes eagerly.
+            let buf = source.read_bytes()?;
+            Ok(Box::new(Cursor::new(buf)))
+        }
     }
 }
 

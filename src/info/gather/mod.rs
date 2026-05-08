@@ -14,7 +14,6 @@
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 use anyhow::Result;
 
@@ -93,7 +92,10 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
 pub fn gather(source: &InputSource, detected: &Detected) -> Result<FileInfo> {
     match source {
         InputSource::File(path) => gather_file(path, detected),
-        InputSource::Stdin { data } => Ok(gather_stdin(data, detected)),
+        // Memory + FileRange share the "no filesystem metadata" path —
+        // they don't have an mtime, owner, or stat() to draw from. Size
+        // comes from the byte source, name from the source's display name.
+        _ => Ok(gather_virtual(source, detected)),
     }
 }
 
@@ -128,15 +130,18 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
     })
 }
 
-fn gather_stdin(data: &Arc<[u8]>, detected: &Detected) -> FileInfo {
+fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
     let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
     let warnings = collect_warnings(None, detected);
-    let extras = gather_extras_stdin(data, &detected.file_type, detected.magic_mime.as_deref());
+    let extras =
+        gather_extras_in_memory(source, &detected.file_type, detected.magic_mime.as_deref());
+    let size = source.open_byte_source().map(|bs| bs.len()).unwrap_or(0);
+    let display = source.name().to_string();
 
     FileInfo {
-        file_name: "<stdin>".to_string(),
-        path: "<stdin>".to_string(),
-        size_bytes: data.len() as u64,
+        file_name: display.clone(),
+        path: display,
+        size_bytes: size,
         mimes,
         warnings,
         modified: None,
@@ -157,35 +162,38 @@ fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
     warnings
 }
 
-fn gather_extras_stdin(
-    data: &Arc<[u8]>,
+fn gather_extras_in_memory(
+    source: &InputSource,
     file_type: &FileType,
     magic_mime: Option<&str>,
 ) -> FileExtras {
-    let stdin_source = InputSource::Stdin {
-        data: Arc::clone(data),
-    };
     match file_type {
         FileType::SourceCode { .. } => {
-            if let Some(extras) = gather_code_extras(&stdin_source, file_type) {
+            if let Some(extras) = gather_code_extras(source, file_type) {
                 return extras;
             }
-            match gather_text_stats(&stdin_source) {
+            match gather_text_stats(source) {
                 Some(stats) => FileExtras::Text(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
-        FileType::Svg => match gather_text_stats(&stdin_source) {
-            Some(stats) => crate::types::svg::info_gather::gather_extras(stats, data),
-            None => crate::types::binary::info::gather_extras(magic_mime),
+        FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
+            (Some(stats), Ok(bytes)) => {
+                crate::types::svg::info_gather::gather_extras(stats, &bytes)
+            }
+            _ => crate::types::binary::info::gather_extras(magic_mime),
         },
-        FileType::Structured(fmt) => crate::types::structured::info::gather_extras(*fmt, data),
-        FileType::Image => {
-            crate::types::image::info_gather::gather_extras(&stdin_source, magic_mime)
-        }
-        FileType::Archive(fmt) => crate::types::archive::info::gather_extras(&stdin_source, *fmt),
+        FileType::Structured(fmt) => match source.read_bytes() {
+            Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
+            Err(_) => FileExtras::Structured {
+                format_name: crate::types::structured::info::format_name(*fmt),
+                stats: None,
+            },
+        },
+        FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
+        FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
-            crate::types::disk_image::info_gather::gather_extras(&stdin_source, *fmt)
+            crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }

@@ -113,4 +113,26 @@ pub struct Args {
     /// Check GitHub for a newer release and install it via the official installer
     #[arg(long, hide_short_help = true)]
     pub update: bool,
+
+    /// Extract a sub-item from a container (animation frame index, archive
+    /// entry path, ISO entry path) instead of viewing the container itself.
+    /// Combines with --print to recursively peek the extracted item, with
+    /// --output to write to a specific path, or — when stdout is piped —
+    /// streams raw bytes.
+    #[arg(short = 'x', long, value_name = "KEY")]
+    pub extract: Option<String>,
+
+    /// Destination for `--extract`. `-` writes raw bytes to stdout. When
+    /// omitted, the extractor's suggested filename is used (relative to
+    /// the current directory).
+    #[arg(short = 'o', long = "output", value_name = "PATH")]
+    pub output: Option<PathBuf>,
+
+    /// Pixel size for the longest axis when extracting an SVG frame.
+    /// Vector SVGs declare a tiny intrinsic size by convention; without
+    /// this flag, peek upscales sub-512px SVGs to 512 on the longest
+    /// axis. Use this to force a specific resolution. Ignored for
+    /// non-SVG sources.
+    #[arg(long = "extract-size", value_name = "PX", hide_short_help = true)]
+    pub extract_size: Option<u32>,
 }

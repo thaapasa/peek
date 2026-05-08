@@ -24,9 +24,10 @@ const ANCHOR_STRIDE: usize = 1024;
 /// - A trailing fragment without a `\n` counts as its own line.
 /// - An empty source has zero lines; `"\n"` has one (empty) line.
 ///
-/// Stdin and file sources go through the same path: stdin is already
-/// in-memory (`Arc<[u8]>`), so the "streaming" reads are zero-cost slices,
-/// and files seek per chunk via `FileByteSource`.
+/// All `InputSource` variants go through the same path. In-memory
+/// sources (stdin, extracted entries) read via cheap `Bytes` slicing;
+/// files seek per chunk via `FileByteSource`; ranged views translate
+/// offsets through `RangeByteSource`.
 pub struct LineSource {
     bs: Box<dyn ByteSource>,
     /// `anchors[k]` is the byte offset where line `k * ANCHOR_STRIDE` starts.
@@ -241,15 +242,13 @@ fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64, bool)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytes::Bytes;
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;
-    use std::sync::Arc;
 
     fn stdin_source(text: &str) -> InputSource {
-        InputSource::Stdin {
-            data: Arc::from(text.as_bytes().to_vec().into_boxed_slice()),
-        }
+        InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
     fn write_temp(name: &str, data: &[u8]) -> PathBuf {
@@ -419,9 +418,7 @@ mod tests {
     #[test]
     fn invalid_utf8_errors() {
         // Lone continuation byte; not valid UTF-8.
-        let s = InputSource::Stdin {
-            data: Arc::from(vec![0x80].into_boxed_slice()),
-        };
+        let s = InputSource::stdin(Bytes::from_static(&[0x80]));
         let ls = LineSource::open(&s).unwrap();
         assert!(ls.line(0).is_err());
     }

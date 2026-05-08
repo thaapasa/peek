@@ -2,35 +2,87 @@ use std::cell::RefCell;
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use bytes::Bytes;
 
 /// Chunk size for streaming line/byte scans of the underlying source.
 const SCAN_CHUNK: usize = 64 * 1024;
 
-/// Source of input content — either a file on disk or buffered stdin.
+/// Source of input content.
 ///
-/// Decouples "where data comes from" from "how it's displayed".
+/// `File` reads a path on disk. `Memory` wraps already-buffered bytes
+/// (stdin, an extracted in-memory archive entry, an encoded animation
+/// frame). `FileRange` is an offset+limit view into a disk file — used
+/// when an extractor can map an inner item directly to a byte range of
+/// the backing file (ISO entry, uncompressed archive entry) without
+/// decompressing or copying.
 ///
-/// Stdin holds an `Arc<[u8]>` so cloning the source — which happens once
-/// per mode in the stack and at every `open_byte_source` call — is a
-/// pointer copy rather than a buffer duplication.
-#[derive(Clone)]
+/// `Memory` holds `bytes::Bytes` so cloning the source is a refcount
+/// bump rather than a buffer duplication. Sub-slicing in-memory bytes
+/// (e.g. extracting an entry from a stdin-piped archive) uses
+/// `Bytes::slice` and stays in `Memory`.
+///
+/// **Invariants for `FileRange`:** `base` always points at a disk file
+/// (never an in-memory blob — that case stays in `Memory`). Nested
+/// ranges collapse at construction; you should not have a `FileRange`
+/// whose `base` ever resolves to another `FileRange`.
+#[derive(Clone, Debug)]
 pub enum InputSource {
     File(PathBuf),
-    Stdin { data: Arc<[u8]> },
+    Memory {
+        bytes: Bytes,
+        name: String,
+    },
+    FileRange {
+        base: PathBuf,
+        offset: u64,
+        len: u64,
+        name: String,
+    },
 }
 
 impl InputSource {
+    /// Construct an in-memory source from owned bytes.
+    pub fn memory<B: Into<Bytes>>(bytes: B, name: impl Into<String>) -> Self {
+        Self::Memory {
+            bytes: bytes.into(),
+            name: name.into(),
+        }
+    }
+
+    /// Construct a stdin-backed source. Display name is `<stdin>`.
+    pub fn stdin(bytes: impl Into<Bytes>) -> Self {
+        Self::Memory {
+            bytes: bytes.into(),
+            name: "<stdin>".to_string(),
+        }
+    }
+
+    /// Construct an offset+limit view into a disk file. Used by
+    /// extractors that can map their inner item to a byte range of the
+    /// backing file without copying.
+    pub fn file_range(base: PathBuf, offset: u64, len: u64, name: impl Into<String>) -> Self {
+        Self::FileRange {
+            base,
+            offset,
+            len,
+            name: name.into(),
+        }
+    }
+
     /// Full content as UTF-8 text.
     pub fn read_text(&self) -> Result<String> {
         match self {
             Self::File(path) => fs::read_to_string(path)
                 .with_context(|| format!("failed to read {}", path.display())),
-            Self::Stdin { data } => std::str::from_utf8(data)
+            Self::Memory { bytes, name } => std::str::from_utf8(bytes)
                 .map(|s| s.to_owned())
-                .context("stdin is not valid UTF-8"),
+                .with_context(|| format!("{name} is not valid UTF-8")),
+            Self::FileRange { name, .. } => {
+                let raw = self.read_bytes()?;
+                String::from_utf8(raw).with_context(|| format!("{name} is not valid UTF-8"))
+            }
         }
     }
 
@@ -40,23 +92,31 @@ impl InputSource {
             Self::File(path) => {
                 fs::read(path).with_context(|| format!("failed to read {}", path.display()))
             }
-            Self::Stdin { data } => Ok(data.to_vec()),
+            Self::Memory { bytes, .. } => Ok(bytes.to_vec()),
+            Self::FileRange {
+                base, offset, len, ..
+            } => read_file_range(base, *offset, *len),
         }
     }
 
-    /// Display name: filename for files, `<stdin>` for stdin.
+    /// Display name: filename for files, stored name for memory/range.
     pub fn name(&self) -> &str {
         match self {
             Self::File(path) => path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
-            Self::Stdin { .. } => "<stdin>",
+            Self::Memory { name, .. } => name,
+            Self::FileRange { name, .. } => name,
         }
     }
 
-    /// Filesystem path (None for stdin).
+    /// Filesystem path, when one is meaningful for the user-visible
+    /// source. `None` for in-memory and for ranged views (the backing
+    /// file path of a range is an internal handle, not the path of the
+    /// inner item the user is viewing).
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File(path) => Some(path.as_path()),
-            Self::Stdin { .. } => None,
+            Self::Memory { .. } => None,
+            Self::FileRange { .. } => None,
         }
     }
 
@@ -128,14 +188,43 @@ impl InputSource {
         crate::input::LineSource::open(self)
     }
 
-    /// Open a streaming byte reader. For files, holds the file handle and
-    /// seeks per read. For stdin, shares the already-buffered bytes via Arc.
+    /// Open a streaming byte reader. For files, holds the file handle
+    /// and seeks per read. For in-memory sources, shares the buffered
+    /// `Bytes` (zero-copy). For ranges, wraps a file reader with offset
+    /// translation.
     pub fn open_byte_source(&self) -> Result<Box<dyn ByteSource>> {
         match self {
             Self::File(path) => Ok(Box::new(FileByteSource::open(path)?)),
-            Self::Stdin { data } => Ok(Box::new(SliceByteSource::new(Arc::clone(data)))),
+            Self::Memory { bytes, .. } => Ok(Box::new(BytesByteSource::new(bytes.clone()))),
+            Self::FileRange {
+                base, offset, len, ..
+            } => {
+                let f = FileByteSource::open(base)?;
+                Ok(Box::new(RangeByteSource::new(Box::new(f), *offset, *len)))
+            }
         }
     }
+}
+
+fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
+    let mut f = File::open(base).with_context(|| format!("failed to open {}", base.display()))?;
+    f.seek(SeekFrom::Start(offset))
+        .with_context(|| format!("failed to seek in {}", base.display()))?;
+    let cap = usize::try_from(len).unwrap_or(usize::MAX);
+    let mut buf = vec![0u8; cap];
+    let mut filled = 0usize;
+    while filled < cap {
+        match f.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) => {
+                return Err(anyhow::Error::from(e))
+                    .with_context(|| format!("failed to read {}", base.display()));
+            }
+        }
+    }
+    buf.truncate(filled);
+    Ok(buf)
 }
 
 /// Random-access byte reader. Implementations may seek (`File`) or slice
@@ -203,29 +292,69 @@ impl ByteSource for FileByteSource {
     }
 }
 
-pub struct SliceByteSource {
-    data: Arc<[u8]>,
+pub struct BytesByteSource {
+    bytes: Bytes,
 }
 
-impl SliceByteSource {
-    pub fn new(data: Arc<[u8]>) -> Self {
-        Self { data }
+impl BytesByteSource {
+    pub fn new(bytes: Bytes) -> Self {
+        Self { bytes }
     }
 }
 
-impl ByteSource for SliceByteSource {
+impl ByteSource for BytesByteSource {
     fn len(&self) -> u64 {
-        self.data.len() as u64
+        self.bytes.len() as u64
     }
 
     fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        let total = self.data.len() as u64;
+        let total = self.bytes.len() as u64;
         if offset >= total || len == 0 {
             return Ok(Vec::new());
         }
         let start = offset as usize;
-        let end = (start + len).min(self.data.len());
-        Ok(self.data[start..end].to_vec())
+        let end = (start + len).min(self.bytes.len());
+        Ok(self.bytes[start..end].to_vec())
+    }
+}
+
+/// Offset-and-limit view over another `ByteSource`. Reads translate
+/// `0..len` on the view to `base_offset..base_offset+len` on the
+/// underlying source. Used by `InputSource::FileRange` to expose an
+/// inner item (e.g. an ISO entry) as if it were a standalone source.
+pub struct RangeByteSource {
+    base: Box<dyn ByteSource>,
+    base_offset: u64,
+    len: u64,
+}
+
+impl RangeByteSource {
+    pub fn new(base: Box<dyn ByteSource>, base_offset: u64, len: u64) -> Self {
+        // Clamp to the underlying length so downstream code can trust
+        // the reported length even if the caller passed a too-large len.
+        let total = base.len();
+        let start = base_offset.min(total);
+        let len = len.min(total.saturating_sub(start));
+        Self {
+            base,
+            base_offset: start,
+            len,
+        }
+    }
+}
+
+impl ByteSource for RangeByteSource {
+    fn len(&self) -> u64 {
+        self.len
+    }
+
+    fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
+        if offset >= self.len || len == 0 {
+            return Ok(Vec::new());
+        }
+        let remaining = self.len - offset;
+        let want = (len as u64).min(remaining) as usize;
+        self.base.read_range(self.base_offset + offset, want)
     }
 }
 
@@ -286,40 +415,67 @@ mod tests {
         let _ = fs::remove_file(&path);
     }
 
-    fn arc_bytes(b: &[u8]) -> Arc<[u8]> {
-        Arc::from(b.to_vec().into_boxed_slice())
-    }
-
     #[test]
-    fn slice_byte_source_full_read() {
-        let bs = SliceByteSource::new(arc_bytes(b"abcdefghij"));
+    fn bytes_byte_source_full_read() {
+        let bs = BytesByteSource::new(Bytes::from_static(b"abcdefghij"));
         assert_eq!(bs.len(), 10);
         assert_eq!(bs.read_range(0, 10).unwrap(), b"abcdefghij");
     }
 
     #[test]
-    fn slice_byte_source_partial_eof() {
-        let bs = SliceByteSource::new(arc_bytes(b"abcdefghij"));
+    fn bytes_byte_source_partial_eof() {
+        let bs = BytesByteSource::new(Bytes::from_static(b"abcdefghij"));
         assert_eq!(bs.read_range(7, 100).unwrap(), b"hij");
     }
 
     #[test]
-    fn slice_byte_source_offset_past_eof() {
-        let bs = SliceByteSource::new(arc_bytes(b"abc"));
+    fn bytes_byte_source_offset_past_eof() {
+        let bs = BytesByteSource::new(Bytes::from_static(b"abc"));
         assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
     }
 
     #[test]
-    fn slice_byte_source_empty() {
-        let bs = SliceByteSource::new(arc_bytes(&[]));
+    fn bytes_byte_source_empty() {
+        let bs = BytesByteSource::new(Bytes::new());
         assert_eq!(bs.len(), 0);
         assert_eq!(bs.read_range(0, 10).unwrap(), Vec::<u8>::new());
     }
 
+    #[test]
+    fn range_byte_source_translates_offsets() {
+        let inner = BytesByteSource::new(Bytes::from_static(b"0123456789"));
+        let bs = RangeByteSource::new(Box::new(inner), 3, 5);
+        assert_eq!(bs.len(), 5);
+        assert_eq!(bs.read_range(0, 5).unwrap(), b"34567");
+        assert_eq!(bs.read_range(2, 2).unwrap(), b"56");
+        // Read past view EOF returns empty even though base has more.
+        assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
+    }
+
+    #[test]
+    fn range_byte_source_clamps_oversized_len() {
+        let inner = BytesByteSource::new(Bytes::from_static(b"abcdef"));
+        let bs = RangeByteSource::new(Box::new(inner), 4, 100);
+        assert_eq!(bs.len(), 2, "clamped to remaining bytes");
+        assert_eq!(bs.read_range(0, 10).unwrap(), b"ef");
+    }
+
+    #[test]
+    fn input_source_file_range_round_trip() {
+        let path = write_temp("range", b"AAAAhelloBBBB");
+        let src = InputSource::file_range(path.clone(), 4, 5, "hello".to_string());
+        assert_eq!(src.read_bytes().unwrap(), b"hello");
+        assert_eq!(src.read_text().unwrap(), "hello");
+        assert_eq!(src.name(), "hello");
+        assert!(src.path().is_none());
+        let bs = src.open_byte_source().unwrap();
+        assert_eq!(bs.len(), 5);
+        assert_eq!(bs.read_range(1, 3).unwrap(), b"ell");
+        let _ = fs::remove_file(&path);
+    }
+
     fn stdin_source(text: &str) -> InputSource {
-        InputSource::Stdin {
-            data: arc_bytes(text.as_bytes()),
-        }
+        InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
     #[test]

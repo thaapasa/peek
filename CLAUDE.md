@@ -27,10 +27,14 @@ src/
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/
     mod.rs             — re-exports InputSource, ByteSource, LineSource
-    source.rs          — InputSource enum (File path or buffered Stdin), ByteSource trait
+    source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource
     lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
     detect.rs          — File-type detection (extension + magic bytes + stdin sniffing)
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
+  extract/
+    mod.rs             — Module declarations + re-exports (Extracted, ExtractOptions, ExtractError, extract, sanitize_entry_path)
+    extract.rs         — Top-level dispatch (FileType → per-type extractor) + Extracted/Options/Error types + path sanitiser
+    write.rs           — Output enum + write_extracted: streams to stdout or writes file at path
   output/
     mod.rs             — re-exports PrintOutput
     print.rs           — PrintOutput: write-once stdout for --print / pipes / --info
@@ -75,6 +79,7 @@ src/
       mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
       info_gather.rs   — gather_extras (dimensions, color, ICC, HDR) + IMAGE_HEAD_SCAN/read_head
       info_render.rs   — render_section (Image, EXIF, XMP, Animation)
+      extract.rs       — Animation frame extract (GIF/WebP): decode all frames, re-encode frame N as PNG (Memory-backed)
       exif.rs          — EXIF field extraction
       xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
       animation_stats.rs — GIF/WebP animation stats (frames, duration, loop)
@@ -101,11 +106,13 @@ src/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)
       info_render.rs   — render_section (SVG info section)
+      extract.rs       — SVG anim frame extract: render_frame → resvg rasterize at intrinsic size (sub-512px upscaled to 512 floor) → PNG
       animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
     archive/
-      mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info)
+      mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
       info.rs          — gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
+      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst]/7z
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
@@ -116,19 +123,20 @@ src/
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
       stats.rs         — Stats: aggregate counts / sizes computed by tree walk
       build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
-      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) used by archive + ISO
+      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive + ISO)
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
-      iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge)
+      iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
       dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes)
+      extract.rs       — ISO entry extract: lookup_file_range → zero-copy FileRange (or Bytes::slice for stdin-piped); DMG returns Unsupported
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
   viewer/
     mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
-    interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack
+    interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     modes/
-      mod.rs           — Mode trait, ModeId, RenderCtx; render_to_pipe for print path
+      mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       info.rs          — InfoMode: file metadata view
@@ -136,7 +144,8 @@ src/
       about.rs         — AboutMode: logo, version, palette swatches, tips
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
-      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache
+      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache, extract dispatch + prompt overlay slot + status flash
+      prompt.rs        — Modal text-input Prompt overlay (readline-style nav) consuming raw key events; replaces status line while open
       screen.rs        — ScreenBuffer: per-row diff against prev frame, no-flash redraw
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer

@@ -974,8 +974,8 @@ mod tests {
     use crate::info::RenderOptions;
     use crate::input::detect;
     use crate::theme::{PeekTheme, PeekThemeName};
+    use bytes::Bytes;
     use std::path::PathBuf;
-    use std::sync::Arc;
 
     fn fixture(name: &str) -> InputSource {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -1093,9 +1093,7 @@ mod tests {
         buf.pop(); // strip trailing comma
         buf.push(']');
 
-        let source = InputSource::Stdin {
-            data: Arc::from(buf.into_bytes().into_boxed_slice()),
-        };
+        let source = InputSource::stdin(Bytes::from(buf.into_bytes()));
         let line_source = source.open_line_source().unwrap();
         assert!(line_source.total_bytes() > PRETTY_MAX_BYTES);
 
@@ -1133,9 +1131,7 @@ mod tests {
     /// stdin bytes. Used by the wrap / h-scroll unit tests below — a
     /// minimal fixture so the visual-row math is the only moving part.
     fn plain_mode_from_bytes(bytes: &[u8]) -> ContentMode {
-        let source = InputSource::Stdin {
-            data: Arc::from(bytes.to_vec().into_boxed_slice()),
-        };
+        let source = InputSource::stdin(Bytes::copy_from_slice(bytes));
         let line_source = source.open_line_source().unwrap();
         let tm = Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, ColorMode::Plain));
         ContentMode::new(

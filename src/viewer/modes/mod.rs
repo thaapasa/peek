@@ -125,6 +125,16 @@ pub(crate) fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<
     lines[start..end].to_vec()
 }
 
+/// Selection the active mode hands to `crate::extract::extract` on the
+/// extract key. Modes without a selection return `None`.
+#[derive(Clone, Debug)]
+pub(crate) enum ExtractTarget {
+    /// Archive / ISO entry path.
+    EntryPath(String),
+    /// 1-based animation frame index.
+    FrameIndex(usize),
+}
+
 /// One renderable + interactive view of a file.
 #[allow(dead_code)]
 pub(crate) trait Mode {
@@ -277,5 +287,10 @@ pub(crate) trait Mode {
     /// into `FileInfo.warnings` so InfoMode picks them up. Default empty.
     fn take_warnings(&mut self) -> Vec<String> {
         Vec::new()
+    }
+
+    /// Selection the extract key targets. `None` = no-op for this mode.
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        None
     }
 }

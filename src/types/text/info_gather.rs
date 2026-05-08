@@ -378,12 +378,10 @@ fn classify_indent(tabs: usize, spaces: usize, widths: &[usize; 9]) -> Option<In
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
+    use bytes::Bytes;
 
     fn stdin_source(text: &str) -> InputSource {
-        InputSource::Stdin {
-            data: Arc::from(text.as_bytes().to_vec().into_boxed_slice()),
-        }
+        InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
     fn text_stats(s: &str) -> TextStats {
@@ -485,9 +483,7 @@ mod tests {
     fn utf8_bom_detected() {
         let mut bytes = vec![0xEF, 0xBB, 0xBF];
         bytes.extend_from_slice(b"hello\n");
-        let src = InputSource::Stdin {
-            data: Arc::from(bytes.into_boxed_slice()),
-        };
+        let src = InputSource::stdin(Bytes::from(bytes));
         let stats = gather_text_stats(&src).unwrap();
         assert!(matches!(stats.encoding, Encoding::Utf8Bom));
     }
@@ -495,19 +491,13 @@ mod tests {
     #[test]
     fn invalid_utf8_returns_none() {
         // 0x80 alone is invalid UTF-8 (continuation byte without lead).
-        let bad = vec![0x80, 0x80, 0x80];
-        let src = InputSource::Stdin {
-            data: Arc::from(bad.into_boxed_slice()),
-        };
+        let src = InputSource::stdin(Bytes::from_static(&[0x80, 0x80, 0x80]));
         assert!(gather_text_stats(&src).is_none());
     }
 
     #[test]
     fn truncated_utf8_returns_none() {
-        let truncated = vec![0xe4, 0xbd];
-        let src = InputSource::Stdin {
-            data: Arc::from(truncated.into_boxed_slice()),
-        };
+        let src = InputSource::stdin(Bytes::from_static(&[0xe4, 0xbd]));
         assert!(gather_text_stats(&src).is_none());
     }
 }
