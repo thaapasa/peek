@@ -103,6 +103,41 @@ pub enum FileExtras {
 pub enum DiskImageMeta {
     Iso(IsoVolumeMeta),
     Dmg(DmgMeta),
+    Raw(RawImageMeta),
+}
+
+/// Generic raw disk image — anything that isn't ISO/DMG and lands at
+/// the `.img` / `.bin` / `.dd` extension. The MBR partition table is
+/// the one structure we parse from the front of the file; without it
+/// (or without a recognisable partition layout) the info section
+/// falls back to a generic "raw image" label plus the file size.
+pub struct RawImageMeta {
+    /// MBR partition table contents when the boot sector signature
+    /// (`0x55 0xAA` at offset 510) matches; `None` for files that
+    /// don't carry an MBR (e.g. raw filesystem dumps, GPT-only
+    /// images, or anything else).
+    pub mbr: Option<MbrTable>,
+}
+
+/// MBR (Master Boot Record) partition table — the four 16-byte
+/// entries at offset 446..510 of the boot sector. Extended partition
+/// chains are not followed; an `0x05` / `0x0F` entry surfaces as-is
+/// with the user left to inspect further.
+pub struct MbrTable {
+    pub partitions: Vec<MbrPartition>,
+}
+
+pub struct MbrPartition {
+    pub bootable: bool,
+    /// One-byte partition type code. The renderer maps a few common
+    /// values (FAT, Linux, swap, …) to friendly names; anything else
+    /// shows as the hex code.
+    pub type_code: u8,
+    /// Starting LBA from the partition entry (little-endian u32 at
+    /// offset +8).
+    pub start_lba: u32,
+    /// Sector count from the partition entry (offset +12).
+    pub sectors: u32,
 }
 
 /// ISO 9660 Primary Volume Descriptor metadata (PVD-only — no directory

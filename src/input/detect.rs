@@ -57,6 +57,9 @@ pub enum ArchiveFormat {
     TarXz,
     TarZst,
     SevenZ,
+    /// Unix `ar(1)` archive — used by `.deb` packages (Debian binary
+    /// package layout: `debian-binary`, `control.tar.*`, `data.tar.*`).
+    Ar,
 }
 
 impl ArchiveFormat {
@@ -69,6 +72,7 @@ impl ArchiveFormat {
             Self::TarXz => "tar + xz",
             Self::TarZst => "tar + zstd",
             Self::SevenZ => "7-Zip archive",
+            Self::Ar => "ar archive",
         }
     }
 }
@@ -77,6 +81,11 @@ impl ArchiveFormat {
 pub enum DiskImageFormat {
     Iso,
     Dmg,
+    /// Generic raw disk image (`.img` / `.bin` / `.dd`) that doesn't
+    /// match a recognised filesystem header. Listing isn't supported
+    /// — the info section parses the partition table when one is
+    /// present, otherwise falls back to "raw image".
+    Raw,
 }
 
 impl DiskImageFormat {
@@ -84,6 +93,7 @@ impl DiskImageFormat {
         match self {
             Self::Iso => "ISO 9660 image",
             Self::Dmg => "Apple Disk Image (UDIF)",
+            Self::Raw => "Raw disk image",
         }
     }
 }
@@ -133,8 +143,17 @@ fn detect_file(path: &Path) -> Result<Detected> {
     if let Some(ext) = path.extension().and_then(|e| e.to_str())
         && let Some(fmt) = disk_image_format_from_ext(&ext.to_lowercase())
     {
+        // `.img` is ambiguous: many distributions ship ISO data under
+        // a `.img` extension, while others use it for raw block-level
+        // dumps. Probe the ISO 9660 PVD signature first; treat as ISO
+        // when it matches, otherwise as a generic raw image.
+        let resolved = if matches!(fmt, DiskImageFormat::Raw) {
+            probe_iso_or_raw(path).unwrap_or(DiskImageFormat::Raw)
+        } else {
+            fmt
+        };
         return Ok(Detected {
-            file_type: FileType::DiskImage(fmt),
+            file_type: FileType::DiskImage(resolved),
             magic_mime: None,
         });
     }
@@ -168,6 +187,13 @@ fn detect_file(path: &Path) -> Result<Detected> {
     let mut head = vec![0u8; HEAD_BYTES];
     let n = read_fill(&mut file, &mut head)?;
     head.truncate(n);
+
+    if head.len() >= AR_MAGIC.len() && &head[..AR_MAGIC.len()] == AR_MAGIC {
+        return Ok(Detected {
+            file_type: FileType::Archive(ArchiveFormat::Ar),
+            magic_mime: Some("application/x-archive".to_string()),
+        });
+    }
 
     let magic_mime = infer::get(&head).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
@@ -292,15 +318,38 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     {
         return Some(ArchiveFormat::Zip);
     }
+    if lower.ends_with(".deb") || lower.ends_with(".ar") || lower.ends_with(".a") {
+        return Some(ArchiveFormat::Ar);
+    }
     None
 }
 
-/// Map a single file extension to a disk-image format.
+/// Map a single file extension to a disk-image format. `.img` /
+/// `.bin` / `.dd` map to `Raw` provisionally; the caller probes for
+/// an ISO 9660 PVD before committing to that classification.
 fn disk_image_format_from_ext(ext: &str) -> Option<DiskImageFormat> {
     match ext {
         "iso" => Some(DiskImageFormat::Iso),
         "dmg" => Some(DiskImageFormat::Dmg),
+        "img" | "bin" | "dd" => Some(DiskImageFormat::Raw),
         _ => None,
+    }
+}
+
+/// Read 6 bytes at the ISO 9660 PVD location (offset 32768 + 0..=5)
+/// and check for the `\x01CD001` signature. Returns
+/// `Some(DiskImageFormat::Iso)` on match, `None` otherwise (caller
+/// falls back to `Raw`).
+fn probe_iso_or_raw(path: &Path) -> Option<DiskImageFormat> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = fs::File::open(path).ok()?;
+    file.seek(SeekFrom::Start(32768)).ok()?;
+    let mut buf = [0u8; 6];
+    file.read_exact(&mut buf).ok()?;
+    if buf[0] == 1 && &buf[1..6] == b"CD001" {
+        Some(DiskImageFormat::Iso)
+    } else {
+        None
     }
 }
 
@@ -316,9 +365,20 @@ fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     }
 }
 
+/// 8-byte ar archive magic — `!<arch>\n`. `infer` doesn't recognise
+/// ar; without an explicit check, stdin-piped `.deb` files would
+/// classify as binary.
+const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
+    if data.len() >= AR_MAGIC.len() && &data[..AR_MAGIC.len()] == AR_MAGIC {
+        return Detected {
+            file_type: FileType::Archive(ArchiveFormat::Ar),
+            magic_mime: Some("application/x-archive".to_string()),
+        };
+    }
     let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
         if mime == "image/svg+xml" {

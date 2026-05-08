@@ -3,8 +3,8 @@
 //! pulls the trailing 512-byte UDIF trailer. Multi-GB images stay
 //! cheap because no payload bytes are touched.
 
-use super::{dmg_trailer, iso_pvd};
-use crate::info::{DiskImageMeta, FileExtras};
+use super::{dmg_trailer, iso_pvd, mbr};
+use crate::info::{DiskImageMeta, FileExtras, RawImageMeta};
 use crate::input::InputSource;
 use crate::input::detect::DiskImageFormat;
 
@@ -18,6 +18,23 @@ pub fn gather_extras(source: &InputSource, fmt: DiskImageFormat) -> FileExtras {
     match fmt {
         DiskImageFormat::Iso => gather_iso(source, format_name),
         DiskImageFormat::Dmg => gather_dmg(source, format_name),
+        DiskImageFormat::Raw => gather_raw(source, format_name),
+    }
+}
+
+fn gather_raw(source: &InputSource, format_name: &'static str) -> FileExtras {
+    // Read just one boot sector (512 bytes) — that's enough for an
+    // MBR partition table. Anything bigger would be needed only by
+    // a GPT walker, which isn't implemented here.
+    let mbr = source
+        .open_byte_source()
+        .ok()
+        .and_then(|bs| bs.read_range(0, mbr::BOOT_SECTOR_BYTES).ok())
+        .and_then(|buf| mbr::parse(&buf));
+    FileExtras::DiskImage {
+        format_name,
+        meta: Some(DiskImageMeta::Raw(RawImageMeta { mbr })),
+        error: None,
     }
 }
 

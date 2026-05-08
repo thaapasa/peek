@@ -3,10 +3,11 @@
 //! and a matching arm in `gather_extras`.
 
 use crate::info::{
-    DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta, push_field,
-    push_section_header, thousands_sep,
+    DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta, MbrPartition,
+    RawImageMeta, push_field, push_section_header, thousands_sep,
 };
 use crate::theme::PeekTheme;
+use crate::types::disk_image::mbr;
 
 pub fn render_section(
     lines: &mut Vec<String>,
@@ -27,8 +28,55 @@ pub fn render_section(
     match meta {
         Some(DiskImageMeta::Iso(iso)) => render_iso(lines, iso, theme),
         Some(DiskImageMeta::Dmg(dmg)) => render_dmg(lines, dmg, theme),
+        Some(DiskImageMeta::Raw(raw)) => render_raw(lines, raw, theme),
         None => {}
     }
+}
+
+fn render_raw(lines: &mut Vec<String>, raw: &RawImageMeta, theme: &PeekTheme) {
+    let Some(table) = &raw.mbr else {
+        push_field(
+            lines,
+            "Layout",
+            &theme.paint_value(
+                "no recognised partition table — appears to be a flat filesystem dump",
+            ),
+            theme,
+        );
+        return;
+    };
+    push_field(
+        lines,
+        "Layout",
+        &theme.paint_value(&format!(
+            "MBR ({} partition{})",
+            table.partitions.len(),
+            if table.partitions.len() == 1 { "" } else { "s" }
+        )),
+        theme,
+    );
+    for (i, p) in table.partitions.iter().enumerate() {
+        let label = format!("Part {}", i + 1);
+        push_field(lines, &label, &paint_partition(p, theme), theme);
+    }
+}
+
+fn paint_partition(p: &MbrPartition, theme: &PeekTheme) -> String {
+    // Sectors are 512 bytes per IBM PC convention. Real disks may
+    // use 4 KiB sectors but the MBR table itself is rooted in the
+    // 512-byte assumption — honour that here.
+    let bytes = (p.sectors as u64) * 512;
+    let kind = mbr::type_label(p.type_code)
+        .map(String::from)
+        .unwrap_or_else(|| format!("0x{:02X}", p.type_code));
+    let boot = if p.bootable { " *" } else { "" };
+    format!(
+        "{}{boot}  start LBA {}  ({} sectors, {} bytes)",
+        theme.paint_value(&kind),
+        thousands_sep(p.start_lba as u64),
+        thousands_sep(p.sectors as u64),
+        thousands_sep(bytes),
+    )
 }
 
 fn render_iso(lines: &mut Vec<String>, iso: &IsoVolumeMeta, theme: &PeekTheme) {

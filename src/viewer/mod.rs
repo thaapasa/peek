@@ -331,7 +331,8 @@ impl Registry {
                                 warnings,
                             )));
                         }
-                        crate::input::detect::DiskImageFormat::Dmg => {
+                        crate::input::detect::DiskImageFormat::Dmg
+                        | crate::input::detect::DiskImageFormat::Raw => {
                             // No content / TOC view — push Info as the
                             // primary so disk-image metadata is what
                             // the user lands on. The universal block

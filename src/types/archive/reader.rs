@@ -44,7 +44,7 @@ pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<E
 }
 
 fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntry>> {
-    use super::backends::{sevenz, tar, zip};
+    use super::backends::{ar, sevenz, tar, zip};
     let reader = open_seekable(source)?;
     match format {
         ArchiveFormat::Zip => zip::list(reader),
@@ -54,6 +54,7 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
         ArchiveFormat::TarXz => tar::list_xz(reader),
         ArchiveFormat::TarZst => tar::list_zst(reader),
         ArchiveFormat::SevenZ => sevenz::list(reader),
+        ArchiveFormat::Ar => ar::list(reader),
     }
 }
 
@@ -125,6 +126,20 @@ mod tests {
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn list_ar_finds_deb_members() {
+        // hello.deb is a 3-member ar archive: debian-binary,
+        // control.tar.gz, data.tar.gz.
+        let entries = list_entries(&fixture("hello.deb"), ArchiveFormat::Ar).unwrap();
+        let stats = Stats::from_root(ArchiveFormat::Ar.label(), &entries);
+        assert_eq!(stats.file_count, 3);
+        assert_eq!(stats.dir_count, 0);
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert!(names.contains(&"debian-binary"));
+        assert!(names.contains(&"control.tar.gz"));
+        assert!(names.contains(&"data.tar.gz"));
     }
 
     #[test]
