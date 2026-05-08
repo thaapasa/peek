@@ -112,7 +112,7 @@ fn main() -> Result<()> {
             theme_name: viewers.theme_name(),
             peek_theme: viewers.peek_theme(),
             render_opts,
-            term_cols: pipe_term_cols(),
+            term_cols: pipe_term_cols(&args),
             term_rows: usize::MAX,
         };
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);
@@ -136,11 +136,13 @@ fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
     extract::write::Output::resolve(None, suggested)
 }
 
-/// Terminal width to use for non-interactive (pipe) rendering. Honors
-/// `$COLUMNS` if set and at least 24; otherwise falls back to 80. Hex
-/// dumps and image rendering use this to size their output sensibly
-/// even when stdout isn't a TTY.
-fn pipe_term_cols() -> usize {
+/// Terminal width for non-interactive (pipe) rendering. `--width N`
+/// wins (user explicitly asked for that output width); otherwise
+/// `$COLUMNS` if set and ≥ 24; else 80.
+fn pipe_term_cols(args: &Args) -> usize {
+    if args.width > 0 {
+        return args.width as usize;
+    }
     std::env::var("COLUMNS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
