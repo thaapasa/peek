@@ -253,12 +253,13 @@ impl ListingMode {
         row: &TreeRow,
         theme: &PeekTheme,
         mtime_text: Option<(&str, usize)>,
+        selected: bool,
     ) -> String {
         let perms = format_perms(row.mode, row.is_dir);
         let size = format_size(row.size, row.is_dir);
         let painted_perms = paint_perms(&perms, theme);
         let painted_size = paint_size(&size, row.size, row.is_dir, theme);
-        let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme);
+        let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme, selected);
         match mtime_text {
             Some((text, width)) => {
                 let padded = format!("{text:<width$}");
@@ -303,8 +304,9 @@ impl ListingMode {
                 } else {
                     None
                 };
-                let line = self.paint_row(row, theme, mtime_text);
-                if Some(*row_idx) == self.selected_idx {
+                let selected = Some(*row_idx) == self.selected_idx;
+                let line = self.paint_row(row, theme, mtime_text, selected);
+                if selected {
                     paint_selected_marker(&line, theme)
                 } else {
                     format!("  {line}")
@@ -388,7 +390,7 @@ impl Mode for ListingMode {
             } else {
                 None
             };
-            out.write_line(&self.paint_row(row, ctx.peek_theme, mtime_text))?;
+            out.write_line(&self.paint_row(row, ctx.peek_theme, mtime_text, false))?;
         }
         Ok(())
     }
@@ -682,20 +684,39 @@ fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
 }
 
 /// Tree prefix in muted, leaf name in foreground (or accent for dirs),
-/// with a trailing `/` for directory entries.
-fn paint_tree_path(prefix: &str, leaf: &str, is_dir: bool, theme: &PeekTheme) -> String {
+/// with a trailing `/` for directory entries. When `selected`, the
+/// leaf gets a `selection`-coloured background — a stronger cue than
+/// the arrow alone for which row the next extract action will target.
+fn paint_tree_path(
+    prefix: &str,
+    leaf: &str,
+    is_dir: bool,
+    theme: &PeekTheme,
+    selected: bool,
+) -> String {
     let leaf_color = if is_dir {
         theme.accent
     } else {
         theme.foreground
     };
     let trailing = if is_dir { "/" } else { "" };
-    format!(
-        "{}{}{}",
-        theme.paint(prefix, theme.muted),
-        theme.paint(leaf, leaf_color),
-        theme.paint(trailing, theme.muted),
-    )
+    let painted_leaf = if selected {
+        // Build the leaf+trailing as one bg-painted run so the
+        // highlight covers the dir slash too without a gap.
+        let mut buf = String::new();
+        theme.paint_into(&mut buf, leaf, leaf_color);
+        if !trailing.is_empty() {
+            theme.paint_into(&mut buf, trailing, theme.muted);
+        }
+        theme.paint_bg(&buf, theme.selection)
+    } else {
+        let mut buf = theme.paint(leaf, leaf_color);
+        if !trailing.is_empty() {
+            buf.push_str(&theme.paint(trailing, theme.muted));
+        }
+        buf
+    };
+    format!("{}{painted_leaf}", theme.paint(prefix, theme.muted))
 }
 
 #[cfg(test)]
