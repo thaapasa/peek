@@ -309,8 +309,7 @@ impl Mode for SvgAnimationMode {
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        // 1-based to match the user-visible "Frame N/M" status counter
-        // and the CLI flag (`--extract 5` saves frame 5).
+        // 1-based to match the visible "Frame N/M" counter.
         Some(ExtractTarget::FrameIndex(self.current + 1))
     }
 }

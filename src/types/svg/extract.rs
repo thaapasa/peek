@@ -1,12 +1,8 @@
-//! Extract a single frame out of a CSS-keyframes SVG animation as a
-//! standalone PNG, rasterised at the SVG's native viewport size.
-//!
-//! Static (non-animated) SVGs return `Unsupported` — the file itself
-//! is already standalone, peek the source directly. Animated SVGs are
-//! sampled at frame index `key` (1-based to match the user-visible
-//! frame counter), the resulting per-frame SVG document is rasterised
-//! via resvg at the SVG's intrinsic pixel size, then PNG-encoded into
-//! a `Memory`-backed [`InputSource`].
+//! Extract a CSS-keyframes SVG animation frame as a PNG. Sample frame
+//! N (1-based) via the existing svg_anim parser, rasterise via resvg
+//! at the SVG's intrinsic size (sub-floor sizes scale up to keep the
+//! output usable), PNG-encode into a Memory-backed [`InputSource`].
+//! Non-animated SVGs return `Unsupported`.
 
 use std::io::Cursor;
 
@@ -59,20 +55,13 @@ pub fn extract(
     })
 }
 
-/// Minimum pixel size on the longest axis when rasterising an SVG
-/// extract without a user-supplied override. Vector SVGs commonly
-/// declare a tiny intrinsic size (e.g. `width="24"`) on the
-/// assumption that CSS or the consuming app will scale them up —
-/// rasterising at the literal intrinsic produces a 24×24 PNG, which
-/// is useless as an extract result. Anything below this floor gets
-/// scaled up while preserving the aspect ratio; SVGs that already
-/// declare a usable intrinsic render at that size.
+/// Floor (longest axis, px) applied when no override is given. SVGs
+/// often declare tiny intrinsic sizes (`width="24"`) expecting CSS to
+/// scale them; literal-intrinsic raster would make extracts useless.
 const SVG_EXTRACT_MIN_DIM: u32 = 512;
 
-/// Resolve the rasterisation target size from an SVG's intrinsic
-/// dimensions and an optional user override. The override pins the
-/// longest axis to the requested pixel count; without one we fall
-/// back to the floor-based default.
+/// Override pins the longest axis; otherwise raster at intrinsic, or
+/// at the floor when intrinsic is below it.
 fn target_dimensions(intrinsic_w: u32, intrinsic_h: u32, size_override: Option<u32>) -> (u32, u32) {
     let w = intrinsic_w.max(1);
     let h = intrinsic_h.max(1);

@@ -1,16 +1,10 @@
 //! Extract a single entry out of an archive (zip / tar / 7z) as an
-//! in-memory [`InputSource`].
+//! in-memory [`InputSource`]. The entry is decompressed into a
+//! [`Bytes`] buffer capped at [`MAX_EXTRACT_BYTES`] — bigger entries
+//! error out rather than triggering OOM.
 //!
-//! Phase 1: every variant decompresses the entry's full bytes into
-//! memory, capped at [`MAX_EXTRACT_BYTES`] to keep hostile archives
-//! from triggering OOM. Phase 2 will swap stored zip / uncompressed tar
-//! to a `FileRange` view (zero buffering) and spool larger compressed
-//! entries to a tempfile.
-//!
-//! Path safety lives in the shared `extract::sanitize_entry_path`: the
-//! key passed by the caller is sanitized before it is matched against
-//! any TOC entry, and the entry's own stored path is also sanitized
-//! before being adopted as the suggested output name.
+//! Path safety: keys go through `extract::sanitize_entry_path` before
+//! any TOC lookup so traversal (`..`) is rejected.
 
 use std::io::Read;
 use std::path::Path;
@@ -22,10 +16,9 @@ use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::types::archive::reader::open_seekable;
 
-/// Cap on a single extracted entry's size. Phase 1 holds extracts in
-/// memory, so a runaway entry would force the process to allocate
-/// gigabytes. 256 MB is well past any common-sense need; bigger entries
-/// get a clean error rather than an OOM.
+/// Hard cap on a single extracted entry. Extracts land in memory, so a
+/// runaway entry would force a multi-GB allocation; anything past this
+/// errors out cleanly.
 const MAX_EXTRACT_BYTES: u64 = 256 * 1024 * 1024;
 
 pub fn extract(

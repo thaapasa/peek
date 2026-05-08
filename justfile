@@ -3,30 +3,35 @@ install_dir := env_var_or_default("PEEK_INSTALL_DIR", env_var("HOME") / ".local/
 default:
     @just --list
 
+# Format codebase
 format:
     cargo +nightly fmt
 
+# Check formatting, cargo check + clippy
 lint:
     cargo +nightly fmt -- --check
     cargo check --all-targets
     cargo clippy --all-targets -- -D warnings
 
+# Run all tests
 test:
     cargo test
 
+# Install peek locally
 install:
     cargo build --release
-    mkdir -p "{{install_dir}}"
-    install -m 755 target/release/peek "{{install_dir}}/peek"
-    @echo "installed peek to {{install_dir}}/peek"
+    mkdir -p "{{ install_dir }}"
+    install -m 755 target/release/peek "{{ install_dir }}/peek"
+    @echo "installed peek to {{ install_dir }}/peek"
 
+# Bump project version, kind = patch | minor | major
 bump kind="patch":
     #!/usr/bin/env bash
     set -euo pipefail
-    case "{{kind}}" in patch|minor|major) ;; *) echo "kind must be patch|minor|major" >&2; exit 1 ;; esac
+    case "{{ kind }}" in patch|minor|major) ;; *) echo "kind must be patch|minor|major" >&2; exit 1 ;; esac
     cur=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
     IFS=. read -r maj min pat <<<"$cur"
-    case "{{kind}}" in
+    case "{{ kind }}" in
       major) maj=$((maj+1)); min=0; pat=0 ;;
       minor) min=$((min+1)); pat=0 ;;
       patch) pat=$((pat+1)) ;;

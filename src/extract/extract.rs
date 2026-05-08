@@ -9,31 +9,22 @@ use std::path::{Component, Path, PathBuf};
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 
-/// Result of a successful extract — a fresh `InputSource` plus a
-/// human-friendly default filename. The caller decides whether to use
-/// the suggested name or override with a user-provided path.
+/// Successful extract: fresh `InputSource` + suggested filename.
 #[derive(Debug)]
 pub struct Extracted {
     pub suggested_name: String,
     pub source: InputSource,
 }
 
-/// Per-extract knobs. Fields are extractor-specific — most extractors
-/// ignore most options. Defaults always do something sensible so the
-/// viewer-side path can pass `Default::default()` without surprises.
+/// Per-extract knobs. Extractor-specific; defaults are always sensible.
 #[derive(Debug, Default, Clone)]
 pub struct ExtractOptions {
-    /// Override the SVG rasterisation size (longest axis, in pixels).
-    /// `None` = use the SVG's intrinsic size, scaled up to the
-    /// extract floor when it would otherwise be tiny. CLI exposes
-    /// this via `--extract-size`.
+    /// Override SVG raster size (longest axis, px). CLI: `--extract-size`.
     pub svg_size: Option<u32>,
 }
 
-/// Failure modes for extraction. `Unsupported` means the container type
-/// has no extractor at all (text, binary, plain image without frames);
-/// `NotFound` / `InvalidKey` mean the container could be opened but the
-/// requested key didn't resolve.
+/// `Unsupported` = container has no extractor; `NotFound` / `InvalidKey`
+/// = container opened but the key didn't resolve.
 #[derive(Debug)]
 pub enum ExtractError {
     NotFound(String),
@@ -71,8 +62,7 @@ impl From<anyhow::Error> for ExtractError {
     }
 }
 
-/// Top-level dispatch: pick the right per-type extractor based on what
-/// `input::detect` decided the source is. Containers without an
+/// Dispatch to the per-type extractor. Containers without an
 /// extractor return `Unsupported`.
 pub fn extract(
     source: &InputSource,
@@ -93,12 +83,8 @@ pub fn extract(
     }
 }
 
-/// Validate an entry path coming from an untrusted archive/ISO TOC.
-/// Reject absolute paths and any path traversal — the result must stay
-/// rooted under an implicit extraction root.
-///
-/// Used by the archive and ISO extract impls; lives here so the safety
-/// rules apply uniformly across container types.
+/// Reject traversal / absolute paths in an untrusted archive/ISO key.
+/// Shared across container types.
 pub(crate) fn sanitize_entry_path(raw: &str) -> Result<PathBuf, ExtractError> {
     let trimmed = raw.trim_start_matches('/');
     let p = Path::new(trimmed);
@@ -109,15 +95,8 @@ pub(crate) fn sanitize_entry_path(raw: &str) -> Result<PathBuf, ExtractError> {
     for c in p.components() {
         match c {
             Component::Normal(seg) => out.push(seg),
-            // ParentDir / Prefix / RootDir / CurDir all rejected: a
-            // sanitized path may only contain plain segments.
-            Component::ParentDir
-            | Component::Prefix(_)
-            | Component::RootDir
-            | Component::CurDir => {
-                if matches!(c, Component::CurDir) {
-                    continue;
-                }
+            Component::CurDir => continue,
+            Component::ParentDir | Component::Prefix(_) | Component::RootDir => {
                 return Err(ExtractError::UnsafePath(raw.to_string()));
             }
         }

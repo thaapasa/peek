@@ -1,25 +1,18 @@
-//! Extract a single frame out of an animated image (GIF / WebP) as a
-//! standalone PNG-encoded [`InputSource`].
-//!
-//! Static images (no frames, or only one) return `Unsupported` — the
-//! file itself is already standalone, so there's nothing to extract.
-//! The caller should peek the source directly.
-//!
-//! SVG keyframe animations are not yet supported here; that path lives
-//! in `svg_anim` and needs a per-frame rasterizer hookup. Phase 2.
+//! Extract a single frame out of an animated GIF / WebP as a
+//! PNG-encoded [`InputSource`]. Static images (no frames or only one)
+//! return `Unsupported` — peek the file directly. Animated SVGs are
+//! handled by `types::svg::extract`.
 
 use std::io::Cursor;
 
 use bytes::Bytes;
-use image::{ImageEncoder, ImageFormat, codecs::png::PngEncoder};
+use image::{ImageEncoder, codecs::png::PngEncoder};
 
 use crate::extract::{ExtractError, Extracted};
 use crate::input::InputSource;
 use crate::types::image::pipeline::animate::{AnimFrame, decode_anim_frames};
 
-/// Extract frame `key` (1-based) from `source`. Returns a Memory-backed
-/// `InputSource` carrying PNG-encoded RGBA bytes — feed it back through
-/// peek to view, or write it via `extract::write`.
+/// Extract frame `key` (1-based) as a Memory-backed PNG `InputSource`.
 pub fn extract(
     source: &InputSource,
     key: &str,
@@ -65,7 +58,6 @@ fn encode_frame_png(frame: &AnimFrame) -> Result<Bytes, ExtractError> {
     let rgba = frame.image.to_rgba8();
     let (w, h) = rgba.dimensions();
     let mut buf = Vec::with_capacity((w as usize) * (h as usize) * 4);
-    let _ = ImageFormat::Png; // ensure image::ImageFormat is in scope for clarity
     PngEncoder::new(Cursor::new(&mut buf))
         .write_image(rgba.as_raw(), w, h, image::ExtendedColorType::Rgba8)
         .map_err(|e| ExtractError::Other(anyhow::Error::from(e)))?;

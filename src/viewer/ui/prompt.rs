@@ -1,38 +1,25 @@
-//! Modal text-input prompt — a transient bar that takes over the
-//! status line while the user types. Used by the extract action to
-//! confirm or override the suggested output filename.
-//!
-//! Not a `Mode`: the prompt doesn't render its own viewport (the
-//! underlying mode keeps showing through), it just consumes raw key
-//! events until the user presses Enter or Esc. Keeping it out of the
-//! mode stack means the existing scroll / cycle / cache plumbing stays
-//! untouched — the only viewer-state changes are an optional `Prompt`
-//! slot plus a small key-dispatch detour.
+//! Modal text input — overlays the status line, consumes raw keys
+//! until Enter / Esc. Not a `Mode`: keeps the underlying mode visible
+//! and avoids touching the existing mode-stack / scroll / cache
+//! plumbing.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::theme::PeekTheme;
 
-/// One in-progress text prompt. Owns the typed input, a UTF-8 cursor
-/// byte position, and the title shown to the left of the field.
 pub(crate) struct Prompt {
     title: String,
     input: String,
-    /// Cursor as a byte offset into `input`. Always at a char boundary
-    /// (movement helpers step by char). Drawn after `cursor` bytes; the
-    /// rendered caret position is the column count to that offset.
+    /// Byte offset into `input`, always at a UTF-8 char boundary.
     cursor: usize,
 }
 
-/// What the event loop should do after handing a key to the prompt.
 pub(crate) enum PromptOutcome {
-    /// Key consumed, prompt still open — caller should redraw the
-    /// status line.
+    /// Prompt still open; redraw status line.
     Continue,
-    /// User pressed Enter; the contained string is the final input
-    /// (trimmed of leading/trailing whitespace).
+    /// Enter pressed; trimmed input.
     Confirmed(String),
-    /// User pressed Esc / Ctrl-C; prompt closes with no action.
+    /// Esc / Ctrl-C; close without action.
     Cancelled,
 }
 
@@ -52,8 +39,6 @@ impl Prompt {
         &self.input
     }
 
-    /// Apply a single key event. Returns the outcome the event loop
-    /// should react to.
     pub fn handle_key(&mut self, key: KeyEvent) -> PromptOutcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
@@ -95,14 +80,13 @@ impl Prompt {
                 self.cursor = self.input.len();
                 PromptOutcome::Continue
             }
+            // Readline kill keys: ^U cuts to start, ^K cuts to end.
             KeyCode::Char('u') if ctrl => {
-                // Kill from start of line to cursor — same as readline.
                 self.input.drain(..self.cursor);
                 self.cursor = 0;
                 PromptOutcome::Continue
             }
             KeyCode::Char('k') if ctrl => {
-                // Kill from cursor to end.
                 self.input.truncate(self.cursor);
                 PromptOutcome::Continue
             }
@@ -144,11 +128,8 @@ impl Prompt {
         self.cursor = next_char_boundary(&self.input, self.cursor);
     }
 
-    /// Render the prompt as a single status-line replacement string.
-    /// `available_cols` is the visible width of the status row; the
-    /// rendered text is truncated at that width. The caret is shown
-    /// inline as an underscore at the cursor position — keeps the
-    /// rendering self-contained without needing a real cursor move.
+    /// Render as a status-line replacement. Caret is drawn inline
+    /// (no real cursor move needed).
     pub fn render_status_line(&self, theme: &PeekTheme) -> String {
         let title = format!("{}: ", self.title);
         let painted_title = theme.paint(&title, theme.label);

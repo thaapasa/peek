@@ -125,16 +125,13 @@ pub(crate) fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<
     lines[start..end].to_vec()
 }
 
-/// What kind of inner item the active mode wants to hand off to the
-/// extract pipeline when the user presses the extract key. Modes that
-/// don't expose a selection return `None` and the action is a no-op.
+/// Selection the active mode hands to `crate::extract::extract` on the
+/// extract key. Modes without a selection return `None`.
 #[derive(Clone, Debug)]
 pub(crate) enum ExtractTarget {
-    /// An archive / ISO entry path inside the container — handed to
-    /// `crate::extract::extract` as the key.
+    /// Archive / ISO entry path.
     EntryPath(String),
-    /// 1-based animation frame index. Re-encoded as PNG by the image
-    /// extractor.
+    /// 1-based animation frame index.
     FrameIndex(usize),
 }
 
@@ -292,9 +289,7 @@ pub(crate) trait Mode {
         Vec::new()
     }
 
-    /// What to extract when the user presses the extract key. `None`
-    /// means this mode has no extractable selection (text views,
-    /// info, help, …) and the action is silently ignored.
+    /// Selection the extract key targets. `None` = no-op for this mode.
     fn extract_target(&self) -> Option<ExtractTarget> {
         None
     }

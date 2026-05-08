@@ -87,20 +87,16 @@ pub(crate) struct ViewerState<'a> {
     file_info: FileInfo,
     render_opts: RenderOptions,
 
-    /// Modal text-input prompt overlay. When `Some`, raw key events go
-    /// to the prompt instead of the mode-action dispatch and the
-    /// status line is replaced by the prompt's render. The paired
-    /// `pending_extract` carries the work that should run when the
-    /// prompt confirms — splitting the two keeps the prompt itself a
-    /// pure text-input widget, oblivious to what its result is for.
+    /// Modal prompt overlay. While `Some`, raw key events go to the
+    /// prompt and the status line shows its render. Paired
+    /// `pending_extract` is the work to run on confirm — keeps the
+    /// Prompt widget oblivious to its purpose.
     prompt: Option<Prompt>,
     pending_extract: Option<Extracted>,
 
-    /// Most recent transient status message (e.g. "wrote /tmp/foo").
-    /// Rendered as a status segment for one redraw cycle, then
-    /// cleared by the event loop. Lives here rather than in any
-    /// individual mode so cross-mode actions (extract) can flash a
-    /// confirmation regardless of what's currently active.
+    /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
+    /// one redraw. Lives here so cross-mode actions can flash from
+    /// any active mode.
     flash: Option<String>,
 }
 
@@ -186,37 +182,30 @@ impl<'a> ViewerState<'a> {
         keys::dispatch(key, GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
     }
 
-    /// Whether a modal prompt is currently consuming keystrokes. The
-    /// event loop bypasses Action dispatch while this is true and
-    /// hands raw `KeyEvent`s to `handle_prompt_key`.
+    /// True while the modal prompt is consuming keys. Event loop
+    /// bypasses Action dispatch and routes raw keys to
+    /// `handle_prompt_key`.
     pub(crate) fn prompt_active(&self) -> bool {
         self.prompt.is_some()
     }
 
-    /// Active prompt (read-only) — used by the status-line renderer.
     pub(crate) fn active_prompt(&self) -> Option<&Prompt> {
         self.prompt.as_ref()
     }
 
-    /// Drain a one-shot status flash. Returns the message and clears
-    /// the slot so the next redraw shows the regular status line.
+    /// Drain the one-shot status flash.
     pub(crate) fn take_flash(&mut self) -> Option<String> {
         self.flash.take()
     }
 
-    /// Begin a modal prompt that, on Enter, writes the extract result
-    /// to the typed path. Esc / Ctrl-C drops both the prompt and the
-    /// extract without writing anything.
+    /// Open the save-to prompt; Enter writes `extracted` to the typed
+    /// path, Esc drops both without writing.
     pub(crate) fn begin_extract_prompt(&mut self, extracted: Extracted) {
         let prefill = extracted.suggested_name.clone();
         self.pending_extract = Some(extracted);
         self.prompt = Some(Prompt::new("Save to", prefill));
     }
 
-    /// Hand a raw key event to the active prompt. Called by the event
-    /// loop only when `prompt_active()` is true. Returns whether the
-    /// caller should redraw — always `true` while a prompt is open
-    /// because either the input changed or the prompt closed.
     pub(crate) fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
         let Some(prompt) = self.prompt.as_mut() else {
             return Ok(false);
@@ -383,11 +372,8 @@ impl<'a> ViewerState<'a> {
         })
     }
 
-    /// Run the extract pipeline against whatever the active mode says
-    /// it has selected (an entry path or an animation frame index),
-    /// then open a save-to prompt with the suggested filename. Failures
-    /// (no selection, container with no extractor, malformed key)
-    /// surface as a status flash rather than killing the viewer.
+    /// Run extract against the active mode's selection, then open the
+    /// save-to prompt. Failures flash on the status line.
     fn start_extract(&mut self) {
         let Some(target) = self.modes[self.active].extract_target() else {
             self.flash = Some("nothing selected to extract".to_string());

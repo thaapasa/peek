@@ -36,11 +36,10 @@ fn main() -> Result<()> {
     let mut source = input::stdin::build_source(&args)?;
     let mut detected = input::detect::detect(&source)?;
 
-    // --extract: pull an inner item out of a container. By default the
-    // bytes are saved to disk (or streamed to stdout when stdout is a
-    // pipe / `-o -` is given). With `--print` or `--info` we instead
-    // replace the active source with the extracted one and let the rest
-    // of the pipeline render it — recursive peek.
+    // --extract: pull an inner item out of a container. With `--print`
+    // or `--info`, swap source for the extracted one and fall through
+    // to the regular pipeline (recursive peek). Otherwise save it to
+    // disk or stream to stdout.
     if let Some(key) = args.extract.as_deref() {
         let opts = extract::ExtractOptions {
             svg_size: args.extract_size,
@@ -126,9 +125,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Decide where extracted bytes should land when `--print` isn't set:
-/// honor an explicit `-o`, otherwise stream to stdout when it's a pipe,
-/// otherwise write to the extractor's suggested filename.
+/// `-o` wins; piped stdout → Stdout; else suggested filename in cwd.
 fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
     if let Some(path) = args.output.as_deref() {
         return extract::write::Output::resolve(Some(path), suggested);

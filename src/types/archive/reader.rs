@@ -29,11 +29,8 @@ pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
         }
         InputSource::Memory { bytes, .. } => Ok(Box::new(Cursor::new(bytes.clone()))),
         InputSource::FileRange { .. } => {
-            // Phase 1: an archive over a range view (e.g. an archive
-            // embedded in an ISO entry, encountered via recursive peek)
-            // reads its bytes eagerly into memory. Phase 2 can replace
-            // this with a Read+Seek adapter that translates offsets
-            // lazily over the backing file.
+            // Archive over a range view (e.g. recursive peek into an
+            // archive embedded in an ISO entry): read bytes eagerly.
             let buf = source.read_bytes()?;
             Ok(Box::new(Cursor::new(buf)))
         }

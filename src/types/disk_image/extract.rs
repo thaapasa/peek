@@ -1,12 +1,7 @@
-//! Extract a single ISO 9660 entry as a standalone [`InputSource`].
-//!
-//! For file-backed ISOs we map the entry directly onto the underlying
-//! file via `InputSource::FileRange` — no decompression, no buffering,
-//! no copy. Stdin-piped ISOs already have the full bytes in memory, so
-//! the entry is exposed via `Bytes::slice` (also zero-copy).
-//!
-//! DMG is intentionally unsupported: the UDIF format chunks payload
-//! into compressed blocks that would need a separate decoder.
+//! Extract a single ISO 9660 entry. File-backed ISOs map the entry to
+//! a zero-copy `InputSource::FileRange`; stdin-piped ISOs use
+//! `Bytes::slice` over the in-memory buffer (also zero-copy). DMG is
+//! unsupported — UDIF block decompression is a separate decoder.
 
 use std::path::Path;
 
@@ -52,12 +47,9 @@ fn build_extracted_source(
             InputSource::file_range(path.clone(), offset, len, suggested_name.to_string())
         }
         InputSource::Memory { bytes, .. } => {
-            // Stdin-piped or already-extracted ISO: zero-copy slice over
-            // the existing Bytes buffer.
             let start = offset as usize;
             let end = (start + len as usize).min(bytes.len());
-            let sliced = bytes.slice(start..end);
-            InputSource::memory(sliced, suggested_name.to_string())
+            InputSource::memory(bytes.slice(start..end), suggested_name.to_string())
         }
         InputSource::FileRange {
             base,
@@ -65,8 +57,8 @@ fn build_extracted_source(
             len: base_len,
             ..
         } => {
-            // Recursive case: the ISO is itself a range inside another
-            // file. Collapse offsets so we don't nest ranges.
+            // Recursive: ISO inside another file's range. Collapse to
+            // a single range — never nest.
             let abs_off = base_off.saturating_add(offset);
             let max = base_off.saturating_add(*base_len);
             let clamped_len = len.min(max.saturating_sub(abs_off));

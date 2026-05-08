@@ -85,10 +85,9 @@ fn event_loop(
         while let Some(ev) = event_opt {
             match ev {
                 Event::Key(key) => {
-                    // Modal prompt overlay: keys are typed into the
-                    // input field, not dispatched as Actions. Bypasses
-                    // the action coalescing too — typing the same
-                    // character twice in a row is meaningful here.
+                    // Modal prompt: keys go straight to the input,
+                    // skipping Action dispatch and coalescing (the
+                    // same char twice is meaningful while typing).
                     if state.prompt_active() {
                         if state.handle_prompt_key(key)? {
                             needs_redraw = true;
@@ -154,10 +153,8 @@ fn dispatch_action(state: &mut ViewerState, action: Action) -> Result<ActionOutc
 fn redraw(stdout: &mut io::Stdout, state: &mut ViewerState, name: &str) -> Result<()> {
     state.ensure_active_rendered()?;
     let status = if let Some(prompt) = state.active_prompt() {
-        // Prompt active: replace the regular status segments with the
-        // input field. Keep the same selection-coloured background so
-        // it visually matches a status line, just with different
-        // content.
+        // Reuse the selection-coloured status background so the
+        // prompt visually slots in.
         let theme = &state.peek_theme;
         theme.paint_bg(&prompt.render_status_line(theme), theme.selection)
     } else {

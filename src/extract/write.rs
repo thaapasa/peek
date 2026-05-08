@@ -1,8 +1,5 @@
-//! Writing an [`Extracted`] item to disk or stdout.
-//!
-//! Sits at the read→write boundary: the rest of `extract` deals only in
-//! `InputSource`s, and this module is the only place that creates new
-//! files or opens stdout for binary output.
+//! Read→write boundary for extract: the only place that opens new
+//! files or writes raw bytes to stdout.
 
 use std::fs;
 use std::io::{self, Write};
@@ -12,20 +9,17 @@ use anyhow::{Context, Result};
 
 use super::Extracted;
 
-/// Where the extracted bytes should land. `Stdout` writes raw bytes to
-/// the process stdout (no formatting, no syntax highlighting — that's
-/// the rendered-print path's job). `Path` writes to a specific file,
-/// creating any missing parent directories.
+/// Where extracted bytes land. `Stdout` writes raw bytes (no
+/// rendering — that's the print path). `Path` creates parent dirs as
+/// needed.
 pub enum Output {
     Stdout,
     Path(PathBuf),
 }
 
 impl Output {
-    /// Resolve an `--output` argument plus the extract's suggested name
-    /// into a destination. `--output` of `-` means stdout; an explicit
-    /// path wins over the suggested name; otherwise the suggested name
-    /// becomes the relative output path in the current directory.
+    /// `-` → stdout; explicit path → file at that path; `None` →
+    /// suggested name in cwd.
     pub fn resolve(user_path: Option<&Path>, suggested_name: &str) -> Self {
         match user_path {
             Some(p) if p == Path::new("-") => Output::Stdout,
@@ -35,9 +29,8 @@ impl Output {
     }
 }
 
-/// Stream the extracted source to `output`. Reads in 64 KB chunks so
-/// large extracts (e.g. an ISO entry) don't get fully buffered in
-/// memory before writing.
+/// Stream the extracted source in 64 KB chunks so large extracts
+/// (e.g. an ISO entry) don't fully buffer before writing.
 pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf> {
     const CHUNK: usize = 64 * 1024;
     let bs = extracted.source.open_byte_source()?;

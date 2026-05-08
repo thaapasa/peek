@@ -41,12 +41,8 @@ pub struct ListingMode {
     /// automatically when the top row has no parent (i.e. scroll is at
     /// a top-level entry) or when there's no scroll at all.
     sticky_enabled: bool,
-    /// Index into `rows` of the currently selected file row, or `None`
-    /// when the listing has no files at all. Up/Down move this; PgUp/Dn
-    /// page-scroll and snap selection to the first file in the new view.
-    /// Top/End jump to the first / last file. The selection drives both
-    /// the highlighted render and which entry the extract action
-    /// targets.
+    /// Selected file row index (or `None` for empty listings). Drives
+    /// the highlight and the extract action target.
     selected_idx: Option<usize>,
 }
 
@@ -67,9 +63,8 @@ struct TreeRow {
     /// `ListingMode::rows`, or `None` for top-level entries. Used to
     /// build the sticky breadcrumb chain on scroll.
     parent_row: Option<usize>,
-    /// Full slash-joined path inside the container for file rows
-    /// (`"sub/deeper/deep.txt"`); `None` for directory rows. Drives the
-    /// extract action — this is the key handed to `extract::extract`.
+    /// Slash-joined inner path for file rows; `None` for directories.
+    /// Used as the extract key.
     inner_path: Option<String>,
 }
 
@@ -97,23 +92,18 @@ impl ListingMode {
         }
     }
 
-    /// Inner-container path of the currently selected file, or `None`
-    /// when the listing holds no files. Surfaced via `extract_target`
-    /// so the viewer-level extract dispatch can pull the path out.
+    /// Inner path of the selected file, surfaced via `extract_target`.
     pub fn selected_inner_path(&self) -> Option<&str> {
         self.selected_idx
             .and_then(|i| self.rows.get(i).and_then(|r| r.inner_path.as_deref()))
     }
 
-    /// Total file count (excludes directories). Used by the status
-    /// segment to show "selected n / files m".
+    /// File rows only, no directories.
     fn file_count(&self) -> usize {
         self.rows.iter().filter(|r| r.inner_path.is_some()).count()
     }
 
-    /// Position of the selected row among files only (1-based). `None`
-    /// when nothing is selected. Lets the status line show "3 / 14"
-    /// over the file count rather than the row count.
+    /// 1-based position of the selection among file rows.
     fn selected_file_pos(&self) -> Option<usize> {
         let sel = self.selected_idx?;
         let mut pos = 0usize;
@@ -128,9 +118,8 @@ impl ListingMode {
         None
     }
 
-    /// Find the nearest file row in the given direction starting from
-    /// `from` (exclusive). Returns the original `from` when no file row
-    /// exists in that direction — keeps selection sticky at the ends.
+    /// Nearest file row in the given direction (exclusive of `from`).
+    /// Returns `None` at the ends so selection stays put.
     fn next_file_row(&self, from: usize, forward: bool) -> Option<usize> {
         let total = self.rows.len();
         if total == 0 {
@@ -151,18 +140,14 @@ impl ListingMode {
         self.rows.iter().rposition(|r| r.inner_path.is_some())
     }
 
-    /// First file row whose render position is at or after `top_index`
-    /// — used after a page-scroll so the selection lands on what the
-    /// user just scrolled into view.
+    /// First file row at or after `top_index`.
     fn first_visible_file(&self) -> Option<usize> {
         (self.top_index..self.rows.len()).find(|&i| self.rows[i].inner_path.is_some())
     }
 
-    /// Adjust `top_index` so the selected row is inside the viewport.
-    /// Sticky breadcrumbs aren't accounted for here — they reduce the
-    /// content slot by at most a third of the viewport, and the result
-    /// of overshooting by that small margin is just one extra scroll
-    /// step the user can take, not lost selection.
+    /// Pull `top_index` so the selection sits inside the viewport.
+    /// Ignores sticky chain — at most a third of the viewport, worst
+    /// case one extra scroll step for the user.
     fn scroll_to_show_selection(&mut self) {
         let Some(sel) = self.selected_idx else {
             return;
@@ -272,13 +257,11 @@ impl ListingMode {
         }
     }
 
-    /// Render every visible row, padding the mtime column to the
-    /// widest formatted string in the slice so the path column always
-    /// abuts the mtime gutter without trailing whitespace. Each row
-    /// carries its position in `self.rows` so the selection highlight
-    /// can fire for the right entry; the sticky breadcrumb rows reuse
-    /// this with the original parent indices so a selection sitting
-    /// inside a pinned ancestor still lights up.
+    /// Mtime column is padded to the widest stringified mtime in the
+    /// slice so the path column abuts cleanly. Each row carries its
+    /// `self.rows` index so selection highlighting works through the
+    /// sticky breadcrumb (parent indices fed in alongside the visible
+    /// content slice).
     fn render_slice_with_indices(
         &self,
         slice: &[(usize, TreeRow)],
@@ -316,10 +299,8 @@ impl ListingMode {
     }
 }
 
-/// Prepend a coloured caret to the rendered line so the selected row
-/// is unmistakable even when the rest of the listing carries colour of
-/// its own. Two-cell prefix keeps non-selected rows aligned with a
-/// matching two-space gutter.
+/// Two-cell caret prefix — paired with a 2-space gutter on
+/// non-selected rows so columns stay aligned.
 fn paint_selected_marker(line: &str, theme: &PeekTheme) -> String {
     let marker = theme.paint("\u{25b8} ", theme.accent);
     format!("{marker}{line}")
@@ -370,10 +351,7 @@ impl Mode for ListingMode {
     }
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        // Pipe rendering is non-interactive: no selection highlight,
-        // no marker prefix. Walk every row with its index so the
-        // shared formatter does its mtime-column alignment but skip
-        // the selection styling.
+        // Non-interactive: no selection highlight, no marker prefix.
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
         let mtimes: Vec<String> = if show_mtime {
             self.rows
@@ -423,10 +401,8 @@ impl Mode for ListingMode {
                 }
                 self.scroll_to_show_selection();
             }
-            // Page keys keep the page-scroll behavior (so quickly
-            // moving through long listings still works) but snap the
-            // selection to whatever file is now at the top of the
-            // viewport — that's what the user just scrolled into view.
+            // PageUp/Dn page-scroll, then snap selection to the first
+            // file now visible.
             Action::PageUp => {
                 self.top_index = self.top_index.saturating_sub(rows.saturating_sub(1));
                 if let Some(idx) = self.first_visible_file() {
