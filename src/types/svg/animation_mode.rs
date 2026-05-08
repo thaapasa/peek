@@ -18,7 +18,7 @@ use crate::types::image::pipeline::render::{self, GridWindow, PreparedImage, Ter
 use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
 use crate::types::image::scroll::{self, ScrollBounds};
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Maximum number of (frame, grid) prepared images held in memory.
@@ -54,6 +54,7 @@ const SVG_ANIM_ACTIONS: &[(Action, &str)] = &[
     (Action::PlayPause, "Play / pause"),
     (Action::NextFrame, "Next frame"),
     (Action::PrevFrame, "Previous frame"),
+    (Action::Extract, "Extract current frame as PNG"),
     (Action::CycleBackground, "Cycle background (images)"),
     (Action::CycleBackgroundBack, "Cycle background backward"),
     (Action::CycleImageMode, "Cycle render mode (images)"),
@@ -305,5 +306,11 @@ impl Mode for SvgAnimationMode {
             (self.config.fit.label().to_string(), theme.label),
             (frame_info, theme.label),
         ]
+    }
+
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        // 1-based to match the user-visible "Frame N/M" status counter
+        // and the CLI flag (`--extract 5` saves frame 5).
+        Some(ExtractTarget::FrameIndex(self.current + 1))
     }
 }
