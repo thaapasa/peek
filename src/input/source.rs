@@ -27,7 +27,7 @@ const SCAN_CHUNK: usize = 64 * 1024;
 /// (never an in-memory blob — that case stays in `Memory`). Nested
 /// ranges collapse at construction; you should not have a `FileRange`
 /// whose `base` ever resolves to another `FileRange`.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum InputSource {
     File(PathBuf),
     Memory {

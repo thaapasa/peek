@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 mod cli;
+mod extract;
 mod info;
 mod input;
 mod output;
