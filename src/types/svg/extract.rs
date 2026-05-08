@@ -37,7 +37,8 @@ pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractErro
     let idx = one_based - 1;
 
     let frame_svg = svg_anim::render_frame(&model, idx);
-    let raster = svg::rasterize_svg_bytes(frame_svg.as_bytes(), model.width_px, model.height_px)
+    let (raster_w, raster_h) = scale_for_raster(model.width_px, model.height_px);
+    let raster = svg::rasterize_svg_bytes(frame_svg.as_bytes(), raster_w, raster_h)
         .map_err(ExtractError::Other)?;
 
     let rgba = raster.to_rgba8();
@@ -52,6 +53,28 @@ pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractErro
         source: InputSource::memory(Bytes::from(buf), suggested_name.clone()),
         suggested_name,
     })
+}
+
+/// Minimum pixel size on the longest axis when rasterising an SVG
+/// extract. Vector SVGs commonly declare a tiny intrinsic size (e.g.
+/// `width="24"`) on the assumption that CSS or the consuming app will
+/// scale them up — rasterising at the literal intrinsic produces a
+/// 24×24 PNG, which is useless as an extract result. Anything below
+/// this floor gets scaled up while preserving the aspect ratio;
+/// SVGs that already declare a usable intrinsic render at that size.
+const SVG_EXTRACT_MIN_DIM: u32 = 512;
+
+fn scale_for_raster(intrinsic_w: u32, intrinsic_h: u32) -> (u32, u32) {
+    let w = intrinsic_w.max(1);
+    let h = intrinsic_h.max(1);
+    let longest = w.max(h);
+    if longest >= SVG_EXTRACT_MIN_DIM {
+        return (w, h);
+    }
+    let scale = SVG_EXTRACT_MIN_DIM as f64 / longest as f64;
+    let sw = ((w as f64 * scale).round() as u32).max(1);
+    let sh = ((h as f64 * scale).round() as u32).max(1);
+    (sw, sh)
 }
 
 fn suggest_name(source: &InputSource, frame_one_based: usize, total: usize) -> String {
@@ -109,6 +132,25 @@ mod tests {
             bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
             "expected PNG header"
         );
-        let _ = image::load_from_memory(&bytes).expect("PNG should decode");
+        let img = image::load_from_memory(&bytes).expect("PNG should decode");
+        // loader-dots declares width=24 height=24 intrinsic — extract
+        // upscales to the SVG floor so the saved PNG is actually
+        // useful rather than a 24-px thumbnail.
+        assert_eq!(img.width(), SVG_EXTRACT_MIN_DIM);
+        assert_eq!(img.height(), SVG_EXTRACT_MIN_DIM);
+    }
+
+    #[test]
+    fn scale_for_raster_keeps_aspect_when_under_floor() {
+        let (w, h) = scale_for_raster(24, 12);
+        assert_eq!(w, SVG_EXTRACT_MIN_DIM);
+        assert_eq!(h, SVG_EXTRACT_MIN_DIM / 2);
+    }
+
+    #[test]
+    fn scale_for_raster_passes_through_when_above_floor() {
+        let (w, h) = scale_for_raster(800, 600);
+        assert_eq!(w, 800);
+        assert_eq!(h, 600);
     }
 }
