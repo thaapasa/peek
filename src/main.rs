@@ -50,7 +50,7 @@ fn main() -> Result<()> {
             let dest = pick_extract_output(&args, &extracted.suggested_name);
             let written = extract::write::write_extracted(&extracted, dest)
                 .with_context(|| format!("failed to write extracted {key:?}"))?;
-            if written != std::path::PathBuf::from("-") {
+            if written != std::path::Path::new("-") {
                 eprintln!("wrote {}", written.display());
             }
             return Ok(());

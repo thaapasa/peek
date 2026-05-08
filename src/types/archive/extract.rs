@@ -13,7 +13,7 @@
 //! before being adopted as the suggested output name.
 
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::Path;
 
 use bytes::Bytes;
 
@@ -47,7 +47,7 @@ pub fn extract(
 
 fn extract_zip(
     source: &InputSource,
-    target: &PathBuf,
+    target: &Path,
     raw_key: &str,
 ) -> Result<Extracted, ExtractError> {
     let reader = open_seekable(source).map_err(ExtractError::Other)?;
@@ -98,7 +98,7 @@ enum TarCompression {
 
 fn extract_tar(
     source: &InputSource,
-    target: &PathBuf,
+    target: &Path,
     raw_key: &str,
     compression: TarCompression,
 ) -> Result<Extracted, ExtractError> {
@@ -169,7 +169,7 @@ fn decompress_tar(raw: &[u8], compression: TarCompression) -> Result<Vec<u8>, Ex
 
 fn extract_7z(
     source: &InputSource,
-    target: &PathBuf,
+    target: &Path,
     raw_key: &str,
 ) -> Result<Extracted, ExtractError> {
     let reader = open_seekable(source).map_err(ExtractError::Other)?;
@@ -196,7 +196,7 @@ fn extract_7z(
     Ok(in_memory_extract(target, buf))
 }
 
-fn in_memory_extract(target: &PathBuf, buf: Vec<u8>) -> Extracted {
+fn in_memory_extract(target: &Path, buf: Vec<u8>) -> Extracted {
     let suggested_name = target
         .file_name()
         .and_then(|n| n.to_str())

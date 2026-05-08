@@ -8,7 +8,7 @@
 //! DMG is intentionally unsupported: the UDIF format chunks payload
 //! into compressed blocks that would need a separate decoder.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
 use crate::input::InputSource;
@@ -80,7 +80,7 @@ fn build_extracted_source(
     }
 }
 
-fn suggested_name(target: &PathBuf) -> String {
+fn suggested_name(target: &Path) -> String {
     target
         .file_name()
         .and_then(|n| n.to_str())
