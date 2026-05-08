@@ -985,14 +985,10 @@ mod tests {
     }
 
     fn make_ctx<'a>(
-        source: &'a InputSource,
-        detected: &'a detect::Detected,
         file_info: &'a crate::info::FileInfo,
         peek_theme: &'a PeekTheme,
     ) -> RenderCtx<'a> {
         RenderCtx {
-            source,
-            detected,
             file_info,
             theme_name: PeekThemeName::IdeaDark,
             peek_theme,
@@ -1046,7 +1042,7 @@ mod tests {
             "Source",
         );
 
-        let ctx = make_ctx(&source, &detected, &file_info, &peek_theme);
+        let ctx = make_ctx(&file_info, &peek_theme);
 
         // Forward scroll: window 0..10 then 10..20 (incremental, no reset).
         // ContentMode owns scroll, so the `scroll` argument to

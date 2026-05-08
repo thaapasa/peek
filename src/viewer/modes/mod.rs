@@ -16,7 +16,6 @@ use syntect::highlighting::Color;
 
 use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::ui::Action;
@@ -36,7 +35,6 @@ pub(crate) use info::InfoMode;
 /// Stable identifier for a mode. Used to look up modes in a stack and
 /// to drive view-switch keybindings (e.g. `i` → Info, `x` → Hex).
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
-#[allow(dead_code)]
 pub(crate) enum ModeId {
     Content,
     Info,
@@ -44,7 +42,6 @@ pub(crate) enum ModeId {
     Hex,
     ImageRender,
     Animation,
-    StructuredSource,
     Listing,
     About,
 }
@@ -90,10 +87,7 @@ impl Handled {
 /// the height of the *content area* (terminal rows minus the status line),
 /// or `usize::MAX` for non-interactive (pipe) rendering where output is
 /// unbounded vertically.
-#[allow(dead_code)]
 pub(crate) struct RenderCtx<'a> {
-    pub source: &'a InputSource,
-    pub detected: &'a Detected,
     pub file_info: &'a FileInfo,
     pub theme_name: PeekThemeName,
     pub peek_theme: &'a PeekTheme,
@@ -136,7 +130,6 @@ pub(crate) enum ExtractTarget {
 }
 
 /// One renderable + interactive view of a file.
-#[allow(dead_code)]
 pub(crate) trait Mode {
     fn id(&self) -> ModeId;
     fn label(&self) -> &str;

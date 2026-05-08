@@ -672,8 +672,6 @@ impl ViewerState {
         let scroll = f.scroll[active];
         let window = {
             let ctx = RenderCtx {
-                source: &f.source,
-                detected: &f.detected,
                 file_info: &f.file_info,
                 theme_name,
                 peek_theme: &peek_theme,

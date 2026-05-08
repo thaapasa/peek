@@ -127,8 +127,6 @@ fn main() -> Result<()> {
         let file_info = info::gather(&source, &detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = viewer::modes::RenderCtx {
-            source: &source,
-            detected: &detected,
             file_info: &file_info,
             theme_name: viewers.theme_name(),
             peek_theme: viewers.peek_theme(),
