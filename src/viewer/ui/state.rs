@@ -553,7 +553,16 @@ impl ViewerState {
         if n == 0 {
             return;
         }
-        let has_primary = f.modes.iter().any(|m| !m.is_aux());
+        // Hex sits in the cycle only when there's no other data
+        // view — i.e. binary files where Hex is the only thing to
+        // look at. Info doesn't count as a data view: a stack of
+        // [Hex, Info] would otherwise treat Info as the "primary"
+        // and silently drop Hex out of Tab, leaving the user stuck
+        // on Info.
+        let has_data_primary = f
+            .modes
+            .iter()
+            .any(|m| !m.is_aux() && !matches!(m.id(), ModeId::Info));
         let mut i = f.active;
         for _ in 0..n {
             i = if direction >= 0 {
@@ -568,7 +577,7 @@ impl ViewerState {
             if matches!(id, ModeId::Help | ModeId::About) {
                 continue;
             }
-            if id == ModeId::Hex && has_primary {
+            if id == ModeId::Hex && has_data_primary {
                 continue;
             }
             self.set_active(i);
@@ -1001,5 +1010,29 @@ mod tests {
         // Last back at depth 1 quits.
         let final_back = state.apply(Action::Back).unwrap();
         assert!(matches!(final_back, Outcome::Quit));
+    }
+
+    /// Binary files: Tab must round-trip Hex ↔ Info. Without the
+    /// Info-aware `has_data_primary` check, Info counts as the
+    /// primary view, Hex stays out of the cycle, and the user gets
+    /// stuck on Info after the first Tab.
+    #[test]
+    fn tab_round_trips_hex_and_info_on_binary() {
+        // archive.tar.lz4 isn't a recognised peek format → detected
+        // as binary → only Hex + Info compose into the mode stack.
+        let source = fixture_source("test-data/archive.tar.lz4");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data/archive.tar.lz4"], source, detected);
+        assert_eq!(active_id(&state), ModeId::Hex, "binary opens on Hex");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info, "Tab goes Hex → Info");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(
+            active_id(&state),
+            ModeId::Hex,
+            "Tab returns Info → Hex on binary (Hex is the only data view)"
+        );
     }
 }
