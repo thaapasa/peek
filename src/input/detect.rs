@@ -57,6 +57,9 @@ pub enum ArchiveFormat {
     TarXz,
     TarZst,
     SevenZ,
+    /// Unix `ar(1)` archive — used by `.deb` packages (Debian binary
+    /// package layout: `debian-binary`, `control.tar.*`, `data.tar.*`).
+    Ar,
 }
 
 impl ArchiveFormat {
@@ -69,6 +72,7 @@ impl ArchiveFormat {
             Self::TarXz => "tar + xz",
             Self::TarZst => "tar + zstd",
             Self::SevenZ => "7-Zip archive",
+            Self::Ar => "ar archive",
         }
     }
 }
@@ -168,6 +172,13 @@ fn detect_file(path: &Path) -> Result<Detected> {
     let mut head = vec![0u8; HEAD_BYTES];
     let n = read_fill(&mut file, &mut head)?;
     head.truncate(n);
+
+    if head.len() >= AR_MAGIC.len() && &head[..AR_MAGIC.len()] == AR_MAGIC {
+        return Ok(Detected {
+            file_type: FileType::Archive(ArchiveFormat::Ar),
+            magic_mime: Some("application/x-archive".to_string()),
+        });
+    }
 
     let magic_mime = infer::get(&head).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
@@ -292,6 +303,9 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     {
         return Some(ArchiveFormat::Zip);
     }
+    if lower.ends_with(".deb") || lower.ends_with(".ar") || lower.ends_with(".a") {
+        return Some(ArchiveFormat::Ar);
+    }
     None
 }
 
@@ -316,9 +330,20 @@ fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     }
 }
 
+/// 8-byte ar archive magic — `!<arch>\n`. `infer` doesn't recognise
+/// ar; without an explicit check, stdin-piped `.deb` files would
+/// classify as binary.
+const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
+    if data.len() >= AR_MAGIC.len() && &data[..AR_MAGIC.len()] == AR_MAGIC {
+        return Detected {
+            file_type: FileType::Archive(ArchiveFormat::Ar),
+            magic_mime: Some("application/x-archive".to_string()),
+        };
+    }
     let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
     if let Some(ref mime) = magic_mime {
         if mime == "image/svg+xml" {

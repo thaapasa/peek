@@ -35,6 +35,7 @@ pub fn extract(
         ArchiveFormat::TarXz => extract_tar(source, &target, key, TarCompression::Xz),
         ArchiveFormat::TarZst => extract_tar(source, &target, key, TarCompression::Zst),
         ArchiveFormat::SevenZ => extract_7z(source, &target, key),
+        ArchiveFormat::Ar => extract_ar(source, &target, key),
     }
 }
 
@@ -187,6 +188,89 @@ fn extract_7z(
         .read_file(&target_str)
         .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e}")))?;
     Ok(in_memory_extract(target, buf))
+}
+
+/// Extract a single ar entry. ar uses 60-byte ASCII headers; walk
+/// the chain, match the requested name, copy the payload bytes.
+fn extract_ar(
+    source: &InputSource,
+    target: &Path,
+    raw_key: &str,
+) -> Result<Extracted, ExtractError> {
+    use std::io::Read;
+    const HEADER_LEN: usize = 60;
+    const GLOBAL_MAGIC: &[u8; 8] = b"!<arch>\n";
+
+    let mut reader =
+        crate::types::archive::reader::open_seekable(source).map_err(ExtractError::Other)?;
+    let mut magic = [0u8; 8];
+    reader
+        .read_exact(&mut magic)
+        .map_err(|e| ExtractError::Other(e.into()))?;
+    if &magic != GLOBAL_MAGIC {
+        return Err(ExtractError::Other(anyhow::anyhow!(
+            "not an ar archive: missing !<arch> magic"
+        )));
+    }
+
+    let target_str = target.to_string_lossy();
+    let mut header = [0u8; HEADER_LEN];
+    loop {
+        let n = reader
+            .read(&mut header)
+            .map_err(|e| ExtractError::Other(e.into()))?;
+        if n == 0 || n < HEADER_LEN {
+            break;
+        }
+        let raw_name = std::str::from_utf8(&header[..16])
+            .unwrap_or("")
+            .trim_end_matches(' ')
+            .trim_end_matches('/')
+            .to_string();
+        let total_size: u64 = std::str::from_utf8(&header[48..58])
+            .ok()
+            .and_then(|s| s.trim().parse().ok())
+            .unwrap_or(0);
+        // BSD long name: `#1/<len>` header, name in payload prefix.
+        let (name, payload_size) = if let Some(rest) = raw_name.strip_prefix("#1/") {
+            let name_len: u64 = rest.trim().parse().unwrap_or(0);
+            if name_len > total_size {
+                ("?".to_string(), total_size)
+            } else {
+                let mut nbuf = vec![0u8; name_len as usize];
+                reader
+                    .read_exact(&mut nbuf)
+                    .map_err(|e| ExtractError::Other(e.into()))?;
+                let n = std::str::from_utf8(&nbuf)
+                    .unwrap_or("?")
+                    .trim_end_matches('\0')
+                    .to_string();
+                (n, total_size - name_len)
+            }
+        } else {
+            (raw_name, total_size)
+        };
+        let pad = total_size % 2;
+
+        if name == target_str {
+            if payload_size > MAX_EXTRACT_BYTES {
+                return Err(ExtractError::Other(anyhow::anyhow!(
+                    "entry {raw_key:?} is {payload_size} bytes; cap is {MAX_EXTRACT_BYTES} bytes"
+                )));
+            }
+            let mut buf = vec![0u8; payload_size as usize];
+            reader
+                .read_exact(&mut buf)
+                .map_err(|e| ExtractError::Other(e.into()))?;
+            return Ok(in_memory_extract(target, buf));
+        }
+
+        let mut skip = vec![0u8; (payload_size + pad) as usize];
+        reader
+            .read_exact(&mut skip)
+            .map_err(|e| ExtractError::Other(e.into()))?;
+    }
+    Err(ExtractError::NotFound(raw_key.to_string()))
 }
 
 fn in_memory_extract(target: &Path, buf: Vec<u8>) -> Extracted {
