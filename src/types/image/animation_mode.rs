@@ -8,7 +8,7 @@ use super::pipeline::render::{self, GridWindow, TermSize};
 use super::pipeline::{FitMode, ImageConfig};
 use super::scroll::{self, ScrollBounds};
 use crate::theme::PeekTheme;
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Animated image view (GIF/WebP). Owns the decoded frame list, current
@@ -37,6 +37,7 @@ const ANIM_ACTIONS: &[(Action, &str)] = &[
     (Action::PlayPause, "Play / pause"),
     (Action::NextFrame, "Next frame"),
     (Action::PrevFrame, "Previous frame"),
+    (Action::Extract, "Extract current frame as PNG"),
     (Action::CycleBackground, "Cycle background (images)"),
     (Action::CycleBackgroundBack, "Cycle background backward"),
     (Action::CycleImageMode, "Cycle render mode (images)"),
@@ -204,6 +205,12 @@ impl Mode for AnimationMode {
         self.current = (self.current + 1) % self.frames.len();
         self.last_advance = Instant::now();
         true
+    }
+
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        // 1-based to match the user-visible "Frame N/M" status counter
+        // and the CLI flag (`--extract 5` saves frame 5).
+        Some(ExtractTarget::FrameIndex(self.current + 1))
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

@@ -14,7 +14,7 @@ use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
-use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, Position, RenderCtx, Window};
 use crate::viewer::ui::Action;
 
 /// Width (chars) of the size column, including thousands separators.
@@ -271,26 +271,13 @@ impl ListingMode {
         }
     }
 
-    /// Render every visible row, padding the mtime column to the widest
-    /// formatted string in the slice so the path column always abuts the
-    /// mtime gutter without trailing whitespace.
-    #[cfg(test)]
-    fn render_slice(
-        &self,
-        slice: &[TreeRow],
-        theme: &PeekTheme,
-        opts: RenderOptions,
-        show_mtime: bool,
-    ) -> Vec<String> {
-        let indexed: Vec<(usize, TreeRow)> = slice.iter().cloned().enumerate().collect();
-        self.render_slice_with_indices(&indexed, theme, opts, show_mtime)
-    }
-
-    /// Like `render_slice` but each row carries its position in
-    /// `self.rows` so the selection highlight can fire for the right
-    /// entry. The sticky breadcrumb rows reuse this with the original
-    /// indices of the parent rows so a selection sitting in the
-    /// breadcrumb still lights up.
+    /// Render every visible row, padding the mtime column to the
+    /// widest formatted string in the slice so the path column always
+    /// abuts the mtime gutter without trailing whitespace. Each row
+    /// carries its position in `self.rows` so the selection highlight
+    /// can fire for the right entry; the sticky breadcrumb rows reuse
+    /// this with the original parent indices so a selection sitting
+    /// inside a pinned ancestor still lights up.
     fn render_slice_with_indices(
         &self,
         slice: &[(usize, TreeRow)],
@@ -510,7 +497,10 @@ impl Mode for ListingMode {
     }
 
     fn extra_actions(&self) -> &'static [(Action, &'static str)] {
-        const ACTIONS: &[(Action, &str)] = &[(Action::ToggleStickyParents, "Pin parent path")];
+        const ACTIONS: &[(Action, &str)] = &[
+            (Action::ToggleStickyParents, "Pin parent path"),
+            (Action::Extract, "Extract selected entry"),
+        ];
         ACTIONS
     }
 
@@ -520,6 +510,11 @@ impl Mode for ListingMode {
             return Handled::Yes;
         }
         Handled::No
+    }
+
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        self.selected_inner_path()
+            .map(|p| ExtractTarget::EntryPath(p.to_string()))
     }
 
     fn take_warnings(&mut self) -> Vec<String> {

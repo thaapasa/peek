@@ -47,10 +47,7 @@ impl Prompt {
         }
     }
 
-    pub fn title(&self) -> &str {
-        &self.title
-    }
-
+    #[cfg(test)]
     pub fn input(&self) -> &str {
         &self.input
     }

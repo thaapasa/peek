@@ -49,6 +49,7 @@ pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
     (Action::CycleThemeBack, "Previous theme"),
     (Action::CycleColorMode, "Next color mode"),
     (Action::CycleColorModeBack, "Previous color mode"),
+    (Action::Extract, "Extract selected entry / current frame"),
 ];
 
 pub(crate) struct ViewerState<'a> {
@@ -361,6 +362,10 @@ impl<'a> ViewerState<'a> {
             // we get here. Listed explicitly so adding a new Action variant
             // forces a non-exhaustive-match compile error in this function
             // and a deliberate decision about which side handles it.
+            Action::Extract => {
+                self.start_extract();
+                Outcome::Redraw
+            }
             Action::ToggleRawSource
             | Action::PlayPause
             | Action::NextFrame
@@ -376,6 +381,26 @@ impl<'a> ViewerState<'a> {
             | Action::CycleImageModeBack
             | Action::ToggleStickyParents => Outcome::Unhandled,
         })
+    }
+
+    /// Run the extract pipeline against whatever the active mode says
+    /// it has selected (an entry path or an animation frame index),
+    /// then open a save-to prompt with the suggested filename. Failures
+    /// (no selection, container with no extractor, malformed key)
+    /// surface as a status flash rather than killing the viewer.
+    fn start_extract(&mut self) {
+        let Some(target) = self.modes[self.active].extract_target() else {
+            self.flash = Some("nothing selected to extract".to_string());
+            return;
+        };
+        let key = match &target {
+            crate::viewer::modes::ExtractTarget::EntryPath(p) => p.clone(),
+            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
+        };
+        match crate::extract::extract(self.source, self.detected, &key) {
+            Ok(extracted) => self.begin_extract_prompt(extracted),
+            Err(e) => self.flash = Some(format!("extract failed: {e}")),
+        }
     }
 
     // ---------------------------------------------------------------------
