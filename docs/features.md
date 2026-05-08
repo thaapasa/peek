@@ -252,8 +252,12 @@ streaming via `ByteSource`). File info reachable via Tab / `i` from within hex, 
 #### Archive Listing ◐
 
 Container archives open in a **TOC view** — one row per entry with permissions, uncompressed
-size, mtime, and path. No payload extraction; only the per-entry headers are read. Tab cycles
-TOC ↔ Info; `x` still drops into the raw hex dump of the archive bytes.
+size, mtime, and path. Listing reads only the per-entry headers, so multi-GB archives open
+instantly. Up/Down move a file-selection cursor (skipping directories), Top/End jump to the
+first / last file, PgUp/Dn page-scroll then snap selection to the first visible file. The
+selected leaf gets a highlighted background + arrow marker. `e` extracts the selected entry —
+see [Extraction](#extraction-) below. Tab cycles TOC ↔ Info; `x` still drops into the raw hex
+dump of the archive bytes.
 
 | Format      | Extensions                     | Status |
 |-------------|--------------------------------|--------|
@@ -418,6 +422,30 @@ filtering (showing only the active mode's extras) not yet done.
 swatches, and a short list of pointers (homepage, license, common keys). Doubles as a theme
 showcase — cycling themes with `t` while on About previews how each theme paints the full palette.
 
+### Extraction ✅
+
+Pull an inner item out of a container as a standalone file. Three sources currently:
+
+- **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst]`, `.7z`): extract a single file by its
+  inner path. Phase 1 always decompresses into memory with a 256 MB cap.
+- **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
+  backing image — no decompression, no buffering, multi-GB ISOs unaffected.
+- **Animation frames** (`.gif`, `.webp`, animated SVG): extract a single composited frame as a
+  PNG at the source's native pixel size (SVG sub-512px scales up to 512 on the longest axis;
+  override with `--extract-size`).
+
+CLI: `peek <file> --extract <KEY> [-o PATH]`. `<KEY>` is an entry path for archives/ISOs or a
+1-based frame index for animations. `-o PATH` overrides the suggested filename; `-o -` or piping
+stdout streams raw bytes. Adding `--print` or `--info` instead replaces the active source with
+the extracted item and runs the rest of the pipeline against it — that's recursive peek
+(`peek archive.zip --extract foo.py --print` syntax-highlights the inner file).
+
+Viewer: in a listing TOC, `e` extracts the selected file; in an animation, `e` extracts the
+current frame. Either way a status-line prompt opens prefilled with the suggested filename —
+Esc cancels, Enter writes. Path safety rejects traversal (`..`) before any TOC lookup.
+
+DMG extract is intentionally unsupported — UDIF block decompression is a separate effort.
+
 ## Keyboard Shortcuts
 
 All for viewer mode. Keys marked *(context)* are file-type-specific.
@@ -433,6 +461,7 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `Page Down` / `Space` | Page down    |
 | `Home`                | Go to top    |
 | `End`                 | Go to bottom |
+| `e`                   | Extract selected entry / current frame |
 
 ### Views and Modes
 
