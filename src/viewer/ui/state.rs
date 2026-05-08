@@ -397,7 +397,8 @@ impl<'a> ViewerState<'a> {
             crate::viewer::modes::ExtractTarget::EntryPath(p) => p.clone(),
             crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
         };
-        match crate::extract::extract(self.source, self.detected, &key) {
+        let opts = crate::extract::ExtractOptions::default();
+        match crate::extract::extract(self.source, self.detected, &key, &opts) {
             Ok(extracted) => self.begin_extract_prompt(extracted),
             Err(e) => self.flash = Some(format!("extract failed: {e}")),
         }

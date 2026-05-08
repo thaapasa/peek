@@ -42,7 +42,10 @@ fn main() -> Result<()> {
     // replace the active source with the extracted one and let the rest
     // of the pipeline render it — recursive peek.
     if let Some(key) = args.extract.as_deref() {
-        let extracted = extract::extract(&source, &detected, key)
+        let opts = extract::ExtractOptions {
+            svg_size: args.extract_size,
+        };
+        let extracted = extract::extract(&source, &detected, key, &opts)
             .with_context(|| format!("failed to extract {key:?} from {}", source.name()))?;
 
         let render_extracted = args.print || args.info;

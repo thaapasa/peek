@@ -28,6 +28,18 @@ pub struct Extracted {
     pub source: InputSource,
 }
 
+/// Per-extract knobs. Fields are extractor-specific — most extractors
+/// ignore most options. Defaults always do something sensible so the
+/// viewer-side path can pass `Default::default()` without surprises.
+#[derive(Debug, Default, Clone)]
+pub struct ExtractOptions {
+    /// Override the SVG rasterisation size (longest axis, in pixels).
+    /// `None` = use the SVG's intrinsic size, scaled up to the
+    /// extract floor when it would otherwise be tiny. CLI exposes
+    /// this via `--extract-size`.
+    pub svg_size: Option<u32>,
+}
+
 /// Failure modes for extraction. `Unsupported` means the container type
 /// has no extractor at all (text, binary, plain image without frames);
 /// `NotFound` / `InvalidKey` mean the container could be opened but the
@@ -76,12 +88,13 @@ pub fn extract(
     source: &InputSource,
     detected: &Detected,
     key: &str,
+    opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
     match &detected.file_type {
         FileType::Image => {
             crate::types::image::extract::extract(source, key, detected.magic_mime.as_deref())
         }
-        FileType::Svg => crate::types::svg::extract::extract(source, key),
+        FileType::Svg => crate::types::svg::extract::extract(source, key, opts.svg_size),
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
         FileType::SourceCode { .. } | FileType::Structured(_) | FileType::Binary => Err(
@@ -145,7 +158,13 @@ mod tests {
     #[test]
     fn extracted_iso_entry_round_trips_through_pipeline() {
         let detected = detect::detect(&fixture("sample.iso")).unwrap();
-        let extracted = extract(&fixture("sample.iso"), &detected, "README.txt").unwrap();
+        let extracted = extract(
+            &fixture("sample.iso"),
+            &detected,
+            "README.txt",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
         // Zero-copy: ISO extracts return a FileRange view.
         assert!(matches!(extracted.source, InputSource::FileRange { .. }));
 
@@ -171,7 +190,13 @@ mod tests {
     #[test]
     fn extracted_archive_entry_round_trips_through_pipeline() {
         let detected = detect::detect(&fixture("archive.zip")).unwrap();
-        let extracted = extract(&fixture("archive.zip"), &detected, "fibonacci.py").unwrap();
+        let extracted = extract(
+            &fixture("archive.zip"),
+            &detected,
+            "fibonacci.py",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
         assert!(matches!(extracted.source, InputSource::Memory { .. }));
 
         let text = extracted.source.read_text().unwrap();
@@ -197,7 +222,13 @@ mod tests {
     #[test]
     fn double_extract_uses_extracted_source_as_new_input() {
         let detected = detect::detect(&fixture("sample.iso")).unwrap();
-        let inner = extract(&fixture("sample.iso"), &detected, "sub/inner.txt").unwrap();
+        let inner = extract(
+            &fixture("sample.iso"),
+            &detected,
+            "sub/inner.txt",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
         // The extracted source is a FileRange backed by sample.iso.
         match &inner.source {
             InputSource::FileRange { base, .. } => {
