@@ -19,6 +19,9 @@ pub fn extract(
         DiskImageFormat::Dmg => Err(ExtractError::Unsupported(
             "DMG extraction is not implemented (UDIF block decompression required)",
         )),
+        DiskImageFormat::Raw => Err(ExtractError::Unsupported(
+            "raw disk images expose no per-file structure to extract",
+        )),
     }
 }
 
