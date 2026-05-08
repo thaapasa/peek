@@ -60,6 +60,15 @@ pub enum ArchiveFormat {
     /// Unix `ar(1)` archive — used by `.deb` packages (Debian binary
     /// package layout: `debian-binary`, `control.tar.*`, `data.tar.*`).
     Ar,
+    /// Bare gzip stream (`.gz`). Treated as a one-entry archive so
+    /// the listing / descend / extract pipeline lights up for it.
+    Gz,
+    /// Bare bzip2 stream (`.bz2`).
+    Bz2,
+    /// Bare xz / LZMA2 stream (`.xz`).
+    Xz,
+    /// Bare zstd stream (`.zst`).
+    Zst,
 }
 
 impl ArchiveFormat {
@@ -73,6 +82,10 @@ impl ArchiveFormat {
             Self::TarZst => "tar + zstd",
             Self::SevenZ => "7-Zip archive",
             Self::Ar => "ar archive",
+            Self::Gz => "gzip stream",
+            Self::Bz2 => "bzip2 stream",
+            Self::Xz => "xz stream",
+            Self::Zst => "zstd stream",
         }
     }
 }
@@ -321,6 +334,21 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     if lower.ends_with(".deb") || lower.ends_with(".ar") || lower.ends_with(".a") {
         return Some(ArchiveFormat::Ar);
     }
+    // Bare single-stream codec extensions. Order matters: the
+    // tar.* variants above already matched and returned before any
+    // file with a `.tar.gz` etc. name reaches this point.
+    if lower.ends_with(".gz") {
+        return Some(ArchiveFormat::Gz);
+    }
+    if lower.ends_with(".bz2") {
+        return Some(ArchiveFormat::Bz2);
+    }
+    if lower.ends_with(".xz") {
+        return Some(ArchiveFormat::Xz);
+    }
+    if lower.ends_with(".zst") {
+        return Some(ArchiveFormat::Zst);
+    }
     None
 }
 
@@ -353,14 +381,19 @@ fn probe_iso_or_raw(path: &Path) -> Option<DiskImageFormat> {
     }
 }
 
-/// Map an `infer` magic-byte MIME to an archive format. `application/gzip`
-/// is intentionally absent: a bare `.gz` isn't necessarily a tarball, so
-/// only the extension path treats `*.tar.gz` as `TarGz`.
+/// Map an `infer` magic-byte MIME to an archive format. The compressed
+/// single-stream variants (gzip / bzip2 / xz / zstd) treat the file as
+/// a one-entry archive, so the listing / extract pipeline gives the
+/// user a path into the decompressed content.
 fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     match mime {
         "application/zip" => Some(ArchiveFormat::Zip),
         "application/x-tar" => Some(ArchiveFormat::Tar),
         "application/x-7z-compressed" => Some(ArchiveFormat::SevenZ),
+        "application/gzip" | "application/x-gzip" => Some(ArchiveFormat::Gz),
+        "application/x-bzip2" | "application/x-bzip" => Some(ArchiveFormat::Bz2),
+        "application/x-xz" => Some(ArchiveFormat::Xz),
+        "application/zstd" | "application/x-zstd" => Some(ArchiveFormat::Zst),
         _ => None,
     }
 }
