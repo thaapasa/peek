@@ -3,7 +3,6 @@
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 use ::image::ImageDecoder;
 
@@ -21,7 +20,10 @@ pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtr
     let head = read_source_head(source, IMAGE_HEAD_SCAN);
     let anim = match source {
         InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
-        InputSource::Stdin { data } => animation_stats::animation_stats_bytes(data, magic_mime),
+        _ => {
+            let buf = source.read_bytes().unwrap_or_default();
+            animation_stats::animation_stats_bytes(&buf, magic_mime)
+        }
     };
     image_extras_from_decoder(decoder, &head, anim)
 }
@@ -33,8 +35,13 @@ fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
             .and_then(|r| r.with_guessed_format().ok())
             .and_then(|r| r.into_decoder().ok())
             .map(|d| Box::new(d) as Box<dyn ImageDecoder>),
-        InputSource::Stdin { data } => {
-            ::image::ImageReader::new(std::io::Cursor::new(Arc::clone(data)))
+        _ => {
+            // Memory-backed source uses its `Bytes` directly; range-backed
+            // sources read their bytes eagerly (small images dominate this
+            // path — extracted ISO entries / archive entries pointed at an
+            // image during recursive peek).
+            let buf = source.read_bytes().ok()?;
+            ::image::ImageReader::new(std::io::Cursor::new(buf))
                 .with_guessed_format()
                 .ok()
                 .and_then(|r| r.into_decoder().ok())

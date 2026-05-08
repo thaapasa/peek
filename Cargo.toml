@@ -47,6 +47,10 @@ anyhow = "1"
 unicode-width = "0.2.2"
 gif = "0.14"
 
+# Cheap-clone byte buffers shared between in-memory InputSource variants and
+# extract results — `Bytes::slice` is a refcount bump, not a copy.
+bytes = "1"
+
 # Archive listing (TOC viewer). Listing-only paths read just the entry
 # headers — no payload decompression — so multi-GB archives list cheaply.
 zip = { version = "8", default-features = false, features = ["deflate"] }

@@ -44,7 +44,10 @@ fn detect_format(source: &InputSource, magic_mime: Option<&str>) -> Option<AnimF
                 _ => None,
             }
         }
-        InputSource::Stdin { data } => sniff_anim_format(data),
+        _ => {
+            let buf = source.read_bytes().ok()?;
+            sniff_anim_format(&buf)
+        }
     }
 }
 
@@ -105,16 +108,22 @@ pub fn decode_anim_frames(
                 image::codecs::webp::WebPDecoder::new(reader).context("failed to decode WebP")?,
             )?
         }
-        (InputSource::Stdin { data }, AnimFormat::Gif) => {
-            let reader = Cursor::new(data.clone());
+        (other, AnimFormat::Gif) => {
+            let buf = other
+                .read_bytes()
+                .context("failed to read animated GIF source")?;
             collect_frames(
-                image::codecs::gif::GifDecoder::new(reader).context("failed to decode GIF")?,
+                image::codecs::gif::GifDecoder::new(Cursor::new(buf))
+                    .context("failed to decode GIF")?,
             )?
         }
-        (InputSource::Stdin { data }, AnimFormat::Webp) => {
-            let reader = Cursor::new(data.clone());
+        (other, AnimFormat::Webp) => {
+            let buf = other
+                .read_bytes()
+                .context("failed to read animated WebP source")?;
             collect_frames(
-                image::codecs::webp::WebPDecoder::new(reader).context("failed to decode WebP")?,
+                image::codecs::webp::WebPDecoder::new(Cursor::new(buf))
+                    .context("failed to decode WebP")?,
             )?
         }
     };

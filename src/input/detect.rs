@@ -103,7 +103,11 @@ pub struct Detected {
 pub fn detect(source: &InputSource) -> Result<Detected> {
     match source {
         InputSource::File(path) => detect_file(path),
-        InputSource::Stdin { data } => Ok(detect_bytes(data)),
+        InputSource::Memory { bytes, .. } => Ok(detect_bytes(bytes)),
+        InputSource::FileRange { .. } => {
+            let buf = source.read_bytes()?;
+            Ok(detect_bytes(&buf))
+        }
     }
 }
 
