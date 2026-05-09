@@ -2,19 +2,23 @@ use std::fmt;
 
 use syntect::highlighting::Color;
 
-/// ANSI escape that resets all attributes.
-const ANSI_RESET: &str = "\x1b[0m";
+use super::sgr::{
+    self, Attr, RESET_ALL, RESET_ALL_BYTES, RESET_BG, RESET_FG, rgb_to_ansi16, rgb_to_ansi256,
+    rgb_to_luminance,
+};
 
-/// Byte form of [`ANSI_RESET`] for use with `write_all`.
-const ANSI_RESET_BYTES: &[u8] = b"\x1b[0m";
-
-/// How RGB colors are encoded in the terminal output.
+/// Active SGR (color + attribute) emission budget.
 ///
-/// Callers always paint with truecolor `Color`s; `StyleMode` decides the
-/// on-the-wire escape form (or whether to emit one at all). This is the
-/// single point of conversion — paint helpers and image writers route
-/// through the methods on this enum so the mode can be swapped without
-/// touching call sites.
+/// Callers always paint with truecolor `Color`s and full attribute
+/// names; `StyleMode` decides the on-the-wire escape form (or whether
+/// to emit one at all). The single point of policy — paint helpers,
+/// image writers, and HTML rendering all route through these methods
+/// so the mode can be swapped without touching call sites.
+///
+/// Two axes collapsed into one user-facing knob (CLI `--color`):
+/// emission gate (`Plain` strips everything) plus color encoding for
+/// the non-plain modes. Attributes (bold / italic / …) ride on the
+/// emission gate; they're emitted whenever any escape would be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum StyleMode {
     /// 24-bit (`\x1b[38;2;r;g;bm`) — full color.
@@ -26,7 +30,7 @@ pub enum StyleMode {
     Ansi16,
     /// 24-bit luminance only — preserves shading, drops hue.
     Grayscale,
-    /// No escapes — strips all color from the output.
+    /// No escapes — strips all color and attribute escapes.
     Plain,
 }
 
@@ -71,6 +75,13 @@ impl StyleMode {
         }
     }
 
+    /// True when any escape would be emitted at all. `false` only for
+    /// `Plain`. Cheaper to call than building a string when the caller
+    /// just needs to gate behavior.
+    pub fn styled(self) -> bool {
+        !matches!(self, Self::Plain)
+    }
+
     /// Foreground SGR sequence for `color`, or `""` in `Plain` mode.
     pub fn fg_seq(self, color: Color) -> String {
         let mut s = String::new();
@@ -81,57 +92,75 @@ impl StyleMode {
     /// Append the foreground SGR sequence for `color` directly to `buf`,
     /// skipping the `String` allocation that `fg_seq` produces.
     pub fn write_fg_seq(self, buf: &mut String, color: Color) {
-        use std::fmt::Write;
         match self {
             Self::Plain => {}
-            Self::TrueColor => {
-                let _ = write!(buf, "\x1b[38;2;{};{};{}m", color.r, color.g, color.b);
-            }
+            Self::TrueColor => sgr::write_fg_truecolor(buf, color.r, color.g, color.b),
             Self::Grayscale => {
-                let l = luminance(color.r, color.g, color.b);
-                let _ = write!(buf, "\x1b[38;2;{l};{l};{l}m");
+                let l = rgb_to_luminance(color.r, color.g, color.b);
+                sgr::write_fg_truecolor(buf, l, l, l);
             }
-            Self::Ansi256 => {
-                let _ = write!(buf, "\x1b[38;5;{}m", rgb_to_256(color.r, color.g, color.b));
-            }
-            Self::Ansi16 => buf.push_str(&fg_ansi16(color.r, color.g, color.b)),
+            Self::Ansi256 => sgr::write_fg_ansi256(buf, rgb_to_ansi256(color.r, color.g, color.b)),
+            Self::Ansi16 => sgr::write_fg_ansi16(buf, rgb_to_ansi16(color.r, color.g, color.b)),
         }
     }
 
     /// Background SGR sequence for `color`, or `""` in `Plain` mode.
     pub fn bg_seq(self, color: Color) -> String {
+        let mut s = String::new();
+        self.write_bg_seq(&mut s, color);
+        s
+    }
+
+    /// Append the background SGR sequence for `color` directly to `buf`.
+    pub fn write_bg_seq(self, buf: &mut String, color: Color) {
         match self {
-            Self::Plain => String::new(),
-            Self::TrueColor => format!("\x1b[48;2;{};{};{}m", color.r, color.g, color.b),
+            Self::Plain => {}
+            Self::TrueColor => sgr::write_bg_truecolor(buf, color.r, color.g, color.b),
             Self::Grayscale => {
-                let l = luminance(color.r, color.g, color.b);
-                format!("\x1b[48;2;{l};{l};{l}m")
+                let l = rgb_to_luminance(color.r, color.g, color.b);
+                sgr::write_bg_truecolor(buf, l, l, l);
             }
-            Self::Ansi256 => format!("\x1b[48;5;{}m", rgb_to_256(color.r, color.g, color.b)),
-            Self::Ansi16 => bg_ansi16(color.r, color.g, color.b),
+            Self::Ansi256 => sgr::write_bg_ansi256(buf, rgb_to_ansi256(color.r, color.g, color.b)),
+            Self::Ansi16 => sgr::write_bg_ansi16(buf, rgb_to_ansi16(color.r, color.g, color.b)),
         }
     }
 
-    /// SGR reset, or `""` in `Plain` mode (nothing to reset).
+    /// Open sequence for `attr`, or `""` in `Plain` mode. Pair with
+    /// [`Self::attr_close`] to bracket a styled span.
+    pub fn attr_open(self, attr: Attr) -> &'static str {
+        if self.styled() { attr.open() } else { "" }
+    }
+
+    /// Close sequence for `attr`. Specific (e.g. `[22m` for bold)
+    /// rather than universal `[0m`, so closing one attribute inside a
+    /// nested span doesn't blow away the outer state.
+    pub fn attr_close(self, attr: Attr) -> &'static str {
+        if self.styled() { attr.close() } else { "" }
+    }
+
+    /// Universal SGR reset, or `""` in `Plain` mode.
     pub fn reset(self) -> &'static str {
-        match self {
-            Self::Plain => "",
-            _ => ANSI_RESET,
-        }
+        if self.styled() { RESET_ALL } else { "" }
     }
 
     /// Byte form of [`Self::reset`] for `write_all`.
     pub fn reset_bytes(self) -> &'static [u8] {
-        match self {
-            Self::Plain => b"",
-            _ => ANSI_RESET_BYTES,
-        }
+        if self.styled() { RESET_ALL_BYTES } else { b"" }
+    }
+
+    /// Reset only the foreground color (preserve attributes / bg).
+    pub fn reset_fg(self) -> &'static str {
+        if self.styled() { RESET_FG } else { "" }
+    }
+
+    /// Reset only the background color.
+    pub fn reset_bg(self) -> &'static str {
+        if self.styled() { RESET_BG } else { "" }
     }
 
     /// Append a foreground-colored character to `buf` (no trailing reset).
     /// Hot-loop entry point for image rendering.
     pub fn write_fg(self, buf: &mut String, color: [u8; 3], ch: char) {
-        use std::fmt::Write;
         let c = Color {
             r: color[0],
             g: color[1],
@@ -143,7 +172,8 @@ impl StyleMode {
                 buf.push(ch);
             }
             _ => {
-                let _ = write!(buf, "{}{}", self.fg_seq(c), ch);
+                self.write_fg_seq(buf, c);
+                buf.push(ch);
             }
         }
     }
@@ -152,7 +182,6 @@ impl StyleMode {
     /// (no trailing reset). Hot-loop entry point for block-color image
     /// rendering.
     pub fn write_fg_bg(self, buf: &mut String, fg: [u8; 3], bg: [u8; 3], ch: char) {
-        use std::fmt::Write;
         let f = Color {
             r: fg[0],
             g: fg[1],
@@ -170,7 +199,9 @@ impl StyleMode {
                 buf.push(ch);
             }
             _ => {
-                let _ = write!(buf, "{}{}{}", self.fg_seq(f), self.bg_seq(b), ch);
+                self.write_fg_seq(buf, f);
+                self.write_bg_seq(buf, b);
+                buf.push(ch);
             }
         }
     }
@@ -195,72 +226,5 @@ impl clap::ValueEnum for StyleMode {
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(clap::builder::PossibleValue::new(self.cli_name()).help(self.help_text()))
-    }
-}
-
-// -- conversion helpers -----------------------------------------------------
-
-/// Rec. 601 luma — common YIQ/YUV approximation.
-fn luminance(r: u8, g: u8, b: u8) -> u8 {
-    (0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32)
-        .round()
-        .clamp(0.0, 255.0) as u8
-}
-
-/// Quantize one channel into the 6-step xterm cube (0,95,135,175,215,255).
-fn cube_channel(v: u8) -> u8 {
-    if v < 48 {
-        0
-    } else if v < 115 {
-        1
-    } else {
-        (v - 35) / 40
-    }
-}
-
-/// Map an RGB triple to the closest entry in the xterm 256-color palette.
-/// Greys are routed to the dedicated 24-step grayscale ramp (232..=255)
-/// for finer luminance fidelity than the 6×6×6 cube provides.
-fn rgb_to_256(r: u8, g: u8, b: u8) -> u8 {
-    if r == g && g == b {
-        if r < 8 {
-            return 16;
-        }
-        if r > 248 {
-            return 231;
-        }
-        return 232 + ((r as u32 - 8) / 10).min(23) as u8;
-    }
-    16 + 36 * cube_channel(r) + 6 * cube_channel(g) + cube_channel(b)
-}
-
-/// Map an RGB triple to one of the 16 base ANSI colors. Lossy by design —
-/// the base palette is non-uniform and not RGB-aligned.
-fn ansi16_index(r: u8, g: u8, b: u8) -> u8 {
-    let max = r.max(g).max(b);
-    let bright = max > 191;
-    let high = if bright { 8 } else { 0 };
-    let threshold = if bright { 127 } else { 63 };
-    let r_bit = (r as u16 > threshold) as u8;
-    let g_bit = (g as u16 > threshold) as u8;
-    let b_bit = (b as u16 > threshold) as u8;
-    high + (b_bit << 2) + (g_bit << 1) + r_bit
-}
-
-fn fg_ansi16(r: u8, g: u8, b: u8) -> String {
-    let n = ansi16_index(r, g, b);
-    if n < 8 {
-        format!("\x1b[3{n}m")
-    } else {
-        format!("\x1b[9{}m", n - 8)
-    }
-}
-
-fn bg_ansi16(r: u8, g: u8, b: u8) -> String {
-    let n = ansi16_index(r, g, b);
-    if n < 8 {
-        format!("\x1b[4{n}m")
-    } else {
-        format!("\x1b[10{}m", n - 8)
     }
 }
