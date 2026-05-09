@@ -169,6 +169,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Toml) => "application/toml",
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
+        FileType::Html => "text/html",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",

@@ -86,9 +86,12 @@ pub fn extract(
         }
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
-        FileType::SourceCode { .. } | FileType::Structured(_) | FileType::Binary => Err(
-            ExtractError::Unsupported("this file type has no inner items"),
-        ),
+        FileType::SourceCode { .. }
+        | FileType::Structured(_)
+        | FileType::Html
+        | FileType::Binary => Err(ExtractError::Unsupported(
+            "this file type has no inner items",
+        )),
     }
 }
 

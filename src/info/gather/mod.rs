@@ -190,6 +190,16 @@ fn gather_extras_in_memory(
                 stats: None,
             },
         },
+        FileType::Html => match source.read_bytes() {
+            Ok(bytes) => crate::types::structured::info::gather_extras(
+                crate::input::detect::StructuredFormat::Xml,
+                &bytes,
+            ),
+            Err(_) => FileExtras::Structured {
+                format_name: "HTML",
+                stats: None,
+            },
+        },
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
@@ -228,6 +238,16 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
             Err(_) => FileExtras::Structured {
                 format_name: crate::types::structured::info::format_name(*fmt),
+                stats: None,
+            },
+        },
+        FileType::Html => match fs::read(path) {
+            Ok(bytes) => crate::types::structured::info::gather_extras(
+                crate::input::detect::StructuredFormat::Xml,
+                &bytes,
+            ),
+            Err(_) => FileExtras::Structured {
+                format_name: "HTML",
                 stats: None,
             },
         },

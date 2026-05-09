@@ -8,10 +8,10 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 
 ### Markup / Documentation ◐
 
-| Format   | Extensions                            | Status |
-|----------|---------------------------------------|--------|
-| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`  | ◐      |
-| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`       | ◐      |
+| Format   | Extensions                           | Status |
+|----------|--------------------------------------|--------|
+| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd` | ◐      |
+| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`      | ◐      |
 
 Highlighted source + format-aware Info section ship today (see
 [features.md → Markdown / SQL](features.md#markdown-)). Still planned:
@@ -27,8 +27,6 @@ Highlighted source + format-aware Info section ship today (see
 
 Pending entries from the Structured Data table in [features.md](features.md):
 
-- **HTML rendered text view** — `.html` source highlighting works today; a rendered text mode is
-  planned (see Document Files → Implementation Libraries below for the library choice).
 - **CSV / TSV** (`.csv`, `.tsv`) — render as a formatted table with column alignment.
 
 JSONL streaming for multi-GB logs is also still pending — the current implementation reads the
@@ -57,9 +55,6 @@ date.
 
 #### Implementation Libraries
 
-- **HTML render** — `html2text` crate (pure Rust, lynx/links-style HTML → terminal text). Source
-  view stays via existing syntax highlighter. Full browser-engine render (Blitz / Servo) deferred —
-  too heavy, not yet stable.
 - **PDF** — `pdfium-render` (bindings to Google PDFium). Used for both page rasterization (preview
   mode → image renderer pipeline) and text extraction. V8/JS-disabled PDFium build (~10–13 MB
   per-platform shared lib). Pure-Rust alternatives (`pdf-extract`, `lopdf`) too fragile on
@@ -186,10 +181,10 @@ memory with a 256 MB cap. Still planned:
 
 ### Disk Images ◐
 
-| Format | Extensions | Status                                                  |
-|--------|------------|---------------------------------------------------------|
-| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet)   |
-| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)             |
+| Format | Extensions | Status                                                |
+|--------|------------|-------------------------------------------------------|
+| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet) |
+| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)           |
 
 ISO ships with a TOC view backed by `types::listing` (same render path as archive containers).
 DMG remains metadata-only. See [features.md → Disk Images](features.md#disk-images-) for what's
@@ -209,11 +204,11 @@ Still planned:
 
 #### Implementation Libraries
 
-| Format          | Crate       | Notes                                                               |
-|-----------------|-------------|---------------------------------------------------------------------|
+| Format          | Crate       | Notes                                                                       |
+|-----------------|-------------|-----------------------------------------------------------------------------|
 | ISO (PVD + TOC) | hand-rolled | Current implementation — directory walker is ~250 LOC, no crate dependency. |
-| DMG (trailer)   | hand-rolled | Current implementation — ~80 lines, no crate dependency.            |
-| DMG (partition) | `plist`     | For decoding the embedded XML partition map.                        |
+| DMG (trailer)   | hand-rolled | Current implementation — ~80 lines, no crate dependency.                    |
+| DMG (partition) | `plist`     | For decoding the embedded XML partition map.                                |
 
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 

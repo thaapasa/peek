@@ -60,6 +60,7 @@ bzip2 = "0.6"
 lzma-rs = "0.3"
 zstd = "0.13"
 sevenz-rust2 = { version = "0.21", default-features = false }
+html2text = { version = "0.17", features = ["css", "css_ext"] }
 
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]

@@ -44,6 +44,7 @@ pub(crate) enum ModeId {
     Animation,
     Listing,
     About,
+    Rendered,
 }
 
 /// A logical position within the source, expressed in whichever unit the

@@ -94,6 +94,21 @@ prose word count (excludes fenced code), and reading-time estimate at 230 wpm. R
 (styled headings, bold, lists, per-language dispatch inside fenced code) is still planned — see
 [planned.md](planned.md#markup--documentation-).
 
+#### HTML ✅
+
+`.html` / `.htm` / `.xhtml` files (and stdin streams that start with `<!DOCTYPE html>` or
+`<html`) get a dual view:
+
+- **Rendered** (default) — lynx-style flow rendered via the `html2text` crate: paragraph wrap to
+  the terminal width, list bullets, table grid (with column sizing), numbered link references,
+  and ANSI styling for `<strong>` / `<em>` / `<code>` / `<s>` / `<a>` plus author colors from
+  inline `style="..."` and `<style>` rules (CSS pulled in via `use_doc_css`). Near-grayscale
+  colors are filtered so author body / heading defaults don't fight the terminal's foreground.
+  Tab cycles to the source view.
+- **Source** — raw HTML with XML syntax highlighting via `ContentMode`.
+
+The Info view shows the structured XML stats (root element, element counts).
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info
@@ -115,13 +130,12 @@ formatter / outline mode still planned.
 | YAML       | `.yaml`, `.yml`     | ✅      |
 | TOML       | `.toml`             | ✅      |
 | XML        | `.xml`              | ✅      |
-| HTML       | `.html`, `.htm`     | ✅      |
 | CSV        | `.csv`, `.tsv`      | ☐      |
 
 JSONC and JSON5 default to **raw** (the pretty path collapses comments / JSON5 syntax, so
 defaulting to it would silently lose information); `r` toggles into the strict-JSON pretty form
 when needed. JSON Lines defaults to pretty: each non-empty line round-trips through serde_json
-and is separated by a blank line. Pending entries (HTML rendered view, CSV/TSV) live in
+and is separated by a blank line. Pending entries (CSV/TSV) live in
 [planned.md](planned.md#structured-data-additions-).
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):

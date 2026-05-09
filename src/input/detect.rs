@@ -24,6 +24,8 @@ pub enum FileType {
     Image,
     /// SVG vector image (rasterized for preview, XML source for raw view)
     Svg,
+    /// HTML document (rendered text view via html2text, XML source for raw view)
+    Html,
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -181,9 +183,8 @@ fn detect_file(path: &Path) -> Result<Detected> {
             "yaml" | "yml" => Some(FileType::Structured(StructuredFormat::Yaml)),
             "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
             "svg" => Some(FileType::Svg),
-            "xml" | "html" | "htm" | "xhtml" | "plist" => {
-                Some(FileType::Structured(StructuredFormat::Xml))
-            }
+            "html" | "htm" | "xhtml" => Some(FileType::Html),
+            "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
             _ => None,
         };
         if let Some(file_type) = file_type {
@@ -475,6 +476,15 @@ fn detect_bytes(data: &[u8]) -> Detected {
             if trimmed.contains("<svg") {
                 return Detected {
                     file_type: FileType::Svg,
+                    magic_mime,
+                };
+            }
+            // HTML5 doctype or top-level <html — caught before generic XML
+            // so html2text gets the rendered view path.
+            let head = &trimmed[..trimmed.len().min(512)].to_ascii_lowercase();
+            if head.starts_with("<!doctype html") || head.contains("<html") {
+                return Detected {
+                    file_type: FileType::Html,
                     magic_mime,
                 };
             }

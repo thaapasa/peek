@@ -7,6 +7,7 @@
 pub mod archive;
 pub mod binary;
 pub mod disk_image;
+pub mod html;
 pub mod image;
 pub mod listing;
 pub mod markdown;

@@ -9,6 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
 use crate::types::archive;
+use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
 use crate::types::listing::ListingMode;
 use crate::types::svg::SvgAnimationMode;
@@ -259,6 +260,14 @@ impl Registry {
                 FileType::SourceCode { .. } | FileType::Structured(_) => {
                     modes.push(self.text_content_mode(source, file_type, args)?);
                 }
+                FileType::Html => {
+                    modes.push(Box::new(RenderedMode::new(
+                        source.clone(),
+                        self.peek_theme.color_mode,
+                    )));
+                    // Pair the rendered view with the HTML source.
+                    modes.push(self.text_content_mode(source, file_type, args)?);
+                }
                 FileType::Image => {
                     let cfg = self.image_config(args);
                     // Animated GIF/WebP: AnimationMode owns the frame stack
@@ -418,7 +427,7 @@ impl Registry {
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
-            FileType::Svg => "Source",
+            FileType::Svg | FileType::Html => "Source",
             _ => "Content",
         };
 
@@ -496,6 +505,7 @@ pub(crate) fn syntax_token_for(
             .to_string(),
         ),
         FileType::Svg => Some("XML".to_string()),
+        FileType::Html => Some("HTML".to_string()),
         _ => None,
     }
 }

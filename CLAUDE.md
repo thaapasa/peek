@@ -102,6 +102,9 @@ src/
           timeline.rs  — Merged frame timeline: build_frames, sample_target (steps + linear)
           marker.rs    — __PEEK_ANIM_*__ marker injection + per-frame substitution
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
+    html/
+      mod.rs           — Module wiring; re-exports RenderedMode
+      mode.rs          — RenderedMode: html2text-backed lynx-style view (paragraph wrap, list bullets, table grid, numbered link refs, ANSI styling for bold/italic/colour); width-keyed cache, rerender on resize. CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
     svg/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)
