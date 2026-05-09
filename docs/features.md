@@ -359,9 +359,9 @@ there.
 `c` cycles modes interactively; the rendered-lines cache invalidates on each cycle so the whole UI
 repaints in the new encoding.
 
-All callers paint truecolor RGB; the `ColorMode` enum on `PeekTheme` owns the conversion and is the
+All callers paint truecolor RGB; the `StyleMode` enum on `PeekTheme` owns the conversion and is the
 single point where the encoding is decided. Image rendering routes the same way via
-`ColorMode::write_fg` / `write_fg_bg`. Plain mode emits text content with zero ANSI escapes (no SGR
+`StyleMode::write_fg` / `write_fg_bg`. Plain mode emits text content with zero ANSI escapes (no SGR
 resets), so piped output is safe to compose with other tools.
 
 ### File Info Screen ✅
@@ -597,14 +597,14 @@ Two rendering axes:
 | Color     | truecolor, 256, 16, grayscale, plain                                   | ✅ (see [Color Modes](#color-modes-))                                    |
 | Character | Full Unicode, ASCII-only (image rendering only — `--image-mode ascii`) | ◐ image side done; UI/glyph fallback for non-Unicode terminals not done |
 
-Color is handled by `ColorMode` — all callers paint truecolor RGB and the active mode decides the
-wire form. Image rendering routes through the same point via `ColorMode::write_fg` / `write_fg_bg`.
+Color is handled by `StyleMode` — all callers paint truecolor RGB and the active mode decides the
+wire form. Image rendering routes through the same point via `StyleMode::write_fg` / `write_fg_bg`.
 Character compatibility is partial: `--image-mode ascii` falls back to a luminance density ramp for
 terminals without block/quadrant glyphs, but the rest of the UI (status line, info screen) still
 uses Unicode box-drawing and dashes.
 
 For library-produced output (syntect), `viewer::ranges_to_escaped` replaces syntect's hardcoded
-24-bit `as_24_bit_terminal_escaped` with one routed through `ColorMode::fg_seq`, so
+24-bit `as_24_bit_terminal_escaped` with one routed through `StyleMode::fg_seq`, so
 syntax-highlighted code is downgraded along with everything else.
 
 ## CLI Options

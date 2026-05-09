@@ -5,7 +5,7 @@ use crossterm::{cursor, execute, terminal};
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthChar;
 
-use crate::theme::{ColorMode, PeekTheme, PeekThemeName, load_embedded_theme};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
 pub(crate) mod help;
 pub(crate) mod keys;
@@ -298,10 +298,10 @@ pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
     result
 }
 
-pub(crate) fn make_peek_theme(name: PeekThemeName, color_mode: ColorMode) -> PeekTheme {
+pub(crate) fn make_peek_theme(name: PeekThemeName, style_mode: StyleMode) -> PeekTheme {
     let syntect_theme = load_embedded_theme(name.tmtheme_source());
     let mut t = PeekTheme::from_syntect(&syntect_theme);
-    t.color_mode = color_mode;
+    t.style_mode = style_mode;
     t
 }
 

@@ -13,12 +13,12 @@ use anyhow::Result;
 use html2text::render::RichAnnotation;
 
 use crate::input::InputSource;
-use crate::theme::ColorMode;
+use crate::theme::StyleMode;
 use crate::viewer::modes::{Mode, ModeId, RenderCtx, Window, slice_window};
 
 pub(crate) struct RenderedMode {
     source: InputSource,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
     /// Cached render keyed by the width it was produced for. `None`
     /// before the first render; replaced when `term_cols` changes.
     cache: Option<Cached>,
@@ -30,10 +30,10 @@ struct Cached {
 }
 
 impl RenderedMode {
-    pub(crate) fn new(source: InputSource, color_mode: ColorMode) -> Self {
+    pub(crate) fn new(source: InputSource, style_mode: StyleMode) -> Self {
         Self {
             source,
-            color_mode,
+            style_mode,
             cache: None,
         }
     }
@@ -46,7 +46,7 @@ impl RenderedMode {
             .unwrap_or(true);
         if needs_render {
             let bytes = self.source.read_bytes()?;
-            let lines = render_html(&bytes, width.max(20), self.color_mode)?;
+            let lines = render_html(&bytes, width.max(20), self.style_mode)?;
             self.cache = Some(Cached { width, lines });
         }
         Ok(&self.cache.as_ref().expect("cache populated").lines)
@@ -83,8 +83,8 @@ impl Mode for RenderedMode {
 /// `use_doc_css` builder pulls in inline `style="..."` and `<style>`
 /// rules so author-defined colors and `font-weight: bold` survive into
 /// the rendered text.
-fn render_html(bytes: &[u8], width: usize, color_mode: ColorMode) -> Result<Vec<String>> {
-    let rendered = if matches!(color_mode, ColorMode::Plain) {
+fn render_html(bytes: &[u8], width: usize, style_mode: StyleMode) -> Result<Vec<String>> {
+    let rendered = if matches!(style_mode, StyleMode::Plain) {
         html2text::config::plain()
             .use_doc_css()
             .string_from_read(Cursor::new(bytes), width)?

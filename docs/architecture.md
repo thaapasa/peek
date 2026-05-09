@@ -250,8 +250,8 @@ passed through the image pipeline.
 
 ### PeekTheme (`theme/`)
 
-Split by concern: `name.rs` holds `PeekThemeName` and the embedded `.tmTheme` data; `color_mode.rs`
-holds `ColorMode` and the RGB→palette conversion helpers; `peek_theme.rs` holds the `PeekTheme`
+Split by concern: `name.rs` holds `PeekThemeName` and the embedded `.tmTheme` data; `style_mode.rs`
+holds `StyleMode` and the RGB→palette conversion helpers; `peek_theme.rs` holds the `PeekTheme`
 struct, paint helpers, and `lerp_color`; `manager.rs` holds `ThemeManager` (shared `SyntaxSet`/
 `ThemeSet` + active `PeekTheme`).
 
@@ -259,15 +259,15 @@ Semantic roles derive automatically from syntect `.tmTheme` files. All colored o
 `PeekTheme::paint()`. Color interpolation via `lerp_color()` for continuous scales (file size, age,
 resolution).
 
-`PeekTheme` carries a `ColorMode` (`TrueColor`/`Ansi256`/`Ansi16`/`Grayscale`/`Plain`) that owns
+`PeekTheme` carries a `StyleMode` (`TrueColor`/`Ansi256`/`Ansi16`/`Grayscale`/`Plain`) that owns
 RGB → wire-format conversion. Callers always paint truecolor RGB; the mode decides 24-bit /
 256-palette / 16-base / luminance-only / no-escape. Image rendering uses the same conversion via
-`ColorMode::write_fg` / `write_fg_bg`. Mode is set from `--color` (or `PEEK_COLOR`) and cyclable
+`StyleMode::write_fg` / `write_fg_bg`. Mode is set from `--color` (or `PEEK_COLOR`) and cyclable
 interactively with `c` — cycling invalidates every mode's line cache so the UI repaints in the new
 encoding.
 
 Shared escape walker for syntect's `LineRanges`: `viewer::ranges_to_escaped` — replaces syntect's
-hardcoded-24-bit `as_24_bit_terminal_escaped`, routed through `ColorMode::fg_seq`.
+hardcoded-24-bit `as_24_bit_terminal_escaped`, routed through `StyleMode::fg_seq`.
 
 ## Image rendering pipeline
 

@@ -3,7 +3,7 @@
 //! that silently change glyph selection, contour density, or cluster
 //! polarity surface as snapshot diffs.
 //!
-//! Snapshots use a small `TermSize` (40×20) and `ColorMode::Plain` to
+//! Snapshots use a small `TermSize` (40×20) and `StyleMode::Plain` to
 //! keep diffs readable and avoid ANSI churn. Truecolor coverage is a
 //! single smoke snapshot — its job is to assert escapes are emitted at
 //! all, not to lock down per-pixel colors.
@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use super::render::{self, GridWindow, TermSize};
 use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
-use crate::theme::ColorMode;
+use crate::theme::StyleMode;
 
 const TERM: TermSize = TermSize {
     cols: 40,
@@ -30,29 +30,29 @@ fn fixture(rel: &str) -> InputSource {
     InputSource::File(path)
 }
 
-fn config(mode: ImageMode, color_mode: ColorMode, bg: Background) -> ImageConfig {
+fn config(mode: ImageMode, style_mode: StyleMode, bg: Background) -> ImageConfig {
     ImageConfig {
         mode,
         width: 0,
         background: bg,
         margin: 0,
-        color_mode,
+        style_mode,
         edge_density: 0.10,
         fit: FitMode::Contain,
     }
 }
 
-fn render_raster(rel: &str, mode: ImageMode, color_mode: ColorMode, bg: Background) -> String {
+fn render_raster(rel: &str, mode: ImageMode, style_mode: StyleMode, bg: Background) -> String {
     let source = fixture(rel);
-    let config = config(mode, color_mode, bg);
+    let config = config(mode, style_mode, bg);
     let prep = render::prepare_raster(&source, &config, TERM).expect("prepare_raster");
     let window = GridWindow::full(prep.cols, prep.rows);
     render::render_prepared(&prep, &config, window).join("\n")
 }
 
-fn render_svg(rel: &str, mode: ImageMode, color_mode: ColorMode, bg: Background) -> String {
+fn render_svg(rel: &str, mode: ImageMode, style_mode: StyleMode, bg: Background) -> String {
     let source = fixture(rel);
-    let config = config(mode, color_mode, bg);
+    let config = config(mode, style_mode, bg);
     let prep = render::prepare_svg(&source, &config, TERM).expect("prepare_svg");
     let window = GridWindow::full(prep.cols, prep.rows);
     render::render_prepared(&prep, &config, window).join("\n")
@@ -67,7 +67,7 @@ fn cozy_room_block_plain() {
     insta::assert_snapshot!(render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Block,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -77,7 +77,7 @@ fn cozy_room_full_plain() {
     insta::assert_snapshot!(render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Full,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -87,7 +87,7 @@ fn cozy_room_geo_plain() {
     insta::assert_snapshot!(render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Geo,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -97,7 +97,7 @@ fn cozy_room_ascii_plain() {
     insta::assert_snapshot!(render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Ascii,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -107,7 +107,7 @@ fn cozy_room_contour_plain() {
     insta::assert_snapshot!(render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Contour,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -121,7 +121,7 @@ fn fire_block_auto_bg() {
     insta::assert_snapshot!(render_raster(
         "test-images/fire.png",
         ImageMode::Block,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -131,7 +131,7 @@ fn fire_block_checkerboard_bg() {
     insta::assert_snapshot!(render_raster(
         "test-images/fire.png",
         ImageMode::Block,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Checkerboard,
     ));
 }
@@ -145,7 +145,7 @@ fn calendar_svg_block_plain() {
     insta::assert_snapshot!(render_svg(
         "test-images/calendar.svg",
         ImageMode::Block,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -155,7 +155,7 @@ fn calendar_svg_contour_plain() {
     insta::assert_snapshot!(render_svg(
         "test-images/calendar.svg",
         ImageMode::Contour,
-        ColorMode::Plain,
+        StyleMode::Plain,
         Background::Auto,
     ));
 }
@@ -170,7 +170,7 @@ fn fit_config(mode: ImageMode, fit: FitMode) -> ImageConfig {
         width: 0,
         background: Background::Auto,
         margin: 0,
-        color_mode: ColorMode::Plain,
+        style_mode: StyleMode::Plain,
         edge_density: 0.10,
         fit,
     }
@@ -290,7 +290,7 @@ fn cozy_room_block_truecolor_first_line() {
     let out = render_raster(
         "test-images/cozy-room.jpg",
         ImageMode::Block,
-        ColorMode::TrueColor,
+        StyleMode::TrueColor,
         Background::Auto,
     );
     // Lock only the first line — full output is dominated by per-cell color

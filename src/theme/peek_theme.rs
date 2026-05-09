@@ -1,7 +1,7 @@
 use syntect::highlighting::{Color, Theme};
 use syntect::parsing::Scope;
 
-use super::ColorMode;
+use super::StyleMode;
 
 #[rustfmt::skip] const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
 #[rustfmt::skip] const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
@@ -26,11 +26,11 @@ pub struct PeekTheme {
     /// Output color encoding. Toggled at runtime — paint helpers read
     /// this on each call so a cycle invalidating the line cache is enough
     /// to switch the whole UI.
-    pub color_mode: ColorMode,
+    pub style_mode: StyleMode,
 }
 
 impl PeekTheme {
-    /// Derive semantic colors from a syntect theme. `color_mode` defaults
+    /// Derive semantic colors from a syntect theme. `style_mode` defaults
     /// to `TrueColor`; callers override it after construction.
     pub fn from_syntect(theme: &Theme) -> Self {
         let fg = theme.settings.foreground.unwrap_or(WHITE);
@@ -54,7 +54,7 @@ impl PeekTheme {
                 .settings
                 .selection
                 .unwrap_or_else(|| blend(bg, fg, 0.15)),
-            color_mode: ColorMode::TrueColor,
+            style_mode: StyleMode::TrueColor,
         }
     }
 
@@ -71,37 +71,37 @@ impl PeekTheme {
     /// trailing reset. Avoids the intermediate `String` allocation that
     /// `paint` produces — useful inside hot rendering loops.
     pub fn paint_into(&self, buf: &mut String, text: &str, color: Color) {
-        self.color_mode.write_fg_seq(buf, color);
+        self.style_mode.write_fg_seq(buf, color);
         buf.push_str(text);
-        buf.push_str(self.color_mode.reset());
+        buf.push_str(self.style_mode.reset());
     }
 
     /// Push a bare foreground-color escape (no text, no reset). Pair with
     /// `push_reset` when emitting `Display`-formatted content directly into
     /// a buffer via `write!`.
     pub fn push_fg(&self, buf: &mut String, color: Color) {
-        self.color_mode.write_fg_seq(buf, color);
+        self.style_mode.write_fg_seq(buf, color);
     }
 
     /// Push a bare reset escape. See `push_fg`.
     pub fn push_reset(&self, buf: &mut String) {
-        buf.push_str(self.color_mode.reset());
+        buf.push_str(self.style_mode.reset());
     }
 
     /// Wrap text in a foreground-color escape **without** a trailing reset.
     /// Use this when composing multiple colored segments inside a shared
     /// background (e.g. status lines).
     pub fn paint_fg(&self, text: &str, color: Color) -> String {
-        format!("{}{}", self.color_mode.fg_seq(color), text)
+        format!("{}{}", self.style_mode.fg_seq(color), text)
     }
 
     /// Wrap content in a background-color escape with a trailing reset.
     pub fn paint_bg(&self, content: &str, color: Color) -> String {
         format!(
             "{}{}{}",
-            self.color_mode.bg_seq(color),
+            self.style_mode.bg_seq(color),
             content,
-            self.color_mode.reset()
+            self.style_mode.reset()
         )
     }
 

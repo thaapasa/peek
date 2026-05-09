@@ -7,7 +7,7 @@ use super::{Handled, Mode, ModeId, Position, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
 use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
-use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::structured::pretty;
 use crate::viewer::ui::{Action, count_wrap_segments, slice_styled_h, wrap_styled};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
@@ -62,7 +62,7 @@ pub(crate) struct ContentMode {
     /// rendered for. Pretty content is bounded by `PRETTY_MAX_BYTES` so
     /// holding one materialized `Vec<String>` is acceptable. Invalidated
     /// whenever the active theme/color tuple changes.
-    pretty_highlighted: Option<(PeekThemeName, ColorMode, Vec<String>)>,
+    pretty_highlighted: Option<(PeekThemeName, StyleMode, Vec<String>)>,
     /// Cached split of pretty content into raw lines (no syntax). Same
     /// reasoning as `pretty_highlighted` — bounded by the cap.
     pretty_raw_lines: Option<Vec<String>>,
@@ -181,9 +181,9 @@ impl ContentMode {
             return;
         }
         let width = Self::gutter_digit_width(total);
-        let color_mode = peek_theme.color_mode;
-        let fg_open = color_mode.fg_seq(peek_theme.gutter);
-        let reset = color_mode.reset();
+        let style_mode = peek_theme.style_mode;
+        let fg_open = style_mode.fg_seq(peek_theme.gutter);
+        let reset = style_mode.reset();
         for (offset, line) in lines.iter_mut().enumerate() {
             let n = start + offset + 1;
             let gutter = format!("{fg_open}{n:>width$} │ {reset}");
@@ -220,9 +220,9 @@ impl ContentMode {
             return String::new();
         }
         let width = Self::gutter_digit_width(total);
-        let color_mode = peek_theme.color_mode;
-        let fg = color_mode.fg_seq(peek_theme.gutter);
-        let reset = color_mode.reset();
+        let style_mode = peek_theme.style_mode;
+        let fg = style_mode.fg_seq(peek_theme.gutter);
+        let reset = style_mode.reset();
         match line_num {
             Some(n) => format!("{fg}{n:>width$} │ {reset}"),
             None => format!("{fg}{:>width$} │ {reset}", ""),
@@ -477,7 +477,7 @@ impl ContentMode {
             let stale = self
                 .pretty_highlighted
                 .as_ref()
-                .is_none_or(|(t, c, _)| *t != ctx.theme_name || *c != ctx.peek_theme.color_mode);
+                .is_none_or(|(t, c, _)| *t != ctx.theme_name || *c != ctx.peek_theme.style_mode);
             if stale {
                 let highlighted = {
                     let pretty = match &self.pretty {
@@ -490,11 +490,11 @@ impl ContentMode {
                         token,
                         &self.theme_manager,
                         ctx.theme_name,
-                        ctx.peek_theme.color_mode,
+                        ctx.peek_theme.style_mode,
                     )?
                 };
                 self.pretty_highlighted =
-                    Some((ctx.theme_name, ctx.peek_theme.color_mode, highlighted));
+                    Some((ctx.theme_name, ctx.peek_theme.style_mode, highlighted));
             }
         } else if self.pretty_raw_lines.is_none() {
             let pretty = match &self.pretty {
@@ -599,7 +599,7 @@ impl ContentMode {
         for (offset, raw) in raw_lines.iter().enumerate() {
             let line_idx = start_at + offset;
             let styled = if let Some(hl) = self.highlighter.as_mut() {
-                hl.feed(raw, ctx.peek_theme.color_mode)?
+                hl.feed(raw, ctx.peek_theme.style_mode)?
             } else {
                 raw.clone()
             };
@@ -687,7 +687,7 @@ impl Mode for ContentMode {
                     token,
                     &self.theme_manager,
                     ctx.theme_name,
-                    ctx.peek_theme.color_mode,
+                    ctx.peek_theme.style_mode,
                 )?;
                 if self.show_line_numbers {
                     let total = lines.len();
@@ -722,9 +722,9 @@ impl Mode for ContentMode {
         } else {
             None
         };
-        let color_mode = ctx.peek_theme.color_mode;
-        let gutter_fg = color_mode.fg_seq(ctx.peek_theme.gutter);
-        let gutter_reset = color_mode.reset();
+        let style_mode = ctx.peek_theme.style_mode;
+        let gutter_fg = style_mode.fg_seq(ctx.peek_theme.gutter);
+        let gutter_reset = style_mode.reset();
         let prefix = |n: usize| -> Option<String> {
             gutter_width.map(|w| format!("{gutter_fg}{n:>w$} │ {gutter_reset}"))
         };
@@ -733,7 +733,7 @@ impl Mode for ContentMode {
             hl.reset(ctx.theme_name);
             for (idx, line) in self.line_source.iter_all().enumerate() {
                 let line = line?;
-                let escaped = hl.feed(&line, color_mode)?;
+                let escaped = hl.feed(&line, style_mode)?;
                 if let Some(p) = prefix(idx + 1) {
                     out.write_line(&format!("{p}{escaped}"))?;
                 } else {
@@ -1009,7 +1009,7 @@ mod tests {
         let file_info = crate::info::gather(&source, &detected).unwrap();
         let tm = Rc::new(ThemeManager::new(
             PeekThemeName::IdeaDark,
-            ColorMode::TrueColor,
+            StyleMode::TrueColor,
         ));
         let peek_theme = tm.peek_theme().clone();
 
@@ -1025,7 +1025,7 @@ mod tests {
             "rs",
             &tm,
             PeekThemeName::IdeaDark,
-            ColorMode::TrueColor,
+            StyleMode::TrueColor,
         )
         .unwrap();
 
@@ -1095,7 +1095,7 @@ mod tests {
 
         let tm = Rc::new(ThemeManager::new(
             PeekThemeName::IdeaDark,
-            ColorMode::TrueColor,
+            StyleMode::TrueColor,
         ));
 
         let mut mode = ContentMode::new(
@@ -1129,7 +1129,7 @@ mod tests {
     fn plain_mode_from_bytes(bytes: &[u8]) -> ContentMode {
         let source = InputSource::stdin(Bytes::copy_from_slice(bytes));
         let line_source = source.open_line_source().unwrap();
-        let tm = Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, ColorMode::Plain));
+        let tm = Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain));
         ContentMode::new(
             source,
             line_source,
@@ -1258,7 +1258,7 @@ mod tests {
     #[test]
     fn status_segments_show_wrap_only_when_on() {
         let mode = plain_mode_from_bytes(b"hi\n");
-        let tm = ThemeManager::new(PeekThemeName::IdeaDark, ColorMode::Plain);
+        let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
         let theme = tm.peek_theme().clone();
         // Default-on.
         let segs = mode.status_segments(&theme);

@@ -49,9 +49,9 @@ src/
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
   theme/
-    mod.rs             — re-exports PeekThemeName, ColorMode, PeekTheme, ThemeManager, helpers
+    mod.rs             — re-exports PeekThemeName, StyleMode, PeekTheme, ThemeManager, helpers
     name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme
-    color_mode.rs      — ColorMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
+    style_mode.rs      — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
     peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   types/

@@ -7,7 +7,7 @@ use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
-use crate::theme::{ColorMode, PeekTheme, PeekThemeName, ThemeManager};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
@@ -36,12 +36,12 @@ pub fn highlight_lines(
     syntax_token: &str,
     tm: &Rc<ThemeManager>,
     theme_name: PeekThemeName,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
 ) -> Result<Vec<String>> {
     let mut hl = LineStreamHighlighter::new(syntax_token.to_string(), Rc::clone(tm), theme_name);
     let mut lines = Vec::new();
     for line in content.lines() {
-        lines.push(hl.feed(line, color_mode)?);
+        lines.push(hl.feed(line, style_mode)?);
     }
     Ok(lines)
 }
@@ -128,7 +128,7 @@ impl LineStreamHighlighter {
 
     /// Feed the next line and return its escaped form. The line must be
     /// the highlighter's current `at()` line; the caller drives sequence.
-    pub(crate) fn feed(&mut self, line: &str, color_mode: ColorMode) -> Result<String> {
+    pub(crate) fn feed(&mut self, line: &str, style_mode: StyleMode) -> Result<String> {
         let theme = self.tm.theme_for(self.active_theme);
         let highlighter = Highlighter::new(theme);
         // syntect expects the trailing newline as part of the line for
@@ -150,7 +150,7 @@ impl LineStreamHighlighter {
         let ranges: Vec<(Style, &str)> = iter.collect();
         // Drop the synthetic trailing newline from the styled output so
         // the caller can decide its own line termination.
-        let escaped = ranges_to_escaped_trim_newline(&ranges, color_mode);
+        let escaped = ranges_to_escaped_trim_newline(&ranges, style_mode);
         self.next_line += 1;
         Ok(escaped)
     }
@@ -180,7 +180,7 @@ fn build_states(
 /// trimming leaves the final range empty (the common case — the trailing
 /// newline often arrives as its own range), drop it so we don't emit a
 /// stray foreground escape sequence with no text behind it.
-fn ranges_to_escaped_trim_newline(ranges: &[(Style, &str)], color_mode: ColorMode) -> String {
+fn ranges_to_escaped_trim_newline(ranges: &[(Style, &str)], style_mode: StyleMode) -> String {
     let mut out = String::new();
     for (i, (style, text)) in ranges.iter().enumerate() {
         let is_last = i + 1 == ranges.len();
@@ -192,10 +192,10 @@ fn ranges_to_escaped_trim_newline(ranges: &[(Style, &str)], color_mode: ColorMod
         if slice.is_empty() {
             continue;
         }
-        out.push_str(&color_mode.fg_seq(style.foreground));
+        out.push_str(&style_mode.fg_seq(style.foreground));
         out.push_str(slice);
     }
-    out.push_str(color_mode.reset());
+    out.push_str(style_mode.reset());
     out
 }
 
@@ -263,7 +263,7 @@ impl Registry {
                 FileType::Html => {
                     modes.push(Box::new(RenderedMode::new(
                         source.clone(),
-                        self.peek_theme.color_mode,
+                        self.peek_theme.style_mode,
                     )));
                     // Pair the rendered view with the HTML source.
                     modes.push(self.text_content_mode(source, file_type, args)?);
@@ -452,7 +452,7 @@ impl Registry {
             width: args.width,
             background: Background::from_str(&args.background),
             margin: args.margin,
-            color_mode: args.color,
+            style_mode: args.color,
             edge_density: args.edge_density,
             fit: FitMode::Contain,
         }
@@ -538,7 +538,7 @@ mod tests {
     fn tm() -> Rc<ThemeManager> {
         Rc::new(ThemeManager::new(
             PeekThemeName::IdeaDark,
-            ColorMode::TrueColor,
+            StyleMode::TrueColor,
         ))
     }
 
@@ -585,7 +585,7 @@ mod tests {
                 token,
                 &tm,
                 PeekThemeName::IdeaDark,
-                ColorMode::TrueColor,
+                StyleMode::TrueColor,
             )
             .unwrap();
 
@@ -596,7 +596,7 @@ mod tests {
             );
             let per_line: Vec<String> = content
                 .lines()
-                .map(|l| streamed.feed(l, ColorMode::TrueColor).unwrap())
+                .map(|l| streamed.feed(l, StyleMode::TrueColor).unwrap())
                 .collect();
 
             assert_eq!(
@@ -616,8 +616,8 @@ mod tests {
         let tm = tm();
         let mut s =
             LineStreamHighlighter::new("Rust".to_string(), Rc::clone(&tm), PeekThemeName::IdeaDark);
-        s.feed("fn a() {}", ColorMode::TrueColor).unwrap();
-        s.feed("fn b() {}", ColorMode::TrueColor).unwrap();
+        s.feed("fn a() {}", StyleMode::TrueColor).unwrap();
+        s.feed("fn b() {}", StyleMode::TrueColor).unwrap();
         assert_eq!(s.at(), 2);
         s.reset(PeekThemeName::IdeaDark);
         assert_eq!(s.at(), 0);

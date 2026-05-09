@@ -36,7 +36,7 @@ impl Mode for AboutMode {
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
         let pt = ctx.peek_theme;
         let theme_name = ctx.theme_name.cli_name();
-        let color_mode = pt.color_mode.cli_name();
+        let style_mode = pt.style_mode.cli_name();
         let mut lines: Vec<String> = Vec::new();
 
         // Logo with theme-color gradient — gives a quick read on what the
@@ -61,7 +61,7 @@ impl Mode for AboutMode {
         // Live display state
         lines.push(pt.paint_heading("DISPLAY"));
         lines.push(kv_line(pt, "Theme", theme_name));
-        lines.push(kv_line(pt, "Color mode", color_mode));
+        lines.push(kv_line(pt, "Color mode", style_mode));
         lines.push(String::new());
 
         // Live system state

@@ -6,7 +6,7 @@
 //! - [`ImageConfig`] / [`ImageMode`] / [`Background`] configure that
 //!   pipeline; they flow in from CLI args via `Registry`.
 
-use crate::theme::ColorMode;
+use crate::theme::StyleMode;
 
 pub(crate) mod animate;
 mod clustering;
@@ -109,7 +109,7 @@ pub struct ImageConfig {
     pub width: u32,
     pub background: Background,
     pub margin: u32,
-    pub color_mode: ColorMode,
+    pub style_mode: StyleMode,
     /// Target fraction of pixels marked as edges in `ImageMode::Contour`.
     /// Range 0.0..1.0. Higher = denser line-art. Stable across animation
     /// frames because it's a percentile of the gradient histogram.

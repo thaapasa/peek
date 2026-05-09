@@ -662,7 +662,7 @@ mod tests {
         let lm = sample();
         let tm = crate::theme::ThemeManager::new(
             crate::theme::PeekThemeName::IdeaDark,
-            crate::theme::ColorMode::Plain,
+            crate::theme::StyleMode::Plain,
         );
         let segs = lm.status_segments(tm.peek_theme());
         // 3 files in sample tree; deep.txt is selected (1st file).

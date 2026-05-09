@@ -7,7 +7,7 @@ use crossterm::event::KeyEvent;
 use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::theme::{ColorMode, PeekTheme, PeekThemeName};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
 use super::keys::{self, Action, Outcome};
@@ -148,12 +148,12 @@ impl ViewerState {
         source: InputSource,
         detected: Detected,
         theme_name: PeekThemeName,
-        color_mode: ColorMode,
+        style_mode: StyleMode,
         render_opts: RenderOptions,
         modes: Vec<Box<dyn Mode>>,
         mode_builder: ModeBuilder,
     ) -> Result<Self> {
-        let peek_theme = make_peek_theme(theme_name, color_mode);
+        let peek_theme = make_peek_theme(theme_name, style_mode);
         let file_info = crate::info::gather(&source, &detected)?;
         let frame = SessionFrame::new(source, detected, file_info, modes);
         Ok(Self {
@@ -591,15 +591,15 @@ impl ViewerState {
         } else {
             self.current_theme.prev()
         };
-        self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.color_mode);
+        self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.style_mode);
         self.invalidate_all_views();
     }
 
     fn cycle_color_mode(&mut self, direction: isize) {
-        self.peek_theme.color_mode = if direction >= 0 {
-            self.peek_theme.color_mode.next()
+        self.peek_theme.style_mode = if direction >= 0 {
+            self.peek_theme.style_mode.next()
         } else {
-            self.peek_theme.color_mode.prev()
+            self.peek_theme.style_mode.prev()
         };
         self.invalidate_all_views();
     }
@@ -775,7 +775,7 @@ impl ViewerState {
     // ---------------------------------------------------------------------
 
     pub(crate) fn draw(&mut self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
-        let reset_bytes = self.peek_theme.color_mode.reset_bytes();
+        let reset_bytes = self.peek_theme.style_mode.reset_bytes();
         // Clone the visible slice into an owned Vec so the immutable
         // frame borrow doesn't conflict with the &mut self.screen
         // call below. Per-frame this is one shallow copy of the

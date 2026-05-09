@@ -7,7 +7,7 @@ use crossterm::event::{self, Event};
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::theme::{ColorMode, PeekThemeName};
+use crate::theme::{PeekThemeName, StyleMode};
 use crate::viewer::modes::Mode;
 use crate::viewer::ui::state::ModeBuilder;
 use crate::viewer::ui::{
@@ -27,7 +27,7 @@ pub fn run(
     source: InputSource,
     detected: Detected,
     theme_name: PeekThemeName,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
@@ -38,7 +38,7 @@ pub fn run(
             source,
             detected,
             theme_name,
-            color_mode,
+            style_mode,
             render_opts,
             modes,
             mode_builder,
@@ -52,7 +52,7 @@ fn event_loop(
     source: InputSource,
     detected: Detected,
     theme_name: PeekThemeName,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
@@ -62,7 +62,7 @@ fn event_loop(
         source,
         detected,
         theme_name,
-        color_mode,
+        style_mode,
         render_opts,
         modes,
         mode_builder,
@@ -182,7 +182,7 @@ fn render_status_line(state: &mut ViewerState) -> String {
     let mode_segs = state.active_status_segments();
     let hints_owned: Vec<&'static str> = state.active_status_hints();
     let theme_name = state.current_theme.cli_name();
-    let color_mode_name = state.peek_theme.color_mode.cli_name();
+    let color_mode_name = state.peek_theme.style_mode.cli_name();
     // Breadcrumb: at depth 1, just the source name (matches the
     // single-session look). At depth > 1, every frame joined with
     // " > " so the user can see how deep they've drilled.
@@ -202,7 +202,7 @@ fn render_status_line(state: &mut ViewerState) -> String {
     segs.push((theme_name, theme.muted));
     // Only surface color mode when it's been changed off the default —
     // keeps the status line uncluttered for the common case.
-    if theme.color_mode != ColorMode::default() {
+    if theme.style_mode != StyleMode::default() {
         segs.push((color_mode_name, theme.muted));
     }
 

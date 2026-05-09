@@ -10,13 +10,13 @@ const ANSI_RESET_BYTES: &[u8] = b"\x1b[0m";
 
 /// How RGB colors are encoded in the terminal output.
 ///
-/// Callers always paint with truecolor `Color`s; `ColorMode` decides the
+/// Callers always paint with truecolor `Color`s; `StyleMode` decides the
 /// on-the-wire escape form (or whether to emit one at all). This is the
 /// single point of conversion — paint helpers and image writers route
 /// through the methods on this enum so the mode can be swapped without
 /// touching call sites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ColorMode {
+pub enum StyleMode {
     /// 24-bit (`\x1b[38;2;r;g;bm`) — full color.
     #[default]
     TrueColor,
@@ -30,7 +30,7 @@ pub enum ColorMode {
     Plain,
 }
 
-impl ColorMode {
+impl StyleMode {
     pub fn cli_name(self) -> &'static str {
         match self {
             Self::TrueColor => "truecolor",
@@ -176,13 +176,13 @@ impl ColorMode {
     }
 }
 
-impl fmt::Display for ColorMode {
+impl fmt::Display for StyleMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.cli_name())
     }
 }
 
-impl clap::ValueEnum for ColorMode {
+impl clap::ValueEnum for StyleMode {
     fn value_variants<'a>() -> &'a [Self] {
         &[
             Self::TrueColor,

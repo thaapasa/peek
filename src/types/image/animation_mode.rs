@@ -72,8 +72,8 @@ impl Mode for AnimationMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
-        // ColorMode can change between renders (interactive cycle).
-        self.config.color_mode = ctx.peek_theme.color_mode;
+        // StyleMode can change between renders (interactive cycle).
+        self.config.style_mode = ctx.peek_theme.style_mode;
         let term = TermSize {
             cols: ctx.term_cols.min(u32::MAX as usize) as u32,
             rows: ctx.term_rows.min(u32::MAX as usize) as u32,

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 
-use super::{ColorMode, PeekTheme, PeekThemeName, load_embedded_theme};
+use super::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
 /// Shared syntax highlighting resources.
 pub struct ThemeManager {
@@ -14,7 +14,7 @@ pub struct ThemeManager {
 }
 
 impl ThemeManager {
-    pub fn new(theme_name: PeekThemeName, color_mode: ColorMode) -> Self {
+    pub fn new(theme_name: PeekThemeName, style_mode: StyleMode) -> Self {
         let syntax_set = two_face::syntax::extra_no_newlines();
 
         // Load all custom themes into a ThemeSet
@@ -33,7 +33,7 @@ impl ThemeManager {
                 .get(theme_name.cli_name())
                 .expect("theme must exist");
             let mut t = PeekTheme::from_syntect(syntect_theme);
-            t.color_mode = color_mode;
+            t.style_mode = style_mode;
             t
         };
         Self {

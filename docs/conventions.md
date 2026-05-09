@@ -13,7 +13,7 @@
 ## Color
 
 - All colored output goes through `PeekTheme::paint()`. Never hand-write ANSI escapes
-  (`\x1b[...m`) — `ColorMode` decides the on-the-wire form (24-bit / 256 / 16 / grayscale / plain)
+  (`\x1b[...m`) — `StyleMode` decides the on-the-wire form (24-bit / 256 / 16 / grayscale / plain)
   in one place.
 - Use semantic roles (`heading`, `label`, `value`, `accent`, `muted`, `warning`). Derive shades with
   `lerp_color()`. Don't hardcode RGB.

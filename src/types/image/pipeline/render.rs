@@ -7,7 +7,7 @@ use super::glyph_atlas::{
 };
 use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
-use crate::theme::ColorMode;
+use crate::theme::StyleMode;
 
 /// Terminal dimensions in characters. The image renderer is fed sizes
 /// from `RenderCtx` rather than querying the terminal itself, so the
@@ -139,9 +139,9 @@ pub fn render_block_color(
     full_rows: u32,
     window: GridWindow,
     mode: ImageMode,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
 ) -> Vec<String> {
-    let plain = color_mode == ColorMode::Plain;
+    let plain = style_mode == StyleMode::Plain;
     let px_w = full_cols * CELL_W;
     let px_h = full_rows * CELL_H;
     let resized = if img.width() == px_w && img.height() == px_h {
@@ -190,10 +190,10 @@ pub fn render_block_color(
                 (glyph_match.ch, fg, bg)
             };
 
-            color_mode.write_fg_bg(&mut line, fg, bg, ch);
+            style_mode.write_fg_bg(&mut line, fg, bg, ch);
         }
 
-        line.push_str(color_mode.reset());
+        line.push_str(style_mode.reset());
         lines.push(line);
     }
 
@@ -252,7 +252,7 @@ pub fn render_contour(
     full_rows: u32,
     window: GridWindow,
     mode: ImageMode,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
 ) -> Vec<String> {
     let px_w = full_cols * CELL_W;
     let px_h = full_rows * CELL_H;
@@ -296,10 +296,10 @@ pub fn render_contour(
                 continue;
             }
             let ch = best_contour_glyph(bits, &atlas, &dilated_atlas);
-            color_mode.write_fg(&mut line, edge_fg, ch);
+            style_mode.write_fg(&mut line, edge_fg, ch);
         }
 
-        line.push_str(color_mode.reset());
+        line.push_str(style_mode.reset());
         lines.push(line);
     }
 
@@ -313,7 +313,7 @@ pub fn render_density(
     full_cols: u32,
     full_rows: u32,
     window: GridWindow,
-    color_mode: ColorMode,
+    style_mode: StyleMode,
 ) -> Vec<String> {
     const DENSITY_RAMP: &[u8] =
         b" .'`^\",:;Il!i><~+_-?][}{1)(|/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$";
@@ -337,9 +337,9 @@ pub fn render_density(
             let idx = ((luma / 255.0) * (ramp_len - 1) as f64) as usize;
             let ch = DENSITY_RAMP[idx.min(ramp_len - 1)] as char;
 
-            color_mode.write_fg(&mut line, [r, g, b], ch);
+            style_mode.write_fg(&mut line, [r, g, b], ch);
         }
-        line.push_str(color_mode.reset());
+        line.push_str(style_mode.reset());
         lines.push(line);
     }
 
@@ -506,7 +506,7 @@ pub fn render_prepared(
             prep.cols,
             prep.rows,
             window,
-            config.color_mode,
+            config.style_mode,
         ),
         ImageMode::Contour => {
             let edges = super::contour::detect_edges(&prep.composited, config.edge_density);
@@ -516,7 +516,7 @@ pub fn render_prepared(
                 prep.rows,
                 window,
                 config.mode,
-                config.color_mode,
+                config.style_mode,
             )
         }
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => render_block_color(
@@ -525,7 +525,7 @@ pub fn render_prepared(
             prep.rows,
             window,
             config.mode,
-            config.color_mode,
+            config.style_mode,
         ),
     }
 }
