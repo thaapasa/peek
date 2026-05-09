@@ -411,4 +411,31 @@ mod tests {
             extract(&fixture("archive.zip"), ArchiveFormat::Zip, "../etc/passwd").unwrap_err();
         assert!(matches!(err, ExtractError::UnsafePath(_)));
     }
+
+    /// Empty `.tar` extract: walking the (empty) entry list must
+    /// finish and return `NotFound` rather than hanging in the tar
+    /// reader. Pairs with the listing-side empty-tar test.
+    #[test]
+    fn extract_from_empty_tar_returns_not_found() {
+        let src = InputSource::memory(bytes::Bytes::new(), "empty.tar");
+        let err = extract(&src, ArchiveFormat::Tar, "anything").unwrap_err();
+        assert!(matches!(err, ExtractError::NotFound(_)));
+    }
+
+    /// Single-stream extract on empty input must surface a clean
+    /// error — codec-level decode failure — instead of looping in
+    /// the decoder.
+    #[test]
+    fn extract_empty_single_stream_errors_cleanly() {
+        for (name, fmt) in [
+            ("empty.gz", ArchiveFormat::Gz),
+            ("empty.bz2", ArchiveFormat::Bz2),
+            ("empty.xz", ArchiveFormat::Xz),
+            ("empty.zst", ArchiveFormat::Zst),
+        ] {
+            let src = InputSource::memory(bytes::Bytes::new(), name);
+            let res = extract(&src, fmt, "decompressed");
+            assert!(res.is_err(), "{name}: decode of empty bytes must error");
+        }
+    }
 }

@@ -176,4 +176,51 @@ mod tests {
         assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_size, 30_683);
     }
+
+    /// Empty `.tar`: zero-byte input must list as an empty TOC, not
+    /// hang. Reproduces the "archive.tar size 0" case where a disk
+    /// image surfaced a 0-byte tar entry and descending into it
+    /// reached the listing path with empty bytes.
+    #[test]
+    fn empty_tar_lists_as_empty_toc() {
+        let src = InputSource::memory(bytes::Bytes::new(), "empty.tar");
+        let entries = list_entries(&src, ArchiveFormat::Tar).unwrap();
+        assert!(entries.is_empty());
+    }
+
+    /// Compressed-tar listings against zero-byte input must finish —
+    /// either with an empty TOC or a clean error. The decoders fail
+    /// at the magic-byte check; the archive backend surfaces that as
+    /// an `Err`. Asserting *completion* (not the specific result)
+    /// is the contract that prevents the hang.
+    #[test]
+    fn empty_compressed_tar_listings_terminate() {
+        for fmt in [
+            ArchiveFormat::TarGz,
+            ArchiveFormat::TarBz2,
+            ArchiveFormat::TarXz,
+            ArchiveFormat::TarZst,
+        ] {
+            let src = InputSource::memory(bytes::Bytes::new(), "empty.tar.x");
+            let _ = list_entries(&src, fmt);
+        }
+    }
+
+    /// Single-stream `.gz` / `.bz2` / `.xz` / `.zst` listings derive
+    /// the entry name from the source filename without touching the
+    /// stream — empty input must still produce the lone synthetic
+    /// entry instead of hanging on a decode of zero bytes.
+    #[test]
+    fn empty_single_stream_listings_produce_one_entry() {
+        for (name, fmt) in [
+            ("empty.gz", ArchiveFormat::Gz),
+            ("empty.bz2", ArchiveFormat::Bz2),
+            ("empty.xz", ArchiveFormat::Xz),
+            ("empty.zst", ArchiveFormat::Zst),
+        ] {
+            let src = InputSource::memory(bytes::Bytes::new(), name);
+            let entries = list_entries(&src, fmt).unwrap();
+            assert_eq!(entries.len(), 1, "{name}: one synthetic entry");
+        }
+    }
 }
