@@ -130,10 +130,10 @@ pub struct Detected {
 pub fn detect(source: &InputSource) -> Result<Detected> {
     match source {
         InputSource::File(path) => detect_file(path),
-        InputSource::Memory { bytes, .. } => Ok(detect_bytes(bytes)),
-        InputSource::FileRange { .. } => {
+        InputSource::Memory { bytes, name } => Ok(detect_bytes_named(bytes, Some(name))),
+        InputSource::FileRange { name, .. } => {
             let buf = source.read_bytes()?;
-            Ok(detect_bytes(&buf))
+            Ok(detect_bytes_named(&buf, Some(name)))
         }
     }
 }
@@ -516,4 +516,69 @@ fn detect_bytes(data: &[u8]) -> Detected {
         file_type: FileType::SourceCode { syntax: None },
         magic_mime,
     }
+}
+
+/// Detect from a byte buffer with an optional source name. The name is
+/// consulted first for extension-based classification (so a file
+/// extracted from an archive into memory still routes by `.json` /
+/// `.svg` / etc. just like a real path would), then for a syntect
+/// syntax hint if content sniffing only resolves to plain SourceCode.
+///
+/// Used by `detect()` for `Memory` and `FileRange` sources so recursive
+/// peek into a container (EPUB / archive / ISO) doesn't lose the entry
+/// name's classification on its way back through the pipeline.
+fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
+    if let Some(name) = name
+        && let Some(file_type) = classify_by_name(name)
+    {
+        return Detected {
+            file_type,
+            magic_mime: None,
+        };
+    }
+    let mut detected = detect_bytes(data);
+    if let FileType::SourceCode { syntax: None } = &detected.file_type
+        && let Some(ext) = name.and_then(extension_lower)
+    {
+        detected.file_type = FileType::SourceCode { syntax: Some(ext) };
+    }
+    detected
+}
+
+/// Mirror of `detect_file`'s extension routing for name-only sources.
+/// Covers archive double-extensions, disk-image extensions, and the
+/// structured / SVG / HTML / EPUB family. Returns `None` when no
+/// extension matches and the caller should fall back to content
+/// sniffing.
+fn classify_by_name(name: &str) -> Option<FileType> {
+    if let Some(fmt) = archive_format_from_name(name) {
+        return Some(FileType::Archive(fmt));
+    }
+    let ext = extension_lower(name)?;
+    if let Some(fmt) = disk_image_format_from_ext(&ext) {
+        return Some(FileType::DiskImage(fmt));
+    }
+    Some(match ext.as_str() {
+        "json" | "geojson" => FileType::Structured(StructuredFormat::Json),
+        "jsonc" => FileType::Structured(StructuredFormat::Jsonc),
+        "json5" => FileType::Structured(StructuredFormat::Json5),
+        "jsonl" | "ndjson" => FileType::Structured(StructuredFormat::Jsonl),
+        "yaml" | "yml" => FileType::Structured(StructuredFormat::Yaml),
+        "toml" => FileType::Structured(StructuredFormat::Toml),
+        "svg" => FileType::Svg,
+        "html" | "htm" | "xhtml" => FileType::Html,
+        "epub" => FileType::Epub,
+        "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),
+        _ => return None,
+    })
+}
+
+/// Lowercased extension of a file name, or `None` for hidden files
+/// (`.foo`) and names without an extension.
+fn extension_lower(name: &str) -> Option<String> {
+    let pos = name.rfind('.')?;
+    if pos == 0 || pos == name.len() - 1 {
+        return None;
+    }
+    Some(name[pos + 1..].to_ascii_lowercase())
 }
