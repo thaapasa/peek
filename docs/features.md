@@ -109,6 +109,23 @@ prose word count (excludes fenced code), and reading-time estimate at 230 wpm. R
 
 The Info view shows the structured XML stats (root element, element counts).
 
+#### EPUB ✅
+
+`.epub` files (a ZIP container with HTML chapters + OPF metadata) get a three-mode view:
+
+- **Read** (default) — one chapter at a time via the shared HTML rendering pipeline (same
+  `html2text` driver as the standalone HTML viewer). `n` / `N` step forward / back through the
+  spine; the status line shows `ch X/Y`. Each rendered chapter is cached at the current width so
+  stepping back is instant; a terminal resize re-renders only the visible chapter.
+- **TOC** — the raw ZIP file tree via the existing `ListingMode`. Useful for inspecting cover
+  images, stylesheets, or the OPF / NCX metadata files inside the container. Recursive peek
+  (`Enter`) descends into selected entries.
+- **Info** — DC metadata extracted from the OPF: title, author (`dc:creator`), language,
+  publisher, date, identifier, description, plus the spine length.
+
+Print mode (`--print` or non-TTY stdout) walks every chapter in spine order separated by blank
+lines, so `peek book.epub | less` renders the whole book.
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

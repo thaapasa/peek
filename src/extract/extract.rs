@@ -86,6 +86,11 @@ pub fn extract(
         }
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
+        FileType::Epub => crate::types::archive::extract::extract(
+            source,
+            crate::input::detect::ArchiveFormat::Zip,
+            key,
+        ),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html

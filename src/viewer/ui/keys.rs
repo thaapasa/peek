@@ -94,6 +94,10 @@ pub(crate) enum Action {
     NextFrame,
     /// Step back to the previous animation frame.
     PrevFrame,
+    /// Advance to the next chapter (EPUB read mode).
+    NextChapter,
+    /// Step back to the previous chapter (EPUB read mode).
+    PrevChapter,
     /// Toggle the sticky parent-directory breadcrumb at the top of a
     /// scrolled listing TOC view.
     ToggleStickyParents,
@@ -148,6 +152,8 @@ impl Action {
         const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
         const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
+        const NEXT_CHAPTER:   &[Binding] = &[Binding::plain(Char('n'))];
+        const PREV_CHAPTER:   &[Binding] = &[Binding::plain(Char('N'))];
         const STICKY_PARENTS: &[Binding] = &[Binding::plain(Char('s'))];
         const EXTRACT:        &[Binding] = &[Binding::plain(Char('e'))];
         const DESCEND:        &[Binding] = &[Binding::plain(Enter)];
@@ -183,6 +189,8 @@ impl Action {
             Action::PlayPause         => PLAY_PAUSE,
             Action::NextFrame         => NEXT_FRAME,
             Action::PrevFrame         => PREV_FRAME,
+            Action::NextChapter       => NEXT_CHAPTER,
+            Action::PrevChapter       => PREV_CHAPTER,
             Action::ToggleStickyParents => STICKY_PARENTS,
             Action::Extract           => EXTRACT,
             Action::Descend           => DESCEND,
@@ -224,6 +232,8 @@ impl Action {
             Action::PlayPause         => "p",
             Action::NextFrame         => "n",
             Action::PrevFrame         => "N",
+            Action::NextChapter       => "n",
+            Action::PrevChapter       => "N",
             Action::ToggleStickyParents => "s",
             Action::Extract           => "e",
             Action::Descend           => "Enter",

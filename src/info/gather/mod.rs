@@ -200,6 +200,7 @@ fn gather_extras_in_memory(
                 stats: None,
             },
         },
+        FileType::Epub => crate::types::epub::info_gather::gather_extras(source),
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
@@ -253,6 +254,9 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         },
         FileType::Archive(fmt) => {
             crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)
+        }
+        FileType::Epub => {
+            crate::types::epub::info_gather::gather_extras(&InputSource::File(path.to_path_buf()))
         }
         FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),

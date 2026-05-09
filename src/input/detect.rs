@@ -26,6 +26,8 @@ pub enum FileType {
     Svg,
     /// HTML document (rendered text view via html2text, XML source for raw view)
     Html,
+    /// EPUB e-book (ZIP container with HTML chapters + OPF metadata)
+    Epub,
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -184,6 +186,7 @@ fn detect_file(path: &Path) -> Result<Detected> {
             "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
             "svg" => Some(FileType::Svg),
             "html" | "htm" | "xhtml" => Some(FileType::Html),
+            "epub" => Some(FileType::Epub),
             "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
             _ => None,
         };

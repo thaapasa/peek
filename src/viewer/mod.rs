@@ -9,6 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
+use crate::types::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
 use crate::types::listing::ListingMode;
@@ -267,6 +268,32 @@ impl Registry {
                     )));
                     // Pair the rendered view with the HTML source.
                     modes.push(self.text_content_mode(source, file_type, args)?);
+                }
+                FileType::Epub => {
+                    // Read mode (default) + ZIP listing TOC. Info
+                    // is appended by the universal tail. If OPF
+                    // parsing fails, fall back to listing-only so
+                    // the user can still browse the container.
+                    let pkg_result = epub::package::open(source);
+                    let mut warnings = Vec::new();
+                    if let Ok(pkg) = pkg_result {
+                        modes.push(Box::new(EpubReadMode::new(
+                            source.clone(),
+                            self.peek_theme.style_mode,
+                            pkg,
+                        )));
+                    } else if let Err(e) = pkg_result {
+                        warnings.push(format!("EPUB metadata unreadable: {e:#}"));
+                    }
+                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
+                        source,
+                        crate::input::detect::ArchiveFormat::Zip,
+                    ) {
+                        Ok(e) => (e, Vec::new()),
+                        Err(e) => (Vec::new(), vec![format!("Failed to list EPUB: {e:#}")]),
+                    };
+                    warnings.append(&mut listing_warnings);
+                    modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
                 }
                 FileType::Image => {
                     let cfg = self.image_config(args);

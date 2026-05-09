@@ -104,7 +104,14 @@ src/
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
     html/
       mod.rs           — Module wiring; re-exports RenderedMode
-      mode.rs          — RenderedMode: html2text-backed lynx-style view (paragraph wrap, list bullets, table grid, numbered link refs, ANSI styling for bold/italic/colour); width-keyed cache, rerender on resize. CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
+      mode.rs          — RenderedMode: width-keyed cache wrapper around `render::render`; rerender on resize
+      render.rs        — Shared html2text driver: bytes → ANSI lines via StyleMode (also used by EPUB chapters). CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
+    epub/
+      mod.rs           — Module wiring; re-exports EpubReadMode
+      package.rs       — Parse EPUB ZIP: META-INF/container.xml → OPF rootfile → DC metadata + manifest (id→href) + spine; resolve spine to absolute ZIP paths; ZIP entry reader
+      read_mode.rs     — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine
+      info_gather.rs   — Build EpubStats (DC metadata + chapter count) from package::open
+      info_render.rs   — Render EPUB info section
     svg/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)

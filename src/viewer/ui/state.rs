@@ -413,6 +413,8 @@ impl ViewerState {
             | Action::PlayPause
             | Action::NextFrame
             | Action::PrevFrame
+            | Action::NextChapter
+            | Action::PrevChapter
             | Action::CycleBackground
             | Action::CycleImageMode
             | Action::CycleFitMode
