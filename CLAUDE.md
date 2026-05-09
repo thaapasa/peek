@@ -109,7 +109,7 @@ src/
     epub/
       mod.rs           — Module wiring; re-exports EpubReadMode
       package.rs       — Parse EPUB ZIP: META-INF/container.xml → OPF rootfile → DC metadata + manifest (id→href) + spine; resolve spine to absolute ZIP paths; ZIP entry reader
-      read_mode.rs     — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine
+      read_mode.rs     — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
       info_gather.rs   — Build EpubStats (DC metadata + chapter count) from package::open
       info_render.rs   — Render EPUB info section
     svg/

@@ -280,6 +280,7 @@ impl Registry {
                         modes.push(Box::new(EpubReadMode::new(
                             source.clone(),
                             self.peek_theme.style_mode,
+                            self.image_config(args),
                             pkg,
                         )));
                     } else if let Err(e) = pkg_result {
