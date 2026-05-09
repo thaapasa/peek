@@ -12,6 +12,7 @@ pub mod build;
 pub mod entry;
 pub mod mode;
 pub mod stats;
+mod viewport;
 
 pub use build::{FlatEntry, from_flat_paths};
 pub use entry::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};

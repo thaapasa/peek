@@ -3,13 +3,18 @@
 //! used by archives, ISO 9660 disk images, and any future container
 //! type that produces a [`super::entry::Entry`] tree.
 //!
-//! Listing-only: no payload extraction. The mode owns the tree, a
-//! pre-flattened row index for O(1) scrolling, and the format label.
+//! Listing-only: no payload extraction. The mode owns the tree and
+//! a pre-flattened row index; scroll + selection state lives in
+//! [`super::viewport::ListingViewport`], which keeps invariants
+//! (top in range, selection on a file row, selection visible inside
+//! the *content* slot — not behind the sticky breadcrumb) under one
+//! reconcile path so individual mode methods can't drift.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
 use super::entry::{Entry, EntryKind, EntryMtime};
+use super::viewport::ListingViewport;
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
@@ -33,39 +38,31 @@ pub struct ListingMode {
     /// scrolling slices into this without rebuilding.
     rows: Vec<TreeRow>,
     pending_warnings: Vec<String>,
-    top_index: usize,
-    cached_rows: usize,
-    /// When true, the ancestor chain of the top visible row is pinned
-    /// to the upper rows of the viewport so deeply-scrolled trees keep
-    /// their breadcrumb visible. Toggled by `s`. Suppressed
-    /// automatically when the top row has no parent (i.e. scroll is at
-    /// a top-level entry) or when there's no scroll at all.
-    sticky_enabled: bool,
-    /// Selected file row index (or `None` for empty listings). Drives
-    /// the highlight and the extract action target.
-    selected_idx: Option<usize>,
+    viewport: ListingViewport,
 }
 
 /// One rendered row in the TOC. Holds enough metadata to render
-/// without traversing the source tree again.
+/// without traversing the source tree again. Kept `pub(super)` so
+/// the viewport module can read row metadata (parent_row,
+/// inner_path) when computing scroll geometry.
 #[derive(Clone)]
-struct TreeRow {
+pub(super) struct TreeRow {
     /// Composed tree prefix: ancestor segments (`│ ` / `  `) plus this
     /// row's `├╴` / `└╴` connector. Empty for top-level rows.
-    prefix: String,
+    pub(super) prefix: String,
     /// Last path segment shown alone — the tree prefix conveys depth.
-    leaf: String,
-    is_dir: bool,
-    size: u64,
-    mode: Option<u32>,
-    mtime: Option<EntryMtime>,
+    pub(super) leaf: String,
+    pub(super) is_dir: bool,
+    pub(super) size: u64,
+    pub(super) mode: Option<u32>,
+    pub(super) mtime: Option<EntryMtime>,
     /// Index of the row representing this entry's parent directory in
     /// `ListingMode::rows`, or `None` for top-level entries. Used to
     /// build the sticky breadcrumb chain on scroll.
-    parent_row: Option<usize>,
+    pub(super) parent_row: Option<usize>,
     /// Slash-joined inner path for file rows; `None` for directories.
     /// Used as the extract key.
-    inner_path: Option<String>,
+    pub(super) inner_path: Option<String>,
 }
 
 impl ListingMode {
@@ -76,161 +73,19 @@ impl ListingMode {
         warnings: Vec<String>,
     ) -> Self {
         let rows = flatten(&entries);
-        let selected_idx = rows.iter().position(|r| r.inner_path.is_some());
+        let viewport = ListingViewport::new(&rows);
         Self {
             format_name: format_name.into(),
             label: label.into(),
             rows,
             pending_warnings: warnings,
-            top_index: 0,
-            // Set on first render_window / on_resize. `scroll` and
-            // `status_segments` guard with `.max(1)` for the brief
-            // window before the first render.
-            cached_rows: 0,
-            sticky_enabled: true,
-            selected_idx,
+            viewport,
         }
-    }
-
-    /// Inner path of the selected file, surfaced via `extract_target`.
-    pub fn selected_inner_path(&self) -> Option<&str> {
-        self.selected_idx
-            .and_then(|i| self.rows.get(i).and_then(|r| r.inner_path.as_deref()))
     }
 
     /// File rows only, no directories.
     fn file_count(&self) -> usize {
         self.rows.iter().filter(|r| r.inner_path.is_some()).count()
-    }
-
-    /// 1-based position of the selection among file rows.
-    fn selected_file_pos(&self) -> Option<usize> {
-        let sel = self.selected_idx?;
-        let mut pos = 0usize;
-        for (i, row) in self.rows.iter().enumerate() {
-            if row.inner_path.is_some() {
-                pos += 1;
-                if i == sel {
-                    return Some(pos);
-                }
-            }
-        }
-        None
-    }
-
-    /// Nearest file row in the given direction (exclusive of `from`).
-    /// Returns `None` at the ends so selection stays put.
-    fn next_file_row(&self, from: usize, forward: bool) -> Option<usize> {
-        let total = self.rows.len();
-        if total == 0 {
-            return None;
-        }
-        if forward {
-            (from + 1..total).find(|&i| self.rows[i].inner_path.is_some())
-        } else {
-            (0..from).rev().find(|&i| self.rows[i].inner_path.is_some())
-        }
-    }
-
-    fn first_file_row(&self) -> Option<usize> {
-        self.rows.iter().position(|r| r.inner_path.is_some())
-    }
-
-    fn last_file_row(&self) -> Option<usize> {
-        self.rows.iter().rposition(|r| r.inner_path.is_some())
-    }
-
-    /// First file row at or after `top_index`.
-    fn first_visible_file(&self) -> Option<usize> {
-        (self.top_index..self.rows.len()).find(|&i| self.rows[i].inner_path.is_some())
-    }
-
-    /// Pull `top_index` so the selection sits inside the viewport.
-    /// Ignores sticky chain — at most a third of the viewport, worst
-    /// case one extra scroll step for the user.
-    fn scroll_to_show_selection(&mut self) {
-        let Some(sel) = self.selected_idx else {
-            return;
-        };
-        let viewport = self.cached_rows.max(1);
-        if sel < self.top_index {
-            self.top_index = sel;
-        } else if sel >= self.top_index + viewport {
-            self.top_index = sel.saturating_sub(viewport - 1);
-        }
-        let max = self.max_top();
-        if self.top_index > max {
-            self.top_index = max;
-        }
-    }
-
-    /// Ancestor row indices for the row currently at the top of the
-    /// viewport, ordered root-most first. Empty when sticky is off, when
-    /// there's no scroll, or when the top row is a top-level entry.
-    /// Capped to `(viewport / 3).max(1)` so sticky never eats more than
-    /// a third of the visible content.
-    fn sticky_chain(&self, viewport: usize) -> Vec<usize> {
-        if !self.sticky_enabled || self.top_index == 0 || self.rows.is_empty() {
-            return Vec::new();
-        }
-        let cap = (viewport / 3).max(1);
-        let mut chain = Vec::new();
-        let mut cur = self.rows[self.top_index].parent_row;
-        while let Some(p) = cur {
-            chain.push(p);
-            cur = self.rows[p].parent_row;
-        }
-        chain.reverse();
-        if chain.len() > cap {
-            let drop = chain.len() - cap;
-            chain.drain(..drop);
-        }
-        chain
-    }
-
-    fn max_top(&self) -> usize {
-        let viewport = self.cached_rows.max(1);
-        let total = self.rows.len();
-        if total <= viewport {
-            return 0;
-        }
-        // Sticky takes some upper rows of the viewport, so the content
-        // slot is `viewport - sticky_len`. The naive bound
-        // `total - viewport` would leave the bottom `sticky_len` rows
-        // unreachable. Sticky depends on which row is at top, so this
-        // is a fixed-point search: try the naive bound, see if the tail
-        // still fits, advance by one if not. Bounded by the sticky cap
-        // (viewport / 3 + 1) — a handful of iterations at worst.
-        let max_iter = (viewport / 3).max(1) + 1;
-        let mut top = total - viewport;
-        for _ in 0..max_iter {
-            let sticky_len = self.sticky_chain_len_at(top);
-            let content = viewport.saturating_sub(sticky_len).max(1);
-            if top + content >= total {
-                return top;
-            }
-            top = (top + 1).min(total - 1);
-        }
-        top
-    }
-
-    /// Length of the sticky chain that would render with `top` as the
-    /// viewport's top row. Same suppression rules as `sticky_chain`
-    /// (off when sticky disabled, top is row 0, or the row has no
-    /// parent). Used by `max_top` to make scroll math sticky-aware
-    /// without allocating the full chain vector.
-    fn sticky_chain_len_at(&self, top: usize) -> usize {
-        if !self.sticky_enabled || top == 0 || self.rows.is_empty() {
-            return 0;
-        }
-        let cap = (self.cached_rows.max(1) / 3).max(1);
-        let mut len = 0usize;
-        let mut cur = self.rows[top].parent_row;
-        while let Some(p) = cur {
-            len += 1;
-            cur = self.rows[p].parent_row;
-        }
-        len.min(cap)
     }
 
     fn paint_row(
@@ -278,6 +133,7 @@ impl ListingMode {
             Vec::new()
         };
         let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
+        let selected_idx = self.viewport.selected();
         slice
             .iter()
             .enumerate()
@@ -287,7 +143,7 @@ impl ListingMode {
                 } else {
                     None
                 };
-                let selected = Some(*row_idx) == self.selected_idx;
+                let selected = Some(*row_idx) == selected_idx;
                 let line = self.paint_row(row, theme, mtime_text, selected);
                 if selected {
                     paint_selected_marker(&line, theme)
@@ -316,18 +172,9 @@ impl Mode for ListingMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, rows: usize) -> Result<Window> {
-        self.cached_rows = rows;
-        let max = self.max_top();
-        if self.top_index > max {
-            self.top_index = max;
-        }
+        self.viewport.set_viewport_rows(&self.rows, rows);
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        let sticky = self.sticky_chain(rows);
-        let content_rows = rows.saturating_sub(sticky.len()).max(1);
-        let end = self
-            .top_index
-            .saturating_add(content_rows)
-            .min(self.rows.len());
+        let win = self.viewport.window(&self.rows);
         // Compose sticky breadcrumb rows + content slice into one
         // buffer so render_slice computes mtime column width across
         // the full visible window — keeps columns aligned. Carry the
@@ -335,11 +182,11 @@ impl Mode for ListingMode {
         // highlight fires for the right row regardless of sticky
         // displacement.
         let mut combined: Vec<(usize, TreeRow)> =
-            Vec::with_capacity(sticky.len() + (end - self.top_index));
-        for idx in &sticky {
+            Vec::with_capacity(win.sticky.len() + win.content.len());
+        for idx in &win.sticky {
             combined.push((*idx, self.rows[*idx].clone()));
         }
-        for idx in self.top_index..end {
+        for idx in win.content.clone() {
             combined.push((idx, self.rows[idx].clone()));
         }
         let lines =
@@ -382,56 +229,13 @@ impl Mode for ListingMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        let max = self.max_top();
-        let rows = self.cached_rows.max(1);
         match action {
-            Action::ScrollUp => {
-                if let Some(cur) = self.selected_idx
-                    && let Some(prev) = self.next_file_row(cur, false)
-                {
-                    self.selected_idx = Some(prev);
-                }
-                self.scroll_to_show_selection();
-            }
-            Action::ScrollDown => {
-                if let Some(cur) = self.selected_idx
-                    && let Some(next) = self.next_file_row(cur, true)
-                {
-                    self.selected_idx = Some(next);
-                }
-                self.scroll_to_show_selection();
-            }
-            // PageUp/Dn page-scroll, then snap selection to the first
-            // file now visible.
-            Action::PageUp => {
-                self.top_index = self.top_index.saturating_sub(rows.saturating_sub(1));
-                if let Some(idx) = self.first_visible_file() {
-                    self.selected_idx = Some(idx);
-                }
-            }
-            Action::PageDown => {
-                self.top_index = self
-                    .top_index
-                    .saturating_add(rows.saturating_sub(1))
-                    .min(max);
-                if let Some(idx) = self.first_visible_file() {
-                    self.selected_idx = Some(idx);
-                }
-            }
-            Action::Top => {
-                if let Some(idx) = self.first_file_row() {
-                    self.selected_idx = Some(idx);
-                }
-                self.top_index = 0;
-                self.scroll_to_show_selection();
-            }
-            Action::Bottom => {
-                if let Some(idx) = self.last_file_row() {
-                    self.selected_idx = Some(idx);
-                }
-                self.top_index = max;
-                self.scroll_to_show_selection();
-            }
+            Action::ScrollUp => self.viewport.move_selection(&self.rows, false),
+            Action::ScrollDown => self.viewport.move_selection(&self.rows, true),
+            Action::PageUp => self.viewport.page(&self.rows, false),
+            Action::PageDown => self.viewport.page(&self.rows, true),
+            Action::Top => self.viewport.jump_first(&self.rows),
+            Action::Bottom => self.viewport.jump_last(&self.rows),
             _ => return false,
         }
         true
@@ -442,7 +246,7 @@ impl Mode for ListingMode {
     }
 
     fn on_resize(&mut self, _term_cols: usize, term_rows: usize) {
-        self.cached_rows = term_rows;
+        self.viewport.set_viewport_rows(&self.rows, term_rows);
     }
 
     fn tracks_position(&self) -> bool {
@@ -450,25 +254,25 @@ impl Mode for ListingMode {
     }
 
     fn position(&self) -> Position {
-        Position::Line(self.top_index)
+        Position::Line(self.viewport.top())
     }
 
     fn set_position(&mut self, pos: Position, _source: &InputSource) {
         if let Position::Line(l) = pos {
-            self.top_index = l.min(self.max_top());
+            self.viewport.set_top(&self.rows, l);
         }
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
         let files = self.file_count();
         let mut segs = Vec::new();
-        let s = match self.selected_file_pos() {
+        let s = match self.viewport.selected_file_pos(&self.rows) {
             Some(pos) => format!("{}/{} ({})", pos, files, self.format_name),
             None => format!("{} ({})", files, self.format_name),
         };
         segs.push((s, theme.muted));
         // Sticky on is the default — only call out the off state.
-        if !self.sticky_enabled {
+        if !self.viewport.sticky_enabled() {
             segs.push(("sticky off".to_string(), theme.muted));
         }
         segs
@@ -484,14 +288,15 @@ impl Mode for ListingMode {
 
     fn handle(&mut self, action: Action) -> Handled {
         if action == Action::ToggleStickyParents {
-            self.sticky_enabled = !self.sticky_enabled;
+            self.viewport.toggle_sticky(&self.rows);
             return Handled::Yes;
         }
         Handled::No
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        self.selected_inner_path()
+        self.viewport
+            .selected_inner_path(&self.rows)
             .map(|p| ExtractTarget::EntryPath(p.to_string()))
     }
 
@@ -524,6 +329,11 @@ fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
         }
     }
     rows
+}
+
+#[cfg(test)]
+pub(super) fn flatten_for_test(entries: &[Entry]) -> Vec<TreeRow> {
+    flatten(entries)
 }
 
 fn walk(
@@ -758,68 +568,6 @@ mod tests {
     }
 
     #[test]
-    fn sticky_chain_empty_at_top() {
-        let mut lm = sample();
-        lm.top_index = 0;
-        assert!(lm.sticky_chain(20).is_empty());
-    }
-
-    #[test]
-    fn sticky_chain_walks_ancestors_root_first() {
-        let mut lm = sample();
-        // Top of viewport is `deep.txt` (row 2). Ancestors: sub/ (0)
-        // → deeper/ (1).
-        lm.top_index = 2;
-        assert_eq!(lm.sticky_chain(20), vec![0, 1]);
-    }
-
-    #[test]
-    fn sticky_chain_capped_to_viewport_third() {
-        let mut lm = sample();
-        lm.top_index = 2;
-        // Viewport 3 → cap = 1 → keep only the deepest ancestor.
-        assert_eq!(lm.sticky_chain(3), vec![1]);
-    }
-
-    #[test]
-    fn sticky_chain_empty_when_disabled() {
-        let mut lm = sample();
-        lm.top_index = 2;
-        lm.sticky_enabled = false;
-        assert!(lm.sticky_chain(20).is_empty());
-    }
-
-    #[test]
-    fn sticky_chain_empty_for_top_level_row() {
-        let mut lm = sample();
-        // Row 4 is `README.txt`, a top-level entry with parent_row = None.
-        lm.top_index = 4;
-        assert!(lm.sticky_chain(20).is_empty());
-    }
-
-    /// With sticky on and a small viewport, max_top advances past the
-    /// naive `total - viewport` so the bottom-most rows aren't hidden
-    /// behind the breadcrumb.
-    #[test]
-    fn max_top_reserves_for_sticky() {
-        let mut lm = sample();
-        lm.cached_rows = 3;
-        // 5 rows, viewport 3. Naive max_top = 2 → with sticky_len = 1
-        // only rows 2,3 visible; row 4 would be unreachable. Iterative
-        // search lands at top = 3 (sticky_len = 1, content shows rows
-        // 3, 4 — tail visible).
-        assert_eq!(lm.max_top(), 3);
-    }
-
-    #[test]
-    fn max_top_naive_when_sticky_disabled() {
-        let mut lm = sample();
-        lm.cached_rows = 3;
-        lm.sticky_enabled = false;
-        assert_eq!(lm.max_top(), 2);
-    }
-
-    #[test]
     fn inner_path_built_for_files_only() {
         let lm = sample();
         let paths: Vec<Option<String>> = lm.rows.iter().map(|r| r.inner_path.clone()).collect();
@@ -839,60 +587,69 @@ mod tests {
     fn initial_selection_is_first_file() {
         let lm = sample();
         // Row 2 is the first file row (deep.txt) in the sample tree.
-        assert_eq!(lm.selected_idx, Some(2));
-        assert_eq!(lm.selected_inner_path(), Some("sub/deeper/deep.txt"));
+        assert_eq!(lm.viewport.selected(), Some(2));
+        assert_eq!(
+            lm.viewport.selected_inner_path(&lm.rows),
+            Some("sub/deeper/deep.txt")
+        );
     }
 
     #[test]
     fn scroll_down_advances_selection_to_next_file_skipping_dirs() {
         let mut lm = sample();
-        lm.cached_rows = 10;
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.selected_idx, Some(3));
-        assert_eq!(lm.selected_inner_path(), Some("sub/inner.txt"));
+        assert_eq!(lm.viewport.selected(), Some(3));
+        assert_eq!(
+            lm.viewport.selected_inner_path(&lm.rows),
+            Some("sub/inner.txt")
+        );
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.selected_idx, Some(4));
-        assert_eq!(lm.selected_inner_path(), Some("README.txt"));
+        assert_eq!(lm.viewport.selected(), Some(4));
+        assert_eq!(
+            lm.viewport.selected_inner_path(&lm.rows),
+            Some("README.txt")
+        );
         // Past the last file, selection sticks rather than wrapping.
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.selected_idx, Some(4));
+        assert_eq!(lm.viewport.selected(), Some(4));
     }
 
     #[test]
     fn scroll_up_walks_back_through_files() {
         let mut lm = sample();
-        lm.cached_rows = 10;
-        lm.selected_idx = Some(4); // README.txt
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.scroll(Action::Bottom);
         lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.selected_idx, Some(3));
+        assert_eq!(lm.viewport.selected(), Some(3));
         lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.selected_idx, Some(2));
+        assert_eq!(lm.viewport.selected(), Some(2));
         // First file: stays put.
         lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.selected_idx, Some(2));
+        assert_eq!(lm.viewport.selected(), Some(2));
     }
 
     #[test]
     fn top_and_bottom_jump_to_first_last_file() {
         let mut lm = sample();
-        lm.cached_rows = 10;
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
         lm.scroll(Action::Bottom);
-        assert_eq!(lm.selected_idx, Some(4));
+        assert_eq!(lm.viewport.selected(), Some(4));
         lm.scroll(Action::Top);
-        assert_eq!(lm.selected_idx, Some(2));
+        assert_eq!(lm.viewport.selected(), Some(2));
     }
 
     #[test]
-    fn page_down_snaps_selection_to_first_visible_file() {
+    fn page_down_snaps_selection_to_visible_file() {
         let mut lm = sample();
-        lm.cached_rows = 2;
-        // Page down enough to scroll past the dirs at the top.
+        lm.viewport.set_viewport_rows(&lm.rows, 2);
         lm.scroll(Action::PageDown);
-        let sel = lm.selected_idx.expect("expected selection");
+        let sel = lm.viewport.selected().expect("expected selection");
+        let win = lm.viewport.window(&lm.rows);
         assert!(
-            sel >= lm.top_index,
-            "selection {sel} should land at or below new top_index {}",
-            lm.top_index
+            win.content.contains(&sel) || win.sticky.contains(&sel),
+            "selection {sel} should sit in window {:?}",
+            win
         );
         assert!(
             lm.rows[sel].inner_path.is_some(),
