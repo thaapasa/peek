@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Table Layouts</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 960px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      color: #222;
+    }
+    h1 { color: #1a3d6d; }
+    h2 { color: #1a3d6d; margin-top: 2.5rem; border-bottom: 1px solid #ccd; padding-bottom: 0.3rem; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+    thead th {
+      background: #1a3d6d;
+      color: #fff;
+      font-weight: 600;
+      border-bottom: 2px solid #112a4d;
+    }
+    tbody tr:nth-child(even) { background: #f6f8fb; }
+    tbody tr:hover { background: #eef3fa; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pos { color: #1b7a3e; }
+    .neg { color: #b00020; }
+    .center { text-align: center; }
+    caption {
+      caption-side: top;
+      text-align: left;
+      font-style: italic;
+      color: #555;
+      margin-bottom: 0.5rem;
+    }
+    .grid-table { border: 1px solid #ccc; }
+    .grid-table th, .grid-table td { border: 1px solid #ccc; }
+    .compact { font-size: 0.9em; }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 0.8em;
+      font-weight: 600;
+      color: white;
+    }
+    .badge.green { background: #1b7a3e; }
+    .badge.amber { background: #c8830b; }
+    .badge.red   { background: #b00020; }
+    .badge.gray  { background: #6c757d; }
+  </style>
+</head>
+<body>
+  <h1>Table Layouts</h1>
+  <p>
+    Tables stress text positioning more than flowing prose does. Below are several common
+    shapes a renderer needs to handle gracefully: a financial summary, a comparison matrix,
+    a schedule grid, and a colspan/rowspan layout.
+  </p>
+
+  <h2>Quarterly revenue by region</h2>
+  <table>
+    <caption>All amounts in thousands of EUR. Source: internal finance, 2024.</caption>
+    <thead>
+      <tr>
+        <th>Region</th>
+        <th class="num">Q1</th>
+        <th class="num">Q2</th>
+        <th class="num">Q3</th>
+        <th class="num">Q4</th>
+        <th class="num">YoY %</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Nordics</td>      <td class="num">1,240</td><td class="num">1,318</td><td class="num">1,402</td><td class="num">1,556</td><td class="num pos">+12.4%</td></tr>
+      <tr><td>DACH</td>         <td class="num">2,103</td><td class="num">2,041</td><td class="num">2,219</td><td class="num">2,398</td><td class="num pos">+7.1%</td></tr>
+      <tr><td>UK &amp; IE</td>  <td class="num">1,887</td><td class="num">1,905</td><td class="num">1,772</td><td class="num">1,830</td><td class="num neg">&minus;3.0%</td></tr>
+      <tr><td>Benelux</td>      <td class="num">  742</td><td class="num">  791</td><td class="num">  814</td><td class="num">  863</td><td class="num pos">+9.8%</td></tr>
+      <tr><td>Iberia</td>       <td class="num">  511</td><td class="num">  548</td><td class="num">  502</td><td class="num">  580</td><td class="num pos">+4.2%</td></tr>
+      <tr><td>Eastern EU</td>   <td class="num">  398</td><td class="num">  421</td><td class="num">  468</td><td class="num">  511</td><td class="num pos">+18.7%</td></tr>
+    </tbody>
+    <tfoot>
+      <tr>
+        <th>Total</th>
+        <th class="num">6,881</th>
+        <th class="num">7,024</th>
+        <th class="num">7,177</th>
+        <th class="num">7,738</th>
+        <th class="num pos">+6.8%</th>
+      </tr>
+    </tfoot>
+  </table>
+
+  <h2>Feature comparison</h2>
+  <table class="grid-table">
+    <thead>
+      <tr>
+        <th>Capability</th>
+        <th class="center">Free</th>
+        <th class="center">Pro</th>
+        <th class="center">Team</th>
+        <th class="center">Enterprise</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Projects</td>             <td class="center">3</td>      <td class="center">Unlimited</td><td class="center">Unlimited</td><td class="center">Unlimited</td></tr>
+      <tr><td>Collaborators</td>        <td class="center">1</td>      <td class="center">5</td>        <td class="center">25</td>       <td class="center">Unlimited</td></tr>
+      <tr><td>Storage</td>              <td class="center">500&nbsp;MB</td><td class="center">20&nbsp;GB</td><td class="center">200&nbsp;GB</td><td class="center">Custom</td></tr>
+      <tr><td>SSO / SAML</td>           <td class="center">&mdash;</td> <td class="center">&mdash;</td>  <td class="center">&check;</td>  <td class="center">&check;</td></tr>
+      <tr><td>Audit log</td>            <td class="center">&mdash;</td> <td class="center">&mdash;</td>  <td class="center">30&nbsp;days</td><td class="center">2&nbsp;years</td></tr>
+      <tr><td>SLA</td>                  <td class="center">&mdash;</td> <td class="center">&mdash;</td>  <td class="center">99.9%</td>    <td class="center">99.99%</td></tr>
+      <tr><td>Priority support</td>     <td class="center">&mdash;</td> <td class="center">Email</td>   <td class="center">Email + chat</td><td class="center">24/7 phone</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Service status</h2>
+  <table class="compact">
+    <thead>
+      <tr>
+        <th>Service</th>
+        <th>Region</th>
+        <th>Status</th>
+        <th class="num">Uptime (30d)</th>
+        <th>Last incident</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>API gateway</td>     <td>eu-west-1</td>  <td><span class="badge green">Operational</span></td><td class="num">99.98%</td><td>2024-01-12</td></tr>
+      <tr><td>API gateway</td>     <td>us-east-1</td>  <td><span class="badge amber">Degraded</span></td>   <td class="num">99.71%</td><td>2024-03-04</td></tr>
+      <tr><td>Database (primary)</td><td>eu-west-1</td><td><span class="badge green">Operational</span></td><td class="num">99.99%</td><td>2023-11-22</td></tr>
+      <tr><td>Object storage</td>  <td>global</td>     <td><span class="badge green">Operational</span></td><td class="num">100.00%</td><td>&mdash;</td></tr>
+      <tr><td>Background workers</td><td>eu-west-1</td><td><span class="badge red">Outage</span></td>      <td class="num">98.12%</td><td>2024-03-09</td></tr>
+      <tr><td>Email delivery</td>  <td>global</td>     <td><span class="badge gray">Maintenance</span></td><td class="num">99.45%</td><td>2024-03-09</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Weekly schedule (colspan / rowspan)</h2>
+  <table class="grid-table center">
+    <thead>
+      <tr>
+        <th>Time</th>
+        <th>Mon</th>
+        <th>Tue</th>
+        <th>Wed</th>
+        <th>Thu</th>
+        <th>Fri</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>09:00</th>
+        <td colspan="2" style="background:#e0f0ff">Sprint planning</td>
+        <td>Design review</td>
+        <td>1:1s</td>
+        <td rowspan="2" style="background:#fff3a3">Focus block<br>(no meetings)</td>
+      </tr>
+      <tr>
+        <th>10:00</th>
+        <td>Backend</td>
+        <td>Frontend</td>
+        <td>Architecture</td>
+        <td>1:1s</td>
+      </tr>
+      <tr>
+        <th>11:00</th>
+        <td colspan="5" style="background:#ffe0e0">All-hands</td>
+      </tr>
+      <tr>
+        <th>13:00</th>
+        <td>Pairing</td>
+        <td colspan="3" style="background:#e0ffe0">Hack afternoon</td>
+        <td>Demo</td>
+      </tr>
+      <tr>
+        <th>15:00</th>
+        <td>Review</td>
+        <td>Review</td>
+        <td>Retro</td>
+        <td>Review</td>
+        <td>Beer o&rsquo;clock</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

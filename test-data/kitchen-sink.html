@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>HTML Kitchen Sink</title>
+  <style>
+    body {
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      color: #1a1a1a;
+      line-height: 1.5;
+    }
+    h1, h2, h3, h4, h5, h6 { color: #2d3a4a; }
+    h1 { border-bottom: 3px solid #2d3a4a; padding-bottom: 0.3rem; }
+    h2 { margin-top: 2rem; border-bottom: 1px solid #ccd; padding-bottom: 0.2rem; }
+    pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 0.9em;
+    }
+    pre .kw { color: #569cd6; }
+    pre .str { color: #ce9178; }
+    pre .com { color: #6a9955; font-style: italic; }
+    pre .fn { color: #dcdcaa; }
+    code { background: #f0f0f0; padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+    dl dt { font-weight: bold; color: #2d3a4a; margin-top: 0.5rem; }
+    dl dd { margin-left: 1.5rem; color: #444; }
+    figure { margin: 1.5rem 0; text-align: center; }
+    figcaption { font-style: italic; color: #666; font-size: 0.9em; margin-top: 0.4rem; }
+    details {
+      background: #f4f6f9;
+      border-left: 3px solid #2d3a4a;
+      padding: 0.5rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 4px 4px 0;
+    }
+    summary { cursor: pointer; font-weight: 600; }
+    .callout {
+      background: #fff8dc;
+      border-left: 4px solid #d4a418;
+      padding: 0.8rem 1rem;
+      margin: 1rem 0;
+    }
+    .callout.danger { background: #ffeaea; border-color: #b00020; }
+    .callout.tip    { background: #eaf6ff; border-color: #1f4f99; }
+    progress { width: 200px; }
+    meter    { width: 200px; }
+    address { font-style: italic; color: #555; }
+    fieldset { border: 1px solid #ccd; border-radius: 4px; padding: 1rem; margin: 1rem 0; }
+    legend { font-weight: 600; padding: 0 0.5rem; color: #2d3a4a; }
+    label { display: block; margin: 0.4rem 0 0.2rem; }
+    input[type="text"], input[type="email"], textarea, select {
+      width: 100%; padding: 6px 8px; border: 1px solid #ccd; border-radius: 4px;
+    }
+    button {
+      background: #2d3a4a; color: white; border: none; padding: 8px 16px;
+      border-radius: 4px; font-weight: 600; cursor: pointer;
+    }
+    button.secondary { background: #6c757d; }
+  </style>
+</head>
+<body>
+  <h1>HTML Kitchen Sink</h1>
+  <p>
+    A grab-bag of common HTML elements to exercise rendering. Useful for spot-checking
+    headings, lists, code blocks, definition lists, callouts, forms, and various other
+    structures that show up in real documents.
+  </p>
+
+  <h2>Headings at every level</h2>
+  <h1>H1 &mdash; document title</h1>
+  <h2>H2 &mdash; major section</h2>
+  <h3>H3 &mdash; subsection</h3>
+  <h4>H4 &mdash; sub-subsection</h4>
+  <h5>H5 &mdash; rare</h5>
+  <h6>H6 &mdash; almost never seen in the wild</h6>
+
+  <h2>Lists</h2>
+  <h3>Unordered, with nesting</h3>
+  <ul>
+    <li>First item at the top level.</li>
+    <li>
+      Second item with a sublist:
+      <ul>
+        <li>Nested A</li>
+        <li>Nested B
+          <ul>
+            <li>Deeply nested 1</li>
+            <li>Deeply nested 2</li>
+          </ul>
+        </li>
+        <li>Nested C</li>
+      </ul>
+    </li>
+    <li>Third item, plain.</li>
+  </ul>
+
+  <h3>Ordered, with custom start</h3>
+  <ol start="7">
+    <li>Continuing from item seven.</li>
+    <li>Item eight has a longer line of text to see how line wrapping handles continuation indentation in numbered lists.</li>
+    <li>Item nine.</li>
+  </ol>
+
+  <h3>Definition list</h3>
+  <dl>
+    <dt>Latency</dt>
+    <dd>Time between a request being issued and the first byte of a response arriving.</dd>
+    <dt>Throughput</dt>
+    <dd>Number of requests a system can serve per unit of time, usually under sustained load.</dd>
+    <dt>Tail latency</dt>
+    <dd>The slow end of the response-time distribution &mdash; typically reported at p95, p99, or p999.</dd>
+  </dl>
+
+  <h2>Code</h2>
+  <p>An inline call: <code>peek file.json --print</code>. A block of source:</p>
+  <pre><span class="com">// Compute the nth Fibonacci number iteratively.</span>
+<span class="kw">fn</span> <span class="fn">fib</span>(n: <span class="kw">u64</span>) -> <span class="kw">u64</span> {
+    <span class="kw">let</span> (<span class="kw">mut</span> a, <span class="kw">mut</span> b) = (<span class="str">0u64</span>, <span class="str">1u64</span>);
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="str">0</span>..n {
+        <span class="kw">let</span> next = a + b;
+        a = b;
+        b = next;
+    }
+    a
+}</pre>
+
+  <h2>Quotes</h2>
+  <blockquote>
+    <p>
+      &ldquo;Premature optimisation is the root of all evil. Yet we should not pass up our
+      opportunities in that critical 3%.&rdquo;
+    </p>
+    <footer>&mdash; <cite>Donald Knuth, <em>Structured Programming with go to Statements</em>, 1974</cite></footer>
+  </blockquote>
+
+  <h2>Callouts</h2>
+  <div class="callout">
+    <strong>Note:</strong> The configuration file is read once at startup. Restart the process
+    after editing it.
+  </div>
+  <div class="callout tip">
+    <strong>Tip:</strong> Use <code>--dry-run</code> to preview the operation without writing
+    anything to disk.
+  </div>
+  <div class="callout danger">
+    <strong>Warning:</strong> The <code>--force</code> flag bypasses the safety prompts and
+    cannot be undone.
+  </div>
+
+  <h2>Figure</h2>
+  <figure>
+    <pre style="display:inline-block; text-align:left;">
+   ___
+  /   \    A diagram, drawn entirely in
+ |  o  |   ASCII characters, because we
+  \___/    do not have an image renderer
+   | |     in this particular sample.
+  _|_|_
+    </pre>
+    <figcaption>Figure 1. A small ASCII diagram with a caption.</figcaption>
+  </figure>
+
+  <h2>Progress and meters</h2>
+  <p>Download progress: <progress value="62" max="100">62%</progress> 62%</p>
+  <p>Disk usage: <meter value="0.78" min="0" max="1" low="0.5" high="0.85" optimum="0.2">78%</meter> 78% of 1&nbsp;TB</p>
+
+  <h2>Disclosures</h2>
+  <details open>
+    <summary>What is this section?</summary>
+    <p>
+      A <code>&lt;details&gt;</code> element with its <code>open</code> attribute set, so the
+      content is visible by default. Useful for FAQs and progressive disclosure.
+    </p>
+  </details>
+  <details>
+    <summary>A second one, collapsed by default</summary>
+    <p>This one starts closed and would expand on click in a browser.</p>
+  </details>
+
+  <h2>Form elements</h2>
+  <form>
+    <fieldset>
+      <legend>Account details</legend>
+      <label for="name">Full name</label>
+      <input id="name" type="text" placeholder="Jane Doe">
+
+      <label for="email">Email</label>
+      <input id="email" type="email" placeholder="jane@example.com">
+
+      <label for="role">Role</label>
+      <select id="role">
+        <option>Engineer</option>
+        <option>Designer</option>
+        <option>Product manager</option>
+        <option>Other</option>
+      </select>
+
+      <label for="bio">Bio</label>
+      <textarea id="bio" rows="3" placeholder="A short description"></textarea>
+
+      <p style="margin-top: 1rem;">
+        <label><input type="checkbox" checked> Subscribe to release notes</label>
+        <label><input type="checkbox"> Send me product surveys</label>
+      </p>
+
+      <p>
+        <label><input type="radio" name="plan" checked> Free</label>
+        <label><input type="radio" name="plan"> Pro</label>
+        <label><input type="radio" name="plan"> Team</label>
+      </p>
+
+      <p style="margin-top: 1rem;">
+        <button type="submit">Save changes</button>
+        <button type="button" class="secondary">Cancel</button>
+      </p>
+    </fieldset>
+  </form>
+
+  <h2>Address</h2>
+  <address>
+    Maren Ostrov<br>
+    Kaivokatu 12 A<br>
+    00100 Helsinki, Finland<br>
+    <a href="mailto:maren@example.com">maren@example.com</a>
+  </address>
+
+  <hr>
+
+  <p><small>End of sample. Total size: enough HTML to exercise most renderers.</small></p>
+</body>
+</html>

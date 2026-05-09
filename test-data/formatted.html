@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Inline Formatting Sampler</title>
+  <style>
+    body {
+      font-family: Georgia, "Times New Roman", serif;
+      max-width: 720px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      color: #1f1f1f;
+      line-height: 1.55;
+    }
+    h1 { color: #4b2e83; font-weight: 700; }
+    h2 { color: #2a6e3f; font-weight: 600; margin-top: 2rem; }
+    .warning  { color: #b00020; font-weight: bold; }
+    .success  { color: #1b7a3e; font-weight: bold; }
+    .info     { color: #1f4f99; }
+    .muted    { color: #888; font-style: italic; }
+    .highlight { background: #fff3a3; padding: 0 0.2em; border-radius: 2px; }
+    .keycap {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid #aaa;
+      border-bottom-width: 2px;
+      border-radius: 4px;
+      background: #f5f5f5;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.85em;
+    }
+    code {
+      background: #f0f0f4;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: ui-monospace, monospace;
+      color: #b03060;
+    }
+    .gradient-text {
+      background: linear-gradient(90deg, #ff5f6d, #ffc371);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      font-weight: 800;
+    }
+    blockquote {
+      border-left: 4px solid #4b2e83;
+      margin: 1rem 0;
+      padding: 0.4rem 1rem;
+      color: #555;
+      font-style: italic;
+      background: #faf7ff;
+    }
+    .small-caps { font-variant: small-caps; letter-spacing: 0.05em; }
+    .strike { text-decoration: line-through; color: #999; }
+    .underline { text-decoration: underline; text-decoration-color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Inline Formatting Sampler</h1>
+  <p>
+    Plain prose runs along like this until something interesting happens. Then we might want to
+    say <strong>this is important</strong>, or perhaps <em>this should be read with feeling</em>,
+    or even <strong><em>both at once</em></strong> when the situation demands.
+  </p>
+
+  <h2>Color and emphasis</h2>
+  <p>
+    Status messages often carry color. A <span class="success">successful build</span> looks
+    different from a <span class="warning">failing one</span>, and an
+    <span class="info">informational note</span> sits somewhere quieter. Sometimes a phrase
+    needs a <span class="highlight">visual highlight</span> so it is impossible to miss when
+    you skim. The <span class="muted">aside in the corner</span> says less by saying it softly.
+  </p>
+  <p>
+    Inline <code>code spans</code> sit in the middle of sentences, and so do
+    <span class="keycap">Ctrl</span> + <span class="keycap">K</span>
+    keyboard hints. A <span class="gradient-text">gradient headline</span> shows up
+    occasionally when designers feel ambitious.
+  </p>
+
+  <h2>Typography variants</h2>
+  <ul>
+    <li>Old text we no longer endorse: <span class="strike">use the deprecated API</span>.</li>
+    <li>A correction underlined in red: <span class="underline">do not skip the migration</span>.</li>
+    <li>A heading-like phrase in <span class="small-caps">small capitals</span> for emphasis.</li>
+    <li>Sub<sub>script</sub> and super<sup>script</sup> for chemistry and footnotes<sup>1</sup>.</li>
+    <li>An abbreviation: <abbr title="Cascading Style Sheets">CSS</abbr> with a tooltip.</li>
+    <li>A keyboard shortcut combo: <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>.</li>
+    <li>A sample of program output: <samp>Segmentation fault (core dumped)</samp>.</li>
+    <li>A variable name in math: <var>x</var> &lt; <var>y</var> + 3.</li>
+    <li>Marked text the editor wants to flag: <mark>this passage is under review</mark>.</li>
+    <li>An inline quotation: <q>computers do exactly what you tell them to</q>.</li>
+  </ul>
+
+  <h2>A blockquote</h2>
+  <blockquote>
+    &ldquo;The first rule of optimisation is don&rsquo;t do it. The second rule, for experts only,
+    is don&rsquo;t do it yet.&rdquo;
+    <br>&mdash; <cite>Michael A. Jackson, 1975</cite>
+  </blockquote>
+
+  <h2>Mixed inline color in flowing prose</h2>
+  <p>
+    The deploy at <span class="info">14:02 UTC</span> initially showed
+    <span class="success">all green checks</span>, but within four minutes the
+    <span class="warning">latency on the orders endpoint</span> climbed past
+    <strong>800&nbsp;ms</strong>, and by <span class="info">14:11 UTC</span> the on-call
+    pager <span class="warning">fired for the first time</span>. The rollback at
+    <span class="info">14:18 UTC</span> restored normal service and the post-mortem found
+    that <span class="highlight">a single missing index</span> on the
+    <code>order_items</code> table had been the root cause all along.
+  </p>
+
+  <hr>
+
+  <p><small><sup>1</sup> A sample footnote, set in smaller text.</small></p>
+</body>
+</html>

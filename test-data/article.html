@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>The Quiet Power of Boring Tools</title>
+  <meta name="author" content="Maren Ostrov">
+  <meta name="description" content="On the underrated value of stable, predictable software.">
+</head>
+<body>
+  <article>
+    <header>
+      <h1>The Quiet Power of Boring Tools</h1>
+      <p><em>Published 14 March 2025 &middot; 8 minute read</em></p>
+    </header>
+
+    <section>
+      <h2>Introduction</h2>
+      <p>
+        There is a particular kind of pleasure that comes from using a tool that has been around
+        long enough to have all of its sharp edges sanded down. It does not surprise you. It does
+        not change its keyboard shortcuts in the next minor release. It does not, in a fit of
+        marketing-driven enthusiasm, decide that what it really wants to be when it grows up is
+        a collaborative cloud platform with a chat sidebar and an AI assistant that suggests
+        completions you did not ask for. It just works, in the unglamorous, undemonstrative way
+        that good infrastructure tends to work.
+      </p>
+      <p>
+        We do not talk enough about this kind of software. The trade press writes about novelty,
+        because novelty generates clicks, and conference talks reward speakers who can stand on
+        stage and announce a paradigm shift. But most of the work of running a real system,
+        year after year, is done by tools that are old, predictable, and so deeply unfashionable
+        that nobody bothers to argue about them anymore. They are the boring middle of the
+        normal distribution, and they are doing the heavy lifting while the long tail of
+        glittering frameworks fights for attention on the conference circuit.
+      </p>
+    </section>
+
+    <section>
+      <h2>What &ldquo;boring&rdquo; actually buys you</h2>
+      <p>
+        When a tool has been in production at thousands of organisations for fifteen years, a
+        large amount of empirical knowledge has accumulated around it. The failure modes are
+        documented. The performance characteristics are predictable. The interactions with other
+        components &mdash; the operating system, the network stack, the file system &mdash;
+        have been mapped, mostly the hard way, by someone whose pager went off at three in the
+        morning and who later wrote about the experience on a personal blog that is still, for
+        now, indexed by search engines. This collective experience is a form of capital, and
+        it is not free. It took years to build up, and it is destroyed every time the industry
+        decides to throw out a working tool in favour of a slightly shinier one.
+      </p>
+      <p>
+        Boring tools also tend to have boring interfaces, by which I mean interfaces that have
+        not changed much in a long time. Muscle memory is real, and it compounds. A senior
+        operator who has used the same shell, the same editor, and the same debugger for a
+        decade is not slower than a beginner using the latest hot tooling; they are
+        substantially faster, and they make fewer mistakes, because they no longer have to
+        think about the tool itself. The tool has become invisible, in the way that a hammer
+        becomes invisible to a carpenter who has used the same one for years.
+      </p>
+    </section>
+
+    <section>
+      <h2>The cost of constant churn</h2>
+      <p>
+        The opposite of boring is not exciting; it is exhausting. A team that adopts every
+        promising new framework as it appears spends a substantial fraction of its capacity
+        on migrations, rewrites, and the slow archaeology of figuring out what the previous
+        team meant when they reached for an abstraction that has since fallen out of fashion.
+        This is not a hypothetical cost. It shows up in delivery timelines, in employee
+        burnout, and in the strange phenomenon of feature regressions that arrive bundled
+        with a major version bump that was sold as &ldquo;internal improvements only.&rdquo;
+      </p>
+      <p>
+        None of this is an argument against new tools. New tools are how the field improves.
+        But there is an asymmetry between the visible benefits of adopting something new
+        (which are immediate, demonstrable, and easy to put on a slide) and the invisible
+        costs (which are diffuse, long-term, and almost impossible to attribute to any single
+        decision). The asymmetry favours adoption, which is why so many engineering
+        organisations look, in retrospect, like a museum of half-finished migrations.
+      </p>
+    </section>
+
+    <section>
+      <h2>A modest proposal</h2>
+      <p>
+        The modest proposal is this: when you are choosing a tool for a job that you expect
+        to still exist in five years, weight stability and longevity at least as heavily as
+        feature breadth or developer experience polish. Ask whether the project has a clear
+        maintainer, a deliberate release cadence, and a track record of treating its users
+        like adults who can be trusted with stable interfaces. Ask whether the documentation
+        was written for people doing real work, or for people evaluating the tool over a
+        weekend. Ask, finally, whether you would be embarrassed to still be using this thing
+        in 2035, and if the answer is no, that is probably a sign that you have found
+        something worth keeping.
+      </p>
+    </section>
+
+    <footer>
+      <p>
+        <small>
+          &copy; 2025 Maren Ostrov. Distributed under
+          <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>.
+        </small>
+      </p>
+    </footer>
+  </article>
+</body>
+</html>
