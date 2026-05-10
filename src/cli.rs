@@ -101,6 +101,12 @@ pub struct Args {
     #[arg(long)]
     pub info: bool,
 
+    /// Print the container's table of contents (archive / ISO / EPUB
+    /// spine / DOCX parts / PDF embeds) to stdout. Errors when the
+    /// file type has no listing.
+    #[arg(long)]
+    pub list: bool,
+
     /// Show line numbers in text views (toggle in viewer with `l`)
     #[arg(short = 'n', long = "line-numbers")]
     pub line_numbers: bool,

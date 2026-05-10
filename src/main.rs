@@ -98,6 +98,39 @@ fn main() -> Result<()> {
         .compose_modes(&source, &detected, &args)
         .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
 
+    // --list: render the listing-mode TOC to stdout (no viewer). Errors
+    // for file types that don't expose one (plain text, single images,
+    // raw binary). Same render path as the universal pipe fallback so
+    // the output matches what the interactive listing view shows minus
+    // selection markers.
+    if args.list {
+        let listing_idx = modes
+            .iter()
+            .position(|m| m.id() == viewer::modes::ModeId::Listing)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "{}: no listing available — this file type does not expose a table of contents",
+                    source.name()
+                )
+            })?;
+        let mut output = output::PrintOutput::stdout();
+        let file_info = info::gather(&source, &detected)
+            .with_context(|| format!("failed to read info for {}", source.name()))?;
+        let ctx = viewer::modes::RenderCtx {
+            file_info: &file_info,
+            theme_name: viewers.theme_name(),
+            peek_theme: viewers.peek_theme(),
+            render_opts,
+            term_cols: pipe_term_cols(&args),
+            term_rows: usize::MAX,
+        };
+        modes[listing_idx]
+            .render_flat_to_pipe(&ctx, &mut output)
+            .with_context(|| format!("failed to render listing for {}", source.name()))?;
+        output.finish()?;
+        return Ok(());
+    }
+
     if interactive {
         // Interactive TTY: compose mode list per file type; one event loop.
         // compose_modes handles animation detection internally, so this

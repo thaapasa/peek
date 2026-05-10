@@ -167,6 +167,16 @@ pub(crate) trait Mode {
         Ok(())
     }
 
+    /// Pipe-render variant used by `peek --list`. Surfaces listings as
+    /// one-path-per-line so the output is easy to feed into `--extract`
+    /// and similar tools (no tree connectors, no directories — just
+    /// extractable inner paths). Default falls through to
+    /// `render_to_pipe` for modes that don't carry a listing; only
+    /// `ListingMode` overrides.
+    fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        self.render_to_pipe(ctx, out)
+    }
+
     /// Total line count the mode currently exposes. `Some(n)` only when
     /// the mode can answer cheaply (without materializing all lines) —
     /// streaming modes like ContentMode return their `LineSource` total.

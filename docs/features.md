@@ -710,6 +710,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--width`        |       | Image rendering width in characters                           | ✅      |
 | `--image-mode`   |       | Image rendering mode                                          | ✅      |
 | `--info`         |       | Show file info instead of contents                            | ✅      |
+| `--list`         |       | Print container TOC to stdout (archives / disks / PDF embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                            | ✅      |

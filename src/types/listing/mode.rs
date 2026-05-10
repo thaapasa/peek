@@ -220,6 +220,26 @@ impl Mode for ListingMode {
         Ok(())
     }
 
+    /// Flat-paths variant for `peek --list`. Files only, no tree
+    /// connectors, no directories — each line carries the full
+    /// `inner_path` so it can be copy-pasted into `--extract` without
+    /// editing.
+    fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        let theme = ctx.peek_theme;
+        for row in &self.rows {
+            let Some(path) = &row.inner_path else {
+                continue;
+            };
+            let perms = format_perms(row.mode, row.is_dir);
+            let size = format_size(row.size, row.is_dir);
+            let painted_perms = paint_perms(&perms, theme);
+            let painted_size = paint_size(&size, row.size, row.is_dir, theme);
+            let painted_path = theme.paint(path, theme.foreground);
+            out.write_line(&format!("{painted_perms}  {painted_size}  {painted_path}"))?;
+        }
+        Ok(())
+    }
+
     fn total_lines(&self) -> Option<usize> {
         Some(self.rows.len())
     }
