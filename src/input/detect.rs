@@ -31,6 +31,10 @@ pub enum FileType {
     /// Comic-archive (one image per page in a ZIP / RAR / 7z / tar
     /// container). Drives the paged-image read mode.
     Comic(ComicFormat),
+    /// Word-style document (DOCX = ZIP of XML, RTF = control-word
+    /// markup). Drives a styled-text read view; DOCX additionally
+    /// exposes the ZIP listing TOC and per-entry extract.
+    Document(DocumentFormat),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -107,6 +111,25 @@ impl ComicFormat {
     pub fn label(self) -> &'static str {
         match self {
             Self::Cbz => "Comic Book ZIP",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentFormat {
+    /// Office Open XML word-processing document. ZIP container with
+    /// `word/document.xml` body + `docProps/*.xml` metadata.
+    Docx,
+    /// Rich Text Format. Control-word markup; single file, not a
+    /// container.
+    Rtf,
+}
+
+impl DocumentFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Docx => "DOCX document",
+            Self::Rtf => "RTF document",
         }
     }
 }
@@ -215,6 +238,8 @@ fn detect_file(path: &Path) -> Result<Detected> {
             "svg" => Some(FileType::Svg),
             "html" | "htm" | "xhtml" => Some(FileType::Html),
             "epub" => Some(FileType::Epub),
+            "docx" => Some(FileType::Document(DocumentFormat::Docx)),
+            "rtf" => Some(FileType::Document(DocumentFormat::Rtf)),
             "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
             _ => None,
         };
@@ -237,6 +262,16 @@ fn detect_file(path: &Path) -> Result<Detected> {
         return Ok(Detected {
             file_type: FileType::Archive(ArchiveFormat::Ar),
             magic_mime: Some("application/x-archive".to_string()),
+        });
+    }
+
+    // RTF starts with `{\rtf1`. `infer` doesn't recognise it; without
+    // this probe stdin-piped RTF would fall through to text/source-code
+    // and lose the styled rendering path.
+    if head.starts_with(RTF_MAGIC) {
+        return Ok(Detected {
+            file_type: FileType::Document(DocumentFormat::Rtf),
+            magic_mime: Some("application/rtf".to_string()),
         });
     }
 
@@ -443,6 +478,11 @@ fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
 /// classify as binary.
 const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
 
+/// RTF (Rich Text Format) signature. Every conforming RTF starts with
+/// `{\rtf1`; `infer` doesn't classify RTF, so the explicit prefix
+/// match is what routes stdin-piped RTF away from plain text.
+const RTF_MAGIC: &[u8] = b"{\\rtf1";
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
@@ -450,6 +490,12 @@ fn detect_bytes(data: &[u8]) -> Detected {
         return Detected {
             file_type: FileType::Archive(ArchiveFormat::Ar),
             magic_mime: Some("application/x-archive".to_string()),
+        };
+    }
+    if data.starts_with(RTF_MAGIC) {
+        return Detected {
+            file_type: FileType::Document(DocumentFormat::Rtf),
+            magic_mime: Some("application/rtf".to_string()),
         };
     }
     let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
@@ -607,6 +653,8 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "svg" => FileType::Svg,
         "html" | "htm" | "xhtml" => FileType::Html,
         "epub" => FileType::Epub,
+        "docx" => FileType::Document(DocumentFormat::Docx),
+        "rtf" => FileType::Document(DocumentFormat::Rtf),
         "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),
         _ => return None,
     })

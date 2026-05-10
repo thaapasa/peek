@@ -7,7 +7,7 @@ use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, FileType};
+use crate::input::detect::{ComicFormat, Detected, DocumentFormat, FileType};
 
 /// Successful extract: fresh `InputSource` + suggested filename.
 #[derive(Debug)]
@@ -86,12 +86,15 @@ pub fn extract(
         }
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
-        FileType::Epub | FileType::Comic(ComicFormat::Cbz) => {
-            crate::types::archive::extract::extract(
-                source,
-                crate::input::detect::ArchiveFormat::Zip,
-                key,
-            )
+        FileType::Epub
+        | FileType::Comic(ComicFormat::Cbz)
+        | FileType::Document(DocumentFormat::Docx) => crate::types::archive::extract::extract(
+            source,
+            crate::input::detect::ArchiveFormat::Zip,
+            key,
+        ),
+        FileType::Document(DocumentFormat::Rtf) => {
+            crate::types::document::rtf::extract::extract(source, key)
         }
         FileType::SourceCode { .. }
         | FileType::Structured(_)
@@ -226,6 +229,46 @@ mod tests {
         }
         // It still reads correctly when treated as a fresh input.
         assert_eq!(inner.source.read_text().unwrap(), "leaf\n");
+    }
+
+    /// DOCX is treated as a ZIP container — extracting an inner part
+    /// must round-trip through the pipeline and re-classify (e.g.
+    /// `word/document.xml` as Structured XML).
+    #[test]
+    fn extracted_docx_part_round_trips() {
+        let detected = detect::detect(&fixture("sample.docx")).unwrap();
+        let extracted = extract(
+            &fixture("sample.docx"),
+            &detected,
+            "word/document.xml",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
+        let inner_detected = detect::detect(&extracted.source).unwrap();
+        assert!(matches!(
+            inner_detected.file_type,
+            detect::FileType::Structured(detect::StructuredFormat::Xml)
+                | detect::FileType::SourceCode { .. }
+        ));
+        let text = extracted.source.read_text().unwrap();
+        assert!(text.contains("<w:document"), "expected DOCX XML body");
+    }
+
+    /// RTF embeds (`\pict` / `\object` groups) extract by their
+    /// auto-generated name. Asking for an embed that doesn't exist
+    /// must surface `NotFound`, not `Unsupported` — RTF has its own
+    /// extract path now.
+    #[test]
+    fn rtf_extract_unknown_embed_is_not_found() {
+        let detected = detect::detect(&fixture("sample.rtf")).unwrap();
+        let err = extract(
+            &fixture("sample.rtf"),
+            &detected,
+            "image999.jpg",
+            &ExtractOptions::default(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, ExtractError::NotFound(_)));
     }
 
     #[test]

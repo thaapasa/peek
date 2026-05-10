@@ -130,6 +130,44 @@ The Info view shows the structured XML stats (root element, element counts).
 Print mode (`--print` or non-TTY stdout) walks every chapter in spine order separated by blank
 lines, so `peek book.epub | less` renders the whole book.
 
+#### DOCX ✅
+
+`.docx` files (Office Open XML — a ZIP container with `word/document.xml` body + `docProps`
+metadata) get a three-mode view:
+
+- **Read** (default) — styled body text. Headings (`Heading1..6` paragraph styles) render bold +
+  themed; bold / italic / underline / strikethrough runs render via SGR; explicit run colors apply;
+  bullet-list paragraphs (those carrying `numPr`) render with a `•` marker indented per `ilvl`.
+  Embedded images surface inline as `[Image: <basename>]` placeholders resolved from the
+  document's relationships; tables flatten to ` | `-joined rows. Width-aware word wrap re-runs on
+  resize. Parsed by a hand-rolled `quick-xml` walk over `word/document.xml` (full WordprocessingML
+  deserializers reject real-world Word files because numeric attributes routinely carry
+  `"auto"` / `"none"` strings their strict integer types can't decode).
+- **TOC** — the raw ZIP file tree via the shared `ListingMode`. Inspects the inner XML parts and
+  embedded media; recursive peek (`Enter`) descends into selected entries. `--extract
+  word/media/imageN.png` works as for any ZIP archive.
+- **Info** — core document properties from `docProps/core.xml`: title, author, subject,
+  keywords, created / modified timestamps, plus paragraph / word / image counts.
+
+Lists currently render as flat bullets — numbering cascade resolution from `numbering.xml`
+(numbered lists, nested numbering schemes) isn't done yet; everything that has a `numPr` shows
+as `•`.
+
+#### RTF ✅
+
+`.rtf` files (Rich Text Format — control-word markup, single file, not a container) get a
+single styled-text view:
+
+- **Read** (default) — body text rendered with bold / italic / underline / strikethrough runs and
+  per-run color from the RTF color table. Powered by `rtf-parser`. The metadata `\info` group is
+  stripped from the body so its title / author strings don't leak into the rendered output, and
+  `\par` paragraph terminators are pre-processed into explicit CRLFs (rtf-parser's lexer doesn't
+  emit a token for them by default).
+- **Info** — title, author, subject, keywords, plus created / revised dates pulled from the
+  `\info` group, and paragraph / word counts.
+
+There is no TOC view or per-entry extract — RTF isn't a container.
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

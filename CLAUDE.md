@@ -115,6 +115,22 @@ src/
         read_mode.rs   — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
+    document/
+      mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata
+      info.rs          — Shared document info shape (DOCX + RTF): DocumentStats { format, metadata, paragraph_count, word_count, image_count } + DocumentMetadata { title / creator / subject / description / keywords / created / modified }
+      info_render.rs   — Render shared Document info section keyed off `format` label
+      docx/
+        mod.rs         — Module wiring; re-exports DocxReadMode
+        package.rs     — Hand-rolled `quick_xml` event walk over `word/document.xml` (paragraph / pPr / pStyle / numPr / r / rPr / b / i / u / strike / color / t / br / tab / drawing-blip), `docProps/core.xml` (DC + cp metadata), and `word/_rels/document.xml.rels` (image rId → basename). Produces owned `Doc { blocks: Vec<Block::{Paragraph,Table}>, metadata, *_count }`. Hand-walking instead of going through a full WordprocessingML deserializer (`docx-rust` / `docx-rs`) — both reject real-world Word files because numeric attributes routinely carry `"auto"` / `"none"` / `"true"` strings their strict integer types can't decode
+        render.rs      — render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | "
+        read_mode.rs   — DocxReadMode: per-(width, style_mode) line cache over render::render; no chapter stepping (single document). render_to_pipe walks the whole rendered output
+        info_gather.rs — Populate DocumentStats via package::open (paragraph / word / image counts + metadata)
+      rtf/
+        mod.rs         — Module wiring; re-exports RtfReadMode
+        parse.rs       — Pre-process RTF (strip `{\info ...}` group, inject `\\\n` after each `\par` so rtf-parser's lexer emits CRLF) → RtfDocument::try_from → owned Vec<Block { painter, paragraph, text }> with painter resolved against \colortbl. Hand-scans `\info` group bytes for title / author / subject / keywords / creatim / revtim
+        render.rs      — render(&Parsed, width, theme, style_mode) -> Vec<String>: wraps StyleBlock.text by width, emits SGR for painter bold/italic/underline/strike + colortbl color
+        read_mode.rs   — RtfReadMode: per-(width, style_mode) line cache; no listing or extract (RTF is single-file)
+        info_gather.rs — Populate DocumentStats via parse::open_source
     comic/
       mod.rs           — Module wiring; re-exports ComicStats / CbzReadMode
       info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }

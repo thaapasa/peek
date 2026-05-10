@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use crate::input::detect::{ComicFormat, DiskImageFormat, FileType, StructuredFormat};
+use crate::input::detect::{
+    ComicFormat, DiskImageFormat, DocumentFormat, FileType, StructuredFormat,
+};
 
 /// How official a MIME type is — drives display markers in the info view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +174,10 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Html => "text/html",
         FileType::Epub => "application/epub+zip",
         FileType::Comic(ComicFormat::Cbz) => "application/vnd.comicbook+zip",
+        FileType::Document(DocumentFormat::Docx) => {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        }
+        FileType::Document(DocumentFormat::Rtf) => "application/rtf",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",

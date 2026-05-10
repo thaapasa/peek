@@ -19,7 +19,7 @@ use anyhow::Result;
 
 use super::{FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, FileType};
+use crate::input::detect::{ComicFormat, Detected, DocumentFormat, FileType};
 use crate::input::mime;
 
 #[cfg(test)]
@@ -204,6 +204,12 @@ fn gather_extras_in_memory(
         FileType::Comic(fmt @ ComicFormat::Cbz) => {
             crate::types::comic::cbz::info_gather::gather_extras(source, *fmt)
         }
+        FileType::Document(DocumentFormat::Docx) => {
+            crate::types::document::docx::info_gather::gather_extras(source)
+        }
+        FileType::Document(DocumentFormat::Rtf) => {
+            crate::types::document::rtf::info_gather::gather_extras(source)
+        }
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
@@ -266,6 +272,16 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
                 &InputSource::File(path.to_path_buf()),
                 *fmt,
             )
+        }
+        FileType::Document(DocumentFormat::Docx) => {
+            crate::types::document::docx::info_gather::gather_extras(&InputSource::File(
+                path.to_path_buf(),
+            ))
+        }
+        FileType::Document(DocumentFormat::Rtf) => {
+            crate::types::document::rtf::info_gather::gather_extras(&InputSource::File(
+                path.to_path_buf(),
+            ))
         }
         FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),

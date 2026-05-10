@@ -62,6 +62,15 @@ zstd = "0.13"
 sevenz-rust2 = { version = "0.21", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 
+# Rich Text Format parser. Small lexer/parser; covers the common Word-export
+# subset (control words, groups, runs).
+rtf-parser = "0.4.2"
+
+# DOCX is parsed via a hand-rolled `quick_xml` walker (existing dep) over
+# `word/document.xml` — full WordprocessingML deserializers (`docx-rust`,
+# `docx-rs`) reject real-world Word documents because numeric attributes
+# routinely carry non-numeric values like "auto" / "none".
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

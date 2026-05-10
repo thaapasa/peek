@@ -163,6 +163,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Comic(stats) => {
             crate::types::comic::cbz::info_render::render_section(lines, stats, theme);
         }
+        FileExtras::Document(stats) => {
+            crate::types::document::info_render::render_section(lines, stats, theme);
+        }
     }
 }
 

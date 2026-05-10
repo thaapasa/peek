@@ -6,10 +6,11 @@ use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, FileType, StructuredFormat};
+use crate::input::detect::{ComicFormat, Detected, DocumentFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
 use crate::types::comic::{CbzReadMode, cbz};
+use crate::types::document::{self, docx::DocxReadMode, rtf::RtfReadMode};
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
@@ -295,6 +296,59 @@ impl Registry {
                     };
                     warnings.append(&mut listing_warnings);
                     modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
+                }
+                FileType::Document(DocumentFormat::Docx) => {
+                    // Read view (default) + ZIP listing TOC. Listing
+                    // fallback covers the case where docx-rust can't
+                    // parse the body (e.g. corrupt / non-conforming
+                    // file) so the user still sees the inner ZIP tree.
+                    let mut warnings = Vec::new();
+                    match document::docx::package::open(source) {
+                        Ok(doc) => modes.push(Box::new(DocxReadMode::new(source.clone(), doc))),
+                        Err(e) => warnings.push(format!("DOCX unreadable: {e:#}")),
+                    }
+                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
+                        source,
+                        crate::input::detect::ArchiveFormat::Zip,
+                    ) {
+                        Ok(e) => (e, Vec::new()),
+                        Err(e) => (Vec::new(), vec![format!("Failed to list DOCX: {e:#}")]),
+                    };
+                    warnings.append(&mut listing_warnings);
+                    modes.push(Box::new(ListingMode::new(
+                        DocumentFormat::Docx.label(),
+                        "TOC",
+                        entries,
+                        warnings,
+                    )));
+                }
+                FileType::Document(DocumentFormat::Rtf) => {
+                    // RTF is single-file at the container level, but
+                    // real Word RTFs embed images as `\pict` groups
+                    // inline with the prose. Read view + a synthetic
+                    // listing of those embeds so the user can browse
+                    // / extract them with the same TAB workflow as a
+                    // ZIP-backed DOCX.
+                    match document::rtf::parse::open_source(source) {
+                        Ok(parsed) => {
+                            let entries = document::rtf::parse::embeds_to_entries(&parsed.embeds);
+                            let has_embeds = !entries.is_empty();
+                            modes.push(Box::new(RtfReadMode::new(source.clone(), parsed)));
+                            if has_embeds {
+                                modes.push(Box::new(ListingMode::new(
+                                    DocumentFormat::Rtf.label(),
+                                    "TOC",
+                                    entries,
+                                    Vec::new(),
+                                )));
+                            }
+                        }
+                        Err(e) => {
+                            // Surface the parse error through Info; the
+                            // read mode just isn't pushed.
+                            let _ = e;
+                        }
+                    }
                 }
                 FileType::Comic(ComicFormat::Cbz) => {
                     // Read mode (paged image reader) + ZIP listing
