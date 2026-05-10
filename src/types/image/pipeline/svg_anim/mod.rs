@@ -537,22 +537,21 @@ mod tests {
         }
     }
 
-    /// Sanity-check the airlock demo fixture: frame 0 should differ
-    /// visually from a mid-animation frame.
+    /// Sanity-check an animated fixture: frame 0 should differ
+    /// visually from a mid-animation frame. Uses loader-dots.svg
+    /// (1.5 KB, animates `r` 0→2px on 12 staggered circles) so the
+    /// double rasterize stays cheap.
     #[test]
     fn demo_svg_frames_diverge_when_available() {
-        let path = format!(
-            "{}/test-images/airlock-demo.svg",
-            env!("CARGO_MANIFEST_DIR")
-        );
-        let bytes = std::fs::read(&path).expect("airlock-demo.svg fixture missing");
+        let path = format!("{}/test-images/loader-dots.svg", env!("CARGO_MANIFEST_DIR"));
+        let bytes = std::fs::read(&path).expect("loader-dots.svg fixture missing");
         let model = try_parse_bytes(&bytes).expect("demo file is animated");
         assert!(model.frames.len() > 4, "expected many frames");
         let mid = model.frames.len() / 2;
         let f0 = render_frame(&model, 0);
         let fm = render_frame(&model, mid);
-        let img0 = super::super::svg::rasterize_svg_bytes(f0.as_bytes(), 400, 240).unwrap();
-        let imgm = super::super::svg::rasterize_svg_bytes(fm.as_bytes(), 400, 240).unwrap();
+        let img0 = super::super::svg::rasterize_svg_bytes(f0.as_bytes(), 96, 96).unwrap();
+        let imgm = super::super::svg::rasterize_svg_bytes(fm.as_bytes(), 96, 96).unwrap();
         let diff: u64 = img0
             .to_rgba8()
             .pixels()
