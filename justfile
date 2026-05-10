@@ -53,10 +53,12 @@ pdfium build="latest":
     build="{{ build }}"
     if [ "$build" = "latest" ]; then
       echo "resolving latest pdfium build..."
-      build=$(curl -fsSL https://api.github.com/repos/bblanchon/pdfium-binaries/releases/latest \
-        | grep -m1 '"tag_name"' \
-        | sed -E 's|.*"chromium/([0-9]+)".*|\1|')
-      if [ -z "$build" ] || ! echo "$build" | grep -qE '^[0-9]+$'; then
+      # Pure-bash extract; piping into grep -m1 trips pipefail (SIGPIPE
+      # back to the upstream printf/curl).
+      api_body=$(curl -fsSL https://api.github.com/repos/bblanchon/pdfium-binaries/releases/latest)
+      if [[ "$api_body" =~ \"tag_name\":[[:space:]]*\"chromium/([0-9]+)\" ]]; then
+        build="${BASH_REMATCH[1]}"
+      else
         echo "could not resolve latest pdfium build from GitHub API" >&2
         exit 1
       fi
