@@ -106,12 +106,15 @@ src/
       mod.rs           — Module wiring; re-exports RenderedMode
       mode.rs          — RenderedMode: width-keyed cache wrapper around `render::render`; rerender on resize
       render.rs        — Shared html2text driver: bytes → ANSI lines via StyleMode (also used by EPUB chapters). CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
-    epub/
-      mod.rs           — Module wiring; re-exports EpubReadMode
-      package.rs       — Parse EPUB ZIP: META-INF/container.xml → OPF rootfile → DC metadata + manifest (id→href) + spine; resolve spine to absolute ZIP paths; ZIP entry reader
-      read_mode.rs     — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
-      info_gather.rs   — Build EpubStats (DC metadata + chapter count) from package::open
-      info_render.rs   — Render EPUB info section
+    ebook/
+      mod.rs           — Module wiring; re-exports EbookStats / Metadata
+      info.rs          — Shared ebook info shape (universal across EPUB / MOBI / FB2): EbookStats { metadata: Metadata, chapter_count }
+      epub/
+        mod.rs         — Module wiring; re-exports EpubReadMode
+        package.rs     — Parse EPUB ZIP: META-INF/container.xml → OPF rootfile → DC metadata (into shared Metadata) + manifest (id→href) + spine; resolve spine to absolute ZIP paths; ZIP entry reader
+        read_mode.rs   — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
+        info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
+        info_render.rs — Render EPUB info section from EbookStats
     svg/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)

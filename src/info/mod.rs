@@ -96,7 +96,7 @@ pub enum FileExtras {
         /// truncated image). Surfaced in place of normal volume rows.
         error: Option<String>,
     },
-    Epub(crate::types::epub::info_gather::EpubStats),
+    Ebook(crate::types::ebook::EbookStats),
 }
 
 /// Format-specific disk-image metadata. Each variant owns the parsed

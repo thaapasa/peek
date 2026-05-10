@@ -2,21 +2,16 @@
 
 use crate::info::FileExtras;
 use crate::input::InputSource;
+use crate::types::ebook::EbookStats;
 
-use super::package::{self, Metadata};
-
-#[derive(Debug, Clone, Default)]
-pub struct EpubStats {
-    pub metadata: Metadata,
-    pub chapter_count: usize,
-}
+use super::package;
 
 pub fn gather_extras(source: &InputSource) -> FileExtras {
     match package::open(source) {
-        Ok(pkg) => FileExtras::Epub(EpubStats {
+        Ok(pkg) => FileExtras::Ebook(EbookStats {
             metadata: pkg.metadata,
             chapter_count: pkg.chapters.len(),
         }),
-        Err(_) => FileExtras::Epub(EpubStats::default()),
+        Err(_) => FileExtras::Ebook(EbookStats::default()),
     }
 }

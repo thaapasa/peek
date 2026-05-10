@@ -157,8 +157,8 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
                 theme,
             );
         }
-        FileExtras::Epub(stats) => {
-            crate::types::epub::info_render::render_section(lines, stats, theme);
+        FileExtras::Ebook(stats) => {
+            crate::types::ebook::epub::info_render::render_section(lines, stats, theme);
         }
     }
 }

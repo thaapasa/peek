@@ -21,25 +21,13 @@ use zip::ZipArchive;
 
 use crate::input::InputSource;
 use crate::types::archive::reader::{ReadSeek, open_seekable};
+use crate::types::ebook::Metadata;
 
 /// Bookkeeping for one EPUB. Built once per file open; chapter bodies
 /// are still pulled lazily via [`read_entry`].
 pub(crate) struct Package {
     pub metadata: Metadata,
     pub chapters: Vec<Chapter>,
-}
-
-/// Dublin Core metadata pulled from `<metadata>`. Each field is
-/// optional — missing in many real-world files.
-#[derive(Debug, Default, Clone)]
-pub(crate) struct Metadata {
-    pub title: Option<String>,
-    pub creator: Option<String>,
-    pub language: Option<String>,
-    pub publisher: Option<String>,
-    pub date: Option<String>,
-    pub identifier: Option<String>,
-    pub description: Option<String>,
 }
 
 /// One spine entry resolved through the manifest. `full_path` is the

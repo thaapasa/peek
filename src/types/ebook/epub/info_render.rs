@@ -2,10 +2,9 @@
 
 use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
+use crate::types::ebook::EbookStats;
 
-use super::info_gather::EpubStats;
-
-pub fn render_section(lines: &mut Vec<String>, stats: &EpubStats, theme: &PeekTheme) {
+pub fn render_section(lines: &mut Vec<String>, stats: &EbookStats, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "EPUB", theme);
 

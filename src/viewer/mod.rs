@@ -9,7 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
-use crate::types::epub::{self, EpubReadMode};
+use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
 use crate::types::listing::ListingMode;
