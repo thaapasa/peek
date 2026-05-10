@@ -59,10 +59,22 @@ yet).
 **From source:**
 
 ```sh
-cargo install --path .
+just pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
+just install     # cargo build --release; install peek + dylib to $PEEK_INSTALL_DIR (default ~/.local/bin)
 ```
 
-No external runtime dependencies.
+`just pdfium` downloads the latest [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)
+release for your host platform (macOS arm64/x86_64, Linux x86_64/aarch64) and unpacks it into
+`.pdfium/`. peek's loader reads the dylib from there during `cargo run`, and `just install` copies
+both `peek` and `libpdfium.*` into the install dir so the deployed binary keeps PDF support too.
+Pin a specific Chromium build with `just pdfium 7825`.
+
+Pure-cargo alternative — works for everything except PDF unless you separately drop the Pdfium
+dylib next to the binary:
+
+```sh
+cargo install --path .
+```
 
 ## Usage
 
