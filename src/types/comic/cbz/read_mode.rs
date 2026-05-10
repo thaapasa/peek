@@ -271,7 +271,7 @@ impl Mode for CbzReadMode {
         if self.pages.len() <= 1 {
             return Vec::new();
         }
-        vec!["n/N:page"]
+        vec!["n/p:page"]
     }
 
     fn take_warnings(&mut self) -> Vec<String> {

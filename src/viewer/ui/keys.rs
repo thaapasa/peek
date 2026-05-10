@@ -126,7 +126,7 @@ impl Action {
         const SCROLL_UP:      &[Binding] = &[Binding::plain(Up),        Binding::plain(Char('k'))];
         const SCROLL_DOWN:    &[Binding] = &[Binding::plain(Down),      Binding::plain(Char('j'))];
         const PAGE_UP:        &[Binding] = &[Binding::plain(PageUp)];
-        const PAGE_DOWN:      &[Binding] = &[Binding::plain(PageDown),  Binding::plain(Char(' '))];
+        const PAGE_DOWN:      &[Binding] = &[Binding::plain(PageDown)];
         const TOP:            &[Binding] = &[Binding::plain(Home),      Binding::plain(Char('g'))];
         const BOTTOM:         &[Binding] = &[Binding::plain(End),       Binding::plain(Char('G'))];
         const SWITCH_INFO:    &[Binding] = &[Binding::plain(Char('i'))];
@@ -149,11 +149,11 @@ impl Action {
         const TOGGLE_RAW:     &[Binding] = &[Binding::plain(Char('r'))];
         const TOGGLE_LINENUM: &[Binding] = &[Binding::plain(Char('l'))];
         const TOGGLE_WRAP:    &[Binding] = &[Binding::plain(Char('w'))];
-        const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char('p'))];
+        const PLAY_PAUSE:     &[Binding] = &[Binding::plain(Char(' '))];
         const NEXT_FRAME:     &[Binding] = &[Binding::plain(Char('n'))];
-        const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('N'))];
+        const PREV_FRAME:     &[Binding] = &[Binding::plain(Char('p'))];
         const NEXT_CHAPTER:   &[Binding] = &[Binding::plain(Char('n'))];
-        const PREV_CHAPTER:   &[Binding] = &[Binding::plain(Char('N'))];
+        const PREV_CHAPTER:   &[Binding] = &[Binding::plain(Char('p'))];
         const STICKY_PARENTS: &[Binding] = &[Binding::plain(Char('s'))];
         const EXTRACT:        &[Binding] = &[Binding::plain(Char('e'))];
         const DESCEND:        &[Binding] = &[Binding::plain(Enter)];
@@ -206,7 +206,7 @@ impl Action {
             Action::ScrollUp          => "Up / k",
             Action::ScrollDown        => "Down / j",
             Action::PageUp            => "PgUp",
-            Action::PageDown          => "PgDn / Space",
+            Action::PageDown          => "PgDn",
             Action::Top               => "Home / g",
             Action::Bottom            => "End / G",
             Action::SwitchInfo        => "i",
@@ -229,11 +229,11 @@ impl Action {
             Action::ToggleRawSource   => "r",
             Action::ToggleLineNumbers => "l",
             Action::ToggleSoftWrap    => "w",
-            Action::PlayPause         => "p",
+            Action::PlayPause         => "Space",
             Action::NextFrame         => "n",
-            Action::PrevFrame         => "N",
+            Action::PrevFrame         => "p",
             Action::NextChapter       => "n",
-            Action::PrevChapter       => "N",
+            Action::PrevChapter       => "p",
             Action::ToggleStickyParents => "s",
             Action::Extract           => "e",
             Action::Descend           => "Enter",

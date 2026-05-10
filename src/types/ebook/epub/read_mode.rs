@@ -316,7 +316,7 @@ impl Mode for EpubReadMode {
         if self.chapters.len() <= 1 {
             return Vec::new();
         }
-        vec!["n/N:chapter"]
+        vec!["n/p:chapter"]
     }
 
     fn take_warnings(&mut self) -> Vec<String> {

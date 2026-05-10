@@ -19,7 +19,7 @@ Works for all file types via the mode-stack architecture: text/source/structured
 straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`); color-encoding
 cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
 background, `m` cycles
-render mode. Animation: `p` play/pause, `n`/`N` and Left/Right step frames. `l` toggles the
+render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
 line-number gutter in text views. Search not yet.
 
 ### Print Mode ◐
@@ -302,7 +302,7 @@ meaning in the new grid). No `--sizing` CLI flag yet.
 
 ### Animated Images (GIF, WebP) ✅
 
-Auto-plays at native frame rate. `p` toggles play/pause; `n`/`N` and Left/Right step frames; `b`
+Auto-plays at native frame rate. `Space` toggles play/pause; `n`/`p` and Left/Right step frames; `b`
 cycles background. Status line shows frame counter and play/pause. Print mode renders the first
 frame. Frame count appears in the file info screen. Transparency handling applies.
 
@@ -587,7 +587,7 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `m`              | Cycle render mode                               |
 
 `Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
-`n` / `N` exclusively (the previous Left/Right frame-step bindings are gone).
+`n` / `p` exclusively (the previous Left/Right frame-step bindings are gone).
 
 These bindings are initial suggestions and may be revised. The help screen (`h`) is the
 authoritative in-app reference.
