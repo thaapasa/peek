@@ -100,6 +100,11 @@ pub enum FileExtras {
     Comic(crate::types::comic::ComicStats),
     Document(crate::types::document::DocumentStats),
     Pdf(crate::types::pdf::PdfStats),
+    Directory {
+        entry_count: usize,
+        file_count: usize,
+        dir_count: usize,
+    },
 }
 
 /// Format-specific disk-image metadata. Each variant owns the parsed

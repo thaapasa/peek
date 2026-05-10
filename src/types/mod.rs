@@ -7,6 +7,7 @@
 pub mod archive;
 pub mod binary;
 pub mod comic;
+pub mod directory;
 pub mod disk_image;
 pub mod document;
 pub mod ebook;

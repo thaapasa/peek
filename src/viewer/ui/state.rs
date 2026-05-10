@@ -497,7 +497,22 @@ impl ViewerState {
         };
         let file_info = crate::info::gather(&source, &detected)?;
         let frame = SessionFrame::new(source, detected, file_info, modes);
-        self.frames.push(frame);
+        // Dir → Dir descent re-targets the current frame instead of
+        // pushing, so navigating between sibling subdirectories doesn't
+        // accumulate a stack the user has to back out of. Esc on the
+        // resulting frame still exits peek (depth-1 Back semantics).
+        let collapse = matches!(
+            frame.detected.file_type,
+            crate::input::detect::FileType::Directory
+        ) && matches!(
+            self.frame().detected.file_type,
+            crate::input::detect::FileType::Directory
+        );
+        if collapse {
+            *self.frames.last_mut().expect("non-empty stack") = frame;
+        } else {
+            self.frames.push(frame);
+        }
         self.screen.invalidate();
         Ok(())
     }
@@ -1010,6 +1025,70 @@ mod tests {
         // Last back at depth 1 quits.
         let final_back = state.apply(Action::Back).unwrap();
         assert!(matches!(final_back, Outcome::Quit));
+    }
+
+    /// Directory descent into a subdirectory must collapse the new
+    /// frame onto the current one — no stack of dirs to back out of.
+    /// Descending into a regular file *does* push (so Back returns to
+    /// the listing), and Esc on a depth-1 directory frame quits.
+    #[test]
+    fn directory_subdir_descent_replaces_frame() {
+        // src/ has subdirectories. Row 0 is the synthetic `..`; skip
+        // past it so we exercise descent into a real child dir.
+        let source = fixture_source("src");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        assert!(matches!(
+            detected.file_type,
+            crate::input::detect::FileType::Directory
+        ));
+        let mut state = build_state(&["peek", "src"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+        state.try_active_scroll(Action::ScrollDown);
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 1, "dir → dir descent collapses stack");
+        assert!(matches!(
+            state.frame().detected.file_type,
+            crate::input::detect::FileType::Directory
+        ));
+    }
+
+    /// Descending from a directory into a regular file pushes a new
+    /// frame so Back returns to the listing.
+    #[test]
+    fn directory_file_descent_pushes_frame() {
+        // test-data/ contains only files. Row 0 is the synthetic
+        // `..`; advance past it to land on a real file row.
+        let source = fixture_source("test-data");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+        state.try_active_scroll(Action::ScrollDown);
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 2, "dir → file descent pushes a frame");
+        let back = state.apply(Action::Back).unwrap();
+        assert!(matches!(back, Outcome::Redraw));
+        assert_eq!(state.stack_depth(), 1);
+    }
+
+    /// Selecting the synthetic `..` row walks one canonical level up
+    /// and collapses the frame (still a dir → dir descent).
+    #[test]
+    fn directory_parent_link_walks_up() {
+        let source = fixture_source("src");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "src"], source, detected);
+        // `..` is row 0 by construction.
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 1, ".. descent stays at depth 1");
+        let new_path = state
+            .frame()
+            .source
+            .path()
+            .expect("dir source has a path")
+            .to_path_buf();
+        // `peek <MANIFEST>/src` → `..` → `<MANIFEST>` (the project root).
+        let expected_parent = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
+        assert_eq!(new_path, expected_parent);
     }
 
     /// Binary files: Tab must round-trip Hex ↔ Info. Without the

@@ -411,6 +411,17 @@ map itself isn't parsed yet; it shows up as a presence + size row.
 
 Both parsers are hand-rolled — no extra crate. Hex view (`x`) still works on the raw image bytes.
 
+#### Filesystem Directories ✅
+
+`peek <dir>` opens a one-level listing instead of erroring on "is a directory". Entries sort
+dirs-first, then by case-insensitive name; perms / size / mtime / name columns mirror the archive
+TOC view. A synthetic `..` row leads the list (suppressed at filesystem root) so the user can
+walk back up — selecting it canonicalizes the current path and re-targets to its parent.
+**Enter** descends: file → push (Esc returns to the listing); directory → re-target the current
+frame (no stack of dirs to back out of). **Esc** at any directory listing exits peek. Hidden
+entries are included; symlinks are followed for kind classification, with broken links shown as
+`?`. `--print` and `--list` both render the listing.
+
 #### Hex Dump Mode ✅
 
 Reads bytes from disk on demand (no full-file slurp). Layout: `hexdump -C`-compatible — 8-digit

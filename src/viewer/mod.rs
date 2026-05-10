@@ -253,7 +253,22 @@ impl Registry {
         if self.plain_mode {
             // Binary/Archive/DiskImage in --plain still goes to Hex (the
             // universal tail); ContentMode requires UTF-8 input.
-            if !matches!(
+            // Directory in --plain still gets the listing — there's no
+            // "raw" view of a directory.
+            if matches!(file_type, FileType::Directory) {
+                let path = source.path().expect("Directory FileType implies a path");
+                let (entries, warnings) =
+                    match crate::types::directory::read::read_dir_entries(path) {
+                        Ok(e) => (e, Vec::new()),
+                        Err(e) => (Vec::new(), vec![format!("Failed to read directory: {e:#}")]),
+                    };
+                let show_parent = parent_link_enabled(path);
+                modes.push(Box::new(crate::types::directory::DirectoryMode::new(
+                    entries,
+                    warnings,
+                    show_parent,
+                )));
+            } else if !matches!(
                 file_type,
                 FileType::Binary | FileType::Archive(_) | FileType::DiskImage(_)
             ) {
@@ -501,6 +516,22 @@ impl Registry {
                         }
                     }
                 }
+                FileType::Directory => {
+                    let path = source.path().expect("Directory FileType implies a path");
+                    let (entries, warnings) =
+                        match crate::types::directory::read::read_dir_entries(path) {
+                            Ok(e) => (e, Vec::new()),
+                            Err(e) => {
+                                (Vec::new(), vec![format!("Failed to read directory: {e:#}")])
+                            }
+                        };
+                    let show_parent = parent_link_enabled(path);
+                    modes.push(Box::new(crate::types::directory::DirectoryMode::new(
+                        entries,
+                        warnings,
+                        show_parent,
+                    )));
+                }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended
                     // below in the always-present block.
@@ -664,6 +695,16 @@ pub(crate) fn syntax_token_for(
 /// (comments / JSON5 features / etc.), so raw should be the default view.
 fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
     matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5)
+}
+
+/// True when the directory at `path` has a parent we can navigate to.
+/// Suppresses the `..` row at filesystem root (and on canonicalize
+/// failures, where `..` would otherwise resolve to a broken target).
+fn parent_link_enabled(path: &std::path::Path) -> bool {
+    std::fs::canonicalize(path)
+        .ok()
+        .and_then(|p| p.parent().map(|_| ()))
+        .is_some()
 }
 
 /// Map file extensions that syntect doesn't natively support to the closest

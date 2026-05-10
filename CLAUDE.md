@@ -173,6 +173,12 @@ src/
       stats.rs         — Stats: aggregate counts / sizes computed by tree walk
       build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
       mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive + ISO)
+    directory/
+      mod.rs           — Module wiring; re-exports DirectoryMode
+      read.rs          — One-level fs::read_dir → Vec<DirEntry>; sorts dirs-first then case-insensitive name; follows symlinks for kind/size/mtime, broken links surface as `?`
+      mode.rs          — DirectoryMode: flat one-level listing. Selects every entry (files + dirs); prepends synthetic `..` row when canonical parent exists. Enter (Action::Descend) targets selected entry. Uses ModeId::Listing so Tab cycle / --list pickup keep working. ViewerState::push_extracted collapses dir→dir descent onto the current frame so there's no stack of directories
+      info.rs          — gather_extras (FileExtras::Directory { entry / file / dir counts }) + render_section
+      extract.rs       — Resolve key (single-segment filename) against parent path → InputSource::File(child_path). `..` walks up via Path::canonicalize → parent. Rejects `/` and `.`
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator

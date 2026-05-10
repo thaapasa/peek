@@ -216,6 +216,9 @@ fn gather_extras_in_memory(
         FileType::DiskImage(fmt) => {
             crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
+        // Directory only ever appears via a real `File` source; the
+        // virtual-source path can't construct one.
+        FileType::Directory => crate::types::binary::info::gather_extras(magic_mime),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }
@@ -291,6 +294,7 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             &InputSource::File(path.to_path_buf()),
             *fmt,
         ),
+        FileType::Directory => crate::types::directory::info::gather_extras(path),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }

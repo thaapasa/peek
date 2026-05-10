@@ -44,6 +44,10 @@ pub enum FileType {
     /// Disk image (ISO / DMG / etc). Drives a metadata-only info view —
     /// volume descriptor / trailer parsing, no filesystem walk.
     DiskImage(DiskImageFormat),
+    /// Filesystem directory. One-level listing view. Selecting a child
+    /// file descends into peek; selecting a child directory re-targets
+    /// the current frame (no stack of directories).
+    Directory,
     /// Binary / unknown
     Binary,
 }
@@ -184,6 +188,15 @@ pub fn detect(source: &InputSource) -> Result<Detected> {
 fn detect_file(path: &Path) -> Result<Detected> {
     if !path.exists() {
         bail!("file not found: {}", path.display());
+    }
+
+    // Directories get their own one-level listing viewer; everything
+    // below assumes a regular file we can read bytes from.
+    if path.is_dir() {
+        return Ok(Detected {
+            file_type: FileType::Directory,
+            magic_mime: None,
+        });
     }
 
     // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file

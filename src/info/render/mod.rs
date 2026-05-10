@@ -169,6 +169,19 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Pdf(stats) => {
             crate::types::pdf::info_render::render_section(lines, stats, theme);
         }
+        FileExtras::Directory {
+            entry_count,
+            file_count,
+            dir_count,
+        } => {
+            crate::types::directory::info::render_section(
+                lines,
+                *entry_count,
+                *file_count,
+                *dir_count,
+                theme,
+            );
+        }
     }
 }
 
