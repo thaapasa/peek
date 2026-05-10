@@ -17,7 +17,8 @@ How peek is packaged and published. User-facing install: [README.md](../README.m
     - `x86_64-pc-windows-msvc` on `windows-latest`
 
    Each emits `peek-<version>-<target>.tar.gz` (`.zip` on Windows) + `.sha256` companion. Unix
-   builds are stripped via the release profile.
+   builds are stripped via the release profile. Each archive also bundles the matching Pdfium
+   dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
 3. **`release`** — downloads artifacts, creates and pushes the tag at the built SHA, publishes a
    GitHub Release with all 5 archives + 5 `.sha256` + `install.sh` + auto-generated notes (
    `git log <previous-tag>..<tag>`).
@@ -35,6 +36,40 @@ Workflow needs `contents: write` to push the tag and create the release. No othe
    curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
    peek --version
    ```
+
+## Pdfium bundling
+
+PDF support relies on Pdfium, a dynamic library built from Chromium's PDF stack. peek loads it via
+`dlopen` at startup (see `src/types/pdf/package.rs::locate_bindings`) — first the directory of the
+running executable, then `.pdfium/lib` under the project root (dev fallback), then system search.
+
+The release pipeline ships the dylib next to the binary so the exe-dir lookup wins:
+
+- Each build matrix entry carries `pdfium_asset` (e.g. `pdfium-mac-arm64.tgz`) and `pdfium_lib`
+  (e.g. `lib/libpdfium.dylib`).
+- The `Bundle Pdfium` step reads `BUILD` from `.pdfium/VERSION`, fetches
+  `https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$BUILD/<asset>`,
+  extracts the platform's `pdfium_lib`, and drops it into `dist/$STAGE/` alongside `peek`.
+- Pdfium's `LICENSE` is also copied as `LICENSE-pdfium`.
+
+Tarball / zip layout:
+
+```
+peek-<version>-<target>/
+  peek                   # or peek.exe on Windows
+  libpdfium.dylib        # macOS — or libpdfium.so (Linux), pdfium.dll (Windows)
+  README.md
+  LICENSE
+  LICENSE-pdfium
+```
+
+`install.sh` moves both `peek` and any `libpdfium.*` siblings into `$PEEK_INSTALL_DIR`. Windows
+users extract manually; `pdfium.dll` lands next to `peek.exe`.
+
+To bump the bundled Pdfium version, replace `.pdfium/` locally with a fresh tarball from
+`bblanchon/pdfium-binaries` and commit the new `.pdfium/VERSION` (the rest of `.pdfium/` is
+gitignored). The release workflow reads `BUILD` from that file, so the dev-time and release-time
+versions stay in lockstep.
 
 ## Linux glibc baseline
 

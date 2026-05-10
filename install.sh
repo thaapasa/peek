@@ -114,6 +114,14 @@ chmod +x "$INSTALL_DIR/$BIN"
 
 say "installed $BIN to $INSTALL_DIR/$BIN"
 
+# Pdfium dynamic library (PDF support). Sits next to the binary so peek's
+# exe-dir lookup picks it up on launch. Optional — skip if absent.
+for lib in "$tmp/$STAGE"/libpdfium.*; do
+  [ -e "$lib" ] || continue
+  mv "$lib" "$INSTALL_DIR/"
+  say "installed $(basename "$lib") to $INSTALL_DIR"
+done
+
 # ---- PATH hint --------------------------------------------------------------
 
 case ":$PATH:" in
