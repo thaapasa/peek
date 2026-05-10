@@ -178,6 +178,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         }
         FileType::Document(DocumentFormat::Rtf) => "application/rtf",
+        FileType::Pdf => "application/pdf",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",

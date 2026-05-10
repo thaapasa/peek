@@ -35,6 +35,9 @@ pub enum FileType {
     /// markup). Drives a styled-text read view; DOCX additionally
     /// exposes the ZIP listing TOC and per-entry extract.
     Document(DocumentFormat),
+    /// PDF document. Drives a paged-image render mode + text-extraction
+    /// view + embedded-files listing.
+    Pdf,
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -240,6 +243,7 @@ fn detect_file(path: &Path) -> Result<Detected> {
             "epub" => Some(FileType::Epub),
             "docx" => Some(FileType::Document(DocumentFormat::Docx)),
             "rtf" => Some(FileType::Document(DocumentFormat::Rtf)),
+            "pdf" => Some(FileType::Pdf),
             "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
             _ => None,
         };
@@ -272,6 +276,13 @@ fn detect_file(path: &Path) -> Result<Detected> {
         return Ok(Detected {
             file_type: FileType::Document(DocumentFormat::Rtf),
             magic_mime: Some("application/rtf".to_string()),
+        });
+    }
+
+    if head.starts_with(PDF_MAGIC) {
+        return Ok(Detected {
+            file_type: FileType::Pdf,
+            magic_mime: Some("application/pdf".to_string()),
         });
     }
 
@@ -483,6 +494,12 @@ const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
 /// match is what routes stdin-piped RTF away from plain text.
 const RTF_MAGIC: &[u8] = b"{\\rtf1";
 
+/// PDF signature. Every conforming PDF starts with `%PDF-1.x` (v1.x)
+/// or `%PDF-2.0` (v2.0). `infer` recognises PDFs but only for the
+/// canonical path — the explicit prefix check keeps stdin-piped PDFs
+/// reliable across infer versions.
+const PDF_MAGIC: &[u8] = b"%PDF-";
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
@@ -496,6 +513,12 @@ fn detect_bytes(data: &[u8]) -> Detected {
         return Detected {
             file_type: FileType::Document(DocumentFormat::Rtf),
             magic_mime: Some("application/rtf".to_string()),
+        };
+    }
+    if data.starts_with(PDF_MAGIC) {
+        return Detected {
+            file_type: FileType::Pdf,
+            magic_mime: Some("application/pdf".to_string()),
         };
     }
     let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
@@ -655,6 +678,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "epub" => FileType::Epub,
         "docx" => FileType::Document(DocumentFormat::Docx),
         "rtf" => FileType::Document(DocumentFormat::Rtf),
+        "pdf" => FileType::Pdf,
         "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),
         _ => return None,
     })

@@ -96,6 +96,7 @@ pub fn extract(
         FileType::Document(DocumentFormat::Rtf) => {
             crate::types::document::rtf::extract::extract(source, key)
         }
+        FileType::Pdf => crate::types::pdf::extract::extract(source, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html

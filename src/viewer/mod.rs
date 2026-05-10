@@ -14,7 +14,8 @@ use crate::types::document::{self, docx::DocxReadMode, rtf::RtfReadMode};
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
-use crate::types::listing::ListingMode;
+use crate::types::listing::{ListingMode, from_flat_paths};
+use crate::types::pdf::{self, PdfPageMode, PdfTextMode};
 use crate::types::svg::SvgAnimationMode;
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
@@ -346,6 +347,42 @@ impl Registry {
                         Err(e) => {
                             // Surface the parse error through Info; the
                             // read mode just isn't pushed.
+                            let _ = e;
+                        }
+                    }
+                }
+                FileType::Pdf => {
+                    // Page-render (default) + text-extraction view +
+                    // optional /EmbeddedFiles listing. If pdfium can't
+                    // open the file (encrypted with no password,
+                    // missing library, corrupt), fall through to
+                    // Hex/Info plus the open-error warning surfaced
+                    // below.
+                    match pdf::package::open_doc(source) {
+                        Ok(doc) => {
+                            if doc.page_count() > 0 {
+                                modes.push(Box::new(PdfPageMode::new(
+                                    doc.clone(),
+                                    self.image_config(args),
+                                )));
+                            }
+                            modes.push(Box::new(PdfTextMode::new(doc.clone())));
+                            let embeds = doc.list_embeds();
+                            if !embeds.is_empty() {
+                                let entries = from_flat_paths(embeds);
+                                modes.push(Box::new(ListingMode::new(
+                                    "PDF",
+                                    "Embeds",
+                                    entries,
+                                    Vec::new(),
+                                )));
+                            }
+                        }
+                        Err(e) => {
+                            // No PDF mode pushed; the open error rides
+                            // through FileInfo warnings via the universal
+                            // tail, so the user lands on Info with the
+                            // reason instead of a silent fall-through.
                             let _ = e;
                         }
                     }

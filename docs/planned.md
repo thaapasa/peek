@@ -34,48 +34,32 @@ whole file into memory, which is fine for most logs but breaks down for very lar
 
 ### Document Files ☐
 
+DOCX, RTF, and PDF are shipped — see [features.md](features.md). What's still planned:
+
 | Format        | Extensions |
 |---------------|------------|
-| PDF           | `.pdf`     |
-| Word (OOXML)  | `.docx`    |
 | Excel (OOXML) | `.xlsx`    |
 
 Modern XML-based Office formats only — legacy `.doc` / `.xls` not planned.
 
-Document files should support multiple modes (cyclable with Tab):
-
-- **Text extraction** — primary mode; show what's in the document as plain text.
-- **Source browsing** — for OOXML (which is ZIP + XML), browse the internal XML files. Useful for
-  debugging or inspecting structure.
-- **Rendered preview** (PDF only) — render PDF pages to images, convert to ASCII art. Mostly
-  novelty, but useful for seeing page layout at a glance.
-
-File info screen should show document-specific metadata: page count, word count, author, creation
-date.
-
-#### Implementation Libraries
-
-- **PDF** — `pdfium-render` (bindings to Google PDFium). Used for both page rasterization (preview
-  mode → image renderer pipeline) and text extraction. V8/JS-disabled PDFium build (~10–13 MB
-  per-platform shared lib). Pure-Rust alternatives (`pdf-extract`, `lopdf`) too fragile on
-  real-world PDFs.
-- **Office (OOXML)** — `zip` + `quick-xml` for the container and document XML; `calamine` for
-  `.xlsx`. Text extract is pure Rust. Source/XML browsing reuses existing structured viewer.
-  Visual render of Word/Excel pages out of scope (would require LibreOffice subprocess).
+`.xlsx` should support text extraction (sheet → tab-separated rows or rendered table) and the
+existing OOXML-as-ZIP TOC browsing. `calamine` handles parsing without bringing a full
+spreadsheet engine.
 
 #### PDFium Distribution
 
-Bundle the PDFium shared library (`.dylib` / `.so` / `.dll`) alongside the peek binary in release
-artifacts. Adds ~10 MB per platform; acceptable.
+PDF support ships with `pdfium-render` (dynamically loads `libpdfium.dylib` / `.so` / `.dll`).
+Still-pending packaging work:
 
-`install.sh` should detect an already-installed system PDFium (e.g. via `brew`, package manager, or
-a previous peek install) and skip the bundled copy in that case. If no PDFium present, download and
-install the matching prebuilt next to the peek binary. Pin the PDFium version per peek release so
-ABI/feature drift is bounded.
-
-`cargo install` users compile against whatever PDFium is on their system — document install steps
-in the README. Optionally gate the PDF feature behind a Cargo feature flag (`pdf`) so a no-PDF
-build stays slim.
+- **Release tarball**: `release.yml` needs a per-target Pdfium-fetch step (download from
+  `bblanchon/pdfium-binaries` matching the build target) and a packaging step that copies
+  `libpdfium.*` next to the `peek` binary so the shipped tarball runs without a system install.
+- **install.sh**: detect an already-installed system Pdfium (homebrew etc.) and skip the bundled
+  copy when present. Pin the Pdfium version per peek release.
+- **`cargo install`**: build-time path search via `PDFIUM_DYNAMIC_LIB_PATH` only finds the lib
+  if the user has set it; document install steps in the README.
+- **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size down for
+  embedded targets.
 
 ### Vector / PostScript Files ☐
 

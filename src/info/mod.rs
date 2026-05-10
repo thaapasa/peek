@@ -99,6 +99,7 @@ pub enum FileExtras {
     Ebook(crate::types::ebook::EbookStats),
     Comic(crate::types::comic::ComicStats),
     Document(crate::types::document::DocumentStats),
+    Pdf(crate::types::pdf::PdfStats),
 }
 
 /// Format-specific disk-image metadata. Each variant owns the parsed

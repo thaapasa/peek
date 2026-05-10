@@ -210,6 +210,7 @@ fn gather_extras_in_memory(
         FileType::Document(DocumentFormat::Rtf) => {
             crate::types::document::rtf::info_gather::gather_extras(source)
         }
+        FileType::Pdf => crate::types::pdf::info_gather::gather_extras(source),
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
@@ -282,6 +283,9 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             crate::types::document::rtf::info_gather::gather_extras(&InputSource::File(
                 path.to_path_buf(),
             ))
+        }
+        FileType::Pdf => {
+            crate::types::pdf::info_gather::gather_extras(&InputSource::File(path.to_path_buf()))
         }
         FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),

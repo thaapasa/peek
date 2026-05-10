@@ -168,6 +168,34 @@ single styled-text view:
 
 There is no TOC view or per-entry extract — RTF isn't a container.
 
+#### PDF ✅
+
+`.pdf` files (Portable Document Format — binary container with paged content, optional
+attachments, and a metadata dict) get a multi-mode view powered by Pdfium:
+
+- **Read** (default) — paged image render. Each page is rasterized via Pdfium and ASCII-rendered
+  through the shared image pipeline (same `prepare_decoded` / `render_prepared` path the
+  comic-archive reader uses). `n` / `p` step pages, the status line shows `page X/Y`. Per-page
+  cache keyed by `(cols, rows, style, image-mode, background, fit)`; resizing or cycling
+  background / image mode / fit re-renders only the visible page.
+- **Text** — width-wrapped text extraction across the whole document, separated by muted
+  `--- Page N ---` markers. Same caching shape as DOCX / RTF (single `(width, style_mode)`
+  cache rebuilt on resize). Reachable via Tab.
+- **Embeds** — when the PDF carries `/EmbeddedFiles` attachments, a `ListingMode` of those
+  attachments. `e` / Enter extracts the selected attachment as an `InputSource::Memory` that
+  re-detects through the recursive-peek pipeline (an attached CSV opens in a CSV view, an
+  attached image opens in the image viewer, and so on). Hidden when no attachments are present.
+- **Info** — PDF version (`1.4`, `1.7`, …), title, author, subject, keywords, creation /
+  modification dates (PDF `D:YYYYMMDDHHMMSSO…` strings reformatted to `YYYY-MM-DD HH:MM:SS UTC`
+  / `±HH:MM`), page count, attachment count.
+
+Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
+detects the `%PDF-` magic and routes to the PDF mode stack.
+
+Pdfium is loaded dynamically from `libpdfium.dylib` / `.so` / `.dll` shipped alongside the
+peek binary in the release tarball — no system install required at runtime. Encrypted /
+password-protected PDFs surface the open error in the Info section instead of crashing.
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

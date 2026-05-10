@@ -14,6 +14,7 @@ pub mod html;
 pub mod image;
 pub mod listing;
 pub mod markdown;
+pub mod pdf;
 pub mod sql;
 pub mod structured;
 pub mod svg;

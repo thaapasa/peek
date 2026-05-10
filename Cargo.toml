@@ -66,6 +66,13 @@ html2text = { version = "0.17", features = ["css", "css_ext"] }
 # subset (control words, groups, runs).
 rtf-parser = "0.4.2"
 
+# PDF rendering + text + attachments. Wraps Google's Pdfium (C++) via dlopen
+# at process start. The libpdfium.dylib / .so / .dll is shipped alongside
+# the peek binary in the release tarball (release.yml grabs it per-target
+# from bblanchon/pdfium-binaries) — no system install needed at runtime.
+# Dev workflow: `.pdfium/lib/libpdfium.*` is searched as a fallback.
+pdfium-render = "0.9"
+
 # DOCX is parsed via a hand-rolled `quick_xml` walker (existing dep) over
 # `word/document.xml` — full WordprocessingML deserializers (`docx-rust`,
 # `docx-rs`) reject real-world Word documents because numeric attributes

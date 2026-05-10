@@ -213,6 +213,20 @@ using glyph-matched character selection with two-color clustering and 24-bit ANS
 `--image-mode`: `full`, `block`, `geo`, `ascii`. Mode definitions and glyph sets: [
 `src/viewer/image/mod.rs`](src/viewer/image/mod.rs).
 
+### Documents and ebooks
+
+| Format | Extensions       | Modes                                                |
+|--------|------------------|------------------------------------------------------|
+| PDF    | `.pdf`           | Paged image render · text extraction · embeds       |
+| DOCX   | `.docx`          | Styled body · ZIP TOC · per-entry extract           |
+| RTF    | `.rtf`           | Styled body                                         |
+| EPUB   | `.epub`          | Per-chapter HTML render · ZIP TOC                   |
+| CBZ    | `.cbz`           | Paged image render · ZIP TOC                        |
+
+PDF support uses Pdfium (Google's PDF library, dynamically loaded from `libpdfium.*` shipped
+alongside the peek binary in the release tarball — no system install needed). Full feature
+detail in [`docs/features.md`](docs/features.md).
+
 ## Configuration
 
 | Variable     | Description               | Default     |

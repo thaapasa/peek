@@ -378,18 +378,26 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 4. Add info gathering in `info/gather/` if the type has interesting metadata (and themed display in
    `info/render.rs` for novel field types).
 
-Example — adding PDF:
+Example — PDF (`src/types/pdf/`):
 
 ```rust
 // in compose_modes
 FileType::Pdf => {
-modes.push(Box::new(PdfTextMode::new(source.clone()) ? ));    // text extract
-modes.push(Box::new(PdfRenderMode::new(source.clone())? ));  // page preview
+    let doc = pdf::package::open_doc(source)?;            // Pdfium-backed Doc, Arc-cloneable
+    modes.push(Box::new(PdfPageMode::new(doc.clone(), image_config))); // page render
+    modes.push(Box::new(PdfTextMode::new(doc.clone())));               // text extract
+    let embeds = doc.list_embeds();                       // /EmbeddedFiles attachments
+    if !embeds.is_empty() {
+        modes.push(Box::new(ListingMode::new("PDF", "Embeds", from_flat_paths(embeds), vec![])));
+    }
 }
 ```
 
-User gets Tab cycling through `text extract → page render → Info`, `x` toggling to hex, `i` jumping
-straight to Info — without touching `main.rs` or the event loop.
+User gets Tab cycling through `page render → text extract → embed listing → Info`, `n`/`p` stepping
+pages in the page view, `e` extracting attachments from the listing, `x` toggling to hex, `i`
+jumping to Info. Pdfium is dynamically loaded from `libpdfium.*` shipped alongside the binary; the
+loader path-search is in `pdf::package::locate_bindings` (exe dir → `.pdfium/lib` dev fallback →
+system).
 
 ## Adding a new theme
 

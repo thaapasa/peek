@@ -16,7 +16,9 @@ cargo test                   # run all tests
 cargo clippy                 # lint
 ```
 
-No external runtime dependencies. Image rendering is built in.
+No external runtime dependencies. Image rendering is built in. (PDF support uses Pdfium —
+shipped alongside the binary in the release tarball, dynamically loaded at startup; no system
+install needed.)
 
 ## Architecture map
 
@@ -131,6 +133,15 @@ src/
         render.rs      — render(&Parsed, width, theme, style_mode) -> Vec<String>: wraps StyleBlock.text by width, emits SGR for painter bold/italic/underline/strike + colortbl color
         read_mode.rs   — RtfReadMode: per-(width, style_mode) line cache; no listing or extract (RTF is single-file)
         info_gather.rs — Populate DocumentStats via parse::open_source
+    pdf/
+      mod.rs           — Module wiring; re-exports PdfStats, PdfPageMode, PdfTextMode
+      package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
+      page_mode.rs     — PdfPageMode: paged image render via `pipeline::render::{prepare_decoded, render_prepared}`. Per-page cache keyed by (cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, labeled "page"). Mirrors CbzReadMode shape
+      text_mode.rs     — PdfTextMode: width-cached text via `Doc::page_text`; pages joined with muted `--- Page N ---` separator. Mirrors DocxReadMode shape; greedy word-wrap with hard-break for over-width tokens
+      extract.rs       — Extract `/EmbeddedFiles` attachment by name → InputSource::Memory; reuses `extract::sanitize_entry_path`
+      info.rs          — PdfStats { metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
+      info_gather.rs   — Populate PdfStats via package::open_doc; failures land as `error` field rendered as warning row
+      info_render.rs   — Render PDF info section (Version / Title / Author / Subject / Keywords / Created / Modified / Pages / Attachments). On error, render only `Error: ...` and stop
     comic/
       mod.rs           — Module wiring; re-exports ComicStats / CbzReadMode
       info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }
