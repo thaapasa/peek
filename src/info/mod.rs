@@ -97,6 +97,7 @@ pub enum FileExtras {
         error: Option<String>,
     },
     Ebook(crate::types::ebook::EbookStats),
+    Comic(crate::types::comic::ComicStats),
 }
 
 /// Format-specific disk-image metadata. Each variant owns the parsed

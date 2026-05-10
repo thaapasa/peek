@@ -6,9 +6,10 @@ use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType, StructuredFormat};
+use crate::input::detect::{ComicFormat, Detected, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
+use crate::types::comic::{CbzReadMode, cbz};
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
@@ -294,6 +295,37 @@ impl Registry {
                     };
                     warnings.append(&mut listing_warnings);
                     modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
+                }
+                FileType::Comic(ComicFormat::Cbz) => {
+                    // Read mode (paged image reader) + ZIP listing
+                    // TOC. If page enumeration fails, fall back to
+                    // listing-only so the user can still browse the
+                    // container.
+                    let mut warnings = Vec::new();
+                    match cbz::package::list_pages(source) {
+                        Ok(pages) if !pages.is_empty() => {
+                            modes.push(Box::new(CbzReadMode::new(
+                                source.clone(),
+                                self.image_config(args),
+                                pages,
+                            )));
+                        }
+                        Ok(_) => {
+                            warnings.push("CBZ contains no image pages".to_string());
+                        }
+                        Err(e) => {
+                            warnings.push(format!("CBZ unreadable: {e:#}"));
+                        }
+                    }
+                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
+                        source,
+                        crate::input::detect::ArchiveFormat::Zip,
+                    ) {
+                        Ok(e) => (e, Vec::new()),
+                        Err(e) => (Vec::new(), vec![format!("Failed to list CBZ: {e:#}")]),
+                    };
+                    warnings.append(&mut listing_warnings);
+                    modes.push(Box::new(ListingMode::new("CBZ", "TOC", entries, warnings)));
                 }
                 FileType::Image => {
                     let cfg = self.image_config(args);

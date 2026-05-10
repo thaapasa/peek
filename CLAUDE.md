@@ -115,6 +115,15 @@ src/
         read_mode.rs   — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
+    comic/
+      mod.rs           — Module wiring; re-exports ComicStats / CbzReadMode
+      info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }
+      cbz/
+        mod.rs         — Module wiring; re-exports CbzReadMode
+        package.rs     — list_pages: walk ZIP central directory, filter image entries by extension (png/jpg/jpeg/webp/gif/bmp/tif/tiff), skip __MACOSX/, sort by name; open_zip + read_page for body fetch
+        read_mode.rs   — CbzReadMode: one page at a time via image pipeline. Per-page render cache keyed by (idx, cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, relabeled "page"). render_to_pipe walks every page separated by blank line
+        info_gather.rs — Populate ComicStats (page count + uncompressed image bytes) from package::list_pages
+        info_render.rs — Render comic info section from ComicStats
     svg/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)

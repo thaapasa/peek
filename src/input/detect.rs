@@ -28,6 +28,9 @@ pub enum FileType {
     Html,
     /// EPUB e-book (ZIP container with HTML chapters + OPF metadata)
     Epub,
+    /// Comic-archive (one image per page in a ZIP / RAR / 7z / tar
+    /// container). Drives the paged-image read mode.
+    Comic(ComicFormat),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -95,6 +98,20 @@ impl ArchiveFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComicFormat {
+    /// Comic Book ZIP (most common comic-archive form in the wild).
+    Cbz,
+}
+
+impl ComicFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Cbz => "Comic Book ZIP",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiskImageFormat {
     Iso,
     Dmg,
@@ -151,6 +168,17 @@ fn detect_file(path: &Path) -> Result<Detected> {
     {
         return Ok(Detected {
             file_type: FileType::Archive(fmt),
+            magic_mime: None,
+        });
+    }
+
+    // Comic-archive extensions win over the magic-byte ZIP detection
+    // below so a `.cbz` doesn't fall through to FileType::Archive(Zip).
+    if let Some(ext) = path.extension().and_then(|e| e.to_str())
+        && let Some(fmt) = comic_format_from_ext(&ext.to_lowercase())
+    {
+        return Ok(Detected {
+            file_type: FileType::Comic(fmt),
             magic_mime: None,
         });
     }
@@ -356,6 +384,14 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     None
 }
 
+/// Map a single file extension to a comic-archive format.
+fn comic_format_from_ext(ext: &str) -> Option<ComicFormat> {
+    match ext {
+        "cbz" => Some(ComicFormat::Cbz),
+        _ => None,
+    }
+}
+
 /// Map a single file extension to a disk-image format. `.img` /
 /// `.bin` / `.dd` map to `Raw` provisionally; the caller probes for
 /// an ISO 9660 PVD before committing to that classification.
@@ -555,6 +591,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         return Some(FileType::Archive(fmt));
     }
     let ext = extension_lower(name)?;
+    if let Some(fmt) = comic_format_from_ext(&ext) {
+        return Some(FileType::Comic(fmt));
+    }
     if let Some(fmt) = disk_image_format_from_ext(&ext) {
         return Some(FileType::DiskImage(fmt));
     }

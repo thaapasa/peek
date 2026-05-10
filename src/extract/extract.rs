@@ -7,7 +7,7 @@ use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType};
+use crate::input::detect::{ComicFormat, Detected, FileType};
 
 /// Successful extract: fresh `InputSource` + suggested filename.
 #[derive(Debug)]
@@ -86,11 +86,13 @@ pub fn extract(
         }
         FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
-        FileType::Epub => crate::types::archive::extract::extract(
-            source,
-            crate::input::detect::ArchiveFormat::Zip,
-            key,
-        ),
+        FileType::Epub | FileType::Comic(ComicFormat::Cbz) => {
+            crate::types::archive::extract::extract(
+                source,
+                crate::input::detect::ArchiveFormat::Zip,
+                key,
+            )
+        }
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html

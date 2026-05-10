@@ -19,7 +19,7 @@ use anyhow::Result;
 
 use super::{FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType};
+use crate::input::detect::{ComicFormat, Detected, FileType};
 use crate::input::mime;
 
 #[cfg(test)]
@@ -201,6 +201,9 @@ fn gather_extras_in_memory(
             },
         },
         FileType::Epub => crate::types::ebook::epub::info_gather::gather_extras(source),
+        FileType::Comic(fmt @ ComicFormat::Cbz) => {
+            crate::types::comic::cbz::info_gather::gather_extras(source, *fmt)
+        }
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::DiskImage(fmt) => {
@@ -258,6 +261,12 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::Epub => crate::types::ebook::epub::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),
         ),
+        FileType::Comic(fmt @ ComicFormat::Cbz) => {
+            crate::types::comic::cbz::info_gather::gather_extras(
+                &InputSource::File(path.to_path_buf()),
+                *fmt,
+            )
+        }
         FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),
             *fmt,
