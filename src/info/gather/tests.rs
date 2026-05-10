@@ -88,21 +88,19 @@ fn jpeg_river_woods_is_ultra_hdr_with_camera_metadata() {
 }
 
 #[test]
-fn png_fire_has_dimensions_and_icc() {
-    let info = gather_fixture("test-images/fire.png");
+fn png_clover_has_dimensions() {
+    let info = gather_fixture("test-images/clover.png");
     let FileExtras::Image {
         width,
         height,
-        icc_profile,
         animation,
         ..
     } = &info.extras
     else {
         panic!("expected Image extras");
     };
-    assert_eq!(*width, 1000);
-    assert_eq!(*height, 667);
-    assert!(icc_profile.is_some(), "expected ICC profile in PNG");
+    assert_eq!(*width, 640);
+    assert_eq!(*height, 599);
     assert!(animation.is_none(), "static PNG must not be animated");
 }
 

@@ -117,9 +117,9 @@ fn cozy_room_contour_plain() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn fire_block_auto_bg() {
+fn clover_block_auto_bg() {
     insta::assert_snapshot!(render_raster(
-        "test-images/fire.png",
+        "test-images/clover.png",
         ImageMode::Block,
         StyleMode::Plain,
         Background::Auto,
@@ -127,9 +127,9 @@ fn fire_block_auto_bg() {
 }
 
 #[test]
-fn fire_block_checkerboard_bg() {
+fn clover_block_checkerboard_bg() {
     insta::assert_snapshot!(render_raster(
-        "test-images/fire.png",
+        "test-images/clover.png",
         ImageMode::Block,
         StyleMode::Plain,
         Background::Checkerboard,

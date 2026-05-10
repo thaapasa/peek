@@ -136,7 +136,7 @@ mod tests {
 
     #[test]
     fn extract_static_image_unsupported() {
-        let src = fixture("fire.png");
+        let src = fixture("clover.png");
         let err = extract(&src, "1", Some("image/png")).unwrap_err();
         assert!(matches!(err, ExtractError::Unsupported(_)));
     }
