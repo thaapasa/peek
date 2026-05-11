@@ -187,10 +187,28 @@ fn render_status_line(state: &mut ViewerState) -> String {
     // single-session look). At depth > 1, every frame joined with
     // " > " so the user can see how deep they've drilled.
     let breadcrumb = state.breadcrumb().join(" > ");
+    let has_warnings = !state.frame().file_info.warnings.is_empty();
     let theme = &state.peek_theme;
 
+    // Prefix breadcrumb with a yellow `!` when the active frame's
+    // info section has surfaced warnings (e.g. extension/MIME
+    // mismatch). The trailing accent-color escape restores the
+    // breadcrumb's own colour for the filename that follows; the
+    // outer `paint_fg(theme.accent)` over this segment paints the
+    // initial state, which the warning escape overrides for the `!`.
+    let breadcrumb_with_mark = if has_warnings {
+        format!(
+            "{}{} {}",
+            theme.paint_fg("!", theme.warning),
+            theme.paint_fg("", theme.accent),
+            breadcrumb,
+        )
+    } else {
+        breadcrumb.clone()
+    };
+
     let mut segs: Vec<(&str, syntect::highlighting::Color)> = vec![
-        (breadcrumb.as_str(), theme.accent),
+        (breadcrumb_with_mark.as_str(), theme.accent),
         (mode_label.as_str(), theme.label),
     ];
     for (s, c) in &mode_segs {
