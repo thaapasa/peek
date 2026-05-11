@@ -721,7 +721,11 @@ impl ViewerState {
         frame.file_info = file_info;
         frame.modes = modes;
         frame.active = 0;
-        frame.last_primary = if frame.modes[0].is_aux() { None } else { Some(0) };
+        frame.last_primary = if frame.modes[0].is_aux() {
+            None
+        } else {
+            Some(0)
+        };
         frame.scroll = vec![0; n];
         frame.views = (0..n).map(|_| None).collect();
         frame.position = Position::Unknown;
@@ -1032,6 +1036,11 @@ mod tests {
 
     #[test]
     fn scrolldown_on_svg_source_shifts_window() {
+        // Pin viewport so the assertion below isn't a function of the
+        // terminal the test happens to run in (the pretty SVG is ~52
+        // lines — a tall console makes `total > rows + 5` flaky).
+        let _term = crate::viewer::ui::test_term_override::pin(80, 21);
+
         let source = fixture_source("test-images/walking-outside.svg");
         let detected = crate::input::detect::detect(&source).unwrap();
         let mut state = build_state(

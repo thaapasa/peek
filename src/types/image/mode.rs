@@ -124,7 +124,11 @@ impl Mode for ImageRenderMode {
             };
             self.cache = Some(CachedFrame { key, prep });
         }
-        let prep = &self.cache.as_ref().unwrap().prep;
+        let prep = &self
+            .cache
+            .as_ref()
+            .expect("cache populated by the recompute branch above")
+            .prep;
 
         // Clamp scroll to the current grid + viewport, then carve a window.
         // Visible viewport is min(term, prep) per axis — nothing past the

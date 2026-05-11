@@ -353,7 +353,10 @@ mod tests {
     #[test]
     fn extension_from_name_basic() {
         assert_eq!(extension_from_name("photo.PNG"), Some("png".to_string()));
-        assert_eq!(extension_from_name("archive.tar.gz"), Some("gz".to_string()));
+        assert_eq!(
+            extension_from_name("archive.tar.gz"),
+            Some("gz".to_string())
+        );
         assert_eq!(extension_from_name("README"), None);
         assert_eq!(extension_from_name(".bashrc"), None);
         assert_eq!(extension_from_name("foo."), None);

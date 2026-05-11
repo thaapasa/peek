@@ -306,11 +306,48 @@ pub(crate) fn make_peek_theme(name: PeekThemeName, style_mode: StyleMode) -> Pee
 }
 
 pub(crate) fn terminal_rows() -> usize {
+    #[cfg(test)]
+    if let Some((_, rows)) = test_term_override::get() {
+        return rows;
+    }
     terminal::size().map(|(_, h)| h as usize).unwrap_or(24)
 }
 
 pub(crate) fn terminal_cols() -> usize {
+    #[cfg(test)]
+    if let Some((cols, _)) = test_term_override::get() {
+        return cols;
+    }
     terminal::size().map(|(w, _)| w as usize).unwrap_or(80)
+}
+
+#[cfg(test)]
+pub(crate) mod test_term_override {
+    use std::cell::Cell;
+
+    thread_local! {
+        static OVERRIDE: Cell<Option<(usize, usize)>> = const { Cell::new(None) };
+    }
+
+    pub(crate) fn get() -> Option<(usize, usize)> {
+        OVERRIDE.with(|c| c.get())
+    }
+
+    /// RAII guard pinning `terminal_cols()` / `terminal_rows()` to fixed
+    /// values for the lifetime of the returned scope. Clears the override
+    /// on drop (including panic) so tests can't leak the pin to siblings.
+    pub(crate) struct Guard;
+
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            OVERRIDE.with(|c| c.set(None));
+        }
+    }
+
+    pub(crate) fn pin(cols: usize, rows: usize) -> Guard {
+        OVERRIDE.with(|c| c.set(Some((cols, rows))));
+        Guard
+    }
 }
 
 /// Visible rows available for content (total rows minus status line).
