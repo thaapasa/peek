@@ -530,9 +530,17 @@ pub fn render_prepared(
 }
 
 /// Load an image from a file path or in-memory / ranged byte source.
+/// Uses magic-byte format detection rather than file extension so a
+/// misnamed file (e.g. PNG renamed to `.svg`) still decodes correctly
+/// when the detection layer routes it to the image viewer.
 pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
     match source {
-        InputSource::File(path) => image::open(path).context("failed to open image"),
+        InputSource::File(path) => image::ImageReader::open(path)
+            .context("failed to open image")?
+            .with_guessed_format()
+            .context("failed to guess image format")?
+            .decode()
+            .context("failed to decode image"),
         _ => {
             let buf = source.read_bytes()?;
             image::load_from_memory(&buf).context("failed to decode image")

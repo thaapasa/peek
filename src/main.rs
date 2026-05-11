@@ -75,16 +75,40 @@ fn main() -> Result<()> {
         detected = input::detect::detect(&source)?;
     }
 
+    // First attempt with name-biased detection. If rendering fails (e.g.
+    // the file's extension lied about its content), retry once with
+    // magic-byte-only detection — but only when the fallback classifies
+    // the file differently, so we don't repeat a guaranteed failure.
+    match run_view(&source, &detected, &args) {
+        Ok(()) => Ok(()),
+        Err(e) => match input::detect::detect_ignore_name(&source) {
+            Ok(retried) if retried.file_type != detected.file_type => {
+                run_view(&source, &retried, &args).map_err(|_| e)
+            }
+            _ => Err(e),
+        },
+    }
+}
+
+/// Render `source` according to `args` (info / list / interactive /
+/// pipe). Separated from `main` so the caller can retry it with a
+/// re-detected `Detected` when the first attempt fails on a misnamed
+/// file.
+fn run_view(
+    source: &input::InputSource,
+    detected: &input::detect::Detected,
+    args: &Args,
+) -> Result<()> {
     let interactive = !args.print && std::io::stdout().is_terminal();
 
-    let viewers = viewer::Registry::new(&args)?;
+    let viewers = viewer::Registry::new(args)?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
     // --info mode: a fixed-size summary, written straight to stdout. For
     // a scrollable view, use the interactive viewer's Info mode (key `i`).
     if args.info {
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(&source, &detected)
+        let file_info = info::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
         for line in &lines {
@@ -95,7 +119,7 @@ fn main() -> Result<()> {
     }
 
     let mut modes = viewers
-        .compose_modes(&source, &detected, &args)
+        .compose_modes(source, detected, args)
         .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
 
     // --list: render the listing-mode TOC to stdout (no viewer). Errors
@@ -114,14 +138,14 @@ fn main() -> Result<()> {
                 )
             })?;
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(&source, &detected)
+        let file_info = info::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = viewer::modes::RenderCtx {
             file_info: &file_info,
             theme_name: viewers.theme_name(),
             peek_theme: viewers.peek_theme(),
             render_opts,
-            term_cols: pipe_term_cols(&args),
+            term_cols: pipe_term_cols(args),
             term_rows: usize::MAX,
         };
         modes[listing_idx]
@@ -143,8 +167,8 @@ fn main() -> Result<()> {
         let theme_name = viewers.theme_name();
         let source_name = source.name().to_string();
         viewer::interactive::run(
-            source,
-            detected,
+            source.clone(),
+            detected.clone(),
             theme_name,
             args.color,
             render_opts,
@@ -157,14 +181,14 @@ fn main() -> Result<()> {
         // (first non-aux) mode straight to stdout — for binary files,
         // where every mode is aux, fall back to the first mode (Hex).
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(&source, &detected)
+        let file_info = info::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = viewer::modes::RenderCtx {
             file_info: &file_info,
             theme_name: viewers.theme_name(),
             peek_theme: viewers.peek_theme(),
             render_opts,
-            term_cols: pipe_term_cols(&args),
+            term_cols: pipe_term_cols(args),
             term_rows: usize::MAX,
         };
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);

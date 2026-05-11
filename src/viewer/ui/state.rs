@@ -84,6 +84,12 @@ pub(crate) struct SessionFrame {
     /// Last known logical position; restored when modes that track
     /// position become active again.
     pub position: Position,
+    /// One-shot retry guard: when a render fails on this frame, we try
+    /// re-detecting the source with `detect_ignore_name` and rebuild the
+    /// frame. Set after that retry runs (success or not) so a second
+    /// render failure on the rebuilt frame propagates rather than
+    /// looping.
+    pub retry_attempted: bool,
 }
 
 impl SessionFrame {
@@ -106,6 +112,7 @@ impl SessionFrame {
             scroll: vec![0; n],
             views: (0..n).map(|_| None).collect(),
             position: Position::Unknown,
+            retry_attempted: false,
         }
     }
 
@@ -663,10 +670,68 @@ impl ViewerState {
             .as_ref()
             .is_some_and(|v| v.scroll_at == scroll && v.rows_at == rows);
         if !cache_hit {
-            let view = self.render_active()?;
-            self.frame_mut().views[active] = Some(view);
+            match self.render_active() {
+                Ok(view) => {
+                    self.frame_mut().views[active] = Some(view);
+                }
+                Err(e) => {
+                    // Frame may have been built from a name-biased detect
+                    // (file extension lied about the content). Try
+                    // magic-byte-only re-detection once; if it yields a
+                    // different file type, rebuild the frame and retry
+                    // the render. Applies uniformly to root and nested
+                    // descended frames.
+                    if !self.frame().retry_attempted && self.retry_frame_detection()? {
+                        let active = self.frame().active;
+                        let view = self.render_active()?;
+                        self.frame_mut().views[active] = Some(view);
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         }
         Ok(())
+    }
+
+    /// Re-detect the active frame's source without using its path /
+    /// entry name, rebuild modes + file_info if the classification
+    /// changed, and reset cached views. Sets `retry_attempted` whether
+    /// or not the classification changed so the caller doesn't loop.
+    /// Returns `Ok(true)` when the frame was rebuilt and is worth
+    /// re-rendering, `Ok(false)` when re-detection didn't change the
+    /// type.
+    fn retry_frame_detection(&mut self) -> Result<bool> {
+        let retried = {
+            let frame = self.frame();
+            match crate::input::detect::detect_ignore_name(&frame.source) {
+                Ok(d) if d.file_type != frame.detected.file_type => d,
+                _ => {
+                    self.frame_mut().retry_attempted = true;
+                    return Ok(false);
+                }
+            }
+        };
+        let source_clone = self.frame().source.clone();
+        let modes = (self.mode_builder)(&source_clone, &retried)?;
+        let file_info = crate::info::gather(&source_clone, &retried)?;
+        let n = modes.len();
+        let frame = self.frame_mut();
+        frame.detected = retried;
+        frame.file_info = file_info;
+        frame.modes = modes;
+        frame.active = 0;
+        frame.last_primary = if frame.modes[0].is_aux() { None } else { Some(0) };
+        frame.scroll = vec![0; n];
+        frame.views = (0..n).map(|_| None).collect();
+        frame.position = Position::Unknown;
+        frame.retry_attempted = true;
+        // Drop the ScreenBuffer's row-diff cache so the next draw
+        // repaints every row — the rebuilt frame's mode set, status
+        // line, and content can differ from whatever the parent frame
+        // (or earlier render attempt) left on screen.
+        self.screen.invalidate();
+        Ok(true)
     }
 
     pub(crate) fn invalidate_active(&mut self) {

@@ -14,7 +14,7 @@ const HEAD_BYTES: usize = 16 * 1024;
 const SCAN_CHUNK: usize = 64 * 1024;
 
 /// Detected file type, used to dispatch to the right viewer.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileType {
     /// Source code or text file with optional syntax name
     SourceCode { syntax: Option<String> },
@@ -175,17 +175,43 @@ pub struct Detected {
 
 /// Detect the file type of an input source.
 pub fn detect(source: &InputSource) -> Result<Detected> {
+    detect_with(source, false)
+}
+
+/// Re-detect ignoring the source's path / entry name. Used as a
+/// fallback retry when rendering fails — if the file's extension lied
+/// about the content, magic-byte detection on the body still resolves
+/// the real type.
+pub fn detect_ignore_name(source: &InputSource) -> Result<Detected> {
+    detect_with(source, true)
+}
+
+fn detect_with(source: &InputSource, ignore_name: bool) -> Result<Detected> {
     match source {
-        InputSource::File(path) => detect_file(path),
-        InputSource::Memory { bytes, name } => Ok(detect_bytes_named(bytes, Some(name))),
+        InputSource::File(path) => detect_file(path, ignore_name),
+        InputSource::Memory { bytes, name } => Ok(detect_bytes_named(
+            bytes,
+            if ignore_name {
+                None
+            } else {
+                Some(name.as_str())
+            },
+        )),
         InputSource::FileRange { name, .. } => {
             let buf = source.read_bytes()?;
-            Ok(detect_bytes_named(&buf, Some(name)))
+            Ok(detect_bytes_named(
+                &buf,
+                if ignore_name {
+                    None
+                } else {
+                    Some(name.as_str())
+                },
+            ))
         }
     }
 }
 
-fn detect_file(path: &Path) -> Result<Detected> {
+fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
     if !path.exists() {
         bail!("file not found: {}", path.display());
     }
@@ -199,72 +225,74 @@ fn detect_file(path: &Path) -> Result<Detected> {
         });
     }
 
-    // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file
-    // name, so they win over the single-extension fallback below for files
-    // like `archive.tar.gz` where `extension()` would only see `.gz`.
-    if let Some(name) = path.file_name().and_then(|n| n.to_str())
-        && let Some(fmt) = archive_format_from_name(name)
-    {
-        return Ok(Detected {
-            file_type: FileType::Archive(fmt),
-            magic_mime: None,
-        });
-    }
-
-    // Comic-archive extensions win over the magic-byte ZIP detection
-    // below so a `.cbz` doesn't fall through to FileType::Archive(Zip).
-    if let Some(ext) = path.extension().and_then(|e| e.to_str())
-        && let Some(fmt) = comic_format_from_ext(&ext.to_lowercase())
-    {
-        return Ok(Detected {
-            file_type: FileType::Comic(fmt),
-            magic_mime: None,
-        });
-    }
-
-    // Disk-image extensions resolve before the structured/text fallback so
-    // the single-extension match below doesn't ever see them.
-    if let Some(ext) = path.extension().and_then(|e| e.to_str())
-        && let Some(fmt) = disk_image_format_from_ext(&ext.to_lowercase())
-    {
-        // `.img` is ambiguous: many distributions ship ISO data under
-        // a `.img` extension, while others use it for raw block-level
-        // dumps. Probe the ISO 9660 PVD signature first; treat as ISO
-        // when it matches, otherwise as a generic raw image.
-        let resolved = if matches!(fmt, DiskImageFormat::Raw) {
-            probe_iso_or_raw(path).unwrap_or(DiskImageFormat::Raw)
-        } else {
-            fmt
-        };
-        return Ok(Detected {
-            file_type: FileType::DiskImage(resolved),
-            magic_mime: None,
-        });
-    }
-
-    // Check extension first for structured formats
-    if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-        let file_type = match ext.to_lowercase().as_str() {
-            "json" | "geojson" => Some(FileType::Structured(StructuredFormat::Json)),
-            "jsonc" => Some(FileType::Structured(StructuredFormat::Jsonc)),
-            "json5" => Some(FileType::Structured(StructuredFormat::Json5)),
-            "jsonl" | "ndjson" => Some(FileType::Structured(StructuredFormat::Jsonl)),
-            "yaml" | "yml" => Some(FileType::Structured(StructuredFormat::Yaml)),
-            "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
-            "svg" => Some(FileType::Svg),
-            "html" | "htm" | "xhtml" => Some(FileType::Html),
-            "epub" => Some(FileType::Epub),
-            "docx" => Some(FileType::Document(DocumentFormat::Docx)),
-            "rtf" => Some(FileType::Document(DocumentFormat::Rtf)),
-            "pdf" => Some(FileType::Pdf),
-            "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
-            _ => None,
-        };
-        if let Some(file_type) = file_type {
+    if !ignore_name {
+        // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file
+        // name, so they win over the single-extension fallback below for files
+        // like `archive.tar.gz` where `extension()` would only see `.gz`.
+        if let Some(name) = path.file_name().and_then(|n| n.to_str())
+            && let Some(fmt) = archive_format_from_name(name)
+        {
             return Ok(Detected {
-                file_type,
+                file_type: FileType::Archive(fmt),
                 magic_mime: None,
             });
+        }
+
+        // Comic-archive extensions win over the magic-byte ZIP detection
+        // below so a `.cbz` doesn't fall through to FileType::Archive(Zip).
+        if let Some(ext) = path.extension().and_then(|e| e.to_str())
+            && let Some(fmt) = comic_format_from_ext(&ext.to_lowercase())
+        {
+            return Ok(Detected {
+                file_type: FileType::Comic(fmt),
+                magic_mime: None,
+            });
+        }
+
+        // Disk-image extensions resolve before the structured/text fallback so
+        // the single-extension match below doesn't ever see them.
+        if let Some(ext) = path.extension().and_then(|e| e.to_str())
+            && let Some(fmt) = disk_image_format_from_ext(&ext.to_lowercase())
+        {
+            // `.img` is ambiguous: many distributions ship ISO data under
+            // a `.img` extension, while others use it for raw block-level
+            // dumps. Probe the ISO 9660 PVD signature first; treat as ISO
+            // when it matches, otherwise as a generic raw image.
+            let resolved = if matches!(fmt, DiskImageFormat::Raw) {
+                probe_iso_or_raw(path).unwrap_or(DiskImageFormat::Raw)
+            } else {
+                fmt
+            };
+            return Ok(Detected {
+                file_type: FileType::DiskImage(resolved),
+                magic_mime: None,
+            });
+        }
+
+        // Check extension first for structured formats
+        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+            let file_type = match ext.to_lowercase().as_str() {
+                "json" | "geojson" => Some(FileType::Structured(StructuredFormat::Json)),
+                "jsonc" => Some(FileType::Structured(StructuredFormat::Jsonc)),
+                "json5" => Some(FileType::Structured(StructuredFormat::Json5)),
+                "jsonl" | "ndjson" => Some(FileType::Structured(StructuredFormat::Jsonl)),
+                "yaml" | "yml" => Some(FileType::Structured(StructuredFormat::Yaml)),
+                "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
+                "svg" => Some(FileType::Svg),
+                "html" | "htm" | "xhtml" => Some(FileType::Html),
+                "epub" => Some(FileType::Epub),
+                "docx" => Some(FileType::Document(DocumentFormat::Docx)),
+                "rtf" => Some(FileType::Document(DocumentFormat::Rtf)),
+                "pdf" => Some(FileType::Pdf),
+                "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
+                _ => None,
+            };
+            if let Some(file_type) = file_type {
+                return Ok(Detected {
+                    file_type,
+                    magic_mime: None,
+                });
+            }
         }
     }
 
@@ -335,11 +363,15 @@ fn detect_file(path: &Path) -> Result<Detected> {
         });
     }
 
-    // It's a text file — use extension as syntax hint
-    let syntax = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|s| s.to_lowercase());
+    // It's a text file — use extension as syntax hint (unless we're
+    // ignoring the name on a fallback retry).
+    let syntax = if ignore_name {
+        None
+    } else {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+    };
 
     Ok(Detected {
         file_type: FileType::SourceCode { syntax },
