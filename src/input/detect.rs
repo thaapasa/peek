@@ -359,12 +359,27 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         }
     }
 
+    // Content-sniff the head (cheap, ASCII-pattern based) BEFORE
+    // streaming the whole body for UTF-8 validation — sniffing only
+    // needs the head bytes, and the result fills in `magic_mime` for
+    // text formats `infer` doesn't classify (SVG / HTML / XML / JSON /
+    // YAML). Compute now so the head buffer can move into the streaming
+    // UTF-8 check below.
+    let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
+
     // Stream the file body to check for non-UTF-8 content. Reuses the head
     // buffer as the first chunk so we don't read it twice.
     if !is_utf8_streaming(head, &mut file)? {
         return Ok(Detected {
             file_type: FileType::Binary,
             magic_mime,
+        });
+    }
+
+    if let Some((file_type, content_mime)) = sniffed {
+        return Ok(Detected {
+            file_type,
+            magic_mime: magic_mime.or_else(|| Some(content_mime.to_string())),
         });
     }
 
@@ -568,6 +583,53 @@ const RTF_MAGIC: &[u8] = b"{\\rtf1";
 /// reliable across infer versions.
 const PDF_MAGIC: &[u8] = b"%PDF-";
 
+/// Inspect a UTF-8 text buffer for a recognisable structured /
+/// markup format. Returns the detected `FileType` plus a canonical
+/// MIME so the caller can populate `Detected.magic_mime` when
+/// `infer` didn't classify the bytes (it never identifies plain
+/// text/XML formats). Used by both file and byte detection paths so
+/// the rules stay in one place.
+fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
+    let trimmed = text.trim_start();
+    let first = trimmed.as_bytes().first().copied();
+    #[allow(clippy::collapsible_match)]
+    match first {
+        Some(b'{') | Some(b'[') => {
+            if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+                return Some((
+                    FileType::Structured(StructuredFormat::Json),
+                    "application/json",
+                ));
+            }
+        }
+        Some(b'<') => {
+            if trimmed.contains("<svg") {
+                return Some((FileType::Svg, "image/svg+xml"));
+            }
+            let head_lower = trimmed[..trimmed.len().min(512)].to_ascii_lowercase();
+            if head_lower.starts_with("<!doctype html") || head_lower.contains("<html") {
+                return Some((FileType::Html, "text/html"));
+            }
+            return Some((
+                FileType::Structured(StructuredFormat::Xml),
+                "application/xml",
+            ));
+        }
+        _ => {}
+    }
+    if trimmed.starts_with("---\n")
+        || trimmed.starts_with("---\r\n")
+        || trimmed == "---"
+        || trimmed.starts_with("%YAML")
+    {
+        return Some((
+            FileType::Structured(StructuredFormat::Yaml),
+            "application/yaml",
+        ));
+    }
+    None
+}
+
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
@@ -629,58 +691,10 @@ fn detect_bytes(data: &[u8]) -> Detected {
         };
     };
 
-    // Content-based format sniffing
-    let trimmed = text.trim_start();
-    let first = trimmed.as_bytes().first().copied();
-
-    // Suppress clippy::collapsible_match: rust 1.95 suggests folding the
-    // inner `if` into a match guard, but doing so changes fall-through
-    // semantics — on guard failure the arm is skipped instead of matched
-    // and emptied, so any future arm added below could silently capture it.
-    #[allow(clippy::collapsible_match)]
-    match first {
-        Some(b'{') | Some(b'[') => {
-            if serde_json::from_str::<serde_json::Value>(text).is_ok() {
-                return Detected {
-                    file_type: FileType::Structured(StructuredFormat::Json),
-                    magic_mime,
-                };
-            }
-        }
-        Some(b'<') => {
-            // SVG has a distinctive root element — catch it before generic XML
-            if trimmed.contains("<svg") {
-                return Detected {
-                    file_type: FileType::Svg,
-                    magic_mime,
-                };
-            }
-            // HTML5 doctype or top-level <html — caught before generic XML
-            // so html2text gets the rendered view path.
-            let head = &trimmed[..trimmed.len().min(512)].to_ascii_lowercase();
-            if head.starts_with("<!doctype html") || head.contains("<html") {
-                return Detected {
-                    file_type: FileType::Html,
-                    magic_mime,
-                };
-            }
-            return Detected {
-                file_type: FileType::Structured(StructuredFormat::Xml),
-                magic_mime,
-            };
-        }
-        _ => {}
-    }
-
-    // YAML document marker or directive
-    if trimmed.starts_with("---\n")
-        || trimmed.starts_with("---\r\n")
-        || trimmed == "---"
-        || trimmed.starts_with("%YAML")
-    {
+    if let Some((file_type, content_mime)) = sniff_text_content(text) {
         return Detected {
-            file_type: FileType::Structured(StructuredFormat::Yaml),
-            magic_mime,
+            file_type,
+            magic_mime: magic_mime.or_else(|| Some(content_mime.to_string())),
         };
     }
 
