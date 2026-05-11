@@ -192,9 +192,9 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
 /// Returns a warning message if the path's extension doesn't match what the
 /// detected MIME type expects. Returns `None` when there's no extension, no
 /// magic-byte detection, or the extension is consistent with the MIME.
-pub fn extension_mismatch(path: &Path, magic_mime: Option<&str>) -> Option<String> {
+pub fn extension_mismatch(ext: &str, magic_mime: Option<&str>) -> Option<String> {
     let magic = magic_mime?;
-    let ext = path.extension()?.to_str()?.to_lowercase();
+    let ext = ext.to_lowercase();
     let expected = mime_guess::get_mime_extensions_str(magic)?;
     if expected.is_empty() || expected.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {
         return None;
@@ -204,6 +204,16 @@ pub fn extension_mismatch(path: &Path, magic_mime: Option<&str>) -> Option<Strin
         "extension `.{ext}` doesn't match content ({magic}); expected {}",
         expected_list.join(" / "),
     ))
+}
+
+/// Lowercased extension of a display name. `None` for hidden files
+/// (`.foo`) and names without a `.`.
+pub fn extension_from_name(name: &str) -> Option<String> {
+    let pos = name.rfind('.')?;
+    if pos == 0 || pos == name.len() - 1 {
+        return None;
+    }
+    Some(name[pos + 1..].to_ascii_lowercase())
 }
 
 #[cfg(test)]
@@ -323,20 +333,29 @@ mod tests {
 
     #[test]
     fn extension_mismatch_detects_jpg_extension_with_png_content() {
-        let warn = extension_mismatch(Path::new("photo.jpg"), Some("image/png"));
+        let warn = extension_mismatch("jpg", Some("image/png"));
         assert!(warn.is_some(), "should warn on .jpg with PNG content");
         assert!(warn.unwrap().contains(".jpg"));
     }
 
     #[test]
     fn extension_mismatch_silent_when_consistent() {
-        let warn = extension_mismatch(Path::new("photo.png"), Some("image/png"));
+        let warn = extension_mismatch("png", Some("image/png"));
         assert!(warn.is_none());
     }
 
     #[test]
     fn extension_mismatch_silent_when_no_magic() {
-        let warn = extension_mismatch(Path::new("foo.txt"), None);
+        let warn = extension_mismatch("txt", None);
         assert!(warn.is_none());
+    }
+
+    #[test]
+    fn extension_from_name_basic() {
+        assert_eq!(extension_from_name("photo.PNG"), Some("png".to_string()));
+        assert_eq!(extension_from_name("archive.tar.gz"), Some("gz".to_string()));
+        assert_eq!(extension_from_name("README"), None);
+        assert_eq!(extension_from_name(".bashrc"), None);
+        assert_eq!(extension_from_name("foo."), None);
     }
 }

@@ -112,7 +112,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
         Some(path),
         detected.magic_mime.as_deref(),
     );
-    let warnings = collect_warnings(Some(path), detected);
+    let warnings = collect_warnings(&file_name, detected);
 
     let permissions = format_permissions_from_meta(&meta);
     let extras = gather_extras(path, &detected.file_type, detected.magic_mime.as_deref());
@@ -132,7 +132,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
 
 fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
     let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
-    let warnings = collect_warnings(None, detected);
+    let warnings = collect_warnings(source.name(), detected);
     let extras =
         gather_extras_in_memory(source, &detected.file_type, detected.magic_mime.as_deref());
     let size = source.open_byte_source().map(|bs| bs.len()).unwrap_or(0);
@@ -151,11 +151,11 @@ fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
     }
 }
 
-/// Build the warnings list. Currently: extension-mismatch only (file path).
-fn collect_warnings(path: Option<&Path>, detected: &Detected) -> Vec<String> {
+/// Build the warnings list. Currently: extension-mismatch only.
+fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
     let mut warnings = Vec::new();
-    if let Some(p) = path
-        && let Some(w) = mime::extension_mismatch(p, detected.magic_mime.as_deref())
+    if let Some(ext) = mime::extension_from_name(name)
+        && let Some(w) = mime::extension_mismatch(&ext, detected.magic_mime.as_deref())
     {
         warnings.push(w);
     }

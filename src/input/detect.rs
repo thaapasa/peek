@@ -225,6 +225,18 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         });
     }
 
+    // Read just the head for magic-byte detection — `infer` only inspects
+    // the first few hundred bytes, so we never need the whole file. Done
+    // up front (before extension routing) so the magic-byte MIME flows
+    // into `Detected.magic_mime` even when the extension is what picks
+    // the viewer. Downstream info section uses both to flag
+    // extension/MIME mismatches.
+    let mut file = fs::File::open(path)?;
+    let mut head = vec![0u8; HEAD_BYTES];
+    let n = read_fill(&mut file, &mut head)?;
+    head.truncate(n);
+    let head_magic = head_magic_mime(&head);
+
     if !ignore_name {
         // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file
         // name, so they win over the single-extension fallback below for files
@@ -234,7 +246,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         {
             return Ok(Detected {
                 file_type: FileType::Archive(fmt),
-                magic_mime: None,
+                magic_mime: head_magic,
             });
         }
 
@@ -245,7 +257,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         {
             return Ok(Detected {
                 file_type: FileType::Comic(fmt),
-                magic_mime: None,
+                magic_mime: head_magic,
             });
         }
 
@@ -265,7 +277,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
             };
             return Ok(Detected {
                 file_type: FileType::DiskImage(resolved),
-                magic_mime: None,
+                magic_mime: head_magic,
             });
         }
 
@@ -290,18 +302,11 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
             if let Some(file_type) = file_type {
                 return Ok(Detected {
                     file_type,
-                    magic_mime: None,
+                    magic_mime: head_magic,
                 });
             }
         }
     }
-
-    // Read just the head for magic-byte detection — `infer` only inspects
-    // the first few hundred bytes, so we never need the whole file.
-    let mut file = fs::File::open(path)?;
-    let mut head = vec![0u8; HEAD_BYTES];
-    let n = read_fill(&mut file, &mut head)?;
-    head.truncate(n);
 
     if head.len() >= AR_MAGIC.len() && &head[..AR_MAGIC.len()] == AR_MAGIC {
         return Ok(Detected {
@@ -327,7 +332,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         });
     }
 
-    let magic_mime = infer::get(&head).map(|k| k.mime_type().to_string());
+    let magic_mime = head_magic;
     if let Some(ref mime) = magic_mime {
         if mime.starts_with("image/") {
             return Ok(Detected {
@@ -377,6 +382,24 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         file_type: FileType::SourceCode { syntax },
         magic_mime,
     })
+}
+
+/// Magic-byte MIME for a file head. Combines the explicit AR / RTF /
+/// PDF prefix probes (which `infer` doesn't classify) with
+/// `infer::get`. Returned MIME flows into `Detected.magic_mime` so the
+/// info section can flag extension/MIME mismatches even when the
+/// extension was the thing that picked the viewer.
+fn head_magic_mime(head: &[u8]) -> Option<String> {
+    if head.len() >= AR_MAGIC.len() && &head[..AR_MAGIC.len()] == AR_MAGIC {
+        return Some("application/x-archive".to_string());
+    }
+    if head.starts_with(RTF_MAGIC) {
+        return Some("application/rtf".to_string());
+    }
+    if head.starts_with(PDF_MAGIC) {
+        return Some("application/pdf".to_string());
+    }
+    infer::get(head).map(|k| k.mime_type().to_string())
 }
 
 /// Read into `buf` until full or EOF. Returns the number of bytes read.
@@ -683,7 +706,7 @@ fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
     {
         return Detected {
             file_type,
-            magic_mime: None,
+            magic_mime: head_magic_mime(data),
         };
     }
     let mut detected = detect_bytes(data);
