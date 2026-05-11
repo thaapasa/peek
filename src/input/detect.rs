@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::{Result, bail};
 
 use crate::input::InputSource;
+use crate::input::mime;
 
 /// Bytes read from the head of a file for magic-byte detection. `infer`
 /// inspects only the first few hundred bytes; 16 KB is comfortable headroom.
@@ -237,126 +238,26 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
     head.truncate(n);
     let head_magic = head_magic_mime(&head);
 
-    if !ignore_name {
-        // Archive double-extensions (.tar.gz, .tgz, etc.) check the full file
-        // name, so they win over the single-extension fallback below for files
-        // like `archive.tar.gz` where `extension()` would only see `.gz`.
-        if let Some(name) = path.file_name().and_then(|n| n.to_str())
-            && let Some(fmt) = archive_format_from_name(name)
-        {
-            return Ok(Detected {
-                file_type: FileType::Archive(fmt),
-                magic_mime: head_magic,
-            });
-        }
-
-        // Comic-archive extensions win over the magic-byte ZIP detection
-        // below so a `.cbz` doesn't fall through to FileType::Archive(Zip).
-        if let Some(ext) = path.extension().and_then(|e| e.to_str())
-            && let Some(fmt) = comic_format_from_ext(&ext.to_lowercase())
-        {
-            return Ok(Detected {
-                file_type: FileType::Comic(fmt),
-                magic_mime: head_magic,
-            });
-        }
-
-        // Disk-image extensions resolve before the structured/text fallback so
-        // the single-extension match below doesn't ever see them.
-        if let Some(ext) = path.extension().and_then(|e| e.to_str())
-            && let Some(fmt) = disk_image_format_from_ext(&ext.to_lowercase())
-        {
-            // `.img` is ambiguous: many distributions ship ISO data under
-            // a `.img` extension, while others use it for raw block-level
-            // dumps. Probe the ISO 9660 PVD signature first; treat as ISO
-            // when it matches, otherwise as a generic raw image.
-            let resolved = if matches!(fmt, DiskImageFormat::Raw) {
-                probe_iso_or_raw(path).unwrap_or(DiskImageFormat::Raw)
-            } else {
-                fmt
-            };
-            return Ok(Detected {
-                file_type: FileType::DiskImage(resolved),
-                magic_mime: head_magic,
-            });
-        }
-
-        // Check extension first for structured formats
-        if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-            let file_type = match ext.to_lowercase().as_str() {
-                "json" | "geojson" => Some(FileType::Structured(StructuredFormat::Json)),
-                "jsonc" => Some(FileType::Structured(StructuredFormat::Jsonc)),
-                "json5" => Some(FileType::Structured(StructuredFormat::Json5)),
-                "jsonl" | "ndjson" => Some(FileType::Structured(StructuredFormat::Jsonl)),
-                "yaml" | "yml" => Some(FileType::Structured(StructuredFormat::Yaml)),
-                "toml" => Some(FileType::Structured(StructuredFormat::Toml)),
-                "svg" => Some(FileType::Svg),
-                "html" | "htm" | "xhtml" => Some(FileType::Html),
-                "epub" => Some(FileType::Epub),
-                "docx" => Some(FileType::Document(DocumentFormat::Docx)),
-                "rtf" => Some(FileType::Document(DocumentFormat::Rtf)),
-                "pdf" => Some(FileType::Pdf),
-                "xml" | "plist" => Some(FileType::Structured(StructuredFormat::Xml)),
-                _ => None,
-            };
-            if let Some(file_type) = file_type {
-                return Ok(Detected {
-                    file_type,
-                    magic_mime: head_magic,
-                });
-            }
-        }
-    }
-
-    if head.len() >= AR_MAGIC.len() && &head[..AR_MAGIC.len()] == AR_MAGIC {
+    // Name-based routing: extension / full-name → FileType. ISO probe
+    // upgrades a `.img` Raw to Iso when the body carries the PVD.
+    if !ignore_name
+        && let Some(name) = path.file_name().and_then(|n| n.to_str())
+        && let Some(file_type) = classify_by_name(name)
+    {
         return Ok(Detected {
-            file_type: FileType::Archive(ArchiveFormat::Ar),
-            magic_mime: Some("application/x-archive".to_string()),
-        });
-    }
-
-    // RTF starts with `{\rtf1`. `infer` doesn't recognise it; without
-    // this probe stdin-piped RTF would fall through to text/source-code
-    // and lose the styled rendering path.
-    if head.starts_with(RTF_MAGIC) {
-        return Ok(Detected {
-            file_type: FileType::Document(DocumentFormat::Rtf),
-            magic_mime: Some("application/rtf".to_string()),
-        });
-    }
-
-    if head.starts_with(PDF_MAGIC) {
-        return Ok(Detected {
-            file_type: FileType::Pdf,
-            magic_mime: Some("application/pdf".to_string()),
+            file_type: upgrade_disk_image_path(file_type, path),
+            magic_mime: head_magic,
         });
     }
 
     let magic_mime = head_magic;
-    if let Some(ref mime) = magic_mime {
-        if mime.starts_with("image/") {
-            return Ok(Detected {
-                file_type: FileType::Image,
-                magic_mime,
-            });
-        }
-        if let Some(fmt) = archive_format_from_mime(mime) {
-            return Ok(Detected {
-                file_type: FileType::Archive(fmt),
-                magic_mime,
-            });
-        }
-        // Known binary types that aren't text
-        if mime.starts_with("video/")
-            || mime.starts_with("audio/")
-            || mime.starts_with("application/gzip")
-            || mime.starts_with("application/x-executable")
-        {
-            return Ok(Detected {
-                file_type: FileType::Binary,
-                magic_mime,
-            });
-        }
+    if let Some(ref mime) = magic_mime
+        && let Some(file_type) = file_type_from_magic_mime(mime)
+    {
+        return Ok(Detected {
+            file_type,
+            magic_mime,
+        });
     }
 
     // Content-sniff the head (cheap, ASCII-pattern based) BEFORE
@@ -415,6 +316,65 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
         return Some("application/pdf".to_string());
     }
     infer::get(head).map(|k| k.mime_type().to_string())
+}
+
+/// Map a magic-byte MIME to a `FileType`. Single source of truth for
+/// the magic-byte → viewer mapping; consumed by both the file and
+/// byte detection paths so the rule stays consistent across sources.
+/// Returns `None` for MIMEs we don't classify (caller falls through
+/// to content sniffing / source-code defaults).
+fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
+    if mime == "application/x-archive" {
+        return Some(FileType::Archive(ArchiveFormat::Ar));
+    }
+    if mime == "application/rtf" {
+        return Some(FileType::Document(DocumentFormat::Rtf));
+    }
+    if mime == "application/pdf" {
+        return Some(FileType::Pdf);
+    }
+    if mime == "image/svg+xml" {
+        return Some(FileType::Svg);
+    }
+    if mime.starts_with("image/") {
+        return Some(FileType::Image);
+    }
+    if let Some(fmt) = archive_format_from_mime(mime) {
+        return Some(FileType::Archive(fmt));
+    }
+    if mime.starts_with("video/")
+        || mime.starts_with("audio/")
+        || mime.starts_with("application/gzip")
+        || mime.starts_with("application/x-executable")
+    {
+        return Some(FileType::Binary);
+    }
+    None
+}
+
+/// Upgrade an `.img`/`.bin`/`.dd`-derived `DiskImage::Raw` to
+/// `DiskImage::Iso` when the byte buffer carries an ISO 9660 PVD at
+/// offset 32768. Byte form (used by Memory / FileRange sources).
+fn upgrade_disk_image_bytes(file_type: FileType, data: &[u8]) -> FileType {
+    if matches!(file_type, FileType::DiskImage(DiskImageFormat::Raw))
+        && data.len() >= 32774
+        && data[32768] == 1
+        && &data[32769..32774] == b"CD001"
+    {
+        return FileType::DiskImage(DiskImageFormat::Iso);
+    }
+    file_type
+}
+
+/// Path form of [`upgrade_disk_image_bytes`] — opens the file and
+/// reads the 6-byte PVD signature without slurping the whole image.
+fn upgrade_disk_image_path(file_type: FileType, path: &Path) -> FileType {
+    if matches!(file_type, FileType::DiskImage(DiskImageFormat::Raw))
+        && matches!(probe_iso_or_raw(path), Some(DiskImageFormat::Iso))
+    {
+        return FileType::DiskImage(DiskImageFormat::Iso);
+    }
+    file_type
 }
 
 /// Read into `buf` until full or EOF. Returns the number of bytes read.
@@ -633,54 +593,14 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
 fn detect_bytes(data: &[u8]) -> Detected {
-    if data.len() >= AR_MAGIC.len() && &data[..AR_MAGIC.len()] == AR_MAGIC {
+    let magic_mime = head_magic_mime(data);
+    if let Some(ref mime) = magic_mime
+        && let Some(file_type) = file_type_from_magic_mime(mime)
+    {
         return Detected {
-            file_type: FileType::Archive(ArchiveFormat::Ar),
-            magic_mime: Some("application/x-archive".to_string()),
+            file_type,
+            magic_mime,
         };
-    }
-    if data.starts_with(RTF_MAGIC) {
-        return Detected {
-            file_type: FileType::Document(DocumentFormat::Rtf),
-            magic_mime: Some("application/rtf".to_string()),
-        };
-    }
-    if data.starts_with(PDF_MAGIC) {
-        return Detected {
-            file_type: FileType::Pdf,
-            magic_mime: Some("application/pdf".to_string()),
-        };
-    }
-    let magic_mime = infer::get(data).map(|k| k.mime_type().to_string());
-    if let Some(ref mime) = magic_mime {
-        if mime == "image/svg+xml" {
-            return Detected {
-                file_type: FileType::Svg,
-                magic_mime,
-            };
-        }
-        if mime.starts_with("image/") {
-            return Detected {
-                file_type: FileType::Image,
-                magic_mime,
-            };
-        }
-        if let Some(fmt) = archive_format_from_mime(mime) {
-            return Detected {
-                file_type: FileType::Archive(fmt),
-                magic_mime,
-            };
-        }
-        if mime.starts_with("video/")
-            || mime.starts_with("audio/")
-            || mime.starts_with("application/gzip")
-            || mime.starts_with("application/x-executable")
-        {
-            return Detected {
-                file_type: FileType::Binary,
-                magic_mime,
-            };
-        }
     }
 
     // Non-UTF-8 → binary
@@ -719,29 +639,30 @@ fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
         && let Some(file_type) = classify_by_name(name)
     {
         return Detected {
-            file_type,
+            file_type: upgrade_disk_image_bytes(file_type, data),
             magic_mime: head_magic_mime(data),
         };
     }
     let mut detected = detect_bytes(data);
     if let FileType::SourceCode { syntax: None } = &detected.file_type
-        && let Some(ext) = name.and_then(extension_lower)
+        && let Some(ext) = name.and_then(mime::extension_from_name)
     {
         detected.file_type = FileType::SourceCode { syntax: Some(ext) };
     }
     detected
 }
 
-/// Mirror of `detect_file`'s extension routing for name-only sources.
-/// Covers archive double-extensions, disk-image extensions, and the
-/// structured / SVG / HTML / EPUB family. Returns `None` when no
-/// extension matches and the caller should fall back to content
-/// sniffing.
+/// Single source of truth for name-based detection. Used by both the
+/// file path and the in-memory byte path so the extension rules stay
+/// consistent. Returns the unprobed `DiskImage::Raw` for `.img` /
+/// `.bin` / `.dd`; callers run `upgrade_disk_image_path` /
+/// `upgrade_disk_image_bytes` to upgrade to `Iso` when the body
+/// carries the ISO 9660 PVD.
 fn classify_by_name(name: &str) -> Option<FileType> {
     if let Some(fmt) = archive_format_from_name(name) {
         return Some(FileType::Archive(fmt));
     }
-    let ext = extension_lower(name)?;
+    let ext = mime::extension_from_name(name)?;
     if let Some(fmt) = comic_format_from_ext(&ext) {
         return Some(FileType::Comic(fmt));
     }
@@ -764,14 +685,4 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),
         _ => return None,
     })
-}
-
-/// Lowercased extension of a file name, or `None` for hidden files
-/// (`.foo`) and names without an extension.
-fn extension_lower(name: &str) -> Option<String> {
-    let pos = name.rfind('.')?;
-    if pos == 0 || pos == name.len() - 1 {
-        return None;
-    }
-    Some(name[pos + 1..].to_ascii_lowercase())
 }
