@@ -33,9 +33,9 @@ pub fn from_flat_paths(items: Vec<FlatEntry>) -> Vec<Entry> {
     let mut root: Vec<Entry> = Vec::new();
     for item in items {
         let trimmed = item.path.trim_start_matches("./").trim_end_matches('/');
-        if trimmed.is_empty() {
-            // The archive root entry itself (e.g. tar's leading `./`).
-            // Drop — we don't render a synthetic root.
+        if trimmed.is_empty() || trimmed == "." {
+            // The archive root entry itself (tar uses `./`, cpio uses
+            // bare `.`). Drop — we don't render a synthetic root.
             continue;
         }
         let parts: Vec<&str> = trimmed.split('/').collect();

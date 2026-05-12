@@ -368,7 +368,10 @@ dump of the archive bytes.
 | Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅      |
 | Tar + xz    | `.tar.xz`, `.txz`              | ✅      |
 | Tar + zstd  | `.tar.zst`, `.tzst`            | ✅      |
+| Tar + lz4   | `.tar.lz4`, `.tlz4`            | ✅      |
 | 7-Zip       | `.7z`                          | ✅      |
+| cpio        | `.cpio`                        | ✅      |
+| cpio + gzip | `.cpio.gz`                     | ✅      |
 | RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures

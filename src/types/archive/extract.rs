@@ -40,8 +40,11 @@ pub fn extract(
         ArchiveFormat::TarBz2 => extract_tar(source, &target, key, TarCompression::Bz2),
         ArchiveFormat::TarXz => extract_tar(source, &target, key, TarCompression::Xz),
         ArchiveFormat::TarZst => extract_tar(source, &target, key, TarCompression::Zst),
+        ArchiveFormat::TarLz4 => extract_tar(source, &target, key, TarCompression::Lz4),
         ArchiveFormat::SevenZ => extract_7z(source, &target, key),
         ArchiveFormat::Ar => extract_ar(source, &target, key),
+        ArchiveFormat::Cpio => extract_cpio(source, &target, key, CpioCompression::None),
+        ArchiveFormat::CpioGz => extract_cpio(source, &target, key, CpioCompression::Gz),
         ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
             unreachable!("single-stream formats handled above")
         }
@@ -55,6 +58,39 @@ fn single_stream_compression(format: ArchiveFormat) -> Option<TarCompression> {
         ArchiveFormat::Xz => Some(TarCompression::Xz),
         ArchiveFormat::Zst => Some(TarCompression::Zst),
         _ => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum CpioCompression {
+    None,
+    Gz,
+}
+
+fn extract_cpio(
+    source: &InputSource,
+    target: &Path,
+    raw_key: &str,
+    compression: CpioCompression,
+) -> Result<Extracted, ExtractError> {
+    let raw = source.read_bytes().map_err(ExtractError::Other)?;
+    let target_str = target.to_string_lossy();
+    let found = match compression {
+        CpioCompression::None => crate::types::archive::backends::cpio::find_entry(
+            std::io::Cursor::new(&raw[..]),
+            &target_str,
+            MAX_EXTRACT_BYTES,
+        ),
+        CpioCompression::Gz => crate::types::archive::backends::cpio::find_entry(
+            flate2::read::GzDecoder::new(std::io::Cursor::new(&raw[..])),
+            &target_str,
+            MAX_EXTRACT_BYTES,
+        ),
+    }
+    .map_err(ExtractError::Other)?;
+    match found {
+        Some(buf) => Ok(in_memory_extract(target, buf)),
+        None => Err(ExtractError::NotFound(raw_key.to_string())),
     }
 }
 
@@ -134,6 +170,7 @@ enum TarCompression {
     Bz2,
     Xz,
     Zst,
+    Lz4,
 }
 
 fn extract_tar(
@@ -202,6 +239,13 @@ fn decompress_tar(raw: &[u8], compression: TarCompression) -> Result<Vec<u8>, Ex
         TarCompression::Zst => {
             let mut out = Vec::new();
             zstd::stream::copy_decode(raw, &mut out).map_err(|e| ExtractError::Other(e.into()))?;
+            Ok(out)
+        }
+        TarCompression::Lz4 => {
+            let mut out = Vec::new();
+            lz4_flex::frame::FrameDecoder::new(raw)
+                .read_to_end(&mut out)
+                .map_err(|e| ExtractError::Other(e.into()))?;
             Ok(out)
         }
     }
@@ -380,6 +424,41 @@ mod tests {
             STABLE_ENTRY,
         )
         .expect("tar.gz extract");
+        assert_eq!(extracted.suggested_name, "fibonacci.py");
+        let bytes = extracted.source.read_bytes().unwrap();
+        assert_eq!(bytes.len(), 2_250);
+    }
+
+    #[test]
+    fn extract_tar_lz4_returns_known_entry() {
+        let extracted = extract(
+            &fixture("archive.tar.lz4"),
+            ArchiveFormat::TarLz4,
+            STABLE_ENTRY,
+        )
+        .expect("tar.lz4 extract");
+        assert_eq!(extracted.suggested_name, "fibonacci.py");
+        let bytes = extracted.source.read_bytes().unwrap();
+        assert_eq!(bytes.len(), 2_250);
+    }
+
+    #[test]
+    fn extract_cpio_returns_known_entry() {
+        let extracted = extract(&fixture("archive.cpio"), ArchiveFormat::Cpio, STABLE_ENTRY)
+            .expect("cpio extract");
+        assert_eq!(extracted.suggested_name, "fibonacci.py");
+        let bytes = extracted.source.read_bytes().unwrap();
+        assert_eq!(bytes.len(), 2_250);
+    }
+
+    #[test]
+    fn extract_cpio_gz_returns_known_entry() {
+        let extracted = extract(
+            &fixture("archive.cpio.gz"),
+            ArchiveFormat::CpioGz,
+            STABLE_ENTRY,
+        )
+        .expect("cpio.gz extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted.source.read_bytes().unwrap();
         assert_eq!(bytes.len(), 2_250);

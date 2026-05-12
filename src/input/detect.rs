@@ -90,6 +90,12 @@ pub enum ArchiveFormat {
     Xz,
     /// Bare zstd stream (`.zst`).
     Zst,
+    /// tar + lz4 frame (`.tar.lz4`).
+    TarLz4,
+    /// cpio archive (newc `070701` / `070702` or ODC `070707`).
+    Cpio,
+    /// cpio + gzip (`.cpio.gz`).
+    CpioGz,
 }
 
 impl ArchiveFormat {
@@ -101,8 +107,11 @@ impl ArchiveFormat {
             Self::TarBz2 => "tar + bzip2",
             Self::TarXz => "tar + xz",
             Self::TarZst => "tar + zstd",
+            Self::TarLz4 => "tar + lz4",
             Self::SevenZ => "7-Zip archive",
             Self::Ar => "ar archive",
+            Self::Cpio => "cpio archive",
+            Self::CpioGz => "cpio + gzip",
             Self::Gz => "gzip stream",
             Self::Bz2 => "bzip2 stream",
             Self::Xz => "xz stream",
@@ -323,6 +332,13 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.starts_with(PDF_MAGIC) {
         return Some("application/pdf".to_string());
     }
+    if head.len() >= 6
+        && (&head[..6] == CPIO_NEWC_MAGIC
+            || &head[..6] == CPIO_CRC_MAGIC
+            || &head[..6] == CPIO_ODC_MAGIC)
+    {
+        return Some("application/x-cpio".to_string());
+    }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
 
@@ -447,8 +463,17 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     if lower.ends_with(".tar.zst") || lower.ends_with(".tzst") {
         return Some(ArchiveFormat::TarZst);
     }
+    if lower.ends_with(".tar.lz4") || lower.ends_with(".tlz4") {
+        return Some(ArchiveFormat::TarLz4);
+    }
     if lower.ends_with(".tar") {
         return Some(ArchiveFormat::Tar);
+    }
+    if lower.ends_with(".cpio.gz") {
+        return Some(ArchiveFormat::CpioGz);
+    }
+    if lower.ends_with(".cpio") {
+        return Some(ArchiveFormat::Cpio);
     }
     if lower.ends_with(".7z") {
         return Some(ArchiveFormat::SevenZ);
@@ -526,6 +551,7 @@ fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     match mime {
         "application/zip" => Some(ArchiveFormat::Zip),
         "application/x-tar" => Some(ArchiveFormat::Tar),
+        "application/x-cpio" => Some(ArchiveFormat::Cpio),
         "application/x-7z-compressed" => Some(ArchiveFormat::SevenZ),
         "application/gzip" | "application/x-gzip" => Some(ArchiveFormat::Gz),
         "application/x-bzip2" | "application/x-bzip" => Some(ArchiveFormat::Bz2),
@@ -550,6 +576,15 @@ const RTF_MAGIC: &[u8] = b"{\\rtf1";
 /// canonical path — the explicit prefix check keeps stdin-piped PDFs
 /// reliable across infer versions.
 const PDF_MAGIC: &[u8] = b"%PDF-";
+
+/// cpio "newc" header magic (SVR4, no CRC) — the dominant form in
+/// the wild (initramfs, RPM payloads).
+const CPIO_NEWC_MAGIC: &[u8; 6] = b"070701";
+/// cpio "newc + CRC" header magic. Same layout as newc; the `check`
+/// field carries a checksum (we don't verify it on listing).
+const CPIO_CRC_MAGIC: &[u8; 6] = b"070702";
+/// cpio "ODC" / POSIX portable header magic (76-byte ASCII header).
+const CPIO_ODC_MAGIC: &[u8; 6] = b"070707";
 
 /// Inspect a UTF-8 text buffer for a recognisable structured /
 /// markup format. Returns the detected `FileType` plus a canonical

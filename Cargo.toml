@@ -59,6 +59,7 @@ flate2 = "1"
 bzip2 = "0.6"
 lzma-rs = "0.3"
 zstd = "0.13"
+lz4_flex = { version = "0.11", default-features = false, features = ["frame"] }
 sevenz-rust2 = { version = "0.21", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 

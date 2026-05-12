@@ -1171,11 +1171,12 @@ mod tests {
     /// stuck on Info after the first Tab.
     #[test]
     fn tab_round_trips_hex_and_info_on_binary() {
-        // archive.tar.lz4 isn't a recognised peek format → detected
-        // as binary → only Hex + Info compose into the mode stack.
-        let source = fixture_source("test-data/archive.tar.lz4");
+        // Synthetic in-memory binary blob (non-UTF8 bytes, no
+        // recognised extension) — classified as Binary, so only
+        // Hex + Info compose into the mode stack.
+        let source = InputSource::memory(bytes::Bytes::from(vec![0xFFu8; 1024]), "blob");
         let detected = crate::input::detect::detect(&source).unwrap();
-        let mut state = build_state(&["peek", "test-data/archive.tar.lz4"], source, detected);
+        let mut state = build_state(&["peek", "blob"], source, detected);
         assert_eq!(active_id(&state), ModeId::Hex, "binary opens on Hex");
 
         state.apply(Action::CycleView).unwrap();

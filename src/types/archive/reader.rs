@@ -44,7 +44,7 @@ pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<E
 }
 
 fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntry>> {
-    use super::backends::{ar, sevenz, single_stream, tar, zip};
+    use super::backends::{ar, cpio, sevenz, single_stream, tar, zip};
     // Single-stream codecs short-circuit `open_seekable` — they don't
     // need the bytes, just the source name to derive the entry label.
     if matches!(
@@ -61,8 +61,11 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
         ArchiveFormat::TarBz2 => tar::list_bz2(reader),
         ArchiveFormat::TarXz => tar::list_xz(reader),
         ArchiveFormat::TarZst => tar::list_zst(reader),
+        ArchiveFormat::TarLz4 => tar::list_lz4(reader),
         ArchiveFormat::SevenZ => sevenz::list(reader),
         ArchiveFormat::Ar => ar::list(reader),
+        ArchiveFormat::Cpio => cpio::list_plain(reader),
+        ArchiveFormat::CpioGz => cpio::list_gz(reader),
         ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
             unreachable!("single-stream formats handled above")
         }
@@ -134,6 +137,33 @@ mod tests {
     fn list_tar_zst_finds_expected_entries() {
         let entries = list_entries(&fixture("archive.tar.zst"), ArchiveFormat::TarZst).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarZst.label(), &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 2);
+        assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn list_tar_lz4_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.tar.lz4"), ArchiveFormat::TarLz4).unwrap();
+        let stats = Stats::from_root(ArchiveFormat::TarLz4.label(), &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 2);
+        assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn list_cpio_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.cpio"), ArchiveFormat::Cpio).unwrap();
+        let stats = Stats::from_root(ArchiveFormat::Cpio.label(), &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 2);
+        assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn list_cpio_gz_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.cpio.gz"), ArchiveFormat::CpioGz).unwrap();
+        let stats = Stats::from_root(ArchiveFormat::CpioGz.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_size, 30_683);

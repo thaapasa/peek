@@ -37,6 +37,11 @@ pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     list_from_read(dec)
 }
 
+pub(crate) fn list_lz4(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+    let dec = lz4_flex::frame::FrameDecoder::new(reader);
+    list_from_read(dec)
+}
+
 pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let mut compressed = Vec::new();
     reader

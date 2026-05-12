@@ -161,12 +161,13 @@ src/
       mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
       info.rs          — gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
-      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst]/7z
+      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
-        tar.rs         — Tar TOC via header walk; gz/bz2/zst stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
+        tar.rs         — Tar TOC via header walk; gz/bz2/zst/lz4 stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
+        cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
