@@ -199,6 +199,27 @@ fn build_listing_keyed(probed: &Probed) -> Vec<(String, EmbedKind, u64)> {
     out
 }
 
+/// Pick the picture to surface in the dedicated `Cover` Tab slot.
+/// Prefers a `FrontCover`-tagged visual; falls back to the first
+/// visual the container declared. `None` when the file carries no
+/// pictures at all.
+pub fn primary_cover(probed: &Probed) -> Option<&EmbedVisual> {
+    probed
+        .visuals
+        .iter()
+        .find(|v| v.usage_root == "front_cover")
+        .or_else(|| probed.visuals.first())
+}
+
+/// Suggested filename for a visual based on its declared media type.
+/// Mirrors the listing's `pictures/<usage>.<ext>` mapping so the
+/// recursive-peek path detects the inner source as Image (and routes
+/// through the ASCII pipeline) on extract.
+pub fn visual_filename(visual: &EmbedVisual) -> String {
+    let ext = extension_for_mime(&visual.media_type);
+    format!("{}.{}", visual.usage_root, ext)
+}
+
 /// Resolve a listing key (e.g. `pictures/front_cover.jpg`) to raw
 /// payload bytes plus a suggested extract filename. Returns `None` for
 /// unknown keys — caller maps that to `ExtractError::NotFound`.

@@ -556,15 +556,42 @@ impl Registry {
                     // decompression error.
                 }
                 FileType::Audio(fmt) => {
-                    // Metadata-only view (no playback). Info as primary
-                    // so the user lands on tags + codec params; the
-                    // universal Info push below dedupes by ModeId so
-                    // it becomes a no-op. When the file carries
-                    // embedded pictures or lyrics, push a ListingMode
-                    // so they're browsable + extractable through the
-                    // same TAB / `e` flow as PDF embeds.
+                    // Metadata-only view (no playback). Tab order:
+                    // Info → Cover (when a picture is embedded) →
+                    // Lyrics (when present) → Embeds listing (when
+                    // either is present). The universal Info push
+                    // below dedupes by ModeId so the explicit Info
+                    // push here just controls position.
                     modes.push(Box::new(InfoMode::new()));
                     if let Ok(probed) = crate::types::audio::package::probe(source, *fmt) {
+                        if let Some(visual) = crate::types::audio::package::primary_cover(&probed) {
+                            let name = crate::types::audio::package::visual_filename(visual);
+                            let cover_source = InputSource::memory(visual.data.clone(), name);
+                            modes.push(Box::new(ImageRenderMode::with_label(
+                                cover_source,
+                                self.image_config(args),
+                                ImageKind::Raster,
+                                "Cover",
+                            )));
+                        }
+                        if let Some(lyrics) = &probed.lyrics {
+                            let lyrics_source =
+                                InputSource::memory(lyrics.as_bytes().to_vec(), "lyrics.txt");
+                            if let Ok(line_source) = lyrics_source.open_line_source() {
+                                modes.push(Box::new(ContentMode::new(
+                                    lyrics_source,
+                                    line_source,
+                                    None,
+                                    None,
+                                    Rc::clone(&self.theme_manager),
+                                    self.theme_name,
+                                    false,
+                                    false,
+                                    args.line_numbers,
+                                    "Lyrics",
+                                )));
+                            }
+                        }
                         let entries = crate::types::audio::package::build_listing(&probed);
                         if !entries.is_empty() {
                             let tree = from_flat_paths(entries);

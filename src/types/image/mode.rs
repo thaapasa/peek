@@ -77,6 +77,18 @@ impl ImageRenderMode {
             ImageKind::Raster => "Image",
             ImageKind::Svg => "Render",
         };
+        Self::with_label(source, config, kind, label)
+    }
+
+    /// Like [`Self::new`] but with a caller-supplied label — used when
+    /// the same render machinery drives a more specific view (e.g.
+    /// the audio "Cover" tab).
+    pub(crate) fn with_label(
+        source: InputSource,
+        config: ImageConfig,
+        kind: ImageKind,
+        label: &'static str,
+    ) -> Self {
         Self {
             source,
             config,

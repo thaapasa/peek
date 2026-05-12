@@ -258,17 +258,17 @@ Crates: `ical` (covers both iCalendar and vCard, pure Rust).
 
 ### Audio Files — Stretch ☐
 
-Tags + technical properties shipped (see [features.md](features.md) "Audio Files"). Open ideas:
+Tags + technical properties + embedded cover-art view + embedded lyrics view + embeds
+listing shipped (see [features.md](features.md) "Audio Files"). Open ideas:
 
-- **Embedded album art rendered as ASCII** through the existing image pipeline. ID3v2 `APIC`,
-  FLAC picture block, MP4 `covr` atom, Ogg base64-cover all carry decode-ready raster bytes.
-  Symphonia surfaces them as `Visual` entries; route through the image pipeline. Should land
-  naturally — same shape as EPUB cover-chapter rendering.
-- **Embedded lyrics on a dedicated view.** ID3v2 `USLT` (unsynced) + `SYLT` (synced /
-  timed). Vorbis `LYRICS=`. MP4 `\xa9lyr` atom. Currently a single "Lyrics: embedded" flag in
-  the info section — promote to a real view with `Tab`-cycle access.
 - **Audiobook chapters** for `.m4b` containers — MP4 chapter atoms / `chpl` boxes drive a
   `NextChapter` / `PrevChapter` flow like EPUB. Defer until a real m4b ships up.
+- **Multi-picture Cover tab.** Today only the primary (FrontCover or first) visual gets the
+  Cover tab; back / artist / leaflet pictures only live in the Embeds listing. Could cycle
+  through all visuals in one Cover view with `n` / `p`.
+- **Synced lyrics timeline.** `SYLT` ID3v2 frames carry per-line timestamps; currently flattened
+  to plain text. A timeline view that highlights the current line during (future) playback
+  would be the next step.
 - **ASCII waveform or spectrum preview.** Decoding adds cost — decide later. Tags alone are
   cheap and useful.
 

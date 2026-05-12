@@ -363,11 +363,13 @@ fields from ID3v1/v2 (MP3, AIFF), Vorbis comments (Ogg, FLAC, Opus), MP4 atoms (
 APE: title, artist, album, album-artist, track / disc number, date, genre, composer, comment.
 
 Embedded blobs (`APIC`/FLAC PICTURE/`covr`/`METADATA_BLOCK_PICTURE` album art, `USLT`/`SYLT`/
-`LYRICS=` lyrics) surface as a **TOC view**: `pictures/<usage>.<ext>` per visual (front /
-back / artist / leaflet / …) plus `lyrics/lyrics.txt` when present. Same TAB / `e` flow as
-PDF embeds; `--extract pictures/front_cover.jpg` dumps the cover. Extracted picture bytes
-re-enter the peek pipeline and render as ASCII art; lyrics re-enter as plain text. Dedicated
-"album art preview" and "lyrics read view" modes deferred (see [planned.md](planned.md)).
+`LYRICS=` lyrics) get **dedicated Tab views**: Info → Cover (primary picture, ASCII-rendered
+through the image pipeline) → Lyrics (plain text) → Embeds (TOC of every embedded blob).
+Cover prefers the FrontCover-tagged picture, falls back to the first one. Embeds listing
+shows `pictures/<usage>.<ext>` per visual (front / back / artist / leaflet / …) plus
+`lyrics/lyrics.txt` when present, with the same `e` extract flow as PDF embeds;
+`--extract pictures/front_cover.jpg` dumps the cover. Extracted picture bytes re-enter
+the peek pipeline and render as ASCII art on recursive peek; lyrics re-enter as plain text.
 
 | Format         | Extensions                  | Status |
 |----------------|-----------------------------|--------|
