@@ -119,17 +119,22 @@ src/
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
     document/
-      mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata
-      info.rs          — Shared document info shape (DOCX + RTF): DocumentStats { format, metadata, paragraph_count, word_count, image_count } + DocumentMetadata { title / creator / subject / description / keywords / created / modified }
+      mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocReadMode
+      ast.rs           — Shared word-processing AST (Doc / Block::{Paragraph,Table} / Paragraph / Run + count_words + merge_paragraphs). Populated by both docx::package and odt::package; RTF stays separate because its on-the-wire shape is a flat painter-tagged text stream
+      render.rs        — Shared render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | ". Used by both DOCX and ODT
+      read_mode.rs     — Shared DocReadMode: per-(width, style_mode) line cache over render::render. Format-agnostic; the per-format wiring only supplies the parsed Doc
+      info.rs          — Shared document info shape (DOCX / ODT / RTF): DocumentStats { format, metadata, paragraph_count, word_count, image_count } + DocumentMetadata { title / creator / subject / description / keywords / created / modified }
       info_render.rs   — Render shared Document info section keyed off `format` label
       docx/
-        mod.rs         — Module wiring; re-exports DocxReadMode
-        package.rs     — Hand-rolled `quick_xml` event walk over `word/document.xml` (paragraph / pPr / pStyle / numPr / r / rPr / b / i / u / strike / color / t / br / tab / drawing-blip), `docProps/core.xml` (DC + cp metadata), and `word/_rels/document.xml.rels` (image rId → basename). Produces owned `Doc { blocks: Vec<Block::{Paragraph,Table}>, metadata, *_count }`. Hand-walking instead of going through a full WordprocessingML deserializer (`docx-rust` / `docx-rs`) — both reject real-world Word files because numeric attributes routinely carry `"auto"` / `"none"` / `"true"` strings their strict integer types can't decode
-        render.rs      — render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | "
-        read_mode.rs   — DocxReadMode: per-(width, style_mode) line cache over render::render; no chapter stepping (single document). render_to_pipe walks the whole rendered output
+        mod.rs         — Module wiring
+        package.rs     — Hand-rolled `quick_xml` event walk over `word/document.xml` (paragraph / pPr / pStyle / numPr / r / rPr / b / i / u / strike / color / t / br / tab / drawing-blip), `docProps/core.xml` (DC + cp metadata), and `word/_rels/document.xml.rels` (image rId → basename). Produces shared `ast::Doc`. Hand-walking instead of going through a full WordprocessingML deserializer (`docx-rust` / `docx-rs`) — both reject real-world Word files because numeric attributes routinely carry `"auto"` / `"none"` / `"true"` strings their strict integer types can't decode
         info_gather.rs — Populate DocumentStats via package::open (paragraph / word / image counts + metadata)
+      odt/
+        mod.rs         — Module wiring
+        package.rs     — Hand-rolled `quick_xml` walk over `content.xml`: pre-scans `<office:automatic-styles>` (and `<office:styles>`) into a style-name → run-attrs table, then resolves `<text:span text:style-name=…>` references during the body walk. Heading level from `<text:h text:outline-level=N>`; falls back to deriving from "Heading_20_N" style names when authoring tools encode headings as styled `<text:p>`. `<draw:image xlink:href="Pictures/…">` → `[Image: <basename>]` placeholder run. `<text:list>` nesting depth drives indent. `meta.xml` Dublin Core + meta:* metadata; multi-valued `<meta:keyword>` entries comma-joined. Produces shared `ast::Doc`. styles.xml inheritance is intentionally not consulted in v1
+        info_gather.rs — Populate DocumentStats via package::open
       rtf/
-        mod.rs         — Module wiring; re-exports RtfReadMode
+        mod.rs         — Module wiring; re-exports RtfReadMode. RTF stays outside the shared AST because its on-the-wire shape is a flat painter-tagged text stream, not a paragraph/run tree
         parse.rs       — Pre-process RTF (strip `{\info ...}` group, inject `\\\n` after each `\par` so rtf-parser's lexer emits CRLF) → RtfDocument::try_from → owned Vec<Block { painter, paragraph, text }> with painter resolved against \colortbl. Hand-scans `\info` group bytes for title / author / subject / keywords / creatim / revtim
         render.rs      — render(&Parsed, width, theme, style_mode) -> Vec<String>: wraps StyleBlock.text by width, emits SGR for painter bold/italic/underline/strike + colortbl color
         read_mode.rs   — RtfReadMode: per-(width, style_mode) line cache; no listing or extract (RTF is single-file)
