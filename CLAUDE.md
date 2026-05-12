@@ -245,6 +245,9 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 ## Workflow
 
 - **Don't commit unless asked.** The user decides what and when.
+- **Don't push, open PRs, or trigger GitHub Actions on your own initiative.** Local commits only.
+  The user pushes / opens PRs / merges themselves so they can amend locally first. Open a PR
+  only when the user explicitly asks for one.
 - **Run `cargo fmt` after editing Rust code** so formatting drift doesn't pile up across unrelated
   files. Cheap; keeps diffs focused on real changes.
 
