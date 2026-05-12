@@ -1,6 +1,6 @@
 # Introduction
 
-**peek** is a modern terminal file viewer. Like `cat`, but it actually shows you what's in the file.
+**peek** is a modern terminal file viewer — preview any file, any format.
 
 Features at a glance:
 

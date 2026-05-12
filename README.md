@@ -8,280 +8,59 @@
 /_/ a file previewer
 ```
 
-Modern file viewer for the terminal. Like `cat`, but it actually tries to show you what's in the
-file.
+Modern terminal file viewer — preview any file, any format.
 
-peek is a **single-file** viewer: it takes one path (or stdin), not a list. Run peek once per file.
+- **Syntax highlighting** for 100+ languages via syntect
+- **Pretty-printing** for JSON / YAML / TOML / XML
+- **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
+- **Documents** — PDF, DOCX, ODT, RTF, EPUB, CBZ
+- **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
+- **Hex dump** fallback for binary, reachable from any view with `x`
+- **Interactive viewer** with live theme cycling, info screen, extraction
 
-- **Syntax highlighting** for source code (syntect / TextMate grammars)
-- **Pretty-printing** for JSON, YAML, TOML, XML — with syntax highlighting
-- **ASCII-art image rendering** with glyph-matched character mapping and 24-bit color
-- **Hex dump** for binary files — `hexdump -C` style, terminal-width aware, streamed (no full-file
-  load); reach from any view with `x`
-- **Interactive viewer** with scrolling, file info, help screen, and live theme cycling
-- **Four custom dark themes** — JetBrains IDEA Dark (default), VS Code Dark Modern, VS Code Dark
-  2026, VS Code Monokai
-- **True color throughout**, with graceful fallback to 256 / 16 / grayscale / plain
-
-## Manual
-
-Full user manual: **<https://thaapasa.github.io/peek/>**.
-
-Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/). For
-local preview:
-
-```sh
-cargo install mdbook
-mdbook serve manual    # opens http://localhost:3000
-```
-
-The rest of this README is a quick reference. For per-format details, keyboard shortcuts,
-extraction, and the full CLI option list, see the manual.
+peek is a single-file viewer: one path (or stdin) at a time. Run peek once per file.
 
 ## Install
 
-**macOS / Linux (recommended):**
+macOS / Linux:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
 ```
 
-Installs the latest release into `~/.local/bin`. Override with `PEEK_VERSION=v0.1.0` to pin a
-version, or `PEEK_INSTALL_DIR=/usr/local/bin` to relocate. Supports `aarch64` and `x86_64` on both
-platforms. `curl` doesn't tag downloads with `com.apple.quarantine`, so macOS runs the binary
-directly — no Gatekeeper prompt.
+Installs the latest release into `~/.local/bin`. Supports `aarch64` and `x86_64`. Pin a version
+with `PEEK_VERSION=v0.1.0` or relocate with `PEEK_INSTALL_DIR=/usr/local/bin`.
 
-**Manual download (macOS / Linux):**
-
-Grab the `.tar.gz` for your platform from
-the [Releases page](https://github.com/thaapasa/peek/releases), verify against the `.sha256`,
-extract, move `peek` onto your `PATH`. On macOS, if the browser quarantined the archive:
-
-```sh
-xattr -d com.apple.quarantine peek
-```
-
-(or right-click → Open once in Finder).
-
-**Windows:**
-
-Download the `.zip` for `x86_64-pc-windows-msvc` from
-the [Releases page](https://github.com/thaapasa/peek/releases), extract, and add the folder
-containing `peek.exe` to your `PATH`. Note: piping text into `peek.exe` on Windows renders once to
-stdout but does not open the interactive viewer (no Windows equivalent for the Unix tty-reopen trick
-yet).
-
-**From source:**
-
-```sh
-just pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
-just install     # cargo build --release; install peek + dylib to $PEEK_INSTALL_DIR (default ~/.local/bin)
-```
-
-`just pdfium` downloads the latest [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)
-release for your host platform (macOS arm64/x86_64, Linux x86_64/aarch64) and unpacks it into
-`.pdfium/`. peek's loader reads the dylib from there during `cargo run`, and `just install` copies
-both `peek` and `libpdfium.*` into the install dir so the deployed binary keeps PDF support too.
-Pin a specific Chromium build with `just pdfium 7825`.
-
-Pure-cargo alternative — works for everything except PDF unless you separately drop the Pdfium
-dylib next to the binary:
-
-```sh
-cargo install --path .
-```
+Manual downloads, Windows, building from source, and updating: see the
+[Installation chapter](https://thaapasa.github.io/peek/installation.html) of the manual.
 
 ## Usage
 
 ```sh
-# View a file (syntax highlighted, interactive viewer)
-peek src/main.rs
-
-# Structured data (pretty-printed + highlighted)
-peek config.json
-peek data.yaml
-
-# Image (glyph-matched ASCII art)
-peek photo.jpg
-
-# SVG (rasterized to ASCII art; Tab cycles to XML source / file info)
-peek icon.svg
-
-# Pipe output (no viewer, still highlighted)
-peek data.json | less -R
-
-# Read from stdin (auto-detects JSON / YAML / XML, or pass -l for syntax)
-echo '{"a":1}' | peek
-curl -s https://example.com/data.json | peek
-cat src/main.rs | peek -l rust
-peek -           # explicit stdin (blocks until Ctrl-D when interactive)
-
-# Force direct output on a TTY
-peek --print file.txt
-peek -p file.txt
-
-# Raw source (no pretty-printing, still highlighted)
-peek --raw config.json
-peek -r data.xml
-
-# Sterile output: no highlighting, pretty-printing, or colors
-peek --plain file.txt
-peek -P file.txt
-
-# Theme
-peek --theme vscode-dark-modern src/main.rs
-
-# Color encoding (truecolor / 256 / 16 / grayscale / plain)
-peek --color 256 src/main.rs
-peek -C plain src/main.rs   # strip all ANSI escapes
-
-# Image with white background (auto / black / white / checkerboard)
-peek --background white logo.png
-
-# Image with transparent margin padding
-peek --margin 20 icon.svg
-
-# File metadata (includes EXIF for images)
-peek --info photo.jpg
-
-# Timestamps in UTC instead of local + offset
-peek --info --utc photo.jpg
+peek src/main.rs        # source code (syntax highlighted, interactive viewer)
+peek photo.jpg          # image (glyph-matched ASCII art)
+peek config.json        # structured data (pretty-printed + highlighted)
+peek book.epub          # paged read with TOC + metadata views
+peek archive.tar.gz     # listing view + per-entry extract
+peek -                  # explicit stdin
+echo '{"a":1}' | peek   # piped stdin auto-detected
 ```
 
-## Interactive Viewer
+Run `peek -h` for the short option list, `peek --help` for the full set, or read the
+[manual](https://thaapasa.github.io/peek/) for per-format details, keyboard shortcuts,
+extraction, themes, and the full CLI reference.
 
-When stdout is a TTY, peek opens a full-screen viewer. Piped or `--print` → output goes directly to
-stdout.
+## Manual
 
-### Keyboard Shortcuts
+Full user manual: **<https://thaapasa.github.io/peek/>**.
 
-| Key              | Action                          |
-|------------------|---------------------------------|
-| `q` / `Esc`      | Quit                            |
-| `Up` / `k`       | Scroll up                       |
-| `Down` / `j`     | Scroll down                     |
-| `PgUp`           | Page up                         |
-| `PgDn` / `Space` | Page down                       |
-| `Home` / `g`     | Top                             |
-| `End` / `G`      | Bottom                          |
-| `Tab` / `Shift+Tab` | Cycle file's view modes (forward / reverse) |
-| `i`              | File info                       |
-| `h` / `?`        | Toggle help                     |
-| `t` / `T`        | Cycle theme (forward / reverse) |
-| `c` / `C`        | Cycle color mode (forward / reverse) |
-| `r`              | Toggle raw / pretty (structured)|
-| `x`              | Toggle hex dump                 |
-| `a`              | About / status screen           |
-| `m` / `M`        | Cycle image render mode (forward / reverse) |
-| `b` / `B`        | Cycle image background (forward / reverse) |
-| `f`              | Cycle image fit mode            |
-| `Left` / `Right` | Pan horizontally (text wrap-off / image FitHeight) |
-| `l`              | Toggle line numbers             |
-| `w`              | Toggle soft wrap                |
-| `p`              | Play / pause animation          |
-| `n` / `N`        | Next / previous animation frame |
+Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/).
+Local preview:
 
-Source of truth: [`src/viewer/ui/keys.rs`](src/viewer/ui/keys.rs).
-
-## Themes
-
-Selectable via `--theme` or `PEEK_THEME`:
-
-| Theme                | Description                           |
-|----------------------|---------------------------------------|
-| `idea-dark`          | JetBrains IDEA default Dark (default) |
-| `vscode-dark-modern` | VS Code Dark Modern                   |
-| `vscode-dark-2026`   | VS Code Dark 2026                     |
-| `vscode-monokai`     | VS Code Monokai                       |
-
-Press `t` in the interactive viewer to cycle live.
-
-CLI names: [`src/theme/name.rs`](src/theme/name.rs). `.tmTheme` sources: [`themes/`](themes/).
-
-## Color Modes
-
-`--color` / `-C` or `PEEK_COLOR`. All paint helpers route through a single `ColorMode` so callers
-always hand off truecolor RGB and the mode decides the on-the-wire form.
-
-| Mode        | Encoding                                      |
-|-------------|-----------------------------------------------|
-| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default     |
-| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)      |
-| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`) |
-| `grayscale` | 24-bit luminance only — preserves shading     |
-| `plain`     | no escapes — strip all color from the output  |
-
-Press `c` in the interactive viewer to cycle live.
-
-Encoding logic and CLI names: [`src/theme/color_mode.rs`](src/theme/color_mode.rs).
-
-## Supported File Types
-
-### Syntax highlighting
-
-All languages supported by the default Sublime Text / TextMate grammar set — hundreds of languages
-including Rust, Python, TypeScript, Go, C/C++, Java, Ruby, Shell, Markdown.
-
-### Pretty-printing
-
-| Format | Extensions                                  |
-|--------|---------------------------------------------|
-| JSON   | `.json`, `.geojson`, `.jsonl`               |
-| YAML   | `.yaml`, `.yml`                             |
-| TOML   | `.toml`                                     |
-| XML    | `.xml`, `.svg`, `.html`, `.xhtml`, `.plist` |
-
-Extension → format mapping: [`src/input/detect.rs`](src/input/detect.rs).
-
-### Image rendering
-
-All formats supported by the `image` crate: PNG, JPEG, GIF, BMP, TIFF, WebP, ICO, and more. Rendered
-using glyph-matched character selection with two-color clustering and 24-bit ANSI color. Modes via
-`--image-mode`: `full`, `block`, `geo`, `ascii`. Mode definitions and glyph sets: [
-`src/viewer/image/mod.rs`](src/viewer/image/mod.rs).
-
-### Documents and ebooks
-
-| Format | Extensions       | Modes                                                |
-|--------|------------------|------------------------------------------------------|
-| PDF    | `.pdf`           | Paged image render · text extraction · embeds       |
-| DOCX   | `.docx`          | Styled body · ZIP TOC · per-entry extract           |
-| ODT    | `.odt`           | Styled body · ZIP TOC · per-entry extract           |
-| RTF    | `.rtf`           | Styled body                                         |
-| EPUB   | `.epub`          | Per-chapter HTML render · ZIP TOC                   |
-| CBZ    | `.cbz`           | Paged image render · ZIP TOC                        |
-
-PDF support uses Pdfium (Google's PDF library, dynamically loaded from `libpdfium.*` shipped
-alongside the peek binary in the release tarball — no system install needed). Full feature
-detail in [`docs/features.md`](docs/features.md).
-
-### Audio files
-
-| Format       | Extensions                  |
-|--------------|-----------------------------|
-| MP3          | `.mp3`                      |
-| FLAC         | `.flac`                     |
-| Ogg / Opus   | `.ogg`, `.oga`, `.opus`     |
-| WAV / AIFF   | `.wav`, `.aiff`, `.aif`     |
-| MPEG-4 audio | `.m4a`, `.m4b`, `.aac`      |
-| Other        | `.caf`, `.mka`, `.wma`      |
-
-Metadata-only — container, codec, channels, sample rate, bit depth, bitrate, duration, plus tag
-fields (title, artist, album, track, date, genre, lyrics + album-art flags). No playback.
-Powered by `symphonia` (pure Rust).
-
-## Configuration
-
-| Variable     | Description               | Default     |
-|--------------|---------------------------|-------------|
-| `PEEK_THEME` | Syntax highlighting theme | `idea-dark` |
-| `PEEK_COLOR` | Output color encoding     | `truecolor` |
-
-## Test Files
-
-`test-data/` and `test-images/` contain sample files for trying out peek's viewers — minified
-JSON/XML/HTML for pretty-printing, source code in several languages for syntax highlighting,
-photographs for image rendering.
+```sh
+cargo install mdbook
+mdbook serve manual    # opens http://localhost:3000
+```
 
 ## License
 
