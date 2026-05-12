@@ -121,6 +121,7 @@ pub enum FileExtras {
     Comic(crate::types::comic::ComicStats),
     Document(crate::types::document::DocumentStats),
     Pdf(crate::types::pdf::PdfStats),
+    Audio(crate::types::audio::AudioStats),
     Directory {
         entry_count: usize,
         file_count: usize,

@@ -79,6 +79,16 @@ pdfium-render = "0.9"
 # `docx-rs`) reject real-world Word documents because numeric attributes
 # routinely carry non-numeric values like "auto" / "none".
 
+# Audio metadata via symphonia. Pure Rust, no system deps. We use the
+# probe + format readers only — no audio decoding — so the info path
+# costs are headers + tag tables. Codec features enabled so probe can
+# resolve codec params (channels / sample rate / bit depth) for MP3 /
+# FLAC / AAC / ALAC / Vorbis / Opus etc; format readers enabled so the
+# right container parser is registered for ISOMP4 (m4a/m4b) / CAF /
+# AIFF / Ogg / Matroska. Metadata features wire ID3v1/v2 + APE tag
+# readers.
+symphonia = { version = "0.5", features = ["all-codecs", "all-formats", "opt-simd"] }
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

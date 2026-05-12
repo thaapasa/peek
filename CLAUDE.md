@@ -163,6 +163,11 @@ src/
       info_render.rs   — render_section (SVG info section)
       extract.rs       — SVG anim frame extract: render_frame → resvg rasterize at intrinsic size (sub-512px upscaled to 512 floor) → PNG
       animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
+    audio/
+      mod.rs           — Module wiring; re-exports AudioStats
+      info.rs          — Shared audio info shape: AudioStats { format, codec, duration_secs, sample_rate, channels, channel_layout, bits_per_sample, bitrate, metadata: AudioMetadata, has_lyrics, has_album_art, error } + AudioMetadata { title, artist, album, album_artist, track_number, disc_number, date, genre, composer, comment }
+      info_gather.rs   — symphonia probe: MediaSourceStream over read_bytes → default_track() codec_params (channels / sample_rate / bits_per_sample / n_frames + time_base → duration). Walks `format.metadata().current()` + `probed.metadata.get().current()` so Vorbis containers (Ogg/FLAC) and ID3v2 sidecars (MP3/AIFF) both surface. Bit-rate derived from file size / duration when container lacks explicit field. Maps StandardTagKey → AudioMetadata fields; non-standard `LYRICS=` key matched on raw name. Embedded visuals flag `has_album_art`
+      info_render.rs   — Render Audio + Tags info sections. Tags section omitted when no tag fields populated
     archive/
       mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper

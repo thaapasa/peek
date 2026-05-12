@@ -256,26 +256,21 @@ File info: event/contact count, date range (calendars), version.
 
 Crates: `ical` (covers both iCalendar and vCard, pure Rust).
 
-### Audio Files ☐
+### Audio Files — Stretch ☐
 
-| Format | Extensions     |
-|--------|----------------|
-| MP3    | `.mp3`         |
-| FLAC   | `.flac`        |
-| WAV    | `.wav`         |
-| Ogg    | `.ogg`, `.oga` |
-| Opus   | `.opus`        |
-| AAC    | `.m4a`, `.aac` |
+Tags + technical properties shipped (see [features.md](features.md) "Audio Files"). Open ideas:
 
-Metadata-first viewer: tags (title, artist, album, track, year, genre, comment), technical
-properties (duration, bitrate, sample rate, channels, codec), embedded album art (route through
-the image pipeline) when present.
-
-Stretch: ASCII waveform or spectrum preview. Decoding adds cost — decide later if worth it. Tags
-alone are cheap and useful.
-
-Crates: `lofty` (tags + properties, pure Rust, broad format coverage). `symphonia` only if
-waveform/spectrum is pursued.
+- **Embedded album art rendered as ASCII** through the existing image pipeline. ID3v2 `APIC`,
+  FLAC picture block, MP4 `covr` atom, Ogg base64-cover all carry decode-ready raster bytes.
+  Symphonia surfaces them as `Visual` entries; route through the image pipeline. Should land
+  naturally — same shape as EPUB cover-chapter rendering.
+- **Embedded lyrics on a dedicated view.** ID3v2 `USLT` (unsynced) + `SYLT` (synced /
+  timed). Vorbis `LYRICS=`. MP4 `\xa9lyr` atom. Currently a single "Lyrics: embedded" flag in
+  the info section — promote to a real view with `Tab`-cycle access.
+- **Audiobook chapters** for `.m4b` containers — MP4 chapter atoms / `chpl` boxes drive a
+  `NextChapter` / `PrevChapter` flow like EPUB. Defer until a real m4b ships up.
+- **ASCII waveform or spectrum preview.** Decoding adds cost — decide later. Tags alone are
+  cheap and useful.
 
 ### Font Files ☐
 

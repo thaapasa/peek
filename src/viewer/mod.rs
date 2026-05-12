@@ -253,10 +253,10 @@ impl Registry {
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
 
         if self.plain_mode {
-            // Binary/Archive/DiskImage in --plain still goes to Hex (the
-            // universal tail); ContentMode requires UTF-8 input.
-            // Directory in --plain still gets the listing — there's no
-            // "raw" view of a directory.
+            // Binary/Archive/DiskImage/Audio in --plain still goes to
+            // Hex (the universal tail); ContentMode requires UTF-8
+            // input. Directory in --plain still gets the listing —
+            // there's no "raw" view of a directory.
             if matches!(file_type, FileType::Directory) {
                 let path = source.path().expect("Directory FileType implies a path");
                 let (entries, warnings) =
@@ -276,6 +276,7 @@ impl Registry {
                     | FileType::Archive(_)
                     | FileType::Compressed(_)
                     | FileType::DiskImage(_)
+                    | FileType::Audio(_)
             ) {
                 modes.push(self.text_content_mode(source, file_type, args)?);
             }
@@ -553,6 +554,13 @@ impl Registry {
                     // Hex + Info tail below renders the raw compressed
                     // bytes, and the FileInfo warning row surfaces the
                     // decompression error.
+                }
+                FileType::Audio(_) => {
+                    // Metadata-only view (no playback). Info as primary
+                    // so the user lands on tags + codec params; the
+                    // universal Info push below dedupes by ModeId so
+                    // it becomes a no-op.
+                    modes.push(Box::new(InfoMode::new()));
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended

@@ -240,6 +240,21 @@ PDF support uses Pdfium (Google's PDF library, dynamically loaded from `libpdfiu
 alongside the peek binary in the release tarball — no system install needed). Full feature
 detail in [`docs/features.md`](docs/features.md).
 
+### Audio files
+
+| Format       | Extensions                  |
+|--------------|-----------------------------|
+| MP3          | `.mp3`                      |
+| FLAC         | `.flac`                     |
+| Ogg / Opus   | `.ogg`, `.oga`, `.opus`     |
+| WAV / AIFF   | `.wav`, `.aiff`, `.aif`     |
+| MPEG-4 audio | `.m4a`, `.m4b`, `.aac`      |
+| Other        | `.caf`, `.mka`, `.wma`      |
+
+Metadata-only — container, codec, channels, sample rate, bit depth, bitrate, duration, plus tag
+fields (title, artist, album, track, date, genre, lyrics + album-art flags). No playback.
+Powered by `symphonia` (pure Rust).
+
 ## Configuration
 
 | Variable     | Description               | Default     |

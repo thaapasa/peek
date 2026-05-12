@@ -5,6 +5,7 @@
 //! here.
 
 pub mod archive;
+pub mod audio;
 pub mod binary;
 pub mod comic;
 pub mod directory;

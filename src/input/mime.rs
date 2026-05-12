@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::input::detect::{
-    ArchiveFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat, EbookFormat,
-    FileType, StructuredFormat,
+    ArchiveFormat, AudioFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat,
+    EbookFormat, FileType, StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -186,6 +186,19 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",
         FileType::Directory => "inode/directory",
+        FileType::Audio(fmt) => match fmt {
+            AudioFormat::Mp3 => "audio/mpeg",
+            AudioFormat::Flac => "audio/flac",
+            AudioFormat::Ogg => "audio/ogg",
+            AudioFormat::Opus => "audio/opus",
+            AudioFormat::Wav => "audio/wav",
+            AudioFormat::M4a => "audio/mp4",
+            AudioFormat::Aac => "audio/aac",
+            AudioFormat::Aiff => "audio/aiff",
+            AudioFormat::Caf => "audio/x-caf",
+            AudioFormat::Mka => "audio/x-matroska",
+            AudioFormat::Wma => "audio/x-ms-wma",
+        },
         // For Image, Archive, Compressed, and Binary, the magic-byte
         // MIME is more specific than any generic registered fallback
         // would be.

@@ -355,6 +355,29 @@ Scroll keys in image views:
 Toggling fit mode resets the scroll offset (the old position has no
 meaning in the new grid). No `--sizing` CLI flag yet.
 
+### Audio Files ✅
+
+Metadata-only Info view (no playback, no waveform). Container + codec params from a symphonia
+probe — duration, channel count + layout, sample rate, bit depth, average bitrate — plus tag
+fields from ID3v1/v2 (MP3, AIFF), Vorbis comments (Ogg, FLAC, Opus), MP4 atoms (m4a, m4b), and
+APE: title, artist, album, album-artist, track / disc number, date, genre, composer, comment.
+Embedded lyrics and embedded album art surface as flags so users know they're there even though
+peek doesn't render them yet.
+
+| Format         | Extensions                  | Status |
+|----------------|-----------------------------|--------|
+| MP3            | `.mp3`                      | ✅      |
+| FLAC           | `.flac`                     | ✅      |
+| Ogg Vorbis     | `.ogg`, `.oga`              | ✅      |
+| Opus           | `.opus`                     | ✅      |
+| WAV            | `.wav`, `.wave`             | ✅      |
+| MPEG-4 audio   | `.m4a`, `.m4b`, `.m4p`      | ✅      |
+| AAC (ADTS)     | `.aac`                      | ✅      |
+| AIFF           | `.aiff`, `.aif`, `.aifc`    | ✅      |
+| Apple CAF      | `.caf`                      | ✅      |
+| Matroska audio | `.mka`                      | ✅      |
+| WMA            | `.wma`                      | ◐ container-only — symphonia doesn't decode WMA |
+
 ### Animated Images (GIF, WebP) ✅
 
 Auto-plays at native frame rate. `Space` toggles play/pause; `n`/`p` and Left/Right step frames; `b`

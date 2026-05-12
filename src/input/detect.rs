@@ -56,8 +56,57 @@ pub enum FileType {
     /// file descends into peek; selecting a child directory re-targets
     /// the current frame (no stack of directories).
     Directory,
+    /// Sound / music file. Drives a metadata-only info view —
+    /// container / codec / channels / bit depth / sample rate + tag
+    /// fields (title / artist / album / etc). No playback.
+    Audio(AudioFormat),
     /// Binary / unknown
     Binary,
+}
+
+/// Sound-file container. Encompasses the common consumer audio formats;
+/// the symphonia probe resolves codec details (e.g. ALAC inside an
+/// M4a container) on top of this container-level classification.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioFormat {
+    Mp3,
+    Flac,
+    /// Ogg container — usually Vorbis, sometimes FLAC.
+    Ogg,
+    /// Ogg container carrying an Opus stream (`.opus`).
+    Opus,
+    Wav,
+    /// MPEG-4 audio container (`.m4a` / `.m4b` / `.mp4` audio-only /
+    /// `.aac` in ADTS).
+    M4a,
+    /// Raw AAC ADTS stream (`.aac`).
+    Aac,
+    /// Audio Interchange File Format (`.aiff` / `.aif`).
+    Aiff,
+    /// Apple Core Audio Format (`.caf`).
+    Caf,
+    /// Matroska audio (`.mka`).
+    Mka,
+    /// Windows Media Audio (`.wma`).
+    Wma,
+}
+
+impl AudioFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mp3 => "MP3",
+            Self::Flac => "FLAC",
+            Self::Ogg => "Ogg",
+            Self::Opus => "Opus",
+            Self::Wav => "WAV",
+            Self::M4a => "MPEG-4 audio",
+            Self::Aac => "AAC",
+            Self::Aiff => "AIFF",
+            Self::Caf => "CAF",
+            Self::Mka => "Matroska audio",
+            Self::Wma => "WMA",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -435,13 +484,35 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if let Some(fmt) = compression_format_from_mime(mime) {
         return Some(FileType::Compressed(fmt));
     }
-    if mime.starts_with("video/")
-        || mime.starts_with("audio/")
-        || mime.starts_with("application/x-executable")
-    {
+    if let Some(fmt) = audio_format_from_mime(mime) {
+        return Some(FileType::Audio(fmt));
+    }
+    if mime.starts_with("video/") || mime.starts_with("application/x-executable") {
         return Some(FileType::Binary);
     }
     None
+}
+
+/// Map an `infer` magic-byte MIME to an audio container format. Covers
+/// the formats `infer` recognises for audio; other audio MIMEs (rare)
+/// fall through to plain `audio/*` → Binary above is unreachable thanks
+/// to the catch-all here returning a Format::* for any audio/* it
+/// knows.
+fn audio_format_from_mime(mime: &str) -> Option<AudioFormat> {
+    match mime {
+        "audio/mpeg" | "audio/mp3" => Some(AudioFormat::Mp3),
+        "audio/flac" | "audio/x-flac" => Some(AudioFormat::Flac),
+        "audio/ogg" | "application/ogg" => Some(AudioFormat::Ogg),
+        "audio/opus" => Some(AudioFormat::Opus),
+        "audio/wav" | "audio/wave" | "audio/x-wav" => Some(AudioFormat::Wav),
+        "audio/mp4" | "audio/m4a" | "audio/x-m4a" => Some(AudioFormat::M4a),
+        "audio/aac" => Some(AudioFormat::Aac),
+        "audio/aiff" | "audio/x-aiff" => Some(AudioFormat::Aiff),
+        "audio/x-caf" => Some(AudioFormat::Caf),
+        "audio/x-matroska" => Some(AudioFormat::Mka),
+        "audio/x-ms-wma" => Some(AudioFormat::Wma),
+        _ => None,
+    }
 }
 
 /// Upgrade an `.img`/`.bin`/`.dd`-derived `DiskImage::Raw` to
@@ -582,6 +653,24 @@ fn compression_format_from_name(name: &str) -> Option<CompressionFormat> {
         return Some(CompressionFormat::Lz4);
     }
     None
+}
+
+/// Map a single file extension to an audio container format.
+fn audio_format_from_ext(ext: &str) -> Option<AudioFormat> {
+    match ext {
+        "mp3" => Some(AudioFormat::Mp3),
+        "flac" => Some(AudioFormat::Flac),
+        "ogg" | "oga" => Some(AudioFormat::Ogg),
+        "opus" => Some(AudioFormat::Opus),
+        "wav" | "wave" => Some(AudioFormat::Wav),
+        "m4a" | "m4b" | "m4p" => Some(AudioFormat::M4a),
+        "aac" => Some(AudioFormat::Aac),
+        "aiff" | "aif" | "aifc" => Some(AudioFormat::Aiff),
+        "caf" => Some(AudioFormat::Caf),
+        "mka" => Some(AudioFormat::Mka),
+        "wma" => Some(AudioFormat::Wma),
+        _ => None,
+    }
 }
 
 /// Map a single file extension to a comic-archive format.
@@ -797,6 +886,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = disk_image_format_from_ext(&ext) {
         return Some(FileType::DiskImage(fmt));
+    }
+    if let Some(fmt) = audio_format_from_ext(&ext) {
+        return Some(FileType::Audio(fmt));
     }
     Some(match ext.as_str() {
         "json" | "geojson" => FileType::Structured(StructuredFormat::Json),
