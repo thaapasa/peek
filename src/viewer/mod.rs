@@ -12,7 +12,7 @@ use crate::input::detect::{
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
 use crate::types::comic::{CbzReadMode, cbz};
-use crate::types::document::{self, docx::DocxReadMode, rtf::RtfReadMode};
+use crate::types::document::{self, DocReadMode, rtf::RtfReadMode};
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
@@ -318,26 +318,34 @@ impl Registry {
                     warnings.append(&mut listing_warnings);
                     modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
                 }
-                FileType::Document(DocumentFormat::Docx) => {
+                FileType::Document(fmt @ (DocumentFormat::Docx | DocumentFormat::Odt)) => {
                     // Read view (default) + ZIP listing TOC. Listing
-                    // fallback covers the case where docx-rust can't
-                    // parse the body (e.g. corrupt / non-conforming
+                    // fallback covers the case where the parser can't
+                    // read the body (e.g. corrupt / non-conforming
                     // file) so the user still sees the inner ZIP tree.
                     let mut warnings = Vec::new();
-                    match document::docx::package::open(source) {
-                        Ok(doc) => modes.push(Box::new(DocxReadMode::new(source.clone(), doc))),
-                        Err(e) => warnings.push(format!("DOCX unreadable: {e:#}")),
+                    let parsed = match fmt {
+                        DocumentFormat::Docx => document::docx::package::open(source),
+                        DocumentFormat::Odt => document::odt::package::open(source),
+                        _ => unreachable!(),
+                    };
+                    match parsed {
+                        Ok(doc) => modes.push(Box::new(DocReadMode::new(source.clone(), doc))),
+                        Err(e) => warnings.push(format!("{} unreadable: {e:#}", fmt.label())),
                     }
                     let (entries, mut listing_warnings) = match archive::reader::list_entries(
                         source,
                         crate::input::detect::ArchiveFormat::Zip,
                     ) {
                         Ok(e) => (e, Vec::new()),
-                        Err(e) => (Vec::new(), vec![format!("Failed to list DOCX: {e:#}")]),
+                        Err(e) => (
+                            Vec::new(),
+                            vec![format!("Failed to list {}: {e:#}", fmt.label())],
+                        ),
                     };
                     warnings.append(&mut listing_warnings);
                     modes.push(Box::new(ListingMode::new(
-                        DocumentFormat::Docx.label(),
+                        fmt.label(),
                         "TOC",
                         entries,
                         warnings,

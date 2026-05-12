@@ -231,6 +231,7 @@ using glyph-matched character selection with two-color clustering and 24-bit ANS
 |--------|------------------|------------------------------------------------------|
 | PDF    | `.pdf`           | Paged image render · text extraction · embeds       |
 | DOCX   | `.docx`          | Styled body · ZIP TOC · per-entry extract           |
+| ODT    | `.odt`           | Styled body · ZIP TOC · per-entry extract           |
 | RTF    | `.rtf`           | Styled body                                         |
 | EPUB   | `.epub`          | Per-chapter HTML render · ZIP TOC                   |
 | CBZ    | `.cbz`           | Paged image render · ZIP TOC                        |

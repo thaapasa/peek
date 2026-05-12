@@ -180,6 +180,9 @@ pub enum DocumentFormat {
     /// Office Open XML word-processing document. ZIP container with
     /// `word/document.xml` body + `docProps/*.xml` metadata.
     Docx,
+    /// OpenDocument Text. ZIP container with `content.xml` body and
+    /// `meta.xml` Dublin Core metadata.
+    Odt,
     /// Rich Text Format. Control-word markup; single file, not a
     /// container.
     Rtf,
@@ -189,6 +192,7 @@ impl DocumentFormat {
     pub fn label(self) -> &'static str {
         match self {
             Self::Docx => "DOCX document",
+            Self::Odt => "ODT document",
             Self::Rtf => "RTF document",
         }
     }
@@ -805,6 +809,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "html" | "htm" | "xhtml" => FileType::Html,
         "epub" => FileType::Ebook(EbookFormat::Epub),
         "docx" => FileType::Document(DocumentFormat::Docx),
+        "odt" => FileType::Document(DocumentFormat::Odt),
         "rtf" => FileType::Document(DocumentFormat::Rtf),
         "pdf" => FileType::Pdf,
         "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),

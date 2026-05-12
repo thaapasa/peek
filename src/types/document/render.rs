@@ -1,16 +1,17 @@
-//! Walk an owned [`super::package::Doc`] AST and emit ANSI-styled lines.
-//! Output shape (`render(&Doc, width, style_mode) -> Result<Vec<String>>`)
+//! Walk a [`super::ast::Doc`] and emit ANSI-styled lines. Output shape
+//! (`render(&Doc, width, theme, style_mode) -> Result<Vec<String>>`)
 //! mirrors `crate::types::html::render::render` so the read-mode wrapper
-//! can cache by `(width, style_mode)` exactly as the EPUB / HTML modes do.
+//! can cache by `(width, style_mode)` exactly as the EPUB / HTML modes
+//! do.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::theme::{Attr, PeekTheme, StyleMode};
-use crate::types::document::docx::package::{Block, Doc, Paragraph, Run};
+use crate::types::document::ast::{Block, Doc, Paragraph, Run};
 
-/// Render an in-memory DOCX AST to ANSI-styled lines.
-pub(crate) fn render(
+/// Render an in-memory document AST to ANSI-styled lines.
+pub fn render(
     doc: &Doc,
     width: usize,
     theme: &PeekTheme,

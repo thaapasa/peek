@@ -153,6 +153,33 @@ Lists currently render as flat bullets — numbering cascade resolution from `nu
 (numbered lists, nested numbering schemes) isn't done yet; everything that has a `numPr` shows
 as `•`.
 
+#### ODT ✅
+
+`.odt` files (OpenDocument Text — a ZIP container with `content.xml` body + `meta.xml` Dublin
+Core metadata) get the same three-mode view as DOCX, backed by a shared AST + renderer + read
+mode in `src/types/document/{ast,render,read_mode}`. The per-format parser is the only piece
+that differs.
+
+- **Read** (default) — styled body text. Headings (`<text:h text:outline-level="N">`) render
+  bold + themed; bold / italic / underline / strikethrough / colored runs render via SGR. Span
+  styling is resolved through `<office:automatic-styles>`: `<text:span text:style-name="T1">`
+  picks up the run-style attrs that the automatic-styles block defines for `T1` (`fo:font-weight`,
+  `fo:font-style`, `style:text-underline-style`, `style:text-line-through-style`, `fo:color`).
+  Bulleted-list rendering uses `<text:list>` nesting depth for indent and a `•` marker on each
+  `<text:list-item>`. `<draw:image>` references inside `<draw:frame>` surface as
+  `[Image: <basename>]` placeholders. Hyperlinks (`<text:a>`) force-underline their inner runs.
+  Tables flatten to ` | `-joined rows. Width-aware word wrap re-runs on resize.
+- **TOC** — the raw ZIP file tree via the shared `ListingMode`, exactly as for DOCX. `--extract
+  Pictures/foo.png` works as for any ZIP archive.
+- **Info** — title, author, subject, keywords (multi-valued `<meta:keyword>` entries
+  comma-joined), description, created / modified timestamps, plus paragraph / word / image
+  counts.
+
+`styles.xml` (the package's separate named-styles container) is intentionally not consulted in
+v1 — real-world ODTs from LibreOffice / OpenOffice dump all directly-used styling into
+content.xml's automatic-styles, and inheritance chains from styles.xml only matter for the
+small fraction of files that rely on them.
+
 #### RTF ✅
 
 `.rtf` files (Rich Text Format — control-word markup, single file, not a container) get a

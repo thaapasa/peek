@@ -6,7 +6,7 @@
 //!   * [`PdfPageMode`] — paged rasterizer, one page at a time
 //!     ([`crate::types::comic::cbz::CbzReadMode`] analog)
 //!   * [`PdfTextMode`] — width-cached text render
-//!     ([`crate::types::document::docx::DocxReadMode`] analog)
+//!     ([`crate::types::document::DocReadMode`] analog)
 //!   * [`crate::types::listing::ListingMode`] of `/EmbeddedFiles`
 //!     attachments — extract path lives in [`extract`]
 

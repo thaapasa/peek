@@ -1,7 +1,10 @@
-//! DOCX read mode: walks the owned [`super::package::Doc`] AST through
-//! the renderer per (width, style_mode). Cache invalidates when the
-//! terminal resizes or the user cycles color, so a single open + walk
-//! covers every redraw of a typical session.
+//! Shared document read mode: walks an owned [`super::ast::Doc`]
+//! through the shared renderer per `(width, style_mode)`. Cache
+//! invalidates when the terminal resizes or the user cycles color, so
+//! a single open + walk covers every redraw of a typical session.
+//!
+//! The mode is format-agnostic — per-format wiring (DOCX, ODT) only
+//! provides the parser and passes the resulting `Doc` here.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
@@ -9,11 +12,10 @@ use syntect::highlighting::Color;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
+use crate::types::document::ast::Doc;
+use crate::types::document::render;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::viewer::ui::Action;
-
-use super::package::Doc;
-use super::render;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct CacheKey {
@@ -26,14 +28,14 @@ struct Cached {
     lines: Vec<String>,
 }
 
-pub(crate) struct DocxReadMode {
+pub(crate) struct DocReadMode {
     #[allow(dead_code)]
     source: InputSource,
     doc: Doc,
     cache: Option<Cached>,
 }
 
-impl DocxReadMode {
+impl DocReadMode {
     pub(crate) fn new(source: InputSource, doc: Doc) -> Self {
         Self {
             source,
@@ -58,7 +60,7 @@ impl DocxReadMode {
     }
 }
 
-impl Mode for DocxReadMode {
+impl Mode for DocReadMode {
     fn id(&self) -> ModeId {
         ModeId::Rendered
     }
