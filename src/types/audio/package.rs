@@ -420,6 +420,38 @@ fn mime_hint(format: AudioFormat) -> Option<&'static str> {
     })
 }
 
+fn codec_label(codec: CodecType) -> Option<&'static str> {
+    // Symphonia exposes a registry-based descriptor lookup, but the
+    // long-form names are clearer if we pin them here. Unknown codec
+    // (WMA, anything symphonia doesn't bundle) → None and the
+    // renderer skips the row.
+    use symphonia::core::codecs as c;
+    Some(match codec {
+        c::CODEC_TYPE_MP1 => "MPEG-1 Audio Layer 1",
+        c::CODEC_TYPE_MP2 => "MPEG-1 Audio Layer 2",
+        c::CODEC_TYPE_MP3 => "MP3 (MPEG-1 Audio Layer 3)",
+        c::CODEC_TYPE_AAC => "AAC (Advanced Audio Coding)",
+        c::CODEC_TYPE_FLAC => "FLAC (Free Lossless Audio Codec)",
+        c::CODEC_TYPE_ALAC => "ALAC (Apple Lossless Audio Codec)",
+        c::CODEC_TYPE_VORBIS => "Vorbis",
+        c::CODEC_TYPE_OPUS => "Opus",
+        c::CODEC_TYPE_PCM_S16LE
+        | c::CODEC_TYPE_PCM_S16BE
+        | c::CODEC_TYPE_PCM_S24LE
+        | c::CODEC_TYPE_PCM_S24BE
+        | c::CODEC_TYPE_PCM_S32LE
+        | c::CODEC_TYPE_PCM_S32BE
+        | c::CODEC_TYPE_PCM_F32LE
+        | c::CODEC_TYPE_PCM_F32BE
+        | c::CODEC_TYPE_PCM_F64LE
+        | c::CODEC_TYPE_PCM_F64BE
+        | c::CODEC_TYPE_PCM_U8
+        | c::CODEC_TYPE_PCM_S8 => "PCM",
+        c::CODEC_TYPE_ADPCM_MS | c::CODEC_TYPE_ADPCM_IMA_WAV => "ADPCM",
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -594,36 +626,4 @@ mod tests {
             &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
         );
     }
-}
-
-fn codec_label(codec: CodecType) -> Option<&'static str> {
-    // Symphonia exposes a registry-based descriptor lookup, but the
-    // long-form names are clearer if we pin them here. Unknown codec
-    // (WMA, anything symphonia doesn't bundle) → None and the
-    // renderer skips the row.
-    use symphonia::core::codecs as c;
-    Some(match codec {
-        c::CODEC_TYPE_MP1 => "MPEG-1 Audio Layer 1",
-        c::CODEC_TYPE_MP2 => "MPEG-1 Audio Layer 2",
-        c::CODEC_TYPE_MP3 => "MP3 (MPEG-1 Audio Layer 3)",
-        c::CODEC_TYPE_AAC => "AAC (Advanced Audio Coding)",
-        c::CODEC_TYPE_FLAC => "FLAC (Free Lossless Audio Codec)",
-        c::CODEC_TYPE_ALAC => "ALAC (Apple Lossless Audio Codec)",
-        c::CODEC_TYPE_VORBIS => "Vorbis",
-        c::CODEC_TYPE_OPUS => "Opus",
-        c::CODEC_TYPE_PCM_S16LE
-        | c::CODEC_TYPE_PCM_S16BE
-        | c::CODEC_TYPE_PCM_S24LE
-        | c::CODEC_TYPE_PCM_S24BE
-        | c::CODEC_TYPE_PCM_S32LE
-        | c::CODEC_TYPE_PCM_S32BE
-        | c::CODEC_TYPE_PCM_F32LE
-        | c::CODEC_TYPE_PCM_F32BE
-        | c::CODEC_TYPE_PCM_F64LE
-        | c::CODEC_TYPE_PCM_F64BE
-        | c::CODEC_TYPE_PCM_U8
-        | c::CODEC_TYPE_PCM_S8 => "PCM",
-        c::CODEC_TYPE_ADPCM_MS | c::CODEC_TYPE_ADPCM_IMA_WAV => "ADPCM",
-        _ => return None,
-    })
 }
