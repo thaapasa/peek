@@ -513,6 +513,66 @@ mod tests {
         assert_eq!(extension_for_mime("image/x-foo"), "bin");
         assert_eq!(extension_for_mime("application/octet-stream"), "bin");
     }
+
+    /// End-to-end smoke: probe the committed `sample-tagged.mp3`
+    /// fixture (built by `cargo run --example gen_audio_fixture`).
+    /// Asserts every wire the listing + extract paths consume: codec
+    /// detection from the MPEG sync word, standard tag fields from
+    /// ID3v2 frames, embedded picture + lyric capture.
+    #[test]
+    fn fixture_round_trips_through_probe() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("test-audio")
+            .join("sample-tagged.mp3");
+        let source = InputSource::File(path);
+        let probed = probe(&source, AudioFormat::Mp3).expect("probe must succeed on fixture");
+
+        assert_eq!(probed.codec, Some("MP3 (MPEG-1 Audio Layer 3)"));
+        assert_eq!(probed.sample_rate, Some(44_100));
+        assert_eq!(probed.channels, Some(1));
+
+        let m = &probed.metadata;
+        assert_eq!(m.title.as_deref(), Some("Sample Track"));
+        assert_eq!(m.artist.as_deref(), Some("Test Artist"));
+        assert_eq!(m.album.as_deref(), Some("Test Album"));
+        assert_eq!(m.track_number.as_deref(), Some("1"));
+        assert!(m.date.as_deref().unwrap_or("").contains("2026"));
+
+        assert_eq!(probed.visuals.len(), 2);
+        assert!(probed.lyrics.as_deref().unwrap_or("").contains("la la la"));
+
+        let entries: Vec<String> = build_listing(&probed).into_iter().map(|e| e.path).collect();
+        assert!(
+            entries.contains(&"pictures/front_cover.png".to_string()),
+            "{entries:?}"
+        );
+        assert!(
+            entries.contains(&"pictures/back_cover.png".to_string()),
+            "{entries:?}"
+        );
+        assert!(
+            entries.contains(&"lyrics/lyrics.txt".to_string()),
+            "{entries:?}"
+        );
+
+        let (lyrics_bytes, lyrics_name) =
+            read_embed(&probed, "lyrics/lyrics.txt").expect("lyrics entry");
+        assert_eq!(lyrics_name, "lyrics.txt");
+        assert!(
+            std::str::from_utf8(&lyrics_bytes)
+                .unwrap()
+                .contains("la la la")
+        );
+
+        let (cover_bytes, cover_name) =
+            read_embed(&probed, "pictures/front_cover.png").expect("front cover entry");
+        assert_eq!(cover_name, "front_cover.png");
+        // PNG signature at the head of the extracted payload.
+        assert_eq!(
+            &cover_bytes[..8],
+            &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+        );
+    }
 }
 
 fn codec_label(codec: CodecType) -> Option<&'static str> {

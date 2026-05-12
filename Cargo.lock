@@ -877,6 +877,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "id3"
+version = "1.16.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "965c5e6a62a241f2f673df956ea5f52c27780bc1031855890a551ed9b869e2d1"
+dependencies = [
+ "bitflags 2.11.1",
+ "byteorder",
+ "flate2",
+]
+
+[[package]]
 name = "image"
 version = "0.25.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1465,6 +1476,7 @@ dependencies = [
  "fontdue",
  "gif",
  "html2text",
+ "id3",
  "image",
  "infer",
  "insta",

@@ -100,6 +100,11 @@ fontdue = "0.9"
 # Snapshot testing for image rendering output
 insta = "1"
 
+# ID3v2 tag writer used by `examples/gen_audio_fixture.rs` to synthesise
+# the tagged MP3 test fixture (cover art + lyrics + tag fields). Dev-
+# only — runtime probe path goes through symphonia.
+id3 = "1"
+
 # Optimize image processing dependencies even in dev builds —
 # these are unusably slow without at least -O2
 [profile.dev.package.image]
