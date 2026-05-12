@@ -16,7 +16,14 @@ mod viewer;
 pub use cli::Args;
 
 fn main() -> Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
+
+    // `--plain` implies `--color plain`: a single "sterile output" knob.
+    // Otherwise the status bar and UI chrome stay themed while content is
+    // unstyled, which is surprising.
+    if args.plain {
+        args.color = theme::StyleMode::Plain;
+    }
 
     if args.version {
         output::help::render_version()?;

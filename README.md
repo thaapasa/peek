@@ -124,7 +124,7 @@ peek -p file.txt
 peek --raw config.json
 peek -r data.xml
 
-# No syntax highlighting or pretty-printing
+# Sterile output: no highlighting, pretty-printing, or colors
 peek --plain file.txt
 peek -P file.txt
 

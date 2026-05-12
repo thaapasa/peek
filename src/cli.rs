@@ -35,7 +35,8 @@ pub struct Args {
     #[arg(short = 'V', long = "version")]
     pub version: bool,
 
-    /// Disable syntax highlighting and pretty-printing
+    /// Disable syntax highlighting, pretty-printing, and color output
+    /// (implies `--color plain`)
     #[arg(short = 'P', long)]
     pub plain: bool,
 

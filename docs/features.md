@@ -795,15 +795,15 @@ syntax-highlighted code is downgraded along with everything else.
 | `--version`      | `-V`  | Show version info and exit                                    | ✅      |
 | `--viewer`       | `-v`  | Force viewer mode                                             | ☐      |
 | `--print`        | `-p`  | Force print mode (direct stdout)                              | ✅      |
-| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing               | ✅      |
+| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   | ✅      |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      | ✅      |
 | `--theme`        | `-t`  | Syntax highlighting theme                                     | ✅      |
 | `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)      | ✅      |
-| `--language`     | `-l`  | Force syntax language                                         | ✅      |
-| `--width`        |       | Image rendering width in characters                           | ✅      |
-| `--image-mode`   |       | Image rendering mode                                          | ✅      |
-| `--info`         |       | Show file info instead of contents                            | ✅      |
-| `--list`         |       | Print container TOC to stdout (archives / disks / PDF embeds) | ✅      |
+| `--language`     | `-L`  | Force syntax language                                         | ✅      |
+| `--width`        | `-w`  | Image rendering width in characters                           | ✅      |
+| `--image-mode`   | `-m`  | Image rendering mode                                          | ✅      |
+| `--info`         | `-i`  | Show file info instead of contents                            | ✅      |
+| `--list`         | `-l`  | Print container TOC to stdout (archives / disks / PDF embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                            | ✅      |
@@ -811,13 +811,13 @@ syntax-highlighted code is downgraded along with everything else.
 | `--wrap`         |       | Soft-wrap long lines (`--no-wrap` to force off)               | ☐      |
 | `--sizing`       |       | Image sizing mode                                             | ☐      |
 
-`--plain` and `--raw` are orthogonal. `--raw` preserves original file structure (no pretty-printing)
-but still applies colors and font styles. `--plain` disables all console enhancements (colors, bold,
-italic) but doesn't change structure. Combinable: `--plain --raw` gives completely unmodified
-content with no styling.
+`--plain` is the single "sterile output" knob: it implies `--color plain` and additionally
+disables syntax highlighting, structured pretty-printing, and rich renders (HTML / EPUB / DOCX
+/ image / PDF fall back to raw text or hex). `--raw` is narrower: it skips pretty-printing of
+structured / SVG sources but keeps colors, font styles, and rich renders. Use `--raw --color
+plain` for raw structure without colors while still letting HTML / DOCX render.
 
-`--print` / `-p` forces print mode. `--plain` / `-P` disables syntax highlighting and
-pretty-printing.
+`--print` / `-p` forces print mode regardless of TTY.
 
 ### `--help` Screen ✅
 

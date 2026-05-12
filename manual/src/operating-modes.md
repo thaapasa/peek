@@ -34,6 +34,6 @@ input still works.
 - **Viewer**: full-screen, alt-screen, no scrollback pollution. Quit returns the terminal
   unchanged.
 - **Print**: streams to stdout. Safe to pipe into `less`, `grep`, `head`. `--plain` / `-P`
-  strips ANSI escapes.
+  strips ANSI escapes, pretty-printing, and rich renders.
 - **`--info`**: prints the [file info screen](./viewer/info-screen.md) and exits.
 - **`--list`**: prints the container TOC (archives, disk images, PDF embeds) and exits.

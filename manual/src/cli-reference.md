@@ -6,7 +6,7 @@
 | `--version`      | `-V`  | Show version info and exit                                    |
 | `--print`        | `-p`  | Force print mode (direct stdout)                              |
 | `--viewer`       | `-v`  | Force viewer mode                                             |
-| `--plain`        | `-P`  | Disable syntax highlighting and pretty-printing               |
+| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      |
 | `--theme`        | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)  |
 | `--color`        | `-C`  | Output color encoding — see [Color modes](./viewer/colors.md) |
@@ -28,10 +28,13 @@
 
 ## Notes
 
-- `--plain` and `--raw` are orthogonal. `--raw` preserves original file structure (no
-  pretty-printing) but still applies colors and font styles. `--plain` disables all console
-  enhancements (colors, bold, italic) but doesn't change structure. Combinable: `--plain --raw`
-  gives completely unmodified content with no styling.
+- `--plain` is the single "sterile output" knob: implies `--color plain` and additionally
+  disables syntax highlighting, structured pretty-printing, and rich renders (HTML / EPUB /
+  DOCX / image / PDF fall back to raw text or hex). Use it when piping into tools that
+  expect bytes-as-typed.
+- `--raw` is narrower: it skips pretty-printing of structured / SVG sources but keeps colors,
+  font styles, and rich renders. Pair `--raw --color plain` if you want raw structure
+  without colors but still want HTML / DOCX rendered.
 - `--print` / `-p` forces print mode regardless of TTY.
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 
