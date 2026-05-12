@@ -224,7 +224,7 @@ themes/
   vscode-dark-modern.tmTheme  — VS Code Dark Modern theme
   vscode-dark-2026.tmTheme    — VS Code Dark 2026 theme
   vscode-monokai.tmTheme      — VS Code Monokai theme
-docs/
+docs/                  — Builder / agent reference (architecture, conventions, planning)
   architecture.md      — Design, data flow, key abstractions, extension guide
   features.md          — Currently shipped features (✅ implemented + ◐ partial)
   planned.md           — Planned features and ideas (☐ planned + ❓ open)
@@ -233,6 +233,9 @@ docs/
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
   svg-anim-perf.md     — SVG animation memory profile + optimization options
   css-info-plan.md     — Plan for rich CSS info view + lightningcss adoption
+manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
+  book.toml            — mdbook config
+  src/                 — Chapter sources (SUMMARY.md + per-topic .md files)
 .github/workflows/
   release.yml          — Manual-dispatch release workflow (5-target build matrix)
 install.sh             — POSIX installer for curl | sh on macOS/Linux
@@ -282,8 +285,11 @@ Surface the trade-off concretely; propose an alternative.
 Keep these in sync with code changes:
 
 - **README.md** — project overview, feature summary, usage examples
+- **manual/src/** — user-facing manual (mdbook). Update the relevant chapter when a
+  user-visible feature changes
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/features.md** — currently shipped features (✅ + ◐)
+- **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of
+  the manual; manual stays concise
 - **docs/planned.md** — planned features and open ideas (☐ + ❓)
 - **docs/conventions.md** — coding conventions
 - **docs/release.md** — release pipeline and recovery

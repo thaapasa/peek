@@ -1,0 +1,12 @@
+[book]
+title = "peek manual"
+authors = ["Tuukka Haapasalo"]
+description = "User manual for peek — a modern terminal file viewer"
+src = "src"
+language = "en"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/thaapasa/peek"
+edit-url-template = "https://github.com/thaapasa/peek/edit/main/manual/{path}"

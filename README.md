@@ -23,6 +23,19 @@ peek is a **single-file** viewer: it takes one path (or stdin), not a list. Run 
   2026, VS Code Monokai
 - **True color throughout**, with graceful fallback to 256 / 16 / grayscale / plain
 
+## Manual
+
+Full user manual lives in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/).
+Browse the sources directly, or build locally:
+
+```sh
+cargo install mdbook
+mdbook serve manual    # opens http://localhost:3000
+```
+
+The rest of this README is a quick reference. For per-format details, keyboard shortcuts,
+extraction, and the full CLI option list, see the manual.
+
 ## Install
 
 **macOS / Linux (recommended):**
