@@ -361,8 +361,13 @@ Metadata-only Info view (no playback, no waveform). Container + codec params fro
 probe — duration, channel count + layout, sample rate, bit depth, average bitrate — plus tag
 fields from ID3v1/v2 (MP3, AIFF), Vorbis comments (Ogg, FLAC, Opus), MP4 atoms (m4a, m4b), and
 APE: title, artist, album, album-artist, track / disc number, date, genre, composer, comment.
-Embedded lyrics and embedded album art surface as flags so users know they're there even though
-peek doesn't render them yet.
+
+Embedded blobs (`APIC`/FLAC PICTURE/`covr`/`METADATA_BLOCK_PICTURE` album art, `USLT`/`SYLT`/
+`LYRICS=` lyrics) surface as a **TOC view**: `pictures/<usage>.<ext>` per visual (front /
+back / artist / leaflet / …) plus `lyrics/lyrics.txt` when present. Same TAB / `e` flow as
+PDF embeds; `--extract pictures/front_cover.jpg` dumps the cover. Extracted picture bytes
+re-enter the peek pipeline and render as ASCII art; lyrics re-enter as plain text. Dedicated
+"album art preview" and "lyrics read view" modes deferred (see [planned.md](planned.md)).
 
 | Format         | Extensions                  | Status |
 |----------------|-----------------------------|--------|

@@ -555,12 +555,27 @@ impl Registry {
                     // bytes, and the FileInfo warning row surfaces the
                     // decompression error.
                 }
-                FileType::Audio(_) => {
+                FileType::Audio(fmt) => {
                     // Metadata-only view (no playback). Info as primary
                     // so the user lands on tags + codec params; the
                     // universal Info push below dedupes by ModeId so
-                    // it becomes a no-op.
+                    // it becomes a no-op. When the file carries
+                    // embedded pictures or lyrics, push a ListingMode
+                    // so they're browsable + extractable through the
+                    // same TAB / `e` flow as PDF embeds.
                     modes.push(Box::new(InfoMode::new()));
+                    if let Ok(probed) = crate::types::audio::package::probe(source, *fmt) {
+                        let entries = crate::types::audio::package::build_listing(&probed);
+                        if !entries.is_empty() {
+                            let tree = from_flat_paths(entries);
+                            modes.push(Box::new(ListingMode::new(
+                                "Audio",
+                                "Embeds",
+                                tree,
+                                Vec::new(),
+                            )));
+                        }
+                    }
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended

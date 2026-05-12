@@ -7,7 +7,9 @@ use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
+use crate::input::detect::{
+    AudioFormat, ComicFormat, Detected, DocumentFormat, EbookFormat, FileType,
+};
 
 /// Successful extract: fresh `InputSource` + suggested filename.
 #[derive(Debug)]
@@ -100,15 +102,23 @@ pub fn extract(
         }
         FileType::Pdf => crate::types::pdf::extract::extract(source, key),
         FileType::Directory => crate::types::directory::extract::extract(source, key),
+        FileType::Audio(fmt) => audio_extract(source, *fmt, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html
         | FileType::Compressed(_)
-        | FileType::Audio(_)
         | FileType::Binary => Err(ExtractError::Unsupported(
             "this file type has no inner items",
         )),
     }
+}
+
+fn audio_extract(
+    source: &InputSource,
+    fmt: AudioFormat,
+    key: &str,
+) -> Result<Extracted, ExtractError> {
+    crate::types::audio::extract::extract(source, fmt, key)
 }
 
 /// Reject traversal / absolute paths in an untrusted archive/ISO key.
