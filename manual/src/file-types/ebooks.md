@@ -1,7 +1,12 @@
-# EPUB
+# Ebooks
 
-`.epub` files ([EPUB 3](https://www.w3.org/TR/epub-33/) — a ZIP container with HTML chapters +
-OPF metadata) get three views, cycled with Tab:
+| Format | Extension | Spec |
+|--------|-----------|------|
+| EPUB   | `.epub`   | [EPUB 3](https://www.w3.org/TR/epub-33/) — a ZIP container with HTML chapters + OPF metadata |
+
+## EPUB
+
+Three views, cycled with Tab:
 
 - **Read** (default) — one chapter at a time via the shared HTML rendering pipeline (same
   `html2text` driver as the standalone [HTML viewer](./html.md)). `n` / `N` step forward /
@@ -17,3 +22,5 @@ OPF metadata) get three views, cycled with Tab:
 
 Print mode walks every chapter in spine order separated by blank lines, so
 `peek book.epub | less` renders the whole book.
+
+Other ebook containers (MOBI, AZW3, FB2) are not yet supported.

@@ -18,7 +18,7 @@
   - [Structured data](./file-types/structured-data.md)
   - [Documents](./file-types/documents.md)
   - [PDF](./file-types/pdf.md)
-  - [EPUB](./file-types/epub.md)
+  - [Ebooks](./file-types/ebooks.md)
   - [Images](./file-types/images.md)
   - [SVG](./file-types/svg.md)
   - [Audio](./file-types/audio.md)
