@@ -10,15 +10,15 @@
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      |
 | `--theme`        | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)  |
 | `--color`        | `-C`  | Output color encoding — see [Color modes](./viewer/colors.md) |
-| `--language`     | `-l`  | Force syntax language                                         |
-| `--width`        |       | Image rendering width in characters                           |
-| `--image-mode`   |       | Image render mode (full / block / geo / ascii / contour)      |
+| `--language`     | `-L`  | Force syntax language                                         |
+| `--width`        | `-w`  | Image rendering width in characters                           |
+| `--image-mode`   | `-m`  | Image render mode (full / block / geo / ascii / contour)      |
 | `--background`   |       | Image transparency background (auto / none / black / white / checkerboard) |
 | `--margin`       |       | Image margin in transparent pixels                            |
 | `--edge-density` |       | Tune contour line count (image-mode contour)                  |
 | `--no-svg-anim` |       | Force static render for animated SVG                          |
-| `--info`         |       | Print file info and exit                                      |
-| `--list`         |       | Print container TOC to stdout (archives / disks / PDF embeds) |
+| `--info`         | `-i`  | Print file info and exit                                      |
+| `--list`         | `-l`  | Print container TOC to stdout (archives / disks / PDF embeds) |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              |
 | `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           |
 | `--extract`      |       | Extract a single inner item — see [Extraction](./viewer/extraction.md) |

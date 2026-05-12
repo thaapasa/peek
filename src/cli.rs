@@ -35,7 +35,7 @@ pub struct Args {
     #[arg(short = 'V', long = "version")]
     pub version: bool,
 
-    /// Disable syntax highlighting and pretty-printing (plain output)
+    /// Disable syntax highlighting and pretty-printing
     #[arg(short = 'P', long)]
     pub plain: bool,
 
@@ -70,15 +70,15 @@ pub struct Args {
     pub color: theme::StyleMode,
 
     /// Force a specific language for syntax highlighting (skip auto-detection)
-    #[arg(short, long, hide_short_help = true)]
+    #[arg(short = 'L', long, hide_short_help = true)]
     pub language: Option<String>,
 
     /// Image rendering width in characters (0 = auto-fit terminal)
-    #[arg(long, default_value = "0", hide_short_help = true)]
+    #[arg(short = 'w', long, default_value = "0", hide_short_help = true)]
     pub width: u32,
 
     /// Image rendering mode: "full" (all glyphs), "block" (blocks + punctuation), "geo" (blocks + lines only), "ascii" (legacy density ramp), "contour" (Sobel edge line-art)
-    #[arg(long, default_value = "full", value_parser = ["full", "block", "geo", "ascii", "contour"], hide_short_help = true)]
+    #[arg(short = 'm', long, default_value = "full", value_parser = ["full", "block", "geo", "ascii", "contour"], hide_short_help = true)]
     pub image_mode: String,
 
     /// Edge density target for contour mode (fraction of pixels marked as edges, 0.01..0.5)
@@ -98,17 +98,15 @@ pub struct Args {
     pub no_svg_anim: bool,
 
     /// Show file info instead of file contents
-    #[arg(long)]
+    #[arg(short = 'i', long)]
     pub info: bool,
 
-    /// Print the container's table of contents (archive / ISO / EPUB
-    /// spine / DOCX parts / PDF embeds) to stdout. Errors when the
-    /// file type has no listing.
-    #[arg(long)]
+    /// List the contents of a container file
+    #[arg(short = 'l', long)]
     pub list: bool,
 
     /// Show line numbers in text views (toggle in viewer with `l`)
-    #[arg(short = 'n', long = "line-numbers")]
+    #[arg(short = 'n', long = "line-numbers", hide_short_help = true)]
     pub line_numbers: bool,
 
     /// Show timestamps in UTC (ISO 8601 with `Z` suffix) instead of
@@ -120,33 +118,30 @@ pub struct Args {
     #[arg(long, hide_short_help = true)]
     pub update: bool,
 
-    /// Extract a sub-item from a container (animation frame index, archive
-    /// entry path, ISO entry path) instead of viewing the container itself.
-    /// Combines with --print to recursively peek the extracted item, with
-    /// --output to write to a specific path, or — when stdout is piped —
-    /// streams raw bytes.
+    /// Pull a sub-item out of a container by key. Use --list to discover
+    /// available keys.
     #[arg(short = 'x', long, value_name = "KEY")]
     pub extract: Option<String>,
 
     /// Destination for `--extract`. `-` writes raw bytes to stdout. When
     /// omitted, the extractor's suggested filename is used (relative to
     /// the current directory).
-    #[arg(short = 'o', long = "output", value_name = "PATH")]
+    #[arg(
+        short = 'o',
+        long = "output",
+        value_name = "PATH",
+        hide_short_help = true
+    )]
     pub output: Option<PathBuf>,
 
-    /// Pixel size for the longest axis when extracting an SVG frame.
-    /// Vector SVGs declare a tiny intrinsic size by convention; without
-    /// this flag, peek upscales sub-512px SVGs to 512 on the longest
-    /// axis. Use this to force a specific resolution. Ignored for
-    /// non-SVG sources.
+    /// Pixel size for the longest axis when extracting an SVG frame
+    /// (default: upscale sub-512px SVGs to 512). Ignored for non-SVG sources.
     #[arg(long = "extract-size", value_name = "PX", hide_short_help = true)]
     pub extract_size: Option<u32>,
 
-    /// Override the terminal's cell aspect ratio (cell height ÷ cell
-    /// width) used when scaling images. Auto-detected from the
-    /// terminal's reported cell pixel size; pass an explicit value
-    /// (e.g. `2.0`, `2.4`) when detection is wrong or unavailable and
-    /// images render with the wrong aspect.
+    /// Override terminal cell aspect ratio (height ÷ width) for image
+    /// scaling. Auto-detected by default; set explicitly (e.g. `2.0`) when
+    /// detection is wrong.
     #[arg(long = "cell-aspect", value_name = "RATIO", hide_short_help = true)]
     pub cell_aspect: Option<f64>,
 }
