@@ -6,7 +6,9 @@ use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, DocumentFormat, FileType, StructuredFormat};
+use crate::input::detect::{
+    ComicFormat, Detected, DocumentFormat, EbookFormat, FileType, StructuredFormat,
+};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::archive;
 use crate::types::comic::{CbzReadMode, cbz};
@@ -287,7 +289,7 @@ impl Registry {
                     // Pair the rendered view with the HTML source.
                     modes.push(self.text_content_mode(source, file_type, args)?);
                 }
-                FileType::Epub => {
+                FileType::Ebook(EbookFormat::Epub) => {
                     // Read mode (default) + ZIP listing TOC. Info
                     // is appended by the universal tail. If OPF
                     // parsing fails, fall back to listing-only so

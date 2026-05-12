@@ -27,8 +27,10 @@ pub enum FileType {
     Svg,
     /// HTML document (rendered text view via html2text, XML source for raw view)
     Html,
-    /// EPUB e-book (ZIP container with HTML chapters + OPF metadata)
-    Epub,
+    /// E-book (EPUB = ZIP container with HTML chapters + OPF
+    /// metadata). Drives a per-chapter rendered read mode plus the
+    /// container's listing TOC.
+    Ebook(EbookFormat),
     /// Comic-archive (one image per page in a ZIP / RAR / 7z / tar
     /// container). Drives the paged-image read mode.
     Comic(ComicFormat),
@@ -121,6 +123,12 @@ impl ComicFormat {
             Self::Cbz => "Comic Book ZIP",
         }
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EbookFormat {
+    /// EPUB — ZIP container with HTML chapters + OPF metadata.
+    Epub,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -678,7 +686,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "toml" => FileType::Structured(StructuredFormat::Toml),
         "svg" => FileType::Svg,
         "html" | "htm" | "xhtml" => FileType::Html,
-        "epub" => FileType::Epub,
+        "epub" => FileType::Ebook(EbookFormat::Epub),
         "docx" => FileType::Document(DocumentFormat::Docx),
         "rtf" => FileType::Document(DocumentFormat::Rtf),
         "pdf" => FileType::Pdf,
