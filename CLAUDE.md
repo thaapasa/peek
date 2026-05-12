@@ -238,6 +238,7 @@ manual/                — User-facing manual (mdbook). `mdbook serve manual` to
   src/                 — Chapter sources (SUMMARY.md + per-topic .md files)
 .github/workflows/
   release.yml          — Manual-dispatch release workflow (5-target build matrix)
+  manual.yml           — Build + deploy mdbook manual to GitHub Pages on manual/** changes
 install.sh             — POSIX installer for curl | sh on macOS/Linux
 ```
 
