@@ -7,6 +7,7 @@ use crate::theme::{PeekTheme, PeekThemeName, ThemeManager, lerp_color};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
+const MANUAL_URL: &str = "https://thaapasa.github.io/peek/";
 
 pub(crate) const LOGO: &[&str] = &[
     r"                 __  ",
@@ -114,6 +115,10 @@ pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
             writeln!(out, "      {}", pt.paint_muted(&help_text))?;
         }
     }
+    writeln!(out)?;
+
+    writeln!(out, "{}", pt.paint_heading("MANUAL"))?;
+    writeln!(out, "  {}", pt.paint_value(MANUAL_URL))?;
     writeln!(out)?;
 
     if short {
