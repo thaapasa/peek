@@ -21,46 +21,7 @@ use zip::ZipArchive;
 use crate::input::InputSource;
 use crate::types::archive::reader::{ReadSeek, open_seekable};
 use crate::types::document::DocumentMetadata;
-
-/// Owned DOCX representation. No references back to the ZIP; safe to
-/// keep across renders.
-pub(crate) struct Doc {
-    pub metadata: DocumentMetadata,
-    pub blocks: Vec<Block>,
-    pub paragraph_count: usize,
-    pub word_count: usize,
-    pub image_count: usize,
-}
-
-/// One body-level block. Tables flatten to row-of-cell-of-paragraphs.
-pub(crate) enum Block {
-    Paragraph(Paragraph),
-    Table(Vec<Vec<Paragraph>>),
-}
-
-#[derive(Default)]
-pub(crate) struct Paragraph {
-    /// Heading level 1..=6 when the paragraph style id resolves to a
-    /// `Heading{N}` style; `None` for body paragraphs.
-    pub heading_level: Option<u8>,
-    /// List bullet / numbering prefix when the paragraph carries
-    /// `numPr`. Numbering cascade isn't resolved; everything bullets
-    /// as "•". Indent level controls leading whitespace.
-    pub list_marker: Option<String>,
-    /// Indent level for nested lists (0 = top level).
-    pub indent_level: u8,
-    pub runs: Vec<Run>,
-}
-
-#[derive(Default, Clone)]
-pub(crate) struct Run {
-    pub text: String,
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strike: bool,
-    pub color: Option<[u8; 3]>,
-}
+use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
 
 pub(crate) fn open(source: &InputSource) -> Result<Doc> {
     let reader = open_seekable(source).context("failed to open DOCX container")?;
@@ -512,20 +473,6 @@ fn finish_paragraph(ps: ParaState) -> Paragraph {
     }
 }
 
-fn merge_paragraphs(paragraphs: Vec<Paragraph>) -> Paragraph {
-    let mut out = Paragraph::default();
-    for (i, p) in paragraphs.into_iter().enumerate() {
-        if i > 0 && !out.runs.is_empty() {
-            out.runs.push(Run {
-                text: " ".to_string(),
-                ..Run::default()
-            });
-        }
-        out.runs.extend(p.runs);
-    }
-    out
-}
-
 // ---------------------------------------------------------------------------
 // Per-element helpers
 // ---------------------------------------------------------------------------
@@ -591,13 +538,6 @@ fn parse_hex_rgb(s: &str) -> Option<[u8; 3]> {
     let g = u8::from_str_radix(&s[2..4], 16).ok()?;
     let b = u8::from_str_radix(&s[4..6], 16).ok()?;
     Some([r, g, b])
-}
-
-fn count_words(runs: &[Run]) -> usize {
-    runs.iter()
-        .flat_map(|r| r.text.split_whitespace())
-        .filter(|w| !w.is_empty())
-        .count()
 }
 
 // ---------------------------------------------------------------------------

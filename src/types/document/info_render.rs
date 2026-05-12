@@ -11,6 +11,7 @@ pub fn render_section(lines: &mut Vec<String>, stats: &DocumentStats, theme: &Pe
     lines.push(String::new());
     let header = match stats.format {
         crate::input::detect::DocumentFormat::Docx => "DOCX",
+        crate::input::detect::DocumentFormat::Odt => "ODT",
         crate::input::detect::DocumentFormat::Rtf => "RTF",
     };
     push_section_header(lines, header, theme);

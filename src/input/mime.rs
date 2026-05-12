@@ -179,6 +179,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Document(DocumentFormat::Docx) => {
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         }
+        FileType::Document(DocumentFormat::Odt) => "application/vnd.oasis.opendocument.text",
         FileType::Document(DocumentFormat::Rtf) => "application/rtf",
         FileType::Pdf => "application/pdf",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
@@ -253,6 +254,7 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Comic(ComicFormat::Cbz) => &["cbz"],
         FileType::Ebook(EbookFormat::Epub) => &["epub"],
         FileType::Document(DocumentFormat::Docx) => &["docx"],
+        FileType::Document(DocumentFormat::Odt) => &["odt"],
         FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
         FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
         FileType::Compressed(CompressionFormat::Gz) => &["gz", "tgz"],

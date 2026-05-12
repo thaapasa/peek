@@ -249,6 +249,9 @@ fn gather_extras_in_memory(
         FileType::Document(DocumentFormat::Docx) => {
             crate::types::document::docx::info_gather::gather_extras(source)
         }
+        FileType::Document(DocumentFormat::Odt) => {
+            crate::types::document::odt::info_gather::gather_extras(source)
+        }
         FileType::Document(DocumentFormat::Rtf) => {
             crate::types::document::rtf::info_gather::gather_extras(source)
         }
@@ -324,6 +327,11 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         }
         FileType::Document(DocumentFormat::Docx) => {
             crate::types::document::docx::info_gather::gather_extras(&InputSource::File(
+                path.to_path_buf(),
+            ))
+        }
+        FileType::Document(DocumentFormat::Odt) => {
+            crate::types::document::odt::info_gather::gather_extras(&InputSource::File(
                 path.to_path_buf(),
             ))
         }

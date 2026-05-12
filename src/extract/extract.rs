@@ -88,11 +88,13 @@ pub fn extract(
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
         FileType::Ebook(EbookFormat::Epub)
         | FileType::Comic(ComicFormat::Cbz)
-        | FileType::Document(DocumentFormat::Docx) => crate::types::archive::extract::extract(
-            source,
-            crate::input::detect::ArchiveFormat::Zip,
-            key,
-        ),
+        | FileType::Document(DocumentFormat::Docx | DocumentFormat::Odt) => {
+            crate::types::archive::extract::extract(
+                source,
+                crate::input::detect::ArchiveFormat::Zip,
+                key,
+            )
+        }
         FileType::Document(DocumentFormat::Rtf) => {
             crate::types::document::rtf::extract::extract(source, key)
         }
