@@ -1,7 +1,9 @@
 # peek — Feature Specification
 
-Covers what peek currently does (✅ implemented and ◐ partial). For planned and open ideas
-(☐ / ❓), see [planned.md](planned.md).
+Engineering-detail reference for what peek currently does (✅ implemented and ◐ partial). The
+user-facing manual ([`manual/`](../manual/)) covers the same ground in less detail and without
+status markers — update both when a feature changes. For planned and open ideas (☐ / ❓), see
+[planned.md](planned.md).
 
 Status legend: ✅ implemented · ◐ partial
 
