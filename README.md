@@ -25,8 +25,10 @@ peek is a **single-file** viewer: it takes one path (or stdin), not a list. Run 
 
 ## Manual
 
-Full user manual lives in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/).
-Browse the sources directly, or build locally:
+Full user manual: **<https://thaapasa.github.io/peek/>**.
+
+Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/). For
+local preview:
 
 ```sh
 cargo install mdbook
