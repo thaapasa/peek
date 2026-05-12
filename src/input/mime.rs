@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::input::detect::{
-    ArchiveFormat, ComicFormat, DiskImageFormat, DocumentFormat, EbookFormat, FileType,
-    StructuredFormat,
+    ArchiveFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat, EbookFormat,
+    FileType, StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -107,9 +107,10 @@ pub fn mimes_for_path(
     if out.is_empty() {
         // Last-resort fallback so the info view always shows something.
         out.push(MimeInfo::new(match file_type {
-            FileType::Binary | FileType::Archive(_) | FileType::DiskImage(_) => {
-                "application/octet-stream"
-            }
+            FileType::Binary
+            | FileType::Archive(_)
+            | FileType::Compressed(_)
+            | FileType::DiskImage(_) => "application/octet-stream",
             _ => "text/plain",
         }));
     }
@@ -184,9 +185,12 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",
         FileType::Directory => "inode/directory",
-        // For Image, Archive, and Binary, the magic-byte MIME is more
-        // specific than any generic registered fallback would be.
-        FileType::Image | FileType::Archive(_) | FileType::Binary => return None,
+        // For Image, Archive, Compressed, and Binary, the magic-byte
+        // MIME is more specific than any generic registered fallback
+        // would be.
+        FileType::Image | FileType::Archive(_) | FileType::Compressed(_) | FileType::Binary => {
+            return None;
+        }
     })
 }
 
@@ -251,6 +255,11 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Document(DocumentFormat::Docx) => &["docx"],
         FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
         FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
+        FileType::Compressed(CompressionFormat::Gz) => &["gz", "tgz"],
+        FileType::Compressed(CompressionFormat::Bz2) => &["bz2", "tbz", "tbz2"],
+        FileType::Compressed(CompressionFormat::Xz) => &["xz", "txz"],
+        FileType::Compressed(CompressionFormat::Zst) => &["zst", "tzst"],
+        FileType::Compressed(CompressionFormat::Lz4) => &["lz4", "tlz4"],
         _ => &[],
     }
 }

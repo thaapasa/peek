@@ -2,8 +2,8 @@ use std::time::SystemTime;
 
 use syntect::highlighting::Color;
 
-use super::super::FileInfo;
 use super::super::time::format_time;
+use super::super::{CompressionInfo, FileInfo};
 use super::{LABEL_WIDTH, push_field, push_section_header};
 use crate::input::mime::{MimeCategory, MimeInfo};
 use crate::theme::{PeekTheme, lerp_color};
@@ -24,6 +24,11 @@ pub(super) fn render_section(
     push_field(lines, "Path", &paint_path(&info.path, theme), theme);
     push_field(lines, "Size", &paint_size(info.size_bytes, theme), theme);
     push_mime_field(lines, &info.mimes, theme);
+    if let Some(ref comp) = info.compression
+        && comp.error.is_none()
+    {
+        push_field(lines, "Compression", &paint_compression(comp, theme), theme);
+    }
     if let Some(modified) = info.modified {
         push_field(
             lines,
@@ -67,6 +72,23 @@ fn push_mime_field(lines: &mut Vec<String>, mimes: &[MimeInfo], theme: &PeekThem
             lines.push(format!("  {}{}", " ".repeat(LABEL_WIDTH), painted));
         }
     }
+}
+
+/// Paint the Compression row: codec name, compressed → decompressed
+/// size with friendly units, and the compression ratio. Ratio is
+/// `decompressed / compressed` so a typical 4:1 gzip shows as `4.0x`.
+fn paint_compression(comp: &CompressionInfo, theme: &PeekTheme) -> String {
+    let ratio = if comp.compressed_size == 0 {
+        0.0
+    } else {
+        comp.decompressed_size as f64 / comp.compressed_size as f64
+    };
+    let codec = theme.paint(comp.codec_label, theme.heading);
+    let from = theme.paint(&format_size_human(comp.compressed_size), theme.value);
+    let to = theme.paint(&format_size_human(comp.decompressed_size), theme.value);
+    let arrow = theme.paint_muted("→");
+    let ratio_txt = theme.paint_muted(&format!("{ratio:.1}x"));
+    format!("{codec}  {from} {arrow} {to}  {ratio_txt}")
 }
 
 fn paint_mime(info: &MimeInfo, theme: &PeekTheme) -> String {

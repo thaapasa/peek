@@ -44,15 +44,7 @@ pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<E
 }
 
 fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntry>> {
-    use super::backends::{ar, cpio, sevenz, single_stream, tar, zip};
-    // Single-stream codecs short-circuit `open_seekable` — they don't
-    // need the bytes, just the source name to derive the entry label.
-    if matches!(
-        format,
-        ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst
-    ) {
-        return Ok(single_stream::list(source.name(), format));
-    }
+    use super::backends::{ar, cpio, sevenz, tar, zip};
     let reader = open_seekable(source)?;
     match format {
         ArchiveFormat::Zip => zip::list(reader),
@@ -66,9 +58,6 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
         ArchiveFormat::Ar => ar::list(reader),
         ArchiveFormat::Cpio => cpio::list_plain(reader),
         ArchiveFormat::CpioGz => cpio::list_gz(reader),
-        ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
-            unreachable!("single-stream formats handled above")
-        }
     }
 }
 
@@ -170,21 +159,6 @@ mod tests {
     }
 
     #[test]
-    fn single_stream_listing_returns_one_entry_per_codec() {
-        for (file, fmt, expected_name) in [
-            ("single.gz", ArchiveFormat::Gz, "single"),
-            ("single.bz2", ArchiveFormat::Bz2, "single"),
-            ("single.xz", ArchiveFormat::Xz, "single"),
-            ("single.zst", ArchiveFormat::Zst, "single"),
-        ] {
-            let entries = list_entries(&fixture(file), fmt).unwrap();
-            assert_eq!(entries.len(), 1, "{file}: expected one entry");
-            assert_eq!(entries[0].name, expected_name, "{file}: stripped name");
-            assert!(!entries[0].is_dir(), "{file}: not a directory");
-        }
-    }
-
-    #[test]
     fn list_ar_finds_deb_members() {
         // hello.deb is a 3-member ar archive: debian-binary,
         // control.tar.gz, data.tar.gz.
@@ -233,24 +207,6 @@ mod tests {
         ] {
             let src = InputSource::memory(bytes::Bytes::new(), "empty.tar.x");
             let _ = list_entries(&src, fmt);
-        }
-    }
-
-    /// Single-stream `.gz` / `.bz2` / `.xz` / `.zst` listings derive
-    /// the entry name from the source filename without touching the
-    /// stream — empty input must still produce the lone synthetic
-    /// entry instead of hanging on a decode of zero bytes.
-    #[test]
-    fn empty_single_stream_listings_produce_one_entry() {
-        for (name, fmt) in [
-            ("empty.gz", ArchiveFormat::Gz),
-            ("empty.bz2", ArchiveFormat::Bz2),
-            ("empty.xz", ArchiveFormat::Xz),
-            ("empty.zst", ArchiveFormat::Zst),
-        ] {
-            let src = InputSource::memory(bytes::Bytes::new(), name);
-            let entries = list_entries(&src, fmt).unwrap();
-            assert_eq!(entries.len(), 1, "{name}: one synthetic entry");
         }
     }
 }

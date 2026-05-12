@@ -31,7 +31,8 @@ src/
     mod.rs             — re-exports InputSource, ByteSource, LineSource
     source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource
     lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
-    detect.rs          — File-type detection (extension + magic bytes + stdin sniffing)
+    detect.rs          — File-type detection (extension + magic bytes + stdin sniffing). FileType::Compressed(CompressionFormat) splits bare wrappers out of ArchiveFormat
+    compression.rs     — decompress_bytes (5 codecs: gz/bz2/xz/zst/lz4) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   extract/
     mod.rs             — Module declarations + re-exports (Extracted, ExtractOptions, ExtractError, extract, sanitize_entry_path)
@@ -161,7 +162,7 @@ src/
       mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
       info.rs          — gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
-      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]
+      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]. decompress_tar() delegates codec dispatch to crate::input::compression::decompress_bytes
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>

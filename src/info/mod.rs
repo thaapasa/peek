@@ -27,7 +27,28 @@ pub struct FileInfo {
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
     pub permissions: Option<String>,
+    /// Set when the rendered source is the inner content of a
+    /// transparently-decompressed bare single-stream wrapper
+    /// (`.gz` / `.bz2` / `.xz` / `.zst` / `.lz4`). Drives a
+    /// Compression row in the File section.
+    pub compression: Option<CompressionInfo>,
     pub extras: FileExtras,
+}
+
+/// Snapshot of a transparent decompression for the info view.
+pub struct CompressionInfo {
+    /// Short codec label (`gzip` / `bzip2` / `xz` / `zstd` / `lz4`).
+    pub codec_label: &'static str,
+    pub compressed_size: u64,
+    pub decompressed_size: u64,
+    /// Outer (compressed) filename so the info view can still surface
+    /// it even though the visible source is the inner decompressed
+    /// memory buffer.
+    pub outer_name: String,
+    /// Decompression error — when present, indicates the viewer is
+    /// rendering the raw compressed bytes (Hex fallback) and this
+    /// string explains why.
+    pub error: Option<String>,
 }
 
 /// Type-specific metadata.

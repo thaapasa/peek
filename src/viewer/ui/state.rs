@@ -495,6 +495,10 @@ impl ViewerState {
                 return Ok(());
             }
         };
+        // Apply transparent decompression so descending into an
+        // extracted `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` lands
+        // straight on the inner content.
+        let (source, detected) = crate::input::compression::resolve_transparent(source, detected);
         let modes = match (self.mode_builder)(&source, &detected) {
             Ok(m) => m,
             Err(e) => {
@@ -712,11 +716,16 @@ impl ViewerState {
                 }
             }
         };
-        let source_clone = self.frame().source.clone();
+        // Re-detect-on-magic may surface a bare codec the name hid —
+        // resolve transparently so the rebuilt frame renders the
+        // decompressed inner content.
+        let (source_clone, retried) =
+            crate::input::compression::resolve_transparent(self.frame().source.clone(), retried);
         let modes = (self.mode_builder)(&source_clone, &retried)?;
         let file_info = crate::info::gather(&source_clone, &retried)?;
         let n = modes.len();
         let frame = self.frame_mut();
+        frame.source = source_clone;
         frame.detected = retried;
         frame.file_info = file_info;
         frame.modes = modes;

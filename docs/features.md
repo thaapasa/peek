@@ -383,6 +383,26 @@ serves disk-image listings, so the behavior matches there too. Capped to one thi
 height, suppressed when scroll is at the top or the top row is a top-level entry. Toggle with `s`;
 when off the status bar shows `sticky off`.
 
+#### Single-stream Compression ✅
+
+Bare single-stream codec wrappers decompress transparently — peek opens straight to the inner
+content (rendered as whatever it actually is: source, JSON, image, etc.), and the info view
+adds a Compression row showing the codec and the size before / after decompression. No TOC
+detour. Decompression failures fall back to a Hex view of the raw compressed bytes plus a
+warning row in info.
+
+| Format | Extensions          | Status |
+|--------|---------------------|--------|
+| gzip   | `.gz`               | ✅      |
+| bzip2  | `.bz2`              | ✅      |
+| xz     | `.xz`               | ✅      |
+| zstd   | `.zst`              | ✅      |
+| lz4    | `.lz4`              | ✅      |
+| brotli | `.br`               | ☐ planned |
+
+Decompressed output is capped at 256 MiB. Anything larger surfaces a warning and the viewer
+shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
+
 #### Disk Images ✅
 
 | Format | Extensions | Status                                                  |

@@ -99,6 +99,17 @@ fn run_view(
     detected: &input::detect::Detected,
     args: &Args,
 ) -> Result<()> {
+    // Transparent single-stream decompression: bare `.gz` / `.bz2` /
+    // `.xz` / `.zst` / `.lz4` resolve to their inner content at this
+    // boundary so every downstream path (info, list, interactive,
+    // pipe, extract) operates on the decompressed bytes. On
+    // decompression failure the original compressed source survives
+    // and downstream falls back to Hex + Info plus a warning row.
+    let (source_owned, detected_owned) =
+        input::compression::resolve_transparent(source.clone(), detected.clone());
+    let source = &source_owned;
+    let detected = &detected_owned;
+
     let interactive = !args.print && std::io::stdout().is_terminal();
 
     let viewers = viewer::Registry::new(args)?;

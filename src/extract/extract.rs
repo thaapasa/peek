@@ -101,6 +101,7 @@ pub fn extract(
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html
+        | FileType::Compressed(_)
         | FileType::Binary => Err(ExtractError::Unsupported(
             "this file type has no inner items",
         )),

@@ -26,12 +26,6 @@ pub fn extract(
     format: ArchiveFormat,
     key: &str,
 ) -> Result<Extracted, ExtractError> {
-    // Single-stream codecs accept the listing's lone entry name as
-    // the key and decompress the whole stream into memory — there's
-    // nothing inside to look up by path.
-    if let Some(comp) = single_stream_compression(format) {
-        return extract_single_stream(source, key, comp);
-    }
     let target = sanitize_entry_path(key)?;
     match format {
         ArchiveFormat::Zip => extract_zip(source, &target, key),
@@ -45,19 +39,6 @@ pub fn extract(
         ArchiveFormat::Ar => extract_ar(source, &target, key),
         ArchiveFormat::Cpio => extract_cpio(source, &target, key, CpioCompression::None),
         ArchiveFormat::CpioGz => extract_cpio(source, &target, key, CpioCompression::Gz),
-        ArchiveFormat::Gz | ArchiveFormat::Bz2 | ArchiveFormat::Xz | ArchiveFormat::Zst => {
-            unreachable!("single-stream formats handled above")
-        }
-    }
-}
-
-fn single_stream_compression(format: ArchiveFormat) -> Option<TarCompression> {
-    match format {
-        ArchiveFormat::Gz => Some(TarCompression::Gz),
-        ArchiveFormat::Bz2 => Some(TarCompression::Bz2),
-        ArchiveFormat::Xz => Some(TarCompression::Xz),
-        ArchiveFormat::Zst => Some(TarCompression::Zst),
-        _ => None,
     }
 }
 
@@ -92,33 +73,6 @@ fn extract_cpio(
         Some(buf) => Ok(in_memory_extract(target, buf)),
         None => Err(ExtractError::NotFound(raw_key.to_string())),
     }
-}
-
-fn extract_single_stream(
-    source: &InputSource,
-    key: &str,
-    compression: TarCompression,
-) -> Result<Extracted, ExtractError> {
-    let raw = source.read_bytes().map_err(ExtractError::Other)?;
-    let decompressed = decompress_tar(&raw, compression)?;
-    if decompressed.len() as u64 > MAX_EXTRACT_BYTES {
-        return Err(ExtractError::Other(anyhow::anyhow!(
-            "decompressed stream is {} bytes; cap is {MAX_EXTRACT_BYTES} bytes",
-            decompressed.len()
-        )));
-    }
-    // The listing reports a single entry whose name is already the
-    // suggested filename — accept it as the key and use it verbatim
-    // as the suggested output name.
-    let suggested_name = if key.is_empty() {
-        "decompressed".to_string()
-    } else {
-        key.to_string()
-    };
-    Ok(Extracted {
-        source: InputSource::memory(Bytes::from(decompressed), suggested_name.clone()),
-        suggested_name,
-    })
 }
 
 fn extract_zip(
@@ -212,43 +166,22 @@ fn extract_tar(
     Err(ExtractError::NotFound(raw_key.to_string()))
 }
 
+/// Decompress a compressed tar payload. Delegates codec dispatch to
+/// [`crate::input::compression::decompress_bytes`] so the same five
+/// codec implementations cover both transparent single-stream
+/// decompression and tar extraction.
 fn decompress_tar(raw: &[u8], compression: TarCompression) -> Result<Vec<u8>, ExtractError> {
-    match compression {
-        TarCompression::None => Ok(raw.to_vec()),
-        TarCompression::Gz => {
-            let mut out = Vec::new();
-            flate2::read::GzDecoder::new(raw)
-                .read_to_end(&mut out)
-                .map_err(|e| ExtractError::Other(e.into()))?;
-            Ok(out)
-        }
-        TarCompression::Bz2 => {
-            let mut out = Vec::new();
-            bzip2::read::BzDecoder::new(raw)
-                .read_to_end(&mut out)
-                .map_err(|e| ExtractError::Other(e.into()))?;
-            Ok(out)
-        }
-        TarCompression::Xz => {
-            let mut out = Vec::new();
-            let mut input = std::io::BufReader::new(raw);
-            lzma_rs::xz_decompress(&mut input, &mut out)
-                .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e:?}")))?;
-            Ok(out)
-        }
-        TarCompression::Zst => {
-            let mut out = Vec::new();
-            zstd::stream::copy_decode(raw, &mut out).map_err(|e| ExtractError::Other(e.into()))?;
-            Ok(out)
-        }
-        TarCompression::Lz4 => {
-            let mut out = Vec::new();
-            lz4_flex::frame::FrameDecoder::new(raw)
-                .read_to_end(&mut out)
-                .map_err(|e| ExtractError::Other(e.into()))?;
-            Ok(out)
-        }
-    }
+    use crate::input::compression::decompress_bytes;
+    use crate::input::detect::CompressionFormat;
+    let fmt = match compression {
+        TarCompression::None => return Ok(raw.to_vec()),
+        TarCompression::Gz => CompressionFormat::Gz,
+        TarCompression::Bz2 => CompressionFormat::Bz2,
+        TarCompression::Xz => CompressionFormat::Xz,
+        TarCompression::Zst => CompressionFormat::Zst,
+        TarCompression::Lz4 => CompressionFormat::Lz4,
+    };
+    decompress_bytes(raw, fmt).map_err(ExtractError::Other)
 }
 
 fn extract_7z(
@@ -393,21 +326,6 @@ mod tests {
     const STABLE_ENTRY: &str = "fibonacci.py";
 
     #[test]
-    fn single_stream_extract_decompresses_each_codec() {
-        for (file, fmt) in [
-            ("single.gz", ArchiveFormat::Gz),
-            ("single.bz2", ArchiveFormat::Bz2),
-            ("single.xz", ArchiveFormat::Xz),
-            ("single.zst", ArchiveFormat::Zst),
-        ] {
-            let extracted = extract(&fixture(file), fmt, "single").expect("single-stream extract");
-            assert_eq!(extracted.suggested_name, "single");
-            let bytes = extracted.source.read_bytes().unwrap();
-            assert_eq!(bytes, b"hello peek single-stream test\n");
-        }
-    }
-
-    #[test]
     fn extract_zip_returns_known_entry() {
         let extracted = extract(&fixture("archive.zip"), ArchiveFormat::Zip, STABLE_ENTRY)
             .expect("zip extract");
@@ -499,22 +417,5 @@ mod tests {
         let src = InputSource::memory(bytes::Bytes::new(), "empty.tar");
         let err = extract(&src, ArchiveFormat::Tar, "anything").unwrap_err();
         assert!(matches!(err, ExtractError::NotFound(_)));
-    }
-
-    /// Single-stream extract on empty input must surface a clean
-    /// error — codec-level decode failure — instead of looping in
-    /// the decoder.
-    #[test]
-    fn extract_empty_single_stream_errors_cleanly() {
-        for (name, fmt) in [
-            ("empty.gz", ArchiveFormat::Gz),
-            ("empty.bz2", ArchiveFormat::Bz2),
-            ("empty.xz", ArchiveFormat::Xz),
-            ("empty.zst", ArchiveFormat::Zst),
-        ] {
-            let src = InputSource::memory(bytes::Bytes::new(), name);
-            let res = extract(&src, fmt, "decompressed");
-            assert!(res.is_err(), "{name}: decode of empty bytes must error");
-        }
     }
 }

@@ -272,7 +272,10 @@ impl Registry {
                 )));
             } else if !matches!(
                 file_type,
-                FileType::Binary | FileType::Archive(_) | FileType::DiskImage(_)
+                FileType::Binary
+                    | FileType::Archive(_)
+                    | FileType::Compressed(_)
+                    | FileType::DiskImage(_)
             ) {
                 modes.push(self.text_content_mode(source, file_type, args)?);
             }
@@ -533,6 +536,15 @@ impl Registry {
                         warnings,
                         show_parent,
                     )));
+                }
+                FileType::Compressed(_) => {
+                    // Bare-codec streams resolve to their inner content
+                    // upstream via `compression::resolve_transparent`,
+                    // so reaching this arm means decompression failed.
+                    // Push nothing file-type-specific — the universal
+                    // Hex + Info tail below renders the raw compressed
+                    // bytes, and the FileInfo warning row surfaces the
+                    // decompression error.
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended

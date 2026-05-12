@@ -17,9 +17,11 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::{FileExtras, FileInfo, format_permissions_from_meta};
+use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
+use crate::input::detect::{
+    ComicFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
+};
 use crate::input::mime;
 
 #[cfg(test)]
@@ -116,6 +118,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
 
     let permissions = format_permissions_from_meta(&meta);
     let extras = gather_extras(path, &detected.file_type, detected.magic_mime.as_deref());
+    let compression = build_compression_info(detected, meta.len());
 
     Ok(FileInfo {
         file_name,
@@ -126,6 +129,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
         modified: meta.modified().ok(),
         created: meta.created().ok(),
         permissions,
+        compression,
         extras,
     })
 }
@@ -136,22 +140,49 @@ fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
     let extras =
         gather_extras_in_memory(source, &detected.file_type, detected.magic_mime.as_deref());
     let size = source.open_byte_source().map(|bs| bs.len()).unwrap_or(0);
-    let display = source.name().to_string();
+    let compression = build_compression_info(detected, size);
+
+    // When the source is the inner content of a transparently-
+    // decompressed wrapper, show the outer (compressed) name + size
+    // in the Name/Path/Size rows — that's the file the user typed.
+    // The Compression row separately surfaces the decompressed size.
+    let (display, file_size) = match &compression {
+        Some(c) if c.error.is_none() => (c.outer_name.clone(), c.compressed_size),
+        _ => (source.name().to_string(), size),
+    };
 
     FileInfo {
         file_name: display.clone(),
         path: display,
-        size_bytes: size,
+        size_bytes: file_size,
         mimes,
         warnings,
         modified: None,
         created: None,
         permissions: None,
+        compression,
         extras,
     }
 }
 
-/// Build the warnings list. Currently: extension-mismatch only.
+/// Build the Compression info row from `Detected.decompressed_from`,
+/// when present. `decompressed_size` is the rendered (inner) source's
+/// size — for the success path that's the in-memory decompressed bytes;
+/// for the failure path it's the raw compressed bytes (same as
+/// `compressed_size`), since the viewer is showing those directly.
+fn build_compression_info(detected: &Detected, decompressed_size: u64) -> Option<CompressionInfo> {
+    let ctx: &DecompressionContext = detected.decompressed_from.as_ref()?;
+    Some(CompressionInfo {
+        codec_label: ctx.codec.codec_label(),
+        compressed_size: ctx.compressed_size,
+        decompressed_size,
+        outer_name: ctx.outer_name.clone(),
+        error: ctx.error.clone(),
+    })
+}
+
+/// Build the warnings list. Sources today: extension-mismatch +
+/// decompression failure on a bare-codec source.
 fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
     let mut warnings = Vec::new();
     if let Some(ext) = mime::extension_from_name(name)
@@ -159,6 +190,14 @@ fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
             mime::extension_mismatch(&ext, detected.magic_mime.as_deref(), &detected.file_type)
     {
         warnings.push(w);
+    }
+    if let Some(ctx) = &detected.decompressed_from
+        && let Some(err) = &ctx.error
+    {
+        warnings.push(format!(
+            "decompression failed ({}): {err}",
+            ctx.codec.codec_label()
+        ));
     }
     warnings
 }
@@ -216,6 +255,7 @@ fn gather_extras_in_memory(
         FileType::Pdf => crate::types::pdf::info_gather::gather_extras(source),
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
+        FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),
         FileType::DiskImage(fmt) => {
             crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
@@ -299,6 +339,7 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             &InputSource::File(path.to_path_buf()),
             *fmt,
         ),
+        FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),
         FileType::Directory => crate::types::directory::info::gather_extras(path),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }

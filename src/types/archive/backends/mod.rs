@@ -5,6 +5,5 @@
 pub(super) mod ar;
 pub(super) mod cpio;
 pub(super) mod sevenz;
-pub(super) mod single_stream;
 pub(super) mod tar;
 pub(super) mod zip;

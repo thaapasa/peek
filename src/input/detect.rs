@@ -44,6 +44,11 @@ pub enum FileType {
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
+    /// Bare single-stream compressed file (`.gz` / `.bz2` / `.xz` /
+    /// `.zst` / `.lz4`). Transparently decompressed by `compose_modes`
+    /// — the user sees the inner content rendered as its real type,
+    /// and the info section surfaces a Compression row.
+    Compressed(CompressionFormat),
     /// Disk image (ISO / DMG / etc). Drives a metadata-only info view —
     /// volume descriptor / trailer parsing, no filesystem walk.
     DiskImage(DiskImageFormat),
@@ -81,15 +86,6 @@ pub enum ArchiveFormat {
     /// Unix `ar(1)` archive — used by `.deb` packages (Debian binary
     /// package layout: `debian-binary`, `control.tar.*`, `data.tar.*`).
     Ar,
-    /// Bare gzip stream (`.gz`). Treated as a one-entry archive so
-    /// the listing / descend / extract pipeline lights up for it.
-    Gz,
-    /// Bare bzip2 stream (`.bz2`).
-    Bz2,
-    /// Bare xz / LZMA2 stream (`.xz`).
-    Xz,
-    /// Bare zstd stream (`.zst`).
-    Zst,
     /// tar + lz4 frame (`.tar.lz4`).
     TarLz4,
     /// cpio archive (newc `070701` / `070702` or ODC `070707`).
@@ -112,10 +108,49 @@ impl ArchiveFormat {
             Self::Ar => "ar archive",
             Self::Cpio => "cpio archive",
             Self::CpioGz => "cpio + gzip",
-            Self::Gz => "gzip stream",
-            Self::Bz2 => "bzip2 stream",
-            Self::Xz => "xz stream",
-            Self::Zst => "zstd stream",
+        }
+    }
+}
+
+/// Bare single-stream compression codec. Detected when the file has
+/// only one of these as its outer wrapper (e.g. `notes.txt.gz`); the
+/// viewer transparently decompresses and renders the inner content as
+/// whatever it actually is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompressionFormat {
+    /// gzip stream (`.gz`).
+    Gz,
+    /// bzip2 stream (`.bz2`).
+    Bz2,
+    /// xz / LZMA2 stream (`.xz`).
+    Xz,
+    /// zstd stream (`.zst`).
+    Zst,
+    /// lz4 frame stream (`.lz4`).
+    Lz4,
+}
+
+impl CompressionFormat {
+    /// Short codec name for the info-section Compression row.
+    pub fn codec_label(self) -> &'static str {
+        match self {
+            Self::Gz => "gzip",
+            Self::Bz2 => "bzip2",
+            Self::Xz => "xz",
+            Self::Zst => "zstd",
+            Self::Lz4 => "lz4",
+        }
+    }
+
+    /// Lowercased filename suffix used for name-strip when building the
+    /// in-memory decompressed source's name.
+    pub fn suffix(self) -> &'static str {
+        match self {
+            Self::Gz => ".gz",
+            Self::Bz2 => ".bz2",
+            Self::Xz => ".xz",
+            Self::Zst => ".zst",
+            Self::Lz4 => ".lz4",
         }
     }
 }
@@ -189,6 +224,42 @@ pub struct Detected {
     /// file's leading bytes don't match any format `infer` recognizes
     /// (true for plain-text source code, structured text files, etc.).
     pub magic_mime: Option<String>,
+    /// Set when this `Detected` describes the inner content of a
+    /// transparently-decompressed bare-codec source. Set by
+    /// `compose_modes` after a successful decompression so the info
+    /// view can render a Compression row; carries the failure reason
+    /// when decompression bombed (Hex fallback path).
+    pub decompressed_from: Option<DecompressionContext>,
+}
+
+/// Metadata about the compressed outer source that produced an inner
+/// `Detected`. Threaded through `Detected.decompressed_from`.
+#[derive(Debug, Clone)]
+pub struct DecompressionContext {
+    pub codec: CompressionFormat,
+    /// Compressed size of the outer stream (file size, or length of
+    /// the stdin buffer).
+    pub compressed_size: u64,
+    /// Outer file name (`notes.txt.gz`). The inner Memory source's
+    /// name is the suffix-stripped form.
+    pub outer_name: String,
+    /// Decompression error when the codec couldn't materialise inner
+    /// bytes — viewer falls back to Hex view on the raw compressed
+    /// source and Info surfaces this string as a warning.
+    pub error: Option<String>,
+}
+
+impl Detected {
+    /// Build a `Detected` for non-decompressed sources. The
+    /// `decompressed_from` field defaults to `None`; only
+    /// `compose_modes` sets it (after a transparent decompression).
+    pub fn new(file_type: FileType, magic_mime: Option<String>) -> Self {
+        Self {
+            file_type,
+            magic_mime,
+            decompressed_from: None,
+        }
+    }
 }
 
 /// Detect the file type of an input source.
@@ -237,10 +308,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
     // Directories get their own one-level listing viewer; everything
     // below assumes a regular file we can read bytes from.
     if path.is_dir() {
-        return Ok(Detected {
-            file_type: FileType::Directory,
-            magic_mime: None,
-        });
+        return Ok(Detected::new(FileType::Directory, None));
     }
 
     // Read just the head for magic-byte detection — `infer` only inspects
@@ -261,20 +329,17 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
         && let Some(name) = path.file_name().and_then(|n| n.to_str())
         && let Some(file_type) = classify_by_name(name)
     {
-        return Ok(Detected {
-            file_type: upgrade_disk_image_path(file_type, path),
-            magic_mime: head_magic,
-        });
+        return Ok(Detected::new(
+            upgrade_disk_image_path(file_type, path),
+            head_magic,
+        ));
     }
 
     let magic_mime = head_magic;
     if let Some(ref mime) = magic_mime
         && let Some(file_type) = file_type_from_magic_mime(mime)
     {
-        return Ok(Detected {
-            file_type,
-            magic_mime,
-        });
+        return Ok(Detected::new(file_type, magic_mime));
     }
 
     // Content-sniff the head (cheap, ASCII-pattern based) BEFORE
@@ -288,17 +353,14 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
     // Stream the file body to check for non-UTF-8 content. Reuses the head
     // buffer as the first chunk so we don't read it twice.
     if !is_utf8_streaming(head, &mut file)? {
-        return Ok(Detected {
-            file_type: FileType::Binary,
-            magic_mime,
-        });
+        return Ok(Detected::new(FileType::Binary, magic_mime));
     }
 
     if let Some((file_type, content_mime)) = sniffed {
-        return Ok(Detected {
+        return Ok(Detected::new(
             file_type,
-            magic_mime: magic_mime.or_else(|| Some(content_mime.to_string())),
-        });
+            magic_mime.or_else(|| Some(content_mime.to_string())),
+        ));
     }
 
     // It's a text file — use extension as syntax hint (unless we're
@@ -311,10 +373,7 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
             .map(|s| s.to_lowercase())
     };
 
-    Ok(Detected {
-        file_type: FileType::SourceCode { syntax },
-        magic_mime,
-    })
+    Ok(Detected::new(FileType::SourceCode { syntax }, magic_mime))
 }
 
 /// Magic-byte MIME for a file head. Combines the explicit AR / RTF /
@@ -338,6 +397,9 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
             || &head[..6] == CPIO_ODC_MAGIC)
     {
         return Some("application/x-cpio".to_string());
+    }
+    if head.len() >= 4 && &head[..4] == LZ4_FRAME_MAGIC {
+        return Some("application/x-lz4".to_string());
     }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
@@ -366,9 +428,11 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if let Some(fmt) = archive_format_from_mime(mime) {
         return Some(FileType::Archive(fmt));
     }
+    if let Some(fmt) = compression_format_from_mime(mime) {
+        return Some(FileType::Compressed(fmt));
+    }
     if mime.starts_with("video/")
         || mime.starts_with("audio/")
-        || mime.starts_with("application/gzip")
         || mime.starts_with("application/x-executable")
     {
         return Some(FileType::Binary);
@@ -488,20 +552,30 @@ fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
     if lower.ends_with(".deb") || lower.ends_with(".ar") || lower.ends_with(".a") {
         return Some(ArchiveFormat::Ar);
     }
-    // Bare single-stream codec extensions. Order matters: the
-    // tar.* variants above already matched and returned before any
-    // file with a `.tar.gz` etc. name reaches this point.
+    None
+}
+
+/// Match a filename against bare single-stream compression
+/// extensions. Returns `None` for non-compression names. The caller
+/// (`classify_by_name`) checks `archive_format_from_name` first so
+/// double-extensions like `.tar.gz` route to `ArchiveFormat::TarGz`
+/// before bare `.gz` is considered.
+fn compression_format_from_name(name: &str) -> Option<CompressionFormat> {
+    let lower = name.to_ascii_lowercase();
     if lower.ends_with(".gz") {
-        return Some(ArchiveFormat::Gz);
+        return Some(CompressionFormat::Gz);
     }
     if lower.ends_with(".bz2") {
-        return Some(ArchiveFormat::Bz2);
+        return Some(CompressionFormat::Bz2);
     }
     if lower.ends_with(".xz") {
-        return Some(ArchiveFormat::Xz);
+        return Some(CompressionFormat::Xz);
     }
     if lower.ends_with(".zst") {
-        return Some(ArchiveFormat::Zst);
+        return Some(CompressionFormat::Zst);
+    }
+    if lower.ends_with(".lz4") {
+        return Some(CompressionFormat::Lz4);
     }
     None
 }
@@ -543,20 +617,26 @@ fn probe_iso_or_raw(path: &Path) -> Option<DiskImageFormat> {
     }
 }
 
-/// Map an `infer` magic-byte MIME to an archive format. The compressed
-/// single-stream variants (gzip / bzip2 / xz / zstd) treat the file as
-/// a one-entry archive, so the listing / extract pipeline gives the
-/// user a path into the decompressed content.
+/// Map an `infer` magic-byte MIME to a multi-entry archive format.
+/// Bare single-stream codecs live in [`compression_format_from_mime`].
 fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
     match mime {
         "application/zip" => Some(ArchiveFormat::Zip),
         "application/x-tar" => Some(ArchiveFormat::Tar),
         "application/x-cpio" => Some(ArchiveFormat::Cpio),
         "application/x-7z-compressed" => Some(ArchiveFormat::SevenZ),
-        "application/gzip" | "application/x-gzip" => Some(ArchiveFormat::Gz),
-        "application/x-bzip2" | "application/x-bzip" => Some(ArchiveFormat::Bz2),
-        "application/x-xz" => Some(ArchiveFormat::Xz),
-        "application/zstd" | "application/x-zstd" => Some(ArchiveFormat::Zst),
+        _ => None,
+    }
+}
+
+/// Map an `infer` magic-byte MIME to a single-stream compression codec.
+fn compression_format_from_mime(mime: &str) -> Option<CompressionFormat> {
+    match mime {
+        "application/gzip" | "application/x-gzip" => Some(CompressionFormat::Gz),
+        "application/x-bzip2" | "application/x-bzip" => Some(CompressionFormat::Bz2),
+        "application/x-xz" => Some(CompressionFormat::Xz),
+        "application/zstd" | "application/x-zstd" => Some(CompressionFormat::Zst),
+        "application/x-lz4" => Some(CompressionFormat::Lz4),
         _ => None,
     }
 }
@@ -585,6 +665,11 @@ const CPIO_NEWC_MAGIC: &[u8; 6] = b"070701";
 const CPIO_CRC_MAGIC: &[u8; 6] = b"070702";
 /// cpio "ODC" / POSIX portable header magic (76-byte ASCII header).
 const CPIO_ODC_MAGIC: &[u8; 6] = b"070707";
+
+/// LZ4 frame format magic (little-endian `0x184D2204`). `infer` knows
+/// this on some versions but not all; explicit check keeps stdin-piped
+/// `.lz4` reliable across infer versions.
+const LZ4_FRAME_MAGIC: &[u8; 4] = &[0x04, 0x22, 0x4D, 0x18];
 
 /// Inspect a UTF-8 text buffer for a recognisable structured /
 /// markup format. Returns the detected `FileType` plus a canonical
@@ -640,32 +725,23 @@ fn detect_bytes(data: &[u8]) -> Detected {
     if let Some(ref mime) = magic_mime
         && let Some(file_type) = file_type_from_magic_mime(mime)
     {
-        return Detected {
-            file_type,
-            magic_mime,
-        };
+        return Detected::new(file_type, magic_mime);
     }
 
     // Non-UTF-8 → binary
     let Ok(text) = std::str::from_utf8(data) else {
-        return Detected {
-            file_type: FileType::Binary,
-            magic_mime,
-        };
+        return Detected::new(FileType::Binary, magic_mime);
     };
 
     if let Some((file_type, content_mime)) = sniff_text_content(text) {
-        return Detected {
+        return Detected::new(
             file_type,
-            magic_mime: magic_mime.or_else(|| Some(content_mime.to_string())),
-        };
+            magic_mime.or_else(|| Some(content_mime.to_string())),
+        );
     }
 
     // Plain text — `--language` can still pin a syntax for highlighting.
-    Detected {
-        file_type: FileType::SourceCode { syntax: None },
-        magic_mime,
-    }
+    Detected::new(FileType::SourceCode { syntax: None }, magic_mime)
 }
 
 /// Detect from a byte buffer with an optional source name. The name is
@@ -681,10 +757,10 @@ fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
     if let Some(name) = name
         && let Some(file_type) = classify_by_name(name)
     {
-        return Detected {
-            file_type: upgrade_disk_image_bytes(file_type, data),
-            magic_mime: head_magic_mime(data),
-        };
+        return Detected::new(
+            upgrade_disk_image_bytes(file_type, data),
+            head_magic_mime(data),
+        );
     }
     let mut detected = detect_bytes(data);
     if let FileType::SourceCode { syntax: None } = &detected.file_type
@@ -702,8 +778,14 @@ fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
 /// `upgrade_disk_image_bytes` to upgrade to `Iso` when the body
 /// carries the ISO 9660 PVD.
 fn classify_by_name(name: &str) -> Option<FileType> {
+    // Multi-entry containers (zip / tar / 7z / cpio / their compressed
+    // tarballs) take precedence — double-extensions like `.tar.gz`
+    // must classify as `ArchiveFormat::TarGz`, not bare `Compressed::Gz`.
     if let Some(fmt) = archive_format_from_name(name) {
         return Some(FileType::Archive(fmt));
+    }
+    if let Some(fmt) = compression_format_from_name(name) {
+        return Some(FileType::Compressed(fmt));
     }
     let ext = mime::extension_from_name(name)?;
     if let Some(fmt) = comic_format_from_ext(&ext) {

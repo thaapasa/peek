@@ -1,3 +1,4 @@
+pub mod compression;
 pub mod detect;
 pub mod lines;
 pub mod mime;
