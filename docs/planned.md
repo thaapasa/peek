@@ -420,3 +420,37 @@ structural metadata. Folding would require:
 
 Indentation-based folding for structured data (JSON/YAML) would be the most practical starting
 point — pretty-printed output has reliable indentation levels.
+
+### Type-support plugin trait ❓
+
+Follow-up to the types-colocation refactor — see
+[refactor-types-colocation-plan.md](refactor-types-colocation-plan.md) for the underlying
+restructuring.
+
+Once every file type owns its `format.rs`, `detect.rs`, `info.rs`, and `compose.rs`, the central
+dispatch sites (`Registry::compose_modes` match, `input/detect.rs::DETECTORS` list, `info::render`
+match) could collapse into trait-dispatch loops:
+
+```rust
+trait TypeSupport {
+    fn matches(&self, detected: &Detected) -> bool;
+    fn compose(&self, ctx: &ComposeCtx, modes: &mut Vec<Box<dyn Mode>>) -> Result<()>;
+    fn detect_by_extension(&self, ext: &str) -> Option<FileType>;
+    fn detect_by_magic(&self, head: &[u8]) -> Option<FileType>;
+    fn render_info(&self, extras: &FileExtras, theme: &PeekTheme, opts: RenderOptions) -> Vec<String>;
+}
+
+fn all_types() -> Vec<Box<dyn TypeSupport>> { /* one entry per type */ }
+```
+
+Adding a new type becomes one new directory plus one line in `all_types()`.
+
+**Trade-off:** loses the single-file dispatch overview. Today, opening `viewer/mod.rs` shows every
+file type's compose strategy at a glance; with trait dispatch, the reader follows a `Vec` to an
+implementation. IDEs handle the jump fine, but losing the "scan the whole match in one screen"
+property is real.
+
+**Recommendation:** revisit only if the number of file types grows past the point where the
+central matches stop fitting on one screen, or if external plugins (loading a `TypeSupport` from a
+dynamic library) become a goal. Until then, the hard-coded matches established by the colocation
+refactor are easier to read and modify.

@@ -233,6 +233,7 @@ docs/                  — Builder / agent reference (architecture, conventions,
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
   svg-anim-perf.md     — SVG animation memory profile + optimization options
   css-info-plan.md     — Plan for rich CSS info view + lightningcss adoption
+  refactor-types-colocation-plan.md — Plan for tightening input / display / type-support split
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
   book.toml            — mdbook config
   src/                 — Chapter sources (SUMMARY.md + per-topic .md files)
