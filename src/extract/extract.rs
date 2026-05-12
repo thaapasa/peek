@@ -259,6 +259,32 @@ mod tests {
         assert!(text.contains("<w:document"), "expected DOCX XML body");
     }
 
+    /// ODT extracts inner ZIP parts through the same archive path as
+    /// DOCX. Asking for `content.xml` round-trips and re-classifies as
+    /// structured XML.
+    #[test]
+    fn extracted_odt_part_round_trips() {
+        let detected = detect::detect(&fixture("sample.odt")).unwrap();
+        let extracted = extract(
+            &fixture("sample.odt"),
+            &detected,
+            "content.xml",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
+        let inner_detected = detect::detect(&extracted.source).unwrap();
+        assert!(matches!(
+            inner_detected.file_type,
+            detect::FileType::Structured(detect::StructuredFormat::Xml)
+                | detect::FileType::SourceCode { .. }
+        ));
+        let text = extracted.source.read_text().unwrap();
+        assert!(
+            text.contains("office:document-content"),
+            "expected ODT content.xml body",
+        );
+    }
+
     /// RTF embeds (`\pict` / `\object` groups) extract by their
     /// auto-generated name. Asking for an embed that doesn't exist
     /// must surface `NotFound`, not `Unsupported` — RTF has its own
