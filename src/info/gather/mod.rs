@@ -155,7 +155,8 @@ fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
 fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
     let mut warnings = Vec::new();
     if let Some(ext) = mime::extension_from_name(name)
-        && let Some(w) = mime::extension_mismatch(&ext, detected.magic_mime.as_deref())
+        && let Some(w) =
+            mime::extension_mismatch(&ext, detected.magic_mime.as_deref(), &detected.file_type)
     {
         warnings.push(w);
     }

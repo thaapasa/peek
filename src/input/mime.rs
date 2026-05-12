@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use crate::input::detect::{
-    ComicFormat, DiskImageFormat, DocumentFormat, EbookFormat, FileType, StructuredFormat,
+    ArchiveFormat, ComicFormat, DiskImageFormat, DocumentFormat, EbookFormat, FileType,
+    StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -190,20 +191,68 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
 }
 
 /// Returns a warning message if the path's extension doesn't match what the
-/// detected MIME type expects. Returns `None` when there's no extension, no
-/// magic-byte detection, or the extension is consistent with the MIME.
-pub fn extension_mismatch(ext: &str, magic_mime: Option<&str>) -> Option<String> {
+/// detected file type expects. Returns `None` when there's no extension, no
+/// magic-byte detection, or the extension is consistent with the file type.
+///
+/// Acceptable extensions are the union of three sources, so container-wrapped
+/// formats (`.cbz` / `.epub` / `.docx` all wrap ZIP, `.deb` wraps ar) don't
+/// fire false-positive warnings just because their magic MIME is the
+/// underlying container's type:
+///
+/// 1. `mime_guess` for the magic-byte MIME (raw container, e.g. `application/zip`).
+/// 2. `mime_guess` for the file type's registered MIME (e.g. `.epub` for
+///    `application/epub+zip`).
+/// 3. Explicit fallback for vendor MIMEs that mime-db doesn't cover.
+pub fn extension_mismatch(
+    ext: &str,
+    magic_mime: Option<&str>,
+    file_type: &FileType,
+) -> Option<String> {
     let magic = magic_mime?;
     let ext = ext.to_lowercase();
-    let expected = mime_guess::get_mime_extensions_str(magic)?;
-    if expected.is_empty() || expected.iter().any(|e| e.eq_ignore_ascii_case(&ext)) {
+
+    let mut acceptable: Vec<String> = Vec::new();
+    if let Some(exts) = mime_guess::get_mime_extensions_str(magic) {
+        acceptable.extend(exts.iter().map(|s| s.to_ascii_lowercase()));
+    }
+    if let Some(reg) = registered_for_type(file_type)
+        && let Some(exts) = mime_guess::get_mime_extensions_str(reg)
+    {
+        acceptable.extend(exts.iter().map(|s| s.to_ascii_lowercase()));
+    }
+    acceptable.extend(
+        known_extensions_for_type(file_type)
+            .iter()
+            .map(|s| (*s).to_string()),
+    );
+
+    if acceptable.is_empty() || acceptable.iter().any(|e| e == &ext) {
         return None;
     }
-    let expected_list: Vec<String> = expected.iter().map(|e| format!(".{e}")).collect();
+
+    acceptable.sort();
+    acceptable.dedup();
+    let expected_list: Vec<String> = acceptable.iter().map(|e| format!(".{e}")).collect();
     Some(format!(
         "extension `.{ext}` doesn't match content ({magic}); expected {}",
         expected_list.join(" / "),
     ))
+}
+
+/// Extensions known to be valid for a given [`FileType`] beyond what
+/// `mime_guess` reports. Plugs the cases where the user-facing format is a
+/// container around another (zip-wrapped `.cbz` / `.epub` / `.docx`,
+/// ar-wrapped `.deb`) and the magic-byte MIME alone would falsely flag
+/// the extension as wrong.
+fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
+    match file_type {
+        FileType::Comic(ComicFormat::Cbz) => &["cbz"],
+        FileType::Ebook(EbookFormat::Epub) => &["epub"],
+        FileType::Document(DocumentFormat::Docx) => &["docx"],
+        FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
+        FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
+        _ => &[],
+    }
 }
 
 /// Lowercased extension of a display name. `None` for hidden files
@@ -333,21 +382,86 @@ mod tests {
 
     #[test]
     fn extension_mismatch_detects_jpg_extension_with_png_content() {
-        let warn = extension_mismatch("jpg", Some("image/png"));
+        let warn = extension_mismatch("jpg", Some("image/png"), &FileType::Image);
         assert!(warn.is_some(), "should warn on .jpg with PNG content");
         assert!(warn.unwrap().contains(".jpg"));
     }
 
     #[test]
     fn extension_mismatch_silent_when_consistent() {
-        let warn = extension_mismatch("png", Some("image/png"));
+        let warn = extension_mismatch("png", Some("image/png"), &FileType::Image);
         assert!(warn.is_none());
     }
 
     #[test]
     fn extension_mismatch_silent_when_no_magic() {
-        let warn = extension_mismatch("txt", None);
+        let warn = extension_mismatch("txt", None, &FileType::SourceCode { syntax: None });
         assert!(warn.is_none());
+    }
+
+    #[test]
+    fn extension_mismatch_silent_on_zip_container_formats() {
+        // `.cbz` / `.epub` / `.docx` all surface a magic MIME of
+        // application/zip because they're ZIP under the hood. The
+        // FileType lookup must rescue them so the warning doesn't fire.
+        assert!(
+            extension_mismatch(
+                "cbz",
+                Some("application/zip"),
+                &FileType::Comic(ComicFormat::Cbz)
+            )
+            .is_none(),
+            ".cbz Comic should not warn against application/zip magic"
+        );
+        assert!(
+            extension_mismatch(
+                "epub",
+                Some("application/zip"),
+                &FileType::Ebook(EbookFormat::Epub)
+            )
+            .is_none(),
+            ".epub Ebook should not warn against application/zip magic"
+        );
+        assert!(
+            extension_mismatch(
+                "docx",
+                Some("application/zip"),
+                &FileType::Document(DocumentFormat::Docx)
+            )
+            .is_none(),
+            ".docx Document should not warn against application/zip magic"
+        );
+    }
+
+    #[test]
+    fn extension_mismatch_silent_on_zip_archive_aliases() {
+        // `.jar` / `.war` / `.apk` are ZIPs by other names. They route
+        // through Archive(Zip) and must not warn.
+        for ext in ["jar", "war", "apk"] {
+            assert!(
+                extension_mismatch(
+                    ext,
+                    Some("application/zip"),
+                    &FileType::Archive(ArchiveFormat::Zip)
+                )
+                .is_none(),
+                ".{ext} Archive(Zip) should not warn against application/zip magic"
+            );
+        }
+    }
+
+    #[test]
+    fn extension_mismatch_silent_on_deb() {
+        // `.deb` magic-detects as application/x-archive (ar) but the
+        // extension is .deb. Archive(Ar) accepts both.
+        assert!(
+            extension_mismatch(
+                "deb",
+                Some("application/x-archive"),
+                &FileType::Archive(ArchiveFormat::Ar)
+            )
+            .is_none()
+        );
     }
 
     #[test]
