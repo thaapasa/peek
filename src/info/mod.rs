@@ -12,6 +12,25 @@ pub use render::{RenderOptions, render, thousands_sep};
 pub(crate) use render::{paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;
 
+// Re-exports of the per-type info shapes so the central `FileExtras`
+// enum below can stay one-line-per-variant. Each type owns its own
+// struct under `types/<x>/info.rs`.
+pub use crate::types::archive::info::ArchiveStats;
+pub use crate::types::audio::AudioStats;
+pub use crate::types::binary::info::BinaryInfo;
+pub use crate::types::comic::ComicStats;
+pub use crate::types::directory::info::DirectoryStats;
+pub use crate::types::disk_image::info::DiskImageInfo;
+pub use crate::types::document::DocumentStats;
+pub use crate::types::ebook::EbookStats;
+pub use crate::types::image::info::ImageStats;
+pub use crate::types::markdown::info::MarkdownInfo;
+pub use crate::types::pdf::PdfStats;
+pub use crate::types::sql::info::SqlInfo;
+pub use crate::types::structured::info::StructuredInfo;
+pub use crate::types::svg::info::SvgStats;
+pub use crate::types::text::info::TextStats;
+
 /// Collected file metadata.
 pub struct FileInfo {
     pub file_name: String,
@@ -51,342 +70,24 @@ pub struct CompressionInfo {
     pub error: Option<String>,
 }
 
-/// Type-specific metadata.
+/// Type-specific metadata. Each variant wraps a single struct owned by
+/// the corresponding `types/<x>/info.rs` module.
 pub enum FileExtras {
-    Image {
-        width: u32,
-        height: u32,
-        color_type: String,
-        bit_depth: u8,
-        hdr_format: Option<String>,
-        icc_profile: Option<String>,
-        animation: Option<AnimationStats>,
-        exif: Vec<(String, String)>,
-        xmp: Vec<(String, String)>,
-    },
+    Image(ImageStats),
     Text(TextStats),
-    Svg {
-        text: TextStats,
-        view_box: Option<String>,
-        declared_width: Option<String>,
-        declared_height: Option<String>,
-        path_count: usize,
-        group_count: usize,
-        rect_count: usize,
-        circle_count: usize,
-        text_count: usize,
-        has_script: bool,
-        has_external_href: bool,
-        animation: Option<SvgAnimationStats>,
-        /// Set when the SVG declared an animation peek can't play
-        /// (unsupported feature, malformed, or rasterization probe
-        /// failed). Surfaced as a warning row in the info view.
-        animation_warning: Option<String>,
-    },
-    Structured {
-        format_name: &'static str,
-        stats: Option<StructuredStats>,
-    },
-    Markdown {
-        text: TextStats,
-        stats: MarkdownStats,
-    },
-    Sql {
-        text: TextStats,
-        stats: SqlStats,
-    },
-    Binary {
-        format: Option<String>,
-    },
-    Archive {
-        format_name: &'static str,
-        entry_count: usize,
-        file_count: usize,
-        dir_count: usize,
-        total_uncompressed_size: u64,
-        /// Set when listing failed (e.g. corrupt archive). When present,
-        /// the info view shows this in place of stats.
-        error: Option<String>,
-    },
-    DiskImage {
-        format_name: &'static str,
-        /// Per-format payload. `None` when parsing failed; the `error`
-        /// field then carries a user-facing reason.
-        meta: Option<DiskImageMeta>,
-        /// Set when descriptor / trailer parsing failed (corrupt or
-        /// truncated image). Surfaced in place of normal volume rows.
-        error: Option<String>,
-    },
-    Ebook(crate::types::ebook::EbookStats),
-    Comic(crate::types::comic::ComicStats),
-    Document(crate::types::document::DocumentStats),
-    Pdf(crate::types::pdf::PdfStats),
-    Audio(crate::types::audio::AudioStats),
-    Directory {
-        entry_count: usize,
-        file_count: usize,
-        dir_count: usize,
-    },
-}
-
-/// Format-specific disk-image metadata. Each variant owns the parsed
-/// shape its parser produces; the renderer picks the matching block.
-pub enum DiskImageMeta {
-    Iso(IsoVolumeMeta),
-    Dmg(DmgMeta),
-    Raw(RawImageMeta),
-}
-
-/// Generic raw disk image — anything that isn't ISO/DMG and lands at
-/// the `.img` / `.bin` / `.dd` extension. The MBR partition table is
-/// the one structure we parse from the front of the file; without it
-/// (or without a recognisable partition layout) the info section
-/// falls back to a generic "raw image" label plus the file size.
-pub struct RawImageMeta {
-    /// MBR partition table contents when the boot sector signature
-    /// (`0x55 0xAA` at offset 510) matches; `None` for files that
-    /// don't carry an MBR (e.g. raw filesystem dumps, GPT-only
-    /// images, or anything else).
-    pub mbr: Option<MbrTable>,
-}
-
-/// MBR (Master Boot Record) partition table — the four 16-byte
-/// entries at offset 446..510 of the boot sector. Extended partition
-/// chains are not followed; an `0x05` / `0x0F` entry surfaces as-is
-/// with the user left to inspect further.
-pub struct MbrTable {
-    pub partitions: Vec<MbrPartition>,
-}
-
-pub struct MbrPartition {
-    pub bootable: bool,
-    /// One-byte partition type code. The renderer maps a few common
-    /// values (FAT, Linux, swap, …) to friendly names; anything else
-    /// shows as the hex code.
-    pub type_code: u8,
-    /// Starting LBA from the partition entry (little-endian u32 at
-    /// offset +8).
-    pub start_lba: u32,
-    /// Sector count from the partition entry (offset +12).
-    pub sectors: u32,
-}
-
-/// ISO 9660 Primary Volume Descriptor metadata (PVD-only — no directory
-/// walk). Trailing-space-padded text fields arrive trimmed; all-zero or
-/// blank fields land as `None`.
-pub struct IsoVolumeMeta {
-    pub system_id: Option<String>,
-    pub volume_label: Option<String>,
-    pub volume_set_id: Option<String>,
-    pub publisher: Option<String>,
-    pub data_preparer: Option<String>,
-    pub application: Option<String>,
-    pub block_size: u32,
-    pub block_count: u32,
-    pub creation: Option<IsoDateTime>,
-    pub modification: Option<IsoDateTime>,
-    pub expiration: Option<IsoDateTime>,
-    pub effective: Option<IsoDateTime>,
-    pub joliet: bool,
-    pub el_torito: bool,
-    pub el_torito_id: Option<String>,
-}
-
-/// ISO 9660 ASCII timestamp (`YYYYMMDDHHMMSSHH±qq`). Hundredths of a
-/// second are dropped on display; offset is held as 15-minute quarters
-/// from GMT (range −48..=+52). All-zero source means "unset" and is
-/// represented by `Option::None` rather than this struct.
-pub struct IsoDateTime {
-    pub year: u16,
-    pub month: u8,
-    pub day: u8,
-    pub hour: u8,
-    pub minute: u8,
-    pub second: u8,
-    /// Quarter-hour offset from GMT.
-    pub gmt_offset_quarters: i8,
-}
-
-/// UDIF (Apple Disk Image) trailer fields. The 512-byte trailer at the
-/// end of every flat DMG carries the structural information; partition
-/// payload sits in an embedded plist that's not parsed at this level.
-pub struct DmgMeta {
-    pub udif_version: u32,
-    pub flags: u32,
-    pub variant: DmgVariant,
-    /// Sector count from the trailer × 512. Logical (uncompressed) size.
-    pub total_size_bytes: u64,
-    pub data_fork_length: u64,
-    /// Whether the trailer references an embedded XML plist (typical;
-    /// the plist holds the partition map / blkx tables).
-    pub plist_present: bool,
-    pub plist_length: u64,
-    pub segment_number: u32,
-    pub segment_count: u32,
-    pub data_checksum_type: DmgChecksumKind,
-    pub master_checksum_type: DmgChecksumKind,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DmgVariant {
-    /// Whole-device image (variant 1) — the common case.
-    Device,
-    /// Single-partition image (variant 2).
-    Partition,
-    /// Mounted-system image (variant 3).
-    MountedSystem,
-    /// Anything else — surface the raw value so the user can spot
-    /// unfamiliar variants without us silently lying.
-    Other(u32),
-}
-
-/// Apple's documented checksum-type tags used by both data and master
-/// checksum fields in the UDIF trailer. Values outside the known set
-/// surface as `Other(_)`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DmgChecksumKind {
-    None,
-    Crc32,
-    Md5,
-    Sha1,
-    Sha256,
-    Sha512,
-    Other(u32),
-}
-
-/// Animation playback stats. Counts/durations may be `None` when the format
-/// requires full decoding to compute (WebP) — the cheap header-walk path is
-/// only available for GIF.
-pub struct AnimationStats {
-    pub frame_count: Option<usize>,
-    pub total_duration_ms: Option<u64>,
-    pub loop_count: Option<LoopCount>,
-}
-
-/// SVG CSS-keyframe animation stats (from `types::image::pipeline::svg_anim`).
-pub struct SvgAnimationStats {
-    pub frame_count: usize,
-    pub total_duration_ms: u64,
-    pub infinite: bool,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum LoopCount {
-    Infinite,
-    Finite(u32),
-}
-
-pub struct TextStats {
-    pub line_count: usize,
-    pub word_count: usize,
-    pub char_count: usize,
-    pub blank_lines: usize,
-    pub longest_line_chars: usize,
-    pub line_endings: LineEndings,
-    pub indent_style: Option<IndentStyle>,
-    pub encoding: Encoding,
-    pub shebang: Option<String>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum LineEndings {
-    None,
-    Lf,
-    Crlf,
-    Cr,
-    Mixed,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum IndentStyle {
-    Tabs,
-    Spaces(u8),
-    Mixed,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Encoding {
-    Utf8,
-    Utf8Bom,
-    Utf16Le,
-    Utf16Be,
-}
-
-pub struct StructuredStats {
-    pub top_level_kind: TopLevelKind,
-    pub top_level_count: usize,
-    pub max_depth: usize,
-    pub total_nodes: usize,
-    pub xml_root: Option<String>,
-    pub xml_namespaces: Vec<String>,
-}
-
-pub enum TopLevelKind {
-    Object,
-    Array,
-    Scalar,
-    Table,
-    MultiDoc(usize),
-    Document,
-}
-
-pub struct MarkdownStats {
-    /// Counts for H1..H6 (index 0 = H1).
-    pub heading_counts: [usize; 6],
-    pub code_block_count: usize,
-    /// Distinct fenced-code-block languages, in first-seen order.
-    pub code_block_languages: Vec<String>,
-    pub inline_code_count: usize,
-    pub link_count: usize,
-    pub image_count: usize,
-    pub table_count: usize,
-    pub list_item_count: usize,
-    pub task_done: usize,
-    pub task_total: usize,
-    pub blockquote_lines: usize,
-    pub footnote_def_count: usize,
-    pub frontmatter: Option<FrontmatterKind>,
-    /// Words outside fenced code blocks. Inline code spans aren't stripped
-    /// (they usually carry meaningful content for prose).
-    pub prose_words: usize,
-    /// Reading time at 230 wpm, rounded up to whole minutes (0 = under 1 min).
-    pub reading_minutes: u32,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum FrontmatterKind {
-    Yaml,
-    Toml,
-}
-
-pub struct SqlStats {
-    pub statement_count: usize,
-    pub ddl_count: usize,
-    pub dml_count: usize,
-    pub dql_count: usize,
-    pub tcl_count: usize,
-    pub other_count: usize,
-    /// Distinct objects created/altered/dropped, by kind, in first-seen order.
-    pub created_tables: Vec<String>,
-    pub created_views: Vec<String>,
-    pub created_indexes: Vec<String>,
-    pub created_functions: Vec<String>,
-    pub created_triggers: Vec<String>,
-    /// Comment lines (any of `--`, `#`, `/* … */`).
-    pub comment_lines: usize,
-    /// Heuristic dialect guess.
-    pub dialect: SqlDialect,
-    /// True if any `$$ … $$` body found (PL/pgSQL or Postgres anonymous block).
-    pub has_dollar_quoted: bool,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum SqlDialect {
-    Generic,
-    PostgreSql,
-    MySql,
-    Sqlite,
-    TSql,
+    Svg(SvgStats),
+    Structured(StructuredInfo),
+    Markdown(MarkdownInfo),
+    Sql(SqlInfo),
+    Binary(BinaryInfo),
+    Archive(ArchiveStats),
+    DiskImage(DiskImageInfo),
+    Directory(DirectoryStats),
+    Ebook(EbookStats),
+    Comic(ComicStats),
+    Document(DocumentStats),
+    Pdf(PdfStats),
+    Audio(AudioStats),
 }
 
 #[cfg(unix)]

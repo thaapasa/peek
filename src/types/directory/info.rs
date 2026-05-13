@@ -7,6 +7,12 @@ use crate::theme::PeekTheme;
 
 use super::read::{DirEntryKind, read_dir_entries};
 
+pub struct DirectoryStats {
+    pub entry_count: usize,
+    pub file_count: usize,
+    pub dir_count: usize,
+}
+
 pub fn gather_extras(path: &Path) -> FileExtras {
     let entries = read_dir_entries(path).unwrap_or_default();
     let dir_count = entries
@@ -17,38 +23,32 @@ pub fn gather_extras(path: &Path) -> FileExtras {
         .iter()
         .filter(|e| e.kind == DirEntryKind::File)
         .count();
-    FileExtras::Directory {
+    FileExtras::Directory(DirectoryStats {
         entry_count: entries.len(),
         file_count,
         dir_count,
-    }
+    })
 }
 
-pub fn render_section(
-    lines: &mut Vec<String>,
-    entry_count: usize,
-    file_count: usize,
-    dir_count: usize,
-    theme: &PeekTheme,
-) {
+pub fn render_section(lines: &mut Vec<String>, stats: &DirectoryStats, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "Directory", theme);
     push_field(
         lines,
         "Entries",
-        &theme.paint_value(&thousands_sep(entry_count as u64)),
+        &theme.paint_value(&thousands_sep(stats.entry_count as u64)),
         theme,
     );
     push_field(
         lines,
         "Files",
-        &theme.paint_value(&thousands_sep(file_count as u64)),
+        &theme.paint_value(&thousands_sep(stats.file_count as u64)),
         theme,
     );
     push_field(
         lines,
         "Subdirs",
-        &theme.paint_value(&thousands_sep(dir_count as u64)),
+        &theme.paint_value(&thousands_sep(stats.dir_count as u64)),
         theme,
     );
 }

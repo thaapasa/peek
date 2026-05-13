@@ -9,7 +9,7 @@
 //! and any per-block decoding live elsewhere. Reading this trailer is
 //! one 512-byte tail read regardless of image size.
 
-use crate::info::{DmgChecksumKind, DmgMeta, DmgVariant};
+use crate::types::disk_image::info::{DmgChecksumKind, DmgMeta, DmgVariant};
 
 /// Trailer length, fixed by Apple's spec.
 pub const TRAILER_SIZE: usize = 512;

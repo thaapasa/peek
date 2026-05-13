@@ -1,65 +1,53 @@
-use crate::info::{AnimationStats, LoopCount, push_field, push_section_header};
+use crate::info::{push_field, push_section_header};
 use crate::theme::{PeekTheme, lerp_color};
+use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
 
-#[allow(clippy::too_many_arguments)]
-pub fn render_section(
-    lines: &mut Vec<String>,
-    width: u32,
-    height: u32,
-    color_type: &str,
-    bit_depth: u8,
-    hdr_format: Option<&str>,
-    icc_profile: Option<&str>,
-    animation: Option<&AnimationStats>,
-    exif: &[(String, String)],
-    xmp: &[(String, String)],
-    theme: &PeekTheme,
-) {
+pub fn render_section(lines: &mut Vec<String>, stats: &ImageStats, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "Image", theme);
     push_field(
         lines,
         "Dimensions",
-        &paint_dimensions(width, height, theme),
+        &paint_dimensions(stats.width, stats.height, theme),
         theme,
     );
     push_field(
         lines,
         "Megapixels",
-        &paint_megapixels(width, height, theme),
+        &paint_megapixels(stats.width, stats.height, theme),
         theme,
     );
-    push_field(lines, "Color", &theme.paint_value(color_type), theme);
-    if bit_depth > 0 {
+    push_field(lines, "Color", &theme.paint_value(&stats.color_type), theme);
+    if stats.bit_depth > 0 {
         push_field(
             lines,
             "Bit Depth",
-            &theme.paint_value(&format!("{bit_depth} bits/channel")),
+            &theme.paint_value(&format!("{} bits/channel", stats.bit_depth)),
             theme,
         );
     }
-    if let Some(icc) = icc_profile {
+    if let Some(icc) = &stats.icc_profile {
         push_field(lines, "ICC Profile", &theme.paint_value(icc), theme);
     }
-    if let Some(hdr) = hdr_format {
+    if let Some(hdr) = &stats.hdr_format {
         push_field(lines, "HDR", &theme.paint_accent(hdr), theme);
     }
-    if let Some(anim) = animation {
+    if let Some(anim) = &stats.animation {
         push_animation(lines, anim, theme);
     }
 
-    if !exif.is_empty() {
+    if !stats.exif.is_empty() {
         lines.push(String::new());
         push_section_header(lines, "EXIF", theme);
-        for (label, value) in exif {
+        for (label, value) in &stats.exif {
             push_field(lines, label, &theme.paint_value(value), theme);
         }
     }
 
-    if !xmp.is_empty() {
+    if !stats.xmp.is_empty() {
         lines.push(String::new());
         push_section_header(lines, "XMP", theme);
-        for (label, value) in xmp {
+        for (label, value) in &stats.xmp {
             push_field(lines, label, &theme.paint_value(value), theme);
         }
     }

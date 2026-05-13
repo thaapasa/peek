@@ -11,7 +11,7 @@
 //! it lives in SUSP fields inside the root directory record and would
 //! need an extra read+parse pass.
 
-use crate::info::{IsoDateTime, IsoVolumeMeta};
+use crate::types::disk_image::info::{IsoDateTime, IsoVolumeMeta};
 
 /// First sector containing the Volume Descriptor Set.
 pub const PVD_OFFSET: u64 = 32768;

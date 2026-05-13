@@ -6,7 +6,7 @@ use std::io::{BufReader, Cursor};
 use std::path::Path;
 
 use super::info_gather::{IMAGE_HEAD_SCAN, read_head};
-use crate::info::{AnimationStats, LoopCount};
+use crate::types::image::info::{AnimationStats, LoopCount};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum AnimFmt {

@@ -4,9 +4,10 @@
 //! cheap because no payload bytes are touched.
 
 use super::{dmg_trailer, iso_pvd, mbr};
-use crate::info::{DiskImageMeta, FileExtras, RawImageMeta};
+use crate::info::FileExtras;
 use crate::input::InputSource;
 use crate::input::detect::DiskImageFormat;
+use crate::types::disk_image::info::{DiskImageInfo, DiskImageMeta, RawImageMeta};
 
 /// Sectors of the descriptor area we pull on a single read for ISO.
 /// Eight 2 KiB sectors covers PVD + supplementary descriptors + boot
@@ -31,56 +32,56 @@ fn gather_raw(source: &InputSource, format_name: &'static str) -> FileExtras {
         .ok()
         .and_then(|bs| bs.read_range(0, mbr::BOOT_SECTOR_BYTES).ok())
         .and_then(|buf| mbr::parse(&buf));
-    FileExtras::DiskImage {
+    FileExtras::DiskImage(DiskImageInfo {
         format_name,
         meta: Some(DiskImageMeta::Raw(RawImageMeta { mbr })),
         error: None,
-    }
+    })
 }
 
 fn gather_iso(source: &InputSource, format_name: &'static str) -> FileExtras {
     match read_iso_descriptors(source) {
         Ok(buf) => match iso_pvd::parse(&buf) {
-            Some(iso) => FileExtras::DiskImage {
+            Some(iso) => FileExtras::DiskImage(DiskImageInfo {
                 format_name,
                 meta: Some(DiskImageMeta::Iso(iso)),
                 error: None,
-            },
-            None => FileExtras::DiskImage {
+            }),
+            None => FileExtras::DiskImage(DiskImageInfo {
                 format_name,
                 meta: None,
                 error: Some(
                     "not a valid ISO 9660 image (Primary Volume Descriptor missing)".into(),
                 ),
-            },
+            }),
         },
-        Err(e) => FileExtras::DiskImage {
+        Err(e) => FileExtras::DiskImage(DiskImageInfo {
             format_name,
             meta: None,
             error: Some(format!("{e:#}")),
-        },
+        }),
     }
 }
 
 fn gather_dmg(source: &InputSource, format_name: &'static str) -> FileExtras {
     match read_dmg_trailer(source) {
         Ok(buf) => match dmg_trailer::parse(&buf) {
-            Some(dmg) => FileExtras::DiskImage {
+            Some(dmg) => FileExtras::DiskImage(DiskImageInfo {
                 format_name,
                 meta: Some(DiskImageMeta::Dmg(dmg)),
                 error: None,
-            },
-            None => FileExtras::DiskImage {
+            }),
+            None => FileExtras::DiskImage(DiskImageInfo {
                 format_name,
                 meta: None,
                 error: Some("not a UDIF disk image (koly trailer signature missing)".into()),
-            },
+            }),
         },
-        Err(e) => FileExtras::DiskImage {
+        Err(e) => FileExtras::DiskImage(DiskImageInfo {
             format_name,
             meta: None,
             error: Some(format!("{e:#}")),
-        },
+        }),
     }
 }
 

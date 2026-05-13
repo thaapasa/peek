@@ -5,8 +5,6 @@ use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
 
-use crate::types::text::info_render::push_text_stats;
-
 /// Per-render options for the Info view.
 #[derive(Clone, Copy, Default)]
 pub struct RenderOptions {
@@ -37,125 +35,32 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
 
 fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme) {
     match extras {
-        FileExtras::Image {
-            width,
-            height,
-            color_type,
-            bit_depth,
-            hdr_format,
-            icc_profile,
-            animation,
-            exif,
-            xmp,
-        } => {
-            crate::types::image::info_render::render_section(
-                lines,
-                *width,
-                *height,
-                color_type,
-                *bit_depth,
-                hdr_format.as_deref(),
-                icc_profile.as_deref(),
-                animation.as_ref(),
-                exif,
-                xmp,
-                theme,
-            );
+        FileExtras::Image(stats) => {
+            crate::types::image::info_render::render_section(lines, stats, theme);
         }
         FileExtras::Text(stats) => {
-            lines.push(String::new());
-            push_section_header(lines, "Content", theme);
-            push_text_stats(lines, stats, theme);
+            crate::types::text::info_render::render_section(lines, stats, theme);
         }
-        FileExtras::Svg {
-            text: text_stats,
-            view_box,
-            declared_width,
-            declared_height,
-            path_count,
-            group_count,
-            rect_count,
-            circle_count,
-            text_count,
-            has_script,
-            has_external_href,
-            animation,
-            animation_warning,
-        } => {
-            crate::types::svg::info_render::render_section(
-                lines,
-                view_box.as_deref(),
-                declared_width.as_deref(),
-                declared_height.as_deref(),
-                *path_count,
-                *group_count,
-                *rect_count,
-                *circle_count,
-                *text_count,
-                *has_script,
-                *has_external_href,
-                animation.as_ref(),
-                animation_warning.as_deref(),
-                theme,
-            );
-            lines.push(String::new());
-            push_section_header(lines, "Source", theme);
-            push_text_stats(lines, text_stats, theme);
+        FileExtras::Svg(stats) => {
+            crate::types::svg::info_render::render_section(lines, stats, theme);
         }
-        FileExtras::Structured { format_name, stats } => {
-            crate::types::structured::info::render_section(
-                lines,
-                format_name,
-                stats.as_ref(),
-                theme,
-            );
+        FileExtras::Structured(info) => {
+            crate::types::structured::info::render_section(lines, info, theme);
         }
-        FileExtras::Markdown { text, stats } => {
-            lines.push(String::new());
-            push_section_header(lines, "Content", theme);
-            push_text_stats(lines, text, theme);
-            crate::types::markdown::info_render::render_section(lines, stats, theme);
+        FileExtras::Markdown(info) => {
+            crate::types::markdown::info_render::render_section(lines, info, theme);
         }
-        FileExtras::Sql { text, stats } => {
-            lines.push(String::new());
-            push_section_header(lines, "Content", theme);
-            push_text_stats(lines, text, theme);
-            crate::types::sql::info_render::render_section(lines, stats, theme);
+        FileExtras::Sql(info) => {
+            crate::types::sql::info_render::render_section(lines, info, theme);
         }
-        FileExtras::Binary { format } => {
-            crate::types::binary::info::render_section(lines, format.as_deref(), theme);
+        FileExtras::Binary(info) => {
+            crate::types::binary::info::render_section(lines, info, theme);
         }
-        FileExtras::Archive {
-            format_name,
-            entry_count,
-            file_count,
-            dir_count,
-            total_uncompressed_size,
-            error,
-        } => {
-            crate::types::archive::info::render_section(
-                lines,
-                format_name,
-                *entry_count,
-                *file_count,
-                *dir_count,
-                *total_uncompressed_size,
-                error.as_deref(),
-                theme,
-            );
+        FileExtras::Archive(stats) => {
+            crate::types::archive::info::render_section(lines, stats, theme);
         }
-        FileExtras::DiskImage {
-            format_name,
-            meta,
-            error,
-        } => {
-            crate::types::disk_image::info_render::render_section(
-                lines,
-                format_name,
-                meta.as_ref(),
-                error.as_deref(),
-                theme,
-            );
+        FileExtras::DiskImage(info) => {
+            crate::types::disk_image::info_render::render_section(lines, info, theme);
         }
         FileExtras::Ebook(stats) => {
             crate::types::ebook::epub::info_render::render_section(lines, stats, theme);
@@ -172,18 +77,8 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Audio(stats) => {
             crate::types::audio::info_render::render_section(lines, stats, theme);
         }
-        FileExtras::Directory {
-            entry_count,
-            file_count,
-            dir_count,
-        } => {
-            crate::types::directory::info::render_section(
-                lines,
-                *entry_count,
-                *file_count,
-                *dir_count,
-                theme,
-            );
+        FileExtras::Directory(stats) => {
+            crate::types::directory::info::render_section(lines, stats, theme);
         }
     }
 }

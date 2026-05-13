@@ -5,8 +5,8 @@
 //! whole-file path because the chunked UTF-8 path can't validate split
 //! 16-bit code units.
 
-use crate::info::{Encoding, IndentStyle, LineEndings, TextStats};
 use crate::input::{ByteSource, InputSource};
+use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 
 /// Chunk size for streaming text-extras counting.
 const TEXT_SCAN_CHUNK: usize = 64 * 1024;

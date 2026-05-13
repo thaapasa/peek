@@ -3,5 +3,6 @@
 //! and as a sub-engine by `types::svg` (which augments `TextStats` with
 //! SVG-specific extras).
 
+pub mod info;
 pub mod info_gather;
 pub mod info_render;

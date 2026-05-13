@@ -6,7 +6,7 @@
 //! tracked so heading-like text inside ` ``` ` blocks isn't counted as a
 //! heading. Reading time uses 230 wpm — middle of common estimates.
 
-use crate::info::{FrontmatterKind, MarkdownStats};
+use crate::types::markdown::info::{FrontmatterKind, MarkdownStats};
 
 const READING_WPM: u32 = 230;
 

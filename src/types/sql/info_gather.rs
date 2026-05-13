@@ -6,7 +6,7 @@
 //! `CREATE` statements the object kind + name are recorded. Dialect is
 //! a heuristic: weighted feature votes pick a winner over Generic.
 
-use crate::info::{SqlDialect, SqlStats};
+use crate::types::sql::info::{SqlDialect, SqlStats};
 
 pub fn gather(text: &str) -> SqlStats {
     let mut stats = SqlStats {

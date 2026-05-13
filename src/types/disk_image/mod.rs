@@ -7,6 +7,7 @@
 
 pub mod dmg_trailer;
 pub mod extract;
+pub mod info;
 pub mod info_gather;
 pub mod info_render;
 pub mod iso_listing;

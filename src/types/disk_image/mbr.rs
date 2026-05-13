@@ -3,7 +3,7 @@
 //! 446..510 plus the 0x55 0xAA boot signature are inspected — extended
 //! partitions, GPT, and protective MBR variants aren't followed.
 
-use crate::info::{MbrPartition, MbrTable};
+use crate::types::disk_image::info::{MbrPartition, MbrTable};
 
 /// Bytes pulled from the start of the image. 512 bytes (one sector)
 /// holds the entire boot sector including the partition table and

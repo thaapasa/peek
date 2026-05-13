@@ -1,7 +1,16 @@
-use crate::info::{FrontmatterKind, MarkdownStats, paint_count, push_field, push_section_header};
+use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
+use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
+use crate::types::text::info_render::push_text_stats;
 
-pub fn render_section(lines: &mut Vec<String>, stats: &MarkdownStats, theme: &PeekTheme) {
+pub fn render_section(lines: &mut Vec<String>, info: &MarkdownInfo, theme: &PeekTheme) {
+    lines.push(String::new());
+    push_section_header(lines, "Content", theme);
+    push_text_stats(lines, &info.text, theme);
+    push_markdown_section(lines, &info.stats, theme);
+}
+
+fn push_markdown_section(lines: &mut Vec<String>, stats: &MarkdownStats, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "Markdown", theme);
 

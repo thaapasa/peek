@@ -5,14 +5,18 @@
 use crate::info::{FileExtras, push_field, push_section_header};
 use crate::theme::PeekTheme;
 
-pub fn gather_extras(magic_mime: Option<&str>) -> FileExtras {
-    FileExtras::Binary {
-        format: magic_mime.map(format_label_for_mime),
-    }
+pub struct BinaryInfo {
+    pub format: Option<String>,
 }
 
-pub fn render_section(lines: &mut Vec<String>, format: Option<&str>, theme: &PeekTheme) {
-    if let Some(fmt) = format {
+pub fn gather_extras(magic_mime: Option<&str>) -> FileExtras {
+    FileExtras::Binary(BinaryInfo {
+        format: magic_mime.map(format_label_for_mime),
+    })
+}
+
+pub fn render_section(lines: &mut Vec<String>, info: &BinaryInfo, theme: &PeekTheme) {
+    if let Some(fmt) = &info.format {
         lines.push(String::new());
         push_section_header(lines, "Format", theme);
         push_field(lines, "Type", &theme.paint_value(fmt), theme);
