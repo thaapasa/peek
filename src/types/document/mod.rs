@@ -16,6 +16,7 @@
 //! listing.
 
 pub mod ast;
+pub mod compose;
 pub mod detect;
 pub mod docx;
 pub mod format;

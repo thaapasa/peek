@@ -10,6 +10,7 @@
 //!   * [`crate::viewer::listing::ListingMode`] of `/EmbeddedFiles`
 //!     attachments — extract path lives in [`extract`]
 
+pub mod compose;
 pub mod extract;
 pub mod info;
 pub mod info_gather;

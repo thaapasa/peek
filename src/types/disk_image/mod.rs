@@ -5,6 +5,7 @@
 //! volume descriptor area via `ByteSource::read_range` so multi-GB
 //! images are cheap to introspect.
 
+pub mod compose;
 pub mod detect;
 pub mod dmg_trailer;
 pub mod extract;

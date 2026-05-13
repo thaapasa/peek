@@ -5,6 +5,7 @@
 //! the same probe result via [`package::build_listing`] /
 //! [`package::read_embed`]. No playback, no waveform.
 
+pub mod compose;
 pub mod detect;
 pub mod extract;
 pub mod format;

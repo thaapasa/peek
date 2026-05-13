@@ -16,6 +16,7 @@
 
 pub mod animation_mode;
 pub mod animation_stats;
+pub mod compose;
 pub mod exif;
 pub mod extract;
 pub mod info;
