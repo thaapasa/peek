@@ -4,7 +4,7 @@
 //!
 //! - [`read_mode::EpubReadMode`] (default) — one chapter at a time
 //!   rendered via `html2text`, `n` / `N` step through the spine.
-//! - [`crate::types::listing::ListingMode`] — TOC view: the raw ZIP
+//! - [`crate::viewer::listing::ListingMode`] — TOC view: the raw ZIP
 //!   container's file tree (reuses the archive listing pipeline).
 //! - [`crate::viewer::modes::InfoMode`] — metadata: title / creator /
 //!   language / publisher / spine length, parsed from the OPF.

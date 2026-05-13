@@ -13,6 +13,7 @@
 //! path; HTML-specific extras (title, meta, headings outline) can be
 //! layered on top later.
 
+pub mod compose;
 pub mod mode;
 pub mod render;
 

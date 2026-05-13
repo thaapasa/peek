@@ -5,5 +5,7 @@
 //! `pretty` reflows the raw source into pretty-printed form for
 //! `ContentMode`'s pretty view.
 
+pub mod detect;
+pub mod format;
 pub mod info;
 pub mod pretty;

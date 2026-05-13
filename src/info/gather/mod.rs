@@ -74,16 +74,18 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
 
     if is_md {
         let stats = crate::types::markdown::info_gather::gather(&text);
-        Some(FileExtras::Markdown {
-            text: text_stats,
-            stats,
-        })
+        Some(FileExtras::Markdown(
+            crate::types::markdown::info::MarkdownInfo {
+                text: text_stats,
+                stats,
+            },
+        ))
     } else {
         let stats = crate::types::sql::info_gather::gather(&text);
-        Some(FileExtras::Sql {
+        Some(FileExtras::Sql(crate::types::sql::info::SqlInfo {
             text: text_stats,
             stats,
-        })
+        }))
     }
 }
 
@@ -225,20 +227,20 @@ fn gather_extras_in_memory(
         },
         FileType::Structured(fmt) => match source.read_bytes() {
             Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => FileExtras::Structured {
+            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
                 format_name: crate::types::structured::info::format_name(*fmt),
                 stats: None,
-            },
+            }),
         },
         FileType::Html => match source.read_bytes() {
             Ok(bytes) => crate::types::structured::info::gather_extras(
                 crate::input::detect::StructuredFormat::Xml,
                 &bytes,
             ),
-            Err(_) => FileExtras::Structured {
+            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
                 format_name: "HTML",
                 stats: None,
-            },
+            }),
         },
         FileType::Ebook(EbookFormat::Epub) => {
             crate::types::ebook::epub::info_gather::gather_extras(source)
@@ -301,20 +303,20 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         }
         FileType::Structured(fmt) => match fs::read(path) {
             Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => FileExtras::Structured {
+            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
                 format_name: crate::types::structured::info::format_name(*fmt),
                 stats: None,
-            },
+            }),
         },
         FileType::Html => match fs::read(path) {
             Ok(bytes) => crate::types::structured::info::gather_extras(
                 crate::input::detect::StructuredFormat::Xml,
                 &bytes,
             ),
-            Err(_) => FileExtras::Structured {
+            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
                 format_name: "HTML",
                 stats: None,
-            },
+            }),
         },
         FileType::Archive(fmt) => {
             crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)

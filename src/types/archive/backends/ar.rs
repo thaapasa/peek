@@ -30,7 +30,7 @@ use std::io::Read;
 use anyhow::{Context, Result, bail};
 
 use crate::types::archive::reader::ReadSeek;
-use crate::types::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
+use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
 const HEADER_LEN: usize = 60;
 const GLOBAL_MAGIC: &[u8; 8] = b"!<arch>\n";

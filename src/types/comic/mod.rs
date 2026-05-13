@@ -4,6 +4,9 @@
 //! struct populated per-format.
 
 pub mod cbz;
+pub mod compose;
+pub mod detect;
+pub mod format;
 pub mod info;
 
 pub(crate) use cbz::CbzReadMode;

@@ -6,25 +6,15 @@ use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{
-    ComicFormat, Detected, DocumentFormat, EbookFormat, FileType, StructuredFormat,
-};
+use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
-use crate::types::archive;
-use crate::types::comic::{CbzReadMode, cbz};
-use crate::types::document::{self, DocReadMode, rtf::RtfReadMode};
-use crate::types::ebook::epub::{self, EpubReadMode};
-use crate::types::html::RenderedMode;
-use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
-use crate::types::listing::{ListingMode, from_flat_paths};
-use crate::types::pdf::{self, PdfPageMode, PdfTextMode};
-use crate::types::svg::SvgAnimationMode;
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 pub mod cell_size;
 pub mod hex;
 pub mod interactive;
+pub(crate) mod listing;
 pub(crate) mod modes;
 pub(crate) mod ui;
 
@@ -243,6 +233,10 @@ impl Registry {
     /// print-mode pipe path both consume this stack — pipe mode picks
     /// the first non-aux mode (or the first mode if all are aux, e.g.
     /// binary files).
+    ///
+    /// Per-type arms below delegate to `types::<x>::compose::compose`
+    /// so each type owns its mode-building logic; this match is the
+    /// single-file overview of the dispatch table.
     pub fn compose_modes(
         &self,
         source: &InputSource,
@@ -251,6 +245,7 @@ impl Registry {
     ) -> Result<Vec<Box<dyn Mode>>> {
         let file_type = &detected.file_type;
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
+        let ctx = self.compose_ctx();
 
         if self.plain_mode {
             // Binary/Archive/DiskImage/Audio in --plain still goes to
@@ -258,18 +253,9 @@ impl Registry {
             // input. Directory in --plain still gets the listing —
             // there's no "raw" view of a directory.
             if matches!(file_type, FileType::Directory) {
-                let path = source.path().expect("Directory FileType implies a path");
-                let (entries, warnings) =
-                    match crate::types::directory::read::read_dir_entries(path) {
-                        Ok(e) => (e, Vec::new()),
-                        Err(e) => (Vec::new(), vec![format!("Failed to read directory: {e:#}")]),
-                    };
-                let show_parent = parent_link_enabled(path);
-                modes.push(Box::new(crate::types::directory::DirectoryMode::new(
-                    entries,
-                    warnings,
-                    show_parent,
-                )));
+                crate::types::directory::compose::compose(
+                    source, detected, args, &ctx, &mut modes,
+                )?;
             } else if !matches!(
                 file_type,
                 FileType::Binary
@@ -278,273 +264,61 @@ impl Registry {
                     | FileType::DiskImage(_)
                     | FileType::Audio(_)
             ) {
-                modes.push(self.text_content_mode(source, file_type, args)?);
+                modes.push(ctx.text_content_mode(source, file_type, args)?);
             }
         } else {
             match file_type {
                 FileType::SourceCode { .. } | FileType::Structured(_) => {
-                    modes.push(self.text_content_mode(source, file_type, args)?);
+                    modes.push(ctx.text_content_mode(source, file_type, args)?);
                 }
                 FileType::Html => {
-                    modes.push(Box::new(RenderedMode::new(
-                        source.clone(),
-                        self.peek_theme.style_mode,
-                    )));
-                    // Pair the rendered view with the HTML source.
-                    modes.push(self.text_content_mode(source, file_type, args)?);
-                }
-                FileType::Ebook(EbookFormat::Epub) => {
-                    // Read mode (default) + ZIP listing TOC. Info
-                    // is appended by the universal tail. If OPF
-                    // parsing fails, fall back to listing-only so
-                    // the user can still browse the container.
-                    let pkg_result = epub::package::open(source);
-                    let mut warnings = Vec::new();
-                    if let Ok(pkg) = pkg_result {
-                        modes.push(Box::new(EpubReadMode::new(
-                            source.clone(),
-                            self.image_config(args),
-                            pkg,
-                        )));
-                    } else if let Err(e) = pkg_result {
-                        warnings.push(format!("EPUB metadata unreadable: {e:#}"));
-                    }
-                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
-                        source,
-                        crate::input::detect::ArchiveFormat::Zip,
-                    ) {
-                        Ok(e) => (e, Vec::new()),
-                        Err(e) => (Vec::new(), vec![format!("Failed to list EPUB: {e:#}")]),
-                    };
-                    warnings.append(&mut listing_warnings);
-                    modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
-                }
-                FileType::Document(fmt @ (DocumentFormat::Docx | DocumentFormat::Odt)) => {
-                    // Read view (default) + ZIP listing TOC. Listing
-                    // fallback covers the case where the parser can't
-                    // read the body (e.g. corrupt / non-conforming
-                    // file) so the user still sees the inner ZIP tree.
-                    let mut warnings = Vec::new();
-                    let parsed = match fmt {
-                        DocumentFormat::Docx => document::docx::package::open(source),
-                        DocumentFormat::Odt => document::odt::package::open(source),
-                        _ => unreachable!(),
-                    };
-                    match parsed {
-                        Ok(doc) => modes.push(Box::new(DocReadMode::new(source.clone(), doc))),
-                        Err(e) => warnings.push(format!("{} unreadable: {e:#}", fmt.label())),
-                    }
-                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
-                        source,
-                        crate::input::detect::ArchiveFormat::Zip,
-                    ) {
-                        Ok(e) => (e, Vec::new()),
-                        Err(e) => (
-                            Vec::new(),
-                            vec![format!("Failed to list {}: {e:#}", fmt.label())],
-                        ),
-                    };
-                    warnings.append(&mut listing_warnings);
-                    modes.push(Box::new(ListingMode::new(
-                        fmt.label(),
-                        "TOC",
-                        entries,
-                        warnings,
-                    )));
-                }
-                FileType::Document(DocumentFormat::Rtf) => {
-                    // RTF is single-file at the container level, but
-                    // real Word RTFs embed images as `\pict` groups
-                    // inline with the prose. Read view + a synthetic
-                    // listing of those embeds so the user can browse
-                    // / extract them with the same TAB workflow as a
-                    // ZIP-backed DOCX.
-                    match document::rtf::parse::open_source(source) {
-                        Ok(parsed) => {
-                            let entries = document::rtf::parse::embeds_to_entries(&parsed.embeds);
-                            let has_embeds = !entries.is_empty();
-                            modes.push(Box::new(RtfReadMode::new(source.clone(), parsed)));
-                            if has_embeds {
-                                modes.push(Box::new(ListingMode::new(
-                                    DocumentFormat::Rtf.label(),
-                                    "TOC",
-                                    entries,
-                                    Vec::new(),
-                                )));
-                            }
-                        }
-                        Err(e) => {
-                            // Surface the parse error through Info; the
-                            // read mode just isn't pushed.
-                            let _ = e;
-                        }
-                    }
-                }
-                FileType::Pdf => {
-                    // Page-render (default) + text-extraction view +
-                    // optional /EmbeddedFiles listing. If pdfium can't
-                    // open the file (encrypted with no password,
-                    // missing library, corrupt), fall through to
-                    // Hex/Info plus the open-error warning surfaced
-                    // below.
-                    match pdf::package::open_doc(source) {
-                        Ok(doc) => {
-                            if doc.page_count() > 0 {
-                                modes.push(Box::new(PdfPageMode::new(
-                                    doc.clone(),
-                                    self.image_config(args),
-                                )));
-                            }
-                            modes.push(Box::new(PdfTextMode::new(doc.clone())));
-                            let embeds = doc.list_embeds();
-                            if !embeds.is_empty() {
-                                let entries = from_flat_paths(embeds);
-                                modes.push(Box::new(ListingMode::new(
-                                    "PDF",
-                                    "Embeds",
-                                    entries,
-                                    Vec::new(),
-                                )));
-                            }
-                        }
-                        Err(e) => {
-                            // No PDF mode pushed; the open error rides
-                            // through FileInfo warnings via the universal
-                            // tail, so the user lands on Info with the
-                            // reason instead of a silent fall-through.
-                            let _ = e;
-                        }
-                    }
-                }
-                FileType::Comic(ComicFormat::Cbz) => {
-                    // Read mode (paged image reader) + ZIP listing
-                    // TOC. If page enumeration fails, fall back to
-                    // listing-only so the user can still browse the
-                    // container.
-                    let mut warnings = Vec::new();
-                    match cbz::package::list_pages(source) {
-                        Ok(pages) if !pages.is_empty() => {
-                            modes.push(Box::new(CbzReadMode::new(
-                                source.clone(),
-                                self.image_config(args),
-                                pages,
-                            )));
-                        }
-                        Ok(_) => {
-                            warnings.push("CBZ contains no image pages".to_string());
-                        }
-                        Err(e) => {
-                            warnings.push(format!("CBZ unreadable: {e:#}"));
-                        }
-                    }
-                    let (entries, mut listing_warnings) = match archive::reader::list_entries(
-                        source,
-                        crate::input::detect::ArchiveFormat::Zip,
-                    ) {
-                        Ok(e) => (e, Vec::new()),
-                        Err(e) => (Vec::new(), vec![format!("Failed to list CBZ: {e:#}")]),
-                    };
-                    warnings.append(&mut listing_warnings);
-                    modes.push(Box::new(ListingMode::new("CBZ", "TOC", entries, warnings)));
+                    crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
                 }
                 FileType::Image => {
-                    let cfg = self.image_config(args);
-                    // Animated GIF/WebP: AnimationMode owns the frame stack
-                    // and drives ticks via the Mode trait. Static image:
-                    // ImageRenderMode renders on demand.
-                    if let Some(frames) =
-                        crate::types::image::pipeline::animate::decode_anim_frames(
-                            source,
-                            detected.magic_mime.as_deref(),
-                        )?
-                    {
-                        modes.push(Box::new(AnimationMode::new(frames, cfg)));
-                    } else {
-                        modes.push(Box::new(ImageRenderMode::new(
-                            source.clone(),
-                            cfg,
-                            ImageKind::Raster,
-                        )));
-                    }
+                    crate::types::image::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
+                    )?;
                 }
                 FileType::Svg => {
-                    let cfg = self.image_config(args);
-                    let anim = if args.no_svg_anim {
-                        None
-                    } else {
-                        crate::types::image::pipeline::svg_anim::try_parse(source)?
-                    };
-                    if let Some(model) = anim {
-                        modes.push(Box::new(SvgAnimationMode::new(model, cfg)));
-                    } else {
-                        modes.push(Box::new(ImageRenderMode::new(
-                            source.clone(),
-                            cfg,
-                            ImageKind::Svg,
-                        )));
-                    }
-                    // Pair the SVG view with its XML source.
-                    modes.push(self.text_content_mode(source, file_type, args)?);
+                    crate::types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                }
+                FileType::Ebook(EbookFormat::Epub) => {
+                    crate::types::ebook::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
+                    )?;
+                }
+                FileType::Document(fmt) => {
+                    crate::types::document::compose::compose(
+                        source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
+                }
+                FileType::Pdf => {
+                    crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                }
+                FileType::Comic(ComicFormat::Cbz) => {
+                    crate::types::comic::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
+                    )?;
                 }
                 FileType::Archive(fmt) => {
-                    let (entries, warnings) = match archive::reader::list_entries(source, *fmt) {
-                        Ok(e) => (e, Vec::new()),
-                        Err(e) => (Vec::new(), vec![format!("Failed to list archive: {e:#}")]),
-                    };
-                    modes.push(Box::new(ListingMode::new(
-                        fmt.label(),
-                        "TOC",
-                        entries,
-                        warnings,
-                    )));
+                    crate::types::archive::compose::compose(
+                        source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
                 }
                 FileType::DiskImage(fmt) => {
-                    // ISO has a directory tree we can walk → present a
-                    // TOC view first, then Info as a sidekick. DMG has
-                    // no listing path (would need a full HFS+/APFS
-                    // filesystem walker), so it stays metadata-only.
-                    match fmt {
-                        crate::input::detect::DiskImageFormat::Iso => {
-                            let (entries, warnings) =
-                                match crate::types::disk_image::iso_listing::list_iso(source) {
-                                    Ok(e) => (e, Vec::new()),
-                                    Err(e) => {
-                                        (Vec::new(), vec![format!("Failed to list ISO: {e:#}")])
-                                    }
-                                };
-                            modes.push(Box::new(ListingMode::new(
-                                fmt.label(),
-                                "TOC",
-                                entries,
-                                warnings,
-                            )));
-                        }
-                        crate::input::detect::DiskImageFormat::Dmg
-                        | crate::input::detect::DiskImageFormat::Raw => {
-                            // No content / TOC view — push Info as the
-                            // primary so disk-image metadata is what
-                            // the user lands on. The universal block
-                            // below dedupes by ModeId, so the tail Info
-                            // append becomes a no-op.
-                            modes.push(Box::new(InfoMode::new()));
-                        }
-                    }
+                    crate::types::disk_image::compose::compose(
+                        source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
+                }
+                FileType::Audio(fmt) => {
+                    crate::types::audio::compose::compose(
+                        source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
                 }
                 FileType::Directory => {
-                    let path = source.path().expect("Directory FileType implies a path");
-                    let (entries, warnings) =
-                        match crate::types::directory::read::read_dir_entries(path) {
-                            Ok(e) => (e, Vec::new()),
-                            Err(e) => {
-                                (Vec::new(), vec![format!("Failed to read directory: {e:#}")])
-                            }
-                        };
-                    let show_parent = parent_link_enabled(path);
-                    modes.push(Box::new(crate::types::directory::DirectoryMode::new(
-                        entries,
-                        warnings,
-                        show_parent,
-                    )));
+                    crate::types::directory::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
+                    )?;
                 }
                 FileType::Compressed(_) => {
                     // Bare-codec streams resolve to their inner content
@@ -554,55 +328,6 @@ impl Registry {
                     // Hex + Info tail below renders the raw compressed
                     // bytes, and the FileInfo warning row surfaces the
                     // decompression error.
-                }
-                FileType::Audio(fmt) => {
-                    // Metadata-only view (no playback). Tab order:
-                    // Info → Cover (when a picture is embedded) →
-                    // Lyrics (when present) → Embeds listing (when
-                    // either is present). The universal Info push
-                    // below dedupes by ModeId so the explicit Info
-                    // push here just controls position.
-                    modes.push(Box::new(InfoMode::new()));
-                    if let Ok(probed) = crate::types::audio::package::probe(source, *fmt) {
-                        if let Some(visual) = crate::types::audio::package::primary_cover(&probed) {
-                            let name = crate::types::audio::package::visual_filename(visual);
-                            let cover_source = InputSource::memory(visual.data.clone(), name);
-                            modes.push(Box::new(ImageRenderMode::with_label(
-                                cover_source,
-                                self.image_config(args),
-                                ImageKind::Raster,
-                                "Cover",
-                            )));
-                        }
-                        if let Some(lyrics) = &probed.lyrics {
-                            let lyrics_source =
-                                InputSource::memory(lyrics.as_bytes().to_vec(), "lyrics.txt");
-                            if let Ok(line_source) = lyrics_source.open_line_source() {
-                                modes.push(Box::new(ContentMode::new(
-                                    lyrics_source,
-                                    line_source,
-                                    None,
-                                    None,
-                                    Rc::clone(&self.theme_manager),
-                                    self.theme_name,
-                                    false,
-                                    false,
-                                    args.line_numbers,
-                                    "Lyrics",
-                                )));
-                            }
-                        }
-                        let entries = crate::types::audio::package::build_listing(&probed);
-                        if !entries.is_empty() {
-                            let tree = from_flat_paths(entries);
-                            modes.push(Box::new(ListingMode::new(
-                                "Audio",
-                                "Embeds",
-                                tree,
-                                Vec::new(),
-                            )));
-                        }
-                    }
                 }
                 FileType::Binary => {
                     // Default view for binary IS hex; HexMode is appended
@@ -634,6 +359,28 @@ impl Registry {
         Ok(modes)
     }
 
+    fn compose_ctx(&self) -> ComposeCtx<'_> {
+        ComposeCtx {
+            theme_manager: Rc::clone(&self.theme_manager),
+            theme_name: self.theme_name,
+            peek_theme: &self.peek_theme,
+            plain_mode: self.plain_mode,
+        }
+    }
+}
+
+/// Shared services threaded through each `types::<x>::compose::compose`
+/// call. Holds the theme/style state plus the two helpers (image config,
+/// generic text content mode) that per-type compose bodies need to build
+/// their mode stacks.
+pub struct ComposeCtx<'a> {
+    pub theme_manager: Rc<ThemeManager>,
+    pub theme_name: PeekThemeName,
+    pub peek_theme: &'a PeekTheme,
+    pub plain_mode: bool,
+}
+
+impl<'a> ComposeCtx<'a> {
     /// Build a `ContentMode` for text-based file types: source code,
     /// structured (lazy pretty-print), plain text, or SVG XML.
     ///
@@ -641,7 +388,7 @@ impl Registry {
     /// count lines and capture sparse anchors — instead of reading the
     /// whole file into memory. Pretty-print is deferred to the first
     /// time pretty view is rendered, capped at `PRETTY_MAX_BYTES`.
-    fn text_content_mode(
+    pub fn text_content_mode(
         &self,
         source: &InputSource,
         file_type: &FileType,
@@ -698,7 +445,7 @@ impl Registry {
         )))
     }
 
-    fn image_config(&self, args: &Args) -> crate::types::image::ImageConfig {
+    pub fn image_config(&self, args: &Args) -> crate::types::image::ImageConfig {
         use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
         ImageConfig {
             mode: ImageMode::from_str(&args.image_mode),
@@ -767,16 +514,6 @@ pub(crate) fn syntax_token_for(
 /// (comments / JSON5 features / etc.), so raw should be the default view.
 fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
     matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5)
-}
-
-/// True when the directory at `path` has a parent we can navigate to.
-/// Suppresses the `..` row at filesystem root (and on canonicalize
-/// failures, where `..` would otherwise resolve to a broken target).
-fn parent_link_enabled(path: &std::path::Path) -> bool {
-    std::fs::canonicalize(path)
-        .ok()
-        .and_then(|p| p.parent().map(|_| ()))
-        .is_some()
 }
 
 /// Map file extensions that syntect doesn't natively support to the closest

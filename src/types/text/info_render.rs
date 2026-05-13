@@ -1,5 +1,13 @@
-use crate::info::{Encoding, IndentStyle, LineEndings, TextStats, paint_count, push_field};
+use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
+use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
+
+/// Render the standalone Content section for plain text files.
+pub fn render_section(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
+    lines.push(String::new());
+    push_section_header(lines, "Content", theme);
+    push_text_stats(lines, stats, theme);
+}
 
 pub fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
     push_field(lines, "Lines", &paint_count(stats.line_count, theme), theme);

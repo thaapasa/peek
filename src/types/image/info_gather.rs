@@ -9,6 +9,7 @@ use ::image::ImageDecoder;
 use super::{animation_stats, exif, xmp};
 use crate::info::FileExtras;
 use crate::input::InputSource;
+use crate::types::image::info::{AnimationStats, ImageStats};
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
 pub(crate) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
@@ -60,7 +61,7 @@ fn read_source_head(source: &InputSource, max: usize) -> Vec<u8> {
 fn image_extras_from_decoder(
     mut decoder: Box<dyn ImageDecoder>,
     head: &[u8],
-    animation: Option<crate::info::AnimationStats>,
+    animation: Option<AnimationStats>,
 ) -> FileExtras {
     let (width, height) = decoder.dimensions();
     let ct = decoder.color_type();
@@ -77,7 +78,7 @@ fn image_extras_from_decoder(
     let exif = exif::exif_fields_from_bytes(head);
     let xmp = xmp::xmp_fields_from_bytes(head);
 
-    FileExtras::Image {
+    FileExtras::Image(ImageStats {
         width,
         height,
         color_type,
@@ -87,7 +88,7 @@ fn image_extras_from_decoder(
         animation,
         exif,
         xmp,
-    }
+    })
 }
 
 /// Read up to `max` bytes from the head of `path`. Errors are swallowed —

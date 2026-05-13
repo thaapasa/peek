@@ -2,30 +2,25 @@
 //! plug into this same section header by adding their own block here
 //! and a matching arm in `gather_extras`.
 
-use crate::info::{
-    DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta, MbrPartition,
-    RawImageMeta, push_field, push_section_header, thousands_sep,
-};
+use crate::info::{push_field, push_section_header, thousands_sep};
 use crate::theme::PeekTheme;
+use crate::types::disk_image::info::{
+    DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta,
+    MbrPartition, RawImageMeta,
+};
 use crate::types::disk_image::mbr;
 
-pub fn render_section(
-    lines: &mut Vec<String>,
-    format_name: &str,
-    meta: Option<&DiskImageMeta>,
-    error: Option<&str>,
-    theme: &PeekTheme,
-) {
+pub fn render_section(lines: &mut Vec<String>, info: &DiskImageInfo, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "Disk Image", theme);
-    push_field(lines, "Format", &theme.paint_value(format_name), theme);
+    push_field(lines, "Format", &theme.paint_value(info.format_name), theme);
 
-    if let Some(err) = error {
+    if let Some(err) = &info.error {
         push_field(lines, "Status", &theme.paint_warning(err), theme);
         return;
     }
 
-    match meta {
+    match &info.meta {
         Some(DiskImageMeta::Iso(iso)) => render_iso(lines, iso, theme),
         Some(DiskImageMeta::Dmg(dmg)) => render_dmg(lines, dmg, theme),
         Some(DiskImageMeta::Raw(raw)) => render_raw(lines, raw, theme),

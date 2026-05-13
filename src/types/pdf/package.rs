@@ -27,7 +27,7 @@ use image::DynamicImage;
 use pdfium_render::prelude::*;
 
 use crate::input::InputSource;
-use crate::types::listing::FlatEntry;
+use crate::viewer::listing::FlatEntry;
 
 /// Process-wide Pdfium handle. Holds the C++ library bindings; a
 /// `PdfDocument` borrows from it for as long as the doc lives.

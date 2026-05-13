@@ -28,7 +28,7 @@ use std::io::{self, Read};
 use anyhow::{Context, Result, anyhow, bail};
 
 use crate::types::archive::reader::ReadSeek;
-use crate::types::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
+use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
 const NEWC_HEADER: usize = 110;
 const ODC_HEADER: usize = 76;

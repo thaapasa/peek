@@ -25,7 +25,7 @@ use symphonia::default::get_probe;
 use crate::input::InputSource;
 use crate::input::detect::AudioFormat;
 use crate::types::audio::info::{AudioMetadata, AudioStats};
-use crate::types::listing::FlatEntry;
+use crate::viewer::listing::FlatEntry;
 
 /// Full probe result. Everything info-gather, listing, and extract need
 /// flows from this single struct.

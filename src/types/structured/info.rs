@@ -4,11 +4,32 @@
 //! additionally records the root element name and any namespaces
 //! declared on the root.
 
-use crate::info::{
-    FileExtras, StructuredStats, TopLevelKind, paint_count, push_field, push_section_header,
-};
+use crate::info::{FileExtras, paint_count, push_field, push_section_header};
 use crate::input::detect::StructuredFormat;
 use crate::theme::PeekTheme;
+
+pub struct StructuredInfo {
+    pub format_name: &'static str,
+    pub stats: Option<StructuredStats>,
+}
+
+pub struct StructuredStats {
+    pub top_level_kind: TopLevelKind,
+    pub top_level_count: usize,
+    pub max_depth: usize,
+    pub total_nodes: usize,
+    pub xml_root: Option<String>,
+    pub xml_namespaces: Vec<String>,
+}
+
+pub enum TopLevelKind {
+    Object,
+    Array,
+    Scalar,
+    Table,
+    MultiDoc(usize),
+    Document,
+}
 
 pub fn format_name(fmt: StructuredFormat) -> &'static str {
     match fmt {
@@ -36,19 +57,14 @@ pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
         },
         Err(_) => None,
     };
-    FileExtras::Structured { format_name, stats }
+    FileExtras::Structured(StructuredInfo { format_name, stats })
 }
 
-pub fn render_section(
-    lines: &mut Vec<String>,
-    format_name: &str,
-    stats: Option<&StructuredStats>,
-    theme: &PeekTheme,
-) {
+pub fn render_section(lines: &mut Vec<String>, info: &StructuredInfo, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "Format", theme);
-    push_field(lines, "Type", &theme.paint_accent(format_name), theme);
-    if let Some(stats) = stats {
+    push_field(lines, "Type", &theme.paint_accent(info.format_name), theme);
+    if let Some(stats) = &info.stats {
         push_structured_stats(lines, stats, theme);
     }
 }

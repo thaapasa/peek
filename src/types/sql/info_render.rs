@@ -1,9 +1,18 @@
-use crate::info::{SqlDialect, SqlStats, paint_count, push_field, push_section_header};
+use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
+use crate::types::sql::info::{SqlDialect, SqlInfo, SqlStats};
+use crate::types::text::info_render::push_text_stats;
 
 const NAME_LIST_LIMIT: usize = 8;
 
-pub fn render_section(lines: &mut Vec<String>, stats: &SqlStats, theme: &PeekTheme) {
+pub fn render_section(lines: &mut Vec<String>, info: &SqlInfo, theme: &PeekTheme) {
+    lines.push(String::new());
+    push_section_header(lines, "Content", theme);
+    push_text_stats(lines, &info.text, theme);
+    push_sql_section(lines, &info.stats, theme);
+}
+
+fn push_sql_section(lines: &mut Vec<String>, stats: &SqlStats, theme: &PeekTheme) {
     lines.push(String::new());
     push_section_header(lines, "SQL", theme);
 
