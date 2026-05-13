@@ -29,28 +29,16 @@ impl Output {
     }
 }
 
-/// Stream the extracted source in 64 KB chunks so large extracts
-/// (e.g. an ISO entry) don't fully buffer before writing.
+/// Stream the extracted source via `io::copy` so large extracts (e.g.
+/// an ISO entry) don't fully buffer before writing.
 pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf> {
-    const CHUNK: usize = 64 * 1024;
-    let bs = extracted.source.open_byte_source()?;
-    let total = bs.len();
+    let mut stream = extracted.source.open_stream()?;
 
     match output {
         Output::Stdout => {
             let stdout = io::stdout();
             let mut handle = stdout.lock();
-            let mut offset: u64 = 0;
-            while offset < total {
-                let buf = bs.read_range(offset, CHUNK)?;
-                if buf.is_empty() {
-                    break;
-                }
-                handle
-                    .write_all(&buf)
-                    .context("failed to write to stdout")?;
-                offset += buf.len() as u64;
-            }
+            io::copy(&mut stream, &mut handle).context("failed to write to stdout")?;
             handle.flush().context("failed to flush stdout")?;
             Ok(PathBuf::from("-"))
         }
@@ -63,16 +51,8 @@ pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf>
             }
             let mut file = fs::File::create(&dest)
                 .with_context(|| format!("failed to create {}", dest.display()))?;
-            let mut offset: u64 = 0;
-            while offset < total {
-                let buf = bs.read_range(offset, CHUNK)?;
-                if buf.is_empty() {
-                    break;
-                }
-                file.write_all(&buf)
-                    .with_context(|| format!("failed to write to {}", dest.display()))?;
-                offset += buf.len() as u64;
-            }
+            io::copy(&mut stream, &mut file)
+                .with_context(|| format!("failed to write to {}", dest.display()))?;
             file.flush()
                 .with_context(|| format!("failed to flush {}", dest.display()))?;
             Ok(dest)

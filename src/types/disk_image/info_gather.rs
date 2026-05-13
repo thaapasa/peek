@@ -3,6 +3,8 @@
 //! pulls the trailing 512-byte UDIF trailer. Multi-GB images stay
 //! cheap because no payload bytes are touched.
 
+use bytes::Bytes;
+
 use super::{dmg_trailer, iso_pvd, mbr};
 use crate::info::FileExtras;
 use crate::input::InputSource;
@@ -85,7 +87,7 @@ fn gather_dmg(source: &InputSource, format_name: &'static str) -> FileExtras {
     }
 }
 
-fn read_iso_descriptors(source: &InputSource) -> anyhow::Result<Vec<u8>> {
+fn read_iso_descriptors(source: &InputSource) -> anyhow::Result<Bytes> {
     let bs = source.open_byte_source()?;
     if bs.len() <= iso_pvd::PVD_OFFSET {
         anyhow::bail!(
@@ -104,7 +106,7 @@ fn read_iso_descriptors(source: &InputSource) -> anyhow::Result<Vec<u8>> {
     Ok(buf)
 }
 
-fn read_dmg_trailer(source: &InputSource) -> anyhow::Result<Vec<u8>> {
+fn read_dmg_trailer(source: &InputSource) -> anyhow::Result<Bytes> {
     let bs = source.open_byte_source()?;
     let len = bs.len();
     if len < dmg_trailer::TRAILER_SIZE as u64 {

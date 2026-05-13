@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
@@ -125,8 +125,9 @@ impl InputSource {
     /// a line index past EOF returns the source length. Returns `None` if
     /// the source can't be read.
     ///
-    /// Streams via `open_byte_source` in 64 KB chunks so multi-GB files
-    /// don't get loaded into memory.
+    /// Streams via [`ByteStream`](super::stream::ByteStream) +
+    /// [`BufReader::read_until`](std::io::BufReader::read_until) so multi-GB
+    /// files don't get loaded into memory.
     ///
     /// For pretty-printed structured content, the displayed line numbers
     /// don't correspond to source line numbers — this conversion is
@@ -135,49 +136,45 @@ impl InputSource {
         if line == 0 {
             return Some(0);
         }
-        let bs = self.open_byte_source().ok()?;
-        let total = bs.len();
-        let mut count = 0usize;
+        let mut reader = std::io::BufReader::with_capacity(SCAN_CHUNK, self.open_stream().ok()?);
+        let mut buf = Vec::new();
         let mut offset: u64 = 0;
-        while offset < total {
-            let buf = bs.read_range(offset, SCAN_CHUNK).ok()?;
-            if buf.is_empty() {
-                break;
+        let mut count = 0usize;
+        loop {
+            buf.clear();
+            let n = std::io::BufRead::read_until(&mut reader, b'\n', &mut buf).ok()?;
+            if n == 0 {
+                return Some(offset);
             }
-            for (i, b) in buf.iter().enumerate() {
-                if *b == b'\n' {
-                    count += 1;
-                    if count == line {
-                        return Some(offset + (i + 1) as u64);
-                    }
+            offset += n as u64;
+            if buf.last() == Some(&b'\n') {
+                count += 1;
+                if count == line {
+                    return Some(offset);
                 }
             }
-            offset += buf.len() as u64;
         }
-        Some(total)
     }
 
     /// Convert a byte offset to a 0-based line index by counting `\n`
     /// bytes up to (but not including) the offset. Offset past EOF
     /// counts the total newlines in the source. Returns `None` if the
     /// source can't be read.
-    ///
-    /// Streams via `open_byte_source` in 64 KB chunks.
     pub fn byte_to_line(&self, byte: u64) -> Option<usize> {
+        use std::io::Read;
         let bs = self.open_byte_source().ok()?;
         let limit = byte.min(bs.len());
+        let stream = super::stream::ByteStream::range(bs, 0, limit);
+        let mut reader = std::io::BufReader::with_capacity(SCAN_CHUNK, stream);
         let mut count = 0usize;
-        let mut offset: u64 = 0;
-        while offset < limit {
-            let want = ((limit - offset) as usize).min(SCAN_CHUNK);
-            let buf = bs.read_range(offset, want).ok()?;
-            if buf.is_empty() {
-                break;
+        let mut buf = [0u8; SCAN_CHUNK];
+        loop {
+            let n = reader.read(&mut buf).ok()?;
+            if n == 0 {
+                return Some(count);
             }
-            count += buf.iter().filter(|b| **b == b'\n').count();
-            offset += buf.len() as u64;
+            count += buf[..n].iter().filter(|b| **b == b'\n').count();
         }
-        Some(count)
     }
 
     /// Open a streaming line reader over this source. See `LineSource`
@@ -186,6 +183,14 @@ impl InputSource {
     /// are bounded by the anchor stride.
     pub fn open_line_source(&self) -> Result<crate::input::LineSource> {
         crate::input::LineSource::open(self)
+    }
+
+    /// Open a sequential byte stream over the full source. Wraps
+    /// `open_byte_source()` in a `ByteStream`, so any `io::Read` consumer
+    /// (`io::copy`, `BufReader`, `take`) can drive the source without
+    /// pumping `read_range` by hand.
+    pub fn open_stream(&self) -> Result<crate::input::ByteStream> {
+        Ok(crate::input::ByteStream::open(self.open_byte_source()?))
     }
 
     /// Open a streaming byte reader. For files, holds the file handle
@@ -229,20 +234,29 @@ fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
 
 /// Random-access byte reader. Implementations may seek (`File`) or slice
 /// (in-memory). Used by the hex viewer to scan a file without loading it
-/// fully into memory.
+/// fully into memory, and as the primitive backing
+/// [`ByteStream`](super::stream::ByteStream) for sequential walks.
 pub trait ByteSource {
     /// Total length of the underlying content in bytes.
     fn len(&self) -> u64;
 
-    /// Read up to `len` bytes starting at `offset`. Returned `Vec` is shorter
-    /// than requested only at EOF; reading at or past EOF returns empty.
-    fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>>;
+    /// Read up to `len` bytes starting at `offset`. Returned `Bytes` is
+    /// shorter than requested only at EOF; reading at or past EOF returns
+    /// empty. `Bytes` so in-memory sources can return zero-copy slices
+    /// and file sources can hand off owned buffers without an extra copy
+    /// at the call site.
+    fn read_range(&self, offset: u64, len: usize) -> Result<Bytes>;
 }
 
 pub struct FileByteSource {
     file: RefCell<File>,
     len: u64,
     path: PathBuf,
+    /// Cached current file position. `None` if unknown (after a failed
+    /// read/seek). Lets sequential `read_range` calls skip the seek when
+    /// the next offset equals where the last read ended — turns an N-chunk
+    /// walk into one seek + N reads.
+    cursor: Cell<Option<u64>>,
 }
 
 impl FileByteSource {
@@ -257,6 +271,7 @@ impl FileByteSource {
             file: RefCell::new(file),
             len,
             path: path.to_path_buf(),
+            cursor: Cell::new(Some(0)),
         })
     }
 }
@@ -266,29 +281,35 @@ impl ByteSource for FileByteSource {
         self.len
     }
 
-    fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
+    fn read_range(&self, offset: u64, len: usize) -> Result<Bytes> {
         if offset >= self.len || len == 0 {
-            return Ok(Vec::new());
+            return Ok(Bytes::new());
         }
         let remaining = (self.len - offset) as usize;
         let to_read = len.min(remaining);
         let mut buf = vec![0u8; to_read];
         let mut file = self.file.borrow_mut();
-        file.seek(SeekFrom::Start(offset))
-            .with_context(|| format!("failed to seek in {}", self.path.display()))?;
+        if self.cursor.get() != Some(offset) {
+            self.cursor.set(None);
+            file.seek(SeekFrom::Start(offset))
+                .with_context(|| format!("failed to seek in {}", self.path.display()))?;
+            self.cursor.set(Some(offset));
+        }
         let mut filled = 0;
         while filled < to_read {
             match file.read(&mut buf[filled..]) {
                 Ok(0) => break,
                 Ok(n) => filled += n,
                 Err(e) => {
+                    self.cursor.set(None);
                     return Err(anyhow::Error::from(e))
                         .with_context(|| format!("failed to read {}", self.path.display()));
                 }
             }
         }
+        self.cursor.set(Some(offset + filled as u64));
         buf.truncate(filled);
-        Ok(buf)
+        Ok(Bytes::from(buf))
     }
 }
 
@@ -307,14 +328,14 @@ impl ByteSource for BytesByteSource {
         self.bytes.len() as u64
     }
 
-    fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
+    fn read_range(&self, offset: u64, len: usize) -> Result<Bytes> {
         let total = self.bytes.len() as u64;
         if offset >= total || len == 0 {
-            return Ok(Vec::new());
+            return Ok(Bytes::new());
         }
         let start = offset as usize;
         let end = (start + len).min(self.bytes.len());
-        Ok(self.bytes[start..end].to_vec())
+        Ok(self.bytes.slice(start..end))
     }
 }
 
@@ -348,9 +369,9 @@ impl ByteSource for RangeByteSource {
         self.len
     }
 
-    fn read_range(&self, offset: u64, len: usize) -> Result<Vec<u8>> {
+    fn read_range(&self, offset: u64, len: usize) -> Result<Bytes> {
         if offset >= self.len || len == 0 {
-            return Ok(Vec::new());
+            return Ok(Bytes::new());
         }
         let remaining = self.len - offset;
         let want = (len as u64).min(remaining) as usize;
@@ -376,7 +397,7 @@ mod tests {
         let path = write_temp("full", b"abcdefghij");
         let bs = FileByteSource::open(&path).unwrap();
         assert_eq!(bs.len(), 10);
-        assert_eq!(bs.read_range(0, 10).unwrap(), b"abcdefghij");
+        assert_eq!(bs.read_range(0, 10).unwrap().as_ref(), b"abcdefghij");
         let _ = fs::remove_file(&path);
     }
 
@@ -384,7 +405,7 @@ mod tests {
     fn file_byte_source_partial_eof() {
         let path = write_temp("partial", b"abcdefghij");
         let bs = FileByteSource::open(&path).unwrap();
-        assert_eq!(bs.read_range(7, 100).unwrap(), b"hij");
+        assert_eq!(bs.read_range(7, 100).unwrap().as_ref(), b"hij");
         let _ = fs::remove_file(&path);
     }
 
@@ -392,7 +413,7 @@ mod tests {
     fn file_byte_source_offset_past_eof() {
         let path = write_temp("past", b"abc");
         let bs = FileByteSource::open(&path).unwrap();
-        assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
+        assert_eq!(bs.read_range(100, 10).unwrap().as_ref(), b"" as &[u8]);
         let _ = fs::remove_file(&path);
     }
 
@@ -401,7 +422,7 @@ mod tests {
         let path = write_temp("empty", b"");
         let bs = FileByteSource::open(&path).unwrap();
         assert_eq!(bs.len(), 0);
-        assert_eq!(bs.read_range(0, 10).unwrap(), Vec::<u8>::new());
+        assert_eq!(bs.read_range(0, 10).unwrap().as_ref(), b"" as &[u8]);
         let _ = fs::remove_file(&path);
     }
 
@@ -409,9 +430,9 @@ mod tests {
     fn file_byte_source_repeated_seeks() {
         let path = write_temp("seek", b"0123456789");
         let bs = FileByteSource::open(&path).unwrap();
-        assert_eq!(bs.read_range(0, 3).unwrap(), b"012");
-        assert_eq!(bs.read_range(7, 3).unwrap(), b"789");
-        assert_eq!(bs.read_range(3, 4).unwrap(), b"3456");
+        assert_eq!(bs.read_range(0, 3).unwrap().as_ref(), b"012");
+        assert_eq!(bs.read_range(7, 3).unwrap().as_ref(), b"789");
+        assert_eq!(bs.read_range(3, 4).unwrap().as_ref(), b"3456");
         let _ = fs::remove_file(&path);
     }
 
@@ -419,26 +440,26 @@ mod tests {
     fn bytes_byte_source_full_read() {
         let bs = BytesByteSource::new(Bytes::from_static(b"abcdefghij"));
         assert_eq!(bs.len(), 10);
-        assert_eq!(bs.read_range(0, 10).unwrap(), b"abcdefghij");
+        assert_eq!(bs.read_range(0, 10).unwrap().as_ref(), b"abcdefghij");
     }
 
     #[test]
     fn bytes_byte_source_partial_eof() {
         let bs = BytesByteSource::new(Bytes::from_static(b"abcdefghij"));
-        assert_eq!(bs.read_range(7, 100).unwrap(), b"hij");
+        assert_eq!(bs.read_range(7, 100).unwrap().as_ref(), b"hij");
     }
 
     #[test]
     fn bytes_byte_source_offset_past_eof() {
         let bs = BytesByteSource::new(Bytes::from_static(b"abc"));
-        assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
+        assert_eq!(bs.read_range(100, 10).unwrap().as_ref(), b"" as &[u8]);
     }
 
     #[test]
     fn bytes_byte_source_empty() {
         let bs = BytesByteSource::new(Bytes::new());
         assert_eq!(bs.len(), 0);
-        assert_eq!(bs.read_range(0, 10).unwrap(), Vec::<u8>::new());
+        assert_eq!(bs.read_range(0, 10).unwrap().as_ref(), b"" as &[u8]);
     }
 
     #[test]
@@ -446,10 +467,10 @@ mod tests {
         let inner = BytesByteSource::new(Bytes::from_static(b"0123456789"));
         let bs = RangeByteSource::new(Box::new(inner), 3, 5);
         assert_eq!(bs.len(), 5);
-        assert_eq!(bs.read_range(0, 5).unwrap(), b"34567");
-        assert_eq!(bs.read_range(2, 2).unwrap(), b"56");
+        assert_eq!(bs.read_range(0, 5).unwrap().as_ref(), b"34567");
+        assert_eq!(bs.read_range(2, 2).unwrap().as_ref(), b"56");
         // Read past view EOF returns empty even though base has more.
-        assert_eq!(bs.read_range(100, 10).unwrap(), Vec::<u8>::new());
+        assert_eq!(bs.read_range(100, 10).unwrap().as_ref(), b"" as &[u8]);
     }
 
     #[test]
@@ -457,7 +478,7 @@ mod tests {
         let inner = BytesByteSource::new(Bytes::from_static(b"abcdef"));
         let bs = RangeByteSource::new(Box::new(inner), 4, 100);
         assert_eq!(bs.len(), 2, "clamped to remaining bytes");
-        assert_eq!(bs.read_range(0, 10).unwrap(), b"ef");
+        assert_eq!(bs.read_range(0, 10).unwrap().as_ref(), b"ef");
     }
 
     #[test]
@@ -470,7 +491,7 @@ mod tests {
         assert!(src.path().is_none());
         let bs = src.open_byte_source().unwrap();
         assert_eq!(bs.len(), 5);
-        assert_eq!(bs.read_range(1, 3).unwrap(), b"ell");
+        assert_eq!(bs.read_range(1, 3).unwrap().as_ref(), b"ell");
         let _ = fs::remove_file(&path);
     }
 

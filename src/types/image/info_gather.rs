@@ -5,6 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use ::image::ImageDecoder;
+use bytes::Bytes;
 
 use super::{animation_stats, exif, xmp};
 use crate::info::FileExtras;
@@ -51,9 +52,9 @@ fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
     }
 }
 
-fn read_source_head(source: &InputSource, max: usize) -> Vec<u8> {
+fn read_source_head(source: &InputSource, max: usize) -> Bytes {
     let Ok(bs) = source.open_byte_source() else {
-        return Vec::new();
+        return Bytes::new();
     };
     bs.read_range(0, max).unwrap_or_default()
 }

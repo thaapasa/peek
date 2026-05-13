@@ -201,6 +201,10 @@ fn decode(bytes: Vec<u8>) -> Result<String> {
 /// One streaming pass: count newlines, capture an anchor every
 /// `ANCHOR_STRIDE` lines, return the totals.
 ///
+/// Stays on `read_range` (not `BufReader::read_until`) because this runs at
+/// every `LineSource::open` and a tight byte scan over 64 KB chunks beats
+/// per-line function-call overhead on long files.
+///
 /// Newline-byte counting is safe over raw bytes: in UTF-8, no continuation
 /// or multibyte-start byte ever has the value `0x0A`, so the count is
 /// independent of how chunks split codepoints.
