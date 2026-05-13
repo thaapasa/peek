@@ -25,7 +25,7 @@ use rtf_parser::{Color as RtfColor, Painter, Paragraph as RtfParagraph, RtfDocum
 
 use crate::input::InputSource;
 use crate::types::document::DocumentMetadata;
-use crate::types::listing::{Entry, EntryKind};
+use crate::viewer::listing::{Entry, EntryKind};
 
 pub(crate) struct Parsed {
     pub metadata: DocumentMetadata,

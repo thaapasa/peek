@@ -5,7 +5,7 @@
 //! - [`read_mode::CbzReadMode`] (default) — one page at a time
 //!   rendered as ASCII art via the image pipeline; `n` / `N` step
 //!   through pages.
-//! - [`crate::types::listing::ListingMode`] — TOC view: the raw ZIP
+//! - [`crate::viewer::listing::ListingMode`] — TOC view: the raw ZIP
 //!   container's file tree (reuses the archive listing pipeline).
 //!
 //! [`package`] owns the ZIP entry walk that picks image pages out of

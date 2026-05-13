@@ -7,7 +7,7 @@ use crate::info::{FileExtras, paint_count, push_field, push_section_header, thou
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::theme::PeekTheme;
-use crate::types::listing::Stats;
+use crate::viewer::listing::Stats;
 
 pub struct ArchiveStats {
     pub format_name: &'static str,

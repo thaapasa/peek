@@ -16,15 +16,16 @@ use crate::types::document::{self, DocReadMode, rtf::RtfReadMode};
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::types::html::RenderedMode;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
-use crate::types::listing::{ListingMode, from_flat_paths};
 use crate::types::pdf::{self, PdfPageMode, PdfTextMode};
 use crate::types::svg::SvgAnimationMode;
+use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
 use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
 
 pub mod cell_size;
 pub mod hex;
 pub mod interactive;
+pub(crate) mod listing;
 pub(crate) mod modes;
 pub(crate) mod ui;
 

@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 
 use crate::types::archive::reader::ReadSeek;
-use crate::types::listing::{EntryMtime, FlatEntry};
+use crate::viewer::listing::{EntryMtime, FlatEntry};
 
 pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     let mut archive = zip::ZipArchive::new(reader).context("failed to read zip archive")?;

@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use sevenz_rust2::{ArchiveReader, Password};
 
 use crate::types::archive::reader::ReadSeek;
-use crate::types::listing::{EntryMtime, FlatEntry};
+use crate::viewer::listing::{EntryMtime, FlatEntry};
 
 /// Windows file-attribute bit for read-only files. Used to translate the
 /// 7z native attribute set into a meaningful Unix permission preview.

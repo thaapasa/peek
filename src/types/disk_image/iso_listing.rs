@@ -1,4 +1,4 @@
-//! ISO 9660 directory walker — produces a [`Listing`](crate::types::listing)
+//! ISO 9660 directory walker — produces a [`Listing`](crate::viewer::listing)
 //! tree for the interactive TOC view.
 //!
 //! Walks recursively from the root extent, parsing fixed-layout
@@ -18,7 +18,7 @@ use anyhow::{Context, Result};
 
 use super::iso_pvd::{self, PVD_OFFSET};
 use crate::input::InputSource;
-use crate::types::listing::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
+use crate::viewer::listing::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
 
 /// Cap on tree depth walked. Real ISOs respect ISO 9660's 8-level
 /// limit; this cap is loose enough for non-conformant images while
@@ -391,7 +391,7 @@ fn civil_to_unix_secs(y: i32, m: u32, d: u32, h: u32, mi: u32, s: u32) -> Option
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::listing::Stats;
+    use crate::viewer::listing::Stats;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {

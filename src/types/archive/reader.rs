@@ -1,5 +1,5 @@
 //! Archive listing dispatch: maps an `ArchiveFormat` to its backend
-//! and returns a generic `Vec<Entry>` tree via `types::listing`. The
+//! and returns a generic `Vec<Entry>` tree via `viewer::listing`. The
 //! shared `ReadSeek` helper lives here because every backend needs a
 //! seekable reader over the source.
 
@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
-use crate::types::listing::{Entry, FlatEntry, from_flat_paths};
+use crate::viewer::listing::{Entry, FlatEntry, from_flat_paths};
 
 /// Trait alias for the seekable readers we hand to the zip backend. tar
 /// only needs `Read`, but using one helper for both keeps the call sites
@@ -64,7 +64,7 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::listing::Stats;
+    use crate::viewer::listing::Stats;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {

@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use tar::EntryType;
 
 use crate::types::archive::reader::ReadSeek;
-use crate::types::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
+use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
 pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     list_from_read(reader)

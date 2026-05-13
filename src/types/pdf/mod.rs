@@ -7,7 +7,7 @@
 //!     ([`crate::types::comic::cbz::CbzReadMode`] analog)
 //!   * [`PdfTextMode`] — width-cached text render
 //!     ([`crate::types::document::DocReadMode`] analog)
-//!   * [`crate::types::listing::ListingMode`] of `/EmbeddedFiles`
+//!   * [`crate::viewer::listing::ListingMode`] of `/EmbeddedFiles`
 //!     attachments — extract path lives in [`extract`]
 
 pub mod extract;

@@ -4,7 +4,7 @@
 //! - [`crate::types::document::DocReadMode`] (default) — styled text,
 //!   walked once at open time into a shared [`crate::types::document::ast::Doc`]
 //!   AST and re-laid-out per width on each render.
-//! - [`crate::types::listing::ListingMode`] — TOC view: the raw ZIP
+//! - [`crate::viewer::listing::ListingMode`] — TOC view: the raw ZIP
 //!   container's file tree (reuses the archive listing pipeline).
 //! - [`crate::viewer::modes::InfoMode`] — metadata: title / creator /
 //!   subject / paragraph and word counts, parsed from `docProps/core.xml`.
