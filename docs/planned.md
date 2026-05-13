@@ -170,7 +170,7 @@ memory with a 256 MB cap. Still planned:
 | ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet) |
 | DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)           |
 
-ISO ships with a TOC view backed by `types::listing` (same render path as archive containers).
+ISO ships with a TOC view backed by `viewer::listing` (same render path as archive containers).
 DMG remains metadata-only. See [features.md → Disk Images](features.md#disk-images-) for what's
 surfaced today.
 

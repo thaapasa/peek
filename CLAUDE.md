@@ -31,7 +31,7 @@ src/
     mod.rs             — re-exports InputSource, ByteSource, LineSource
     source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource
     lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
-    detect.rs          — File-type detection (extension + magic bytes + stdin sniffing). FileType::Compressed(CompressionFormat) splits bare wrappers out of ArchiveFormat
+    detect.rs          — File-type detection orchestrator (magic-byte / extension / content-sniff priority + Detected / FileType / CompressionFormat); per-type format enums + detection helpers live alongside their types under `types/<x>/{format,detect}.rs` and are re-exported here
     compression.rs     — decompress_bytes (5 codecs: gz/bz2/xz/zst/lz4) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   extract/
@@ -43,7 +43,7 @@ src/
     print.rs           — PrintOutput: write-once stdout for --print / pipes / --info
     help.rs            — CLI help and version screens
   info/
-    mod.rs             — FileInfo, FileExtras data types and shared permission helpers
+    mod.rs             — FileInfo + FileExtras enum (single-field wrappers around per-type stats from `types/<x>/info.rs`) + shared permission helpers
     gather/            — FileInfo collection, split per general file type
       mod.rs           — Per-source dispatch (gather() entry point)
       tests.rs         — Fixture-based tests against test-images / test-data
@@ -61,25 +61,32 @@ src/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
     binary/
       mod.rs           — Module wiring
-      info.rs          — gather_extras (friendly format label) + render_section (Format)
+      info.rs          — BinaryInfo struct + gather_extras (friendly format label) + render_section (Format)
     text/
       mod.rs           — Module wiring
+      info.rs          — TextStats / LineEndings / IndentStyle / Encoding (shared shape: markdown / sql / svg import from here)
       info_gather.rs   — gather_text_stats: streaming UTF-8/UTF-16 stats (lines/words/encoding/indent/shebang)
-      info_render.rs   — push_text_stats: Content/Source section content
+      info_render.rs   — render_section + push_text_stats: Content/Source section content
     markdown/
       mod.rs           — Module wiring
+      info.rs          — MarkdownInfo { text: TextStats, stats: MarkdownStats } + MarkdownStats + FrontmatterKind
       info_gather.rs   — Single-pass MD stats: headings by level, fenced blocks + langs, links/images/tables/lists, task progress, frontmatter, prose word count, reading time
-      info_render.rs   — Render Markdown info section
+      info_render.rs   — Render Markdown info section (Content + Markdown blocks)
     sql/
       mod.rs           — Module wiring
+      info.rs          — SqlInfo { text: TextStats, stats: SqlStats } + SqlStats + SqlDialect
       info_gather.rs   — Statement scanner with string/comment/dollar-quote state; classifies DDL/DML/DQL/TCL, records created objects, guesses dialect
-      info_render.rs   — Render SQL info section
+      info_render.rs   — Render SQL info section (Content + SQL blocks)
     structured/
       mod.rs           — Module wiring
-      info.rs          — gather_extras (per-format stats) + render_section (Format)
+      format.rs        — StructuredFormat enum (JSON/JSONC/JSON5/JSONL/YAML/TOML/XML)
+      detect.rs        — format_from_ext: extension → StructuredFormat
+      info.rs          — StructuredInfo / StructuredStats / TopLevelKind + gather_extras (per-format stats) + render_section (Format)
       pretty.rs        — JSON / YAML / TOML / XML pretty-printers (used by ContentMode)
     image/
       mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
+      compose.rs       — compose(): push AnimationMode for animated GIF/WebP, ImageRenderMode for static raster
+      info.rs          — ImageStats + AnimationStats + LoopCount (animation summary)
       info_gather.rs   — gather_extras (dimensions, color, ICC, HDR) + IMAGE_HEAD_SCAN/read_head
       info_render.rs   — render_section (Image, EXIF, XMP, Animation)
       extract.rs       — Animation frame extract (GIF/WebP): decode all frames, re-encode frame N as PNG (Memory-backed)
@@ -107,10 +114,14 @@ src/
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
     html/
       mod.rs           — Module wiring; re-exports RenderedMode
+      compose.rs       — compose(): push RenderedMode + paired HTML source ContentMode
       mode.rs          — RenderedMode: width-keyed cache wrapper around `render::render`; rerender on resize
       render.rs        — Shared html2text driver: bytes → ANSI lines via StyleMode (also used by EPUB chapters). CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
     ebook/
       mod.rs           — Module wiring; re-exports EbookStats / Metadata
+      compose.rs       — compose(): push EpubReadMode (chapters) + ZIP TOC ListingMode; OPF failure leaves listing-only
+      detect.rs        — format_from_ext: `.epub` → EbookFormat::Epub
+      format.rs        — EbookFormat enum
       info.rs          — Shared ebook info shape (universal across EPUB / MOBI / FB2): EbookStats { metadata: Metadata, chapter_count }
       epub/
         mod.rs         — Module wiring; re-exports EpubReadMode
@@ -120,6 +131,9 @@ src/
         info_render.rs — Render EPUB info section from EbookStats
     document/
       mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocReadMode
+      compose.rs       — compose(): DOCX/ODT → DocReadMode + ZIP TOC ListingMode; RTF → RtfReadMode + inline-embed listing when any \pict groups parsed
+      detect.rs        — format_from_ext + format_from_mime (RTF magic-byte route)
+      format.rs        — DocumentFormat enum (Docx/Odt/Rtf) + label
       ast.rs           — Shared word-processing AST (Doc / Block::{Paragraph,Table} / Paragraph / Run + count_words + merge_paragraphs). Populated by both docx::package and odt::package; RTF stays separate because its on-the-wire shape is a flat painter-tagged text stream
       render.rs        — Shared render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | ". Used by both DOCX and ODT
       read_mode.rs     — Shared DocReadMode: per-(width, style_mode) line cache over render::render. Format-agnostic; the per-format wiring only supplies the parsed Doc
@@ -141,6 +155,7 @@ src/
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
       mod.rs           — Module wiring; re-exports PdfStats, PdfPageMode, PdfTextMode
+      compose.rs       — compose(): PdfPageMode + PdfTextMode + /EmbeddedFiles ListingMode
       package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
       page_mode.rs     — PdfPageMode: paged image render via `pipeline::render::{prepare_decoded, render_prepared}`. Per-page cache keyed by (cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, labeled "page"). Mirrors CbzReadMode shape
       text_mode.rs     — PdfTextMode: width-cached text via `Doc::page_text`; pages joined with muted `--- Page N ---` separator. Mirrors DocxReadMode shape; greedy word-wrap with hard-break for over-width tokens
@@ -150,6 +165,9 @@ src/
       info_render.rs   — Render PDF info section (Version / Title / Author / Subject / Keywords / Created / Modified / Pages / Attachments). On error, render only `Error: ...` and stop
     comic/
       mod.rs           — Module wiring; re-exports ComicStats / CbzReadMode
+      compose.rs       — compose(): CbzReadMode (paged images) + ZIP TOC ListingMode
+      detect.rs        — format_from_ext: `.cbz` → ComicFormat::Cbz
+      format.rs        — ComicFormat enum + label
       info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }
       cbz/
         mod.rs         — Module wiring; re-exports CbzReadMode
@@ -159,12 +177,17 @@ src/
         info_render.rs — Render comic info section from ComicStats
     svg/
       mod.rs           — Module wiring; re-exports SvgAnimationMode
+      compose.rs       — compose(): SvgAnimationMode (CSS keyframes) or ImageRenderMode + paired XML source ContentMode
+      info.rs          — SvgStats { text: TextStats, viewBox, element counts, security flags, animation } + SvgAnimationStats
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)
-      info_render.rs   — render_section (SVG info section)
+      info_render.rs   — render_section (SVG + Source sections)
       extract.rs       — SVG anim frame extract: render_frame → resvg rasterize at intrinsic size (sub-512px upscaled to 512 floor) → PNG
       animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
     audio/
       mod.rs           — Module wiring; re-exports AudioStats
+      compose.rs       — compose(): Info → optional Cover (ImageRenderMode) → optional Lyrics (ContentMode) → optional Embeds ListingMode
+      detect.rs        — format_from_ext + format_from_mime (audio container routing)
+      format.rs        — AudioFormat enum + label
       info.rs          — Shared audio info shape: AudioStats { format, codec, duration_secs, sample_rate, channels, channel_layout, bits_per_sample, bitrate, metadata: AudioMetadata, has_lyrics, has_album_art, error } + AudioMetadata { title, artist, album, album_artist, track_number, disc_number, date, genre, composer, comment }
       package.rs       — Central symphonia probe. `probe(source, format)` → `Probed { codec/track params, AudioMetadata, visuals: Vec<EmbedVisual>, lyrics: Option<String> }`. Walks both `format.metadata().current()` (Vorbis on Ogg/FLAC) and `probed.metadata.get().current()` (ID3v2 sidecar on MP3/AIFF); embedded visuals carried as raw bytes + media_type + canonical `usage_root` (front_cover / back_cover / artist / …). Lyrics joined across USLT/SYLT/`LYRICS=` sources. `to_stats(&Probed)` projects onto AudioStats for InfoMode. `primary_cover(&Probed)` picks the FrontCover-tagged visual (fallback first) for the dedicated Cover tab; `visual_filename` builds its suggested name. `build_listing(&Probed)` synthesises `pictures/<usage>.<ext>` (with `_N` suffix on dup roots) + `lyrics/lyrics.txt`; empty when nothing embedded. `read_embed(&Probed, key)` returns `(Vec<u8>, suggested_name)` for extract. Re-probes per call (header + tag walk, ms-cheap)
       info_gather.rs   — Thin shim: calls `package::probe` + `package::to_stats`; failures land as `error` field
@@ -172,8 +195,11 @@ src/
       extract.rs       — Per-key extract: `package::probe` → `package::read_embed` → `InputSource::Memory`. Image bytes re-detect as Image (route through ASCII pipeline on recursive peek); lyrics text re-detect as plain text
     archive/
       mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
+      compose.rs       — compose(): list TOC entries → ListingMode under the format's label
+      detect.rs        — format_from_name + format_from_mime (handles double-extensions `.tar.gz` etc. before bare compression)
+      format.rs        — ArchiveFormat enum + label
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
-      info.rs          — gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
+      info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
       extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]. decompress_tar() delegates codec dispatch to crate::input::compression::decompress_bytes
       backends/
         mod.rs         — Backend module wiring
@@ -181,20 +207,19 @@ src/
         tar.rs         — Tar TOC via header walk; gz/bz2/zst/lz4 stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
         cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
-    listing/
-      mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
-      entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
-      stats.rs         — Stats: aggregate counts / sizes computed by tree walk
-      build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
-      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive + ISO)
     directory/
       mod.rs           — Module wiring; re-exports DirectoryMode
+      compose.rs       — compose(): DirectoryMode rooted at the source path; suppress `..` row at filesystem root
       read.rs          — One-level fs::read_dir → Vec<DirEntry>; sorts dirs-first then case-insensitive name; follows symlinks for kind/size/mtime, broken links surface as `?`
       mode.rs          — DirectoryMode: flat one-level listing. Selects every entry (files + dirs); prepends synthetic `..` row when canonical parent exists. Enter (Action::Descend) targets selected entry. Uses ModeId::Listing so Tab cycle / --list pickup keep working. ViewerState::push_extracted collapses dir→dir descent onto the current frame so there's no stack of directories
-      info.rs          — gather_extras (FileExtras::Directory { entry / file / dir counts }) + render_section
+      info.rs          — DirectoryStats + gather_extras + render_section
       extract.rs       — Resolve key (single-segment filename) against parent path → InputSource::File(child_path). `..` walks up via Path::canonicalize → parent. Rejects `/` and `.`
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
+      compose.rs       — compose(): ISO → directory-tree ListingMode; DMG / Raw → InfoMode (no filesystem walker available)
+      detect.rs        — format_from_ext + Raw → Iso upgrade (cheap 6-byte PVD probe at offset 32768)
+      format.rs        — DiskImageFormat enum (Iso/Dmg/Raw) + label
+      info.rs          — DiskImageInfo + DiskImageMeta { Iso | Dmg | Raw } + IsoVolumeMeta / IsoDateTime / DmgMeta / DmgVariant / DmgChecksumKind / RawImageMeta / MbrTable / MbrPartition
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
       iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
       dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes)
@@ -202,8 +227,14 @@ src/
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
   viewer/
-    mod.rs             — Registry, compose_modes, syntax_token_for, highlight_lines, LineStreamHighlighter
+    mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
+    listing/
+      mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
+      entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
+      stats.rs         — Stats: aggregate counts / sizes computed by tree walk
+      build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
+      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive / comic / ebook / document / pdf / audio / disk_image)
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
