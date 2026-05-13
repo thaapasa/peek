@@ -6,9 +6,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use bytes::Bytes;
 
-/// Chunk size for streaming line/byte scans of the underlying source.
-const SCAN_CHUNK: usize = 64 * 1024;
-
 /// Source of input content.
 ///
 /// `File` reads a path on disk. `Memory` wraps already-buffered bytes
@@ -125,24 +122,24 @@ impl InputSource {
     /// a line index past EOF returns the source length. Returns `None` if
     /// the source can't be read.
     ///
-    /// Streams via [`ByteStream`](super::stream::ByteStream) +
-    /// [`BufReader::read_until`](std::io::BufReader::read_until) so multi-GB
-    /// files don't get loaded into memory.
+    /// Streams via [`ByteStream`](super::stream::ByteStream)'s `BufRead`
+    /// impl so multi-GB files don't get loaded into memory.
     ///
     /// For pretty-printed structured content, the displayed line numbers
     /// don't correspond to source line numbers — this conversion is
     /// approximate in that case.
     pub fn line_to_byte(&self, line: usize) -> Option<u64> {
+        use std::io::BufRead;
         if line == 0 {
             return Some(0);
         }
-        let mut reader = std::io::BufReader::with_capacity(SCAN_CHUNK, self.open_stream().ok()?);
+        let mut stream = self.open_stream().ok()?;
         let mut buf = Vec::new();
         let mut offset: u64 = 0;
         let mut count = 0usize;
         loop {
             buf.clear();
-            let n = std::io::BufRead::read_until(&mut reader, b'\n', &mut buf).ok()?;
+            let n = stream.read_until(b'\n', &mut buf).ok()?;
             if n == 0 {
                 return Some(offset);
             }
@@ -161,19 +158,19 @@ impl InputSource {
     /// counts the total newlines in the source. Returns `None` if the
     /// source can't be read.
     pub fn byte_to_line(&self, byte: u64) -> Option<usize> {
-        use std::io::Read;
+        use std::io::BufRead;
         let bs = self.open_byte_source().ok()?;
         let limit = byte.min(bs.len());
-        let stream = super::stream::ByteStream::range(bs, 0, limit);
-        let mut reader = std::io::BufReader::with_capacity(SCAN_CHUNK, stream);
+        let mut stream = super::stream::ByteStream::range(bs, 0, limit);
         let mut count = 0usize;
-        let mut buf = [0u8; SCAN_CHUNK];
         loop {
-            let n = reader.read(&mut buf).ok()?;
-            if n == 0 {
+            let buf = stream.fill_buf().ok()?;
+            if buf.is_empty() {
                 return Some(count);
             }
-            count += buf[..n].iter().filter(|b| **b == b'\n').count();
+            let n = buf.len();
+            count += buf.iter().filter(|b| **b == b'\n').count();
+            stream.consume(n);
         }
     }
 

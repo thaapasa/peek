@@ -1,13 +1,19 @@
 //! Sequential byte stream over a sub-range of a [`ByteSource`].
 //!
-//! Wraps any `ByteSource` and exposes it as an [`io::Read`] so callers
-//! can use `io::copy`, `BufReader`, `take`, and the rest of the
-//! `std::io` ecosystem instead of pumping `read_range` in a loop.
+//! Wraps any `ByteSource` and exposes it as both [`io::Read`] and
+//! [`io::BufRead`] so callers can use `io::copy`, `read_until`, `lines`,
+//! `take`, and the rest of the `std::io` ecosystem instead of pumping
+//! `read_range` in a loop.
 //!
 //! Internally pulls fixed-size chunks (default 64 KiB) from the underlying
 //! source via `read_range`. `FileByteSource` caches the current file
 //! position so a sequential walk costs one seek total; `BytesByteSource`
 //! reads are pure slicing.
+//!
+//! The stream owns its chunk buffer and exposes it directly via `BufRead`,
+//! so callers do **not** need to wrap it in `BufReader` — that would
+//! triple-buffer (source → stream → BufReader). Use the stream's own
+//! `BufRead` methods.
 
 use std::io;
 
@@ -55,26 +61,32 @@ impl ByteStream {
     }
 }
 
-impl io::Read for ByteStream {
-    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
-        if self.buf.is_empty() {
-            if self.offset >= self.end {
-                return Ok(0);
-            }
+impl io::BufRead for ByteStream {
+    fn fill_buf(&mut self) -> io::Result<&[u8]> {
+        if self.buf.is_empty() && self.offset < self.end {
             let want = ((self.end - self.offset) as usize).min(DEFAULT_CHUNK);
             let chunk = self
                 .bs
                 .read_range(self.offset, want)
                 .map_err(io::Error::other)?;
-            if chunk.is_empty() {
-                return Ok(0);
-            }
             self.offset += chunk.len() as u64;
             self.buf = chunk;
         }
-        let n = self.buf.len().min(out.len());
-        out[..n].copy_from_slice(&self.buf[..n]);
+        Ok(&self.buf)
+    }
+
+    fn consume(&mut self, amt: usize) {
+        let n = amt.min(self.buf.len());
         self.buf = self.buf.slice(n..);
+    }
+}
+
+impl io::Read for ByteStream {
+    fn read(&mut self, out: &mut [u8]) -> io::Result<usize> {
+        let buf = io::BufRead::fill_buf(self)?;
+        let n = buf.len().min(out.len());
+        out[..n].copy_from_slice(&buf[..n]);
+        io::BufRead::consume(self, n);
         Ok(n)
     }
 }
@@ -112,5 +124,35 @@ mod tests {
         let mut out = Vec::new();
         s.read_to_end(&mut out).unwrap();
         assert_eq!(out, b"body");
+    }
+
+    #[test]
+    fn bufread_read_until_yields_each_line() {
+        use std::io::BufRead;
+        let mut s = ByteStream::open(source(b"alpha\nbeta\ngamma\n"));
+        let mut lines = Vec::new();
+        loop {
+            let mut buf = Vec::new();
+            let n = s.read_until(b'\n', &mut buf).unwrap();
+            if n == 0 {
+                break;
+            }
+            lines.push(buf);
+        }
+        assert_eq!(
+            lines,
+            vec![b"alpha\n".to_vec(), b"beta\n".to_vec(), b"gamma\n".to_vec()]
+        );
+    }
+
+    #[test]
+    fn bufread_fill_buf_then_consume() {
+        use std::io::BufRead;
+        let mut s = ByteStream::open(source(b"abcdef"));
+        let buf = s.fill_buf().unwrap().to_vec();
+        assert_eq!(buf, b"abcdef");
+        s.consume(3);
+        let rest = s.fill_buf().unwrap().to_vec();
+        assert_eq!(rest, b"def");
     }
 }
