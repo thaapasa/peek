@@ -7,6 +7,25 @@ use anyhow::{Result, bail};
 use crate::input::InputSource;
 use crate::input::mime;
 
+// Per-type format enums live in `types/<x>/format.rs`. Re-export them
+// here so consumers keep importing them through `input::detect` — the
+// path that's been stable across the codebase.
+pub use crate::types::archive::format::ArchiveFormat;
+pub use crate::types::audio::format::AudioFormat;
+pub use crate::types::comic::format::ComicFormat;
+pub use crate::types::disk_image::format::DiskImageFormat;
+pub use crate::types::document::format::DocumentFormat;
+pub use crate::types::ebook::format::EbookFormat;
+pub use crate::types::structured::format::StructuredFormat;
+
+use crate::types::archive::detect as archive_detect;
+use crate::types::audio::detect as audio_detect;
+use crate::types::comic::detect as comic_detect;
+use crate::types::disk_image::detect as disk_image_detect;
+use crate::types::document::detect as document_detect;
+use crate::types::ebook::detect as ebook_detect;
+use crate::types::structured::detect as structured_detect;
+
 /// Bytes read from the head of a file for magic-byte detection. `infer`
 /// inspects only the first few hundred bytes; 16 KB is comfortable headroom.
 const HEAD_BYTES: usize = 16 * 1024;
@@ -64,107 +83,14 @@ pub enum FileType {
     Binary,
 }
 
-/// Sound-file container. Encompasses the common consumer audio formats;
-/// the symphonia probe resolves codec details (e.g. ALAC inside an
-/// M4a container) on top of this container-level classification.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioFormat {
-    Mp3,
-    Flac,
-    /// Ogg container — usually Vorbis, sometimes FLAC.
-    Ogg,
-    /// Ogg container carrying an Opus stream (`.opus`).
-    Opus,
-    Wav,
-    /// MPEG-4 audio container (`.m4a` / `.m4b` / `.mp4` audio-only /
-    /// `.aac` in ADTS).
-    M4a,
-    /// Raw AAC ADTS stream (`.aac`).
-    Aac,
-    /// Audio Interchange File Format (`.aiff` / `.aif`).
-    Aiff,
-    /// Apple Core Audio Format (`.caf`).
-    Caf,
-    /// Matroska audio (`.mka`).
-    Mka,
-    /// Windows Media Audio (`.wma`).
-    Wma,
-}
-
-impl AudioFormat {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Mp3 => "MP3",
-            Self::Flac => "FLAC",
-            Self::Ogg => "Ogg",
-            Self::Opus => "Opus",
-            Self::Wav => "WAV",
-            Self::M4a => "MPEG-4 audio",
-            Self::Aac => "AAC",
-            Self::Aiff => "AIFF",
-            Self::Caf => "CAF",
-            Self::Mka => "Matroska audio",
-            Self::Wma => "WMA",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum StructuredFormat {
-    Json,
-    /// JSON with comments (VS Code flavor): `//` and `/* … */` allowed.
-    Jsonc,
-    /// JSON5: comments, unquoted keys, trailing commas, single quotes, hex.
-    Json5,
-    /// JSON Lines / NDJSON: one JSON value per line.
-    Jsonl,
-    Yaml,
-    Toml,
-    Xml,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ArchiveFormat {
-    Zip,
-    Tar,
-    TarGz,
-    TarBz2,
-    TarXz,
-    TarZst,
-    SevenZ,
-    /// Unix `ar(1)` archive — used by `.deb` packages (Debian binary
-    /// package layout: `debian-binary`, `control.tar.*`, `data.tar.*`).
-    Ar,
-    /// tar + lz4 frame (`.tar.lz4`).
-    TarLz4,
-    /// cpio archive (newc `070701` / `070702` or ODC `070707`).
-    Cpio,
-    /// cpio + gzip (`.cpio.gz`).
-    CpioGz,
-}
-
-impl ArchiveFormat {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Zip => "ZIP archive",
-            Self::Tar => "tar archive",
-            Self::TarGz => "tar + gzip",
-            Self::TarBz2 => "tar + bzip2",
-            Self::TarXz => "tar + xz",
-            Self::TarZst => "tar + zstd",
-            Self::TarLz4 => "tar + lz4",
-            Self::SevenZ => "7-Zip archive",
-            Self::Ar => "ar archive",
-            Self::Cpio => "cpio archive",
-            Self::CpioGz => "cpio + gzip",
-        }
-    }
-}
-
 /// Bare single-stream compression codec. Detected when the file has
 /// only one of these as its outer wrapper (e.g. `notes.txt.gz`); the
 /// viewer transparently decompresses and renders the inner content as
 /// whatever it actually is.
+///
+/// Stays in the input layer because transparent decompression is an
+/// input-source transformation (compressed bytes → in-memory inner
+/// source); the [`crate::input::compression`] module is the consumer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionFormat {
     /// gzip stream (`.gz`).
@@ -200,70 +126,6 @@ impl CompressionFormat {
             Self::Xz => ".xz",
             Self::Zst => ".zst",
             Self::Lz4 => ".lz4",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComicFormat {
-    /// Comic Book ZIP (most common comic-archive form in the wild).
-    Cbz,
-}
-
-impl ComicFormat {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Cbz => "Comic Book ZIP",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EbookFormat {
-    /// EPUB — ZIP container with HTML chapters + OPF metadata.
-    Epub,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DocumentFormat {
-    /// Office Open XML word-processing document. ZIP container with
-    /// `word/document.xml` body + `docProps/*.xml` metadata.
-    Docx,
-    /// OpenDocument Text. ZIP container with `content.xml` body and
-    /// `meta.xml` Dublin Core metadata.
-    Odt,
-    /// Rich Text Format. Control-word markup; single file, not a
-    /// container.
-    Rtf,
-}
-
-impl DocumentFormat {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Docx => "DOCX document",
-            Self::Odt => "ODT document",
-            Self::Rtf => "RTF document",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DiskImageFormat {
-    Iso,
-    Dmg,
-    /// Generic raw disk image (`.img` / `.bin` / `.dd`) that doesn't
-    /// match a recognised filesystem header. Listing isn't supported
-    /// — the info section parses the partition table when one is
-    /// present, otherwise falls back to "raw image".
-    Raw,
-}
-
-impl DiskImageFormat {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Iso => "ISO 9660 image",
-            Self::Dmg => "Apple Disk Image (UDIF)",
-            Self::Raw => "Raw disk image",
         }
     }
 }
@@ -466,8 +328,8 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if mime == "application/x-archive" {
         return Some(FileType::Archive(ArchiveFormat::Ar));
     }
-    if mime == "application/rtf" {
-        return Some(FileType::Document(DocumentFormat::Rtf));
+    if let Some(fmt) = document_detect::format_from_mime(mime) {
+        return Some(FileType::Document(fmt));
     }
     if mime == "application/pdf" {
         return Some(FileType::Pdf);
@@ -478,13 +340,13 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if mime.starts_with("image/") {
         return Some(FileType::Image);
     }
-    if let Some(fmt) = archive_format_from_mime(mime) {
+    if let Some(fmt) = archive_detect::format_from_mime(mime) {
         return Some(FileType::Archive(fmt));
     }
     if let Some(fmt) = compression_format_from_mime(mime) {
         return Some(FileType::Compressed(fmt));
     }
-    if let Some(fmt) = audio_format_from_mime(mime) {
+    if let Some(fmt) = audio_detect::format_from_mime(mime) {
         return Some(FileType::Audio(fmt));
     }
     if mime.starts_with("video/") || mime.starts_with("application/x-executable") {
@@ -493,49 +355,21 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     None
 }
 
-/// Map an `infer` magic-byte MIME to an audio container format. Covers
-/// the formats `infer` recognises for audio; other audio MIMEs (rare)
-/// fall through to plain `audio/*` → Binary above is unreachable thanks
-/// to the catch-all here returning a Format::* for any audio/* it
-/// knows.
-fn audio_format_from_mime(mime: &str) -> Option<AudioFormat> {
-    match mime {
-        "audio/mpeg" | "audio/mp3" => Some(AudioFormat::Mp3),
-        "audio/flac" | "audio/x-flac" => Some(AudioFormat::Flac),
-        "audio/ogg" | "application/ogg" => Some(AudioFormat::Ogg),
-        "audio/opus" => Some(AudioFormat::Opus),
-        "audio/wav" | "audio/wave" | "audio/x-wav" => Some(AudioFormat::Wav),
-        "audio/mp4" | "audio/m4a" | "audio/x-m4a" => Some(AudioFormat::M4a),
-        "audio/aac" => Some(AudioFormat::Aac),
-        "audio/aiff" | "audio/x-aiff" => Some(AudioFormat::Aiff),
-        "audio/x-caf" => Some(AudioFormat::Caf),
-        "audio/x-matroska" => Some(AudioFormat::Mka),
-        "audio/x-ms-wma" => Some(AudioFormat::Wma),
-        _ => None,
-    }
-}
-
 /// Upgrade an `.img`/`.bin`/`.dd`-derived `DiskImage::Raw` to
 /// `DiskImage::Iso` when the byte buffer carries an ISO 9660 PVD at
 /// offset 32768. Byte form (used by Memory / FileRange sources).
 fn upgrade_disk_image_bytes(file_type: FileType, data: &[u8]) -> FileType {
-    if matches!(file_type, FileType::DiskImage(DiskImageFormat::Raw))
-        && data.len() >= 32774
-        && data[32768] == 1
-        && &data[32769..32774] == b"CD001"
-    {
-        return FileType::DiskImage(DiskImageFormat::Iso);
+    if let FileType::DiskImage(fmt) = file_type {
+        return FileType::DiskImage(disk_image_detect::upgrade_raw_to_iso_bytes(fmt, data));
     }
     file_type
 }
 
-/// Path form of [`upgrade_disk_image_bytes`] — opens the file and
-/// reads the 6-byte PVD signature without slurping the whole image.
+/// Path form of [`upgrade_disk_image_bytes`] — reads the 6-byte PVD
+/// signature without slurping the whole image.
 fn upgrade_disk_image_path(file_type: FileType, path: &Path) -> FileType {
-    if matches!(file_type, FileType::DiskImage(DiskImageFormat::Raw))
-        && matches!(probe_iso_or_raw(path), Some(DiskImageFormat::Iso))
-    {
-        return FileType::DiskImage(DiskImageFormat::Iso);
+    if let FileType::DiskImage(fmt) = file_type {
+        return FileType::DiskImage(disk_image_detect::upgrade_raw_to_iso_path(fmt, path));
     }
     file_type
 }
@@ -585,56 +419,10 @@ fn is_utf8_streaming<R: Read>(head: Vec<u8>, reader: &mut R) -> Result<bool> {
     }
 }
 
-/// Match a filename against archive double-extensions (e.g. `.tar.gz`,
-/// `.tgz`) and single archive extensions (e.g. `.zip`). Returns `None`
-/// for non-archive names. Case-insensitive.
-fn archive_format_from_name(name: &str) -> Option<ArchiveFormat> {
-    let lower = name.to_ascii_lowercase();
-    if lower.ends_with(".tar.gz") || lower.ends_with(".tgz") {
-        return Some(ArchiveFormat::TarGz);
-    }
-    if lower.ends_with(".tar.bz2") || lower.ends_with(".tbz2") || lower.ends_with(".tbz") {
-        return Some(ArchiveFormat::TarBz2);
-    }
-    if lower.ends_with(".tar.xz") || lower.ends_with(".txz") {
-        return Some(ArchiveFormat::TarXz);
-    }
-    if lower.ends_with(".tar.zst") || lower.ends_with(".tzst") {
-        return Some(ArchiveFormat::TarZst);
-    }
-    if lower.ends_with(".tar.lz4") || lower.ends_with(".tlz4") {
-        return Some(ArchiveFormat::TarLz4);
-    }
-    if lower.ends_with(".tar") {
-        return Some(ArchiveFormat::Tar);
-    }
-    if lower.ends_with(".cpio.gz") {
-        return Some(ArchiveFormat::CpioGz);
-    }
-    if lower.ends_with(".cpio") {
-        return Some(ArchiveFormat::Cpio);
-    }
-    if lower.ends_with(".7z") {
-        return Some(ArchiveFormat::SevenZ);
-    }
-    if lower.ends_with(".zip")
-        || lower.ends_with(".jar")
-        || lower.ends_with(".war")
-        || lower.ends_with(".apk")
-    {
-        return Some(ArchiveFormat::Zip);
-    }
-    if lower.ends_with(".deb") || lower.ends_with(".ar") || lower.ends_with(".a") {
-        return Some(ArchiveFormat::Ar);
-    }
-    None
-}
-
 /// Match a filename against bare single-stream compression
 /// extensions. Returns `None` for non-compression names. The caller
-/// (`classify_by_name`) checks `archive_format_from_name` first so
-/// double-extensions like `.tar.gz` route to `ArchiveFormat::TarGz`
-/// before bare `.gz` is considered.
+/// ([`classify_by_name`]) checks archive double-extensions first so
+/// `.tar.gz` routes to `ArchiveFormat::TarGz` before bare `.gz`.
 fn compression_format_from_name(name: &str) -> Option<CompressionFormat> {
     let lower = name.to_ascii_lowercase();
     if lower.ends_with(".gz") {
@@ -653,73 +441,6 @@ fn compression_format_from_name(name: &str) -> Option<CompressionFormat> {
         return Some(CompressionFormat::Lz4);
     }
     None
-}
-
-/// Map a single file extension to an audio container format.
-fn audio_format_from_ext(ext: &str) -> Option<AudioFormat> {
-    match ext {
-        "mp3" => Some(AudioFormat::Mp3),
-        "flac" => Some(AudioFormat::Flac),
-        "ogg" | "oga" => Some(AudioFormat::Ogg),
-        "opus" => Some(AudioFormat::Opus),
-        "wav" | "wave" => Some(AudioFormat::Wav),
-        "m4a" | "m4b" | "m4p" => Some(AudioFormat::M4a),
-        "aac" => Some(AudioFormat::Aac),
-        "aiff" | "aif" | "aifc" => Some(AudioFormat::Aiff),
-        "caf" => Some(AudioFormat::Caf),
-        "mka" => Some(AudioFormat::Mka),
-        "wma" => Some(AudioFormat::Wma),
-        _ => None,
-    }
-}
-
-/// Map a single file extension to a comic-archive format.
-fn comic_format_from_ext(ext: &str) -> Option<ComicFormat> {
-    match ext {
-        "cbz" => Some(ComicFormat::Cbz),
-        _ => None,
-    }
-}
-
-/// Map a single file extension to a disk-image format. `.img` /
-/// `.bin` / `.dd` map to `Raw` provisionally; the caller probes for
-/// an ISO 9660 PVD before committing to that classification.
-fn disk_image_format_from_ext(ext: &str) -> Option<DiskImageFormat> {
-    match ext {
-        "iso" => Some(DiskImageFormat::Iso),
-        "dmg" => Some(DiskImageFormat::Dmg),
-        "img" | "bin" | "dd" => Some(DiskImageFormat::Raw),
-        _ => None,
-    }
-}
-
-/// Read 6 bytes at the ISO 9660 PVD location (offset 32768 + 0..=5)
-/// and check for the `\x01CD001` signature. Returns
-/// `Some(DiskImageFormat::Iso)` on match, `None` otherwise (caller
-/// falls back to `Raw`).
-fn probe_iso_or_raw(path: &Path) -> Option<DiskImageFormat> {
-    use std::io::{Read, Seek, SeekFrom};
-    let mut file = fs::File::open(path).ok()?;
-    file.seek(SeekFrom::Start(32768)).ok()?;
-    let mut buf = [0u8; 6];
-    file.read_exact(&mut buf).ok()?;
-    if buf[0] == 1 && &buf[1..6] == b"CD001" {
-        Some(DiskImageFormat::Iso)
-    } else {
-        None
-    }
-}
-
-/// Map an `infer` magic-byte MIME to a multi-entry archive format.
-/// Bare single-stream codecs live in [`compression_format_from_mime`].
-fn archive_format_from_mime(mime: &str) -> Option<ArchiveFormat> {
-    match mime {
-        "application/zip" => Some(ArchiveFormat::Zip),
-        "application/x-tar" => Some(ArchiveFormat::Tar),
-        "application/x-cpio" => Some(ArchiveFormat::Cpio),
-        "application/x-7z-compressed" => Some(ArchiveFormat::SevenZ),
-        _ => None,
-    }
 }
 
 /// Map an `infer` magic-byte MIME to a single-stream compression codec.
@@ -874,37 +595,35 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     // Multi-entry containers (zip / tar / 7z / cpio / their compressed
     // tarballs) take precedence — double-extensions like `.tar.gz`
     // must classify as `ArchiveFormat::TarGz`, not bare `Compressed::Gz`.
-    if let Some(fmt) = archive_format_from_name(name) {
+    if let Some(fmt) = archive_detect::format_from_name(name) {
         return Some(FileType::Archive(fmt));
     }
     if let Some(fmt) = compression_format_from_name(name) {
         return Some(FileType::Compressed(fmt));
     }
     let ext = mime::extension_from_name(name)?;
-    if let Some(fmt) = comic_format_from_ext(&ext) {
+    if let Some(fmt) = comic_detect::format_from_ext(&ext) {
         return Some(FileType::Comic(fmt));
     }
-    if let Some(fmt) = disk_image_format_from_ext(&ext) {
+    if let Some(fmt) = disk_image_detect::format_from_ext(&ext) {
         return Some(FileType::DiskImage(fmt));
     }
-    if let Some(fmt) = audio_format_from_ext(&ext) {
+    if let Some(fmt) = audio_detect::format_from_ext(&ext) {
         return Some(FileType::Audio(fmt));
     }
+    if let Some(fmt) = structured_detect::format_from_ext(&ext) {
+        return Some(FileType::Structured(fmt));
+    }
+    if let Some(fmt) = ebook_detect::format_from_ext(&ext) {
+        return Some(FileType::Ebook(fmt));
+    }
+    if let Some(fmt) = document_detect::format_from_ext(&ext) {
+        return Some(FileType::Document(fmt));
+    }
     Some(match ext.as_str() {
-        "json" | "geojson" => FileType::Structured(StructuredFormat::Json),
-        "jsonc" => FileType::Structured(StructuredFormat::Jsonc),
-        "json5" => FileType::Structured(StructuredFormat::Json5),
-        "jsonl" | "ndjson" => FileType::Structured(StructuredFormat::Jsonl),
-        "yaml" | "yml" => FileType::Structured(StructuredFormat::Yaml),
-        "toml" => FileType::Structured(StructuredFormat::Toml),
         "svg" => FileType::Svg,
         "html" | "htm" | "xhtml" => FileType::Html,
-        "epub" => FileType::Ebook(EbookFormat::Epub),
-        "docx" => FileType::Document(DocumentFormat::Docx),
-        "odt" => FileType::Document(DocumentFormat::Odt),
-        "rtf" => FileType::Document(DocumentFormat::Rtf),
         "pdf" => FileType::Pdf,
-        "xml" | "plist" => FileType::Structured(StructuredFormat::Xml),
         _ => return None,
     })
 }

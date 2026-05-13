@@ -8,6 +8,8 @@
 //! tree and renders the interactive TOC view.
 
 mod backends;
+pub mod detect;
 pub mod extract;
+pub mod format;
 pub mod info;
 pub mod reader;

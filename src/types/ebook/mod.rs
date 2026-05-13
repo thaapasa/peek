@@ -3,7 +3,9 @@
 //! for one container shape; [`info`] holds the shared metadata struct
 //! they all populate.
 
+pub mod detect;
 pub mod epub;
+pub mod format;
 pub mod info;
 
 pub use info::{EbookStats, Metadata};
