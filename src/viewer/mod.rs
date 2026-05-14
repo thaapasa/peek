@@ -9,6 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
+use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 
 pub mod cell_size;
@@ -345,17 +346,30 @@ impl Registry {
         push_unique_mode(&mut modes, Box::new(InfoMode::new()));
         push_unique_mode(&mut modes, Box::new(AboutMode::new()));
 
-        // Help action union: globals + every preceding mode's extras,
-        // deduped. Help itself contributes nothing new.
-        let mut help_actions: Vec<HelpEntry> = GLOBAL_ACTIONS.to_vec();
+        // Help screen: a "Global" section, then one section per mode
+        // that has extras (its label as the heading). A mode's entry is
+        // dropped from its section when it's already a global, so the
+        // global keys aren't repeated. The screen lists every mode the
+        // file has — sectioning makes clear which keys belong where.
+        let mut help_sections: Vec<HelpSection> = vec![HelpSection {
+            title: "Global".to_string(),
+            entries: GLOBAL_ACTIONS.to_vec(),
+        }];
         for m in &modes {
-            for entry in m.extra_actions() {
-                if !help_actions.iter().any(|e| e == entry) {
-                    help_actions.push(*entry);
-                }
+            let entries: Vec<HelpEntry> = m
+                .extra_actions()
+                .iter()
+                .filter(|e| !GLOBAL_ACTIONS.contains(e))
+                .copied()
+                .collect();
+            if !entries.is_empty() {
+                help_sections.push(HelpSection {
+                    title: m.label().to_string(),
+                    entries,
+                });
             }
         }
-        modes.push(Box::new(HelpMode::new(help_actions)));
+        modes.push(Box::new(HelpMode::new(help_sections)));
 
         Ok(modes)
     }

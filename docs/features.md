@@ -631,10 +631,12 @@ Regex matching and incremental (search-as-you-type) are still planned — see
 
 ### Help Screen ◐
 
-`h` / `?` opens the help screen. Shows keyboard shortcuts and the active theme. Shortcut list is
-composed per file type from the union of global actions and each loaded mode's extras — so an SVG
-file's help shows the background-cycle shortcut, while a JSON file's doesn't. Per-active-mode
-filtering (showing only the active mode's extras) not yet done.
+`h` / `?` opens the help screen. Shows keyboard shortcuts and the active theme. The shortcut list
+is sectioned: a **Global** block, then one block per loaded mode (its label as the heading) for
+that mode's extras — so an EPUB file's help shows a **Read** section (chapter nav) and a **TOC**
+section (pin parent path) under separate headings, instead of one flat list that mixes them. A
+mode's entry is dropped from its section when it duplicates a global key. The screen still lists
+every mode the file has at once — it doesn't filter down to just the active mode.
 
 ### About Screen ✅
 

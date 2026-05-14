@@ -1,16 +1,15 @@
 use anyhow::Result;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::viewer::ui::HelpEntry;
-use crate::viewer::ui::help::render_help_with_keys;
+use crate::viewer::ui::help::{HelpSection, render_help_with_keys};
 
 pub(crate) struct HelpMode {
-    actions: Vec<HelpEntry>,
+    sections: Vec<HelpSection>,
 }
 
 impl HelpMode {
-    pub(crate) fn new(actions: Vec<HelpEntry>) -> Self {
-        Self { actions }
+    pub(crate) fn new(sections: Vec<HelpSection>) -> Self {
+        Self { sections }
     }
 }
 
@@ -28,7 +27,7 @@ impl Mode for HelpMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
-        let full = render_help_with_keys(ctx.peek_theme, ctx.theme_name, &self.actions);
+        let full = render_help_with_keys(ctx.peek_theme, ctx.theme_name, &self.sections);
         let total = full.len();
         let lines = slice_window(&full, scroll, rows);
         Ok(Window { lines, total })
