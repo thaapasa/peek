@@ -383,7 +383,7 @@ mod tests {
         // "abcde" with match 1..3 → a {mbg}{mfg} bc {bg_off}{fg_off} de.
         // No prior syntax colour, so the span closes back to default fg.
         assert_eq!(
-            overlay_matches("abcde", &[1..3], None, &theme),
+            overlay_matches("abcde", std::slice::from_ref(&(1..3)), None, &theme),
             format!("a{mbg}{mfg}bc{bg_off}{fg_off}de")
         );
     }
@@ -409,7 +409,7 @@ mod tests {
         // match 1..2 must land on 'b' regardless of the escape bytes.
         let fg = theme.style_mode.fg_seq(theme.foreground);
         let styled = format!("{fg}ab\x1b[0m");
-        let got = overlay_matches(&styled, &[1..2], None, &theme);
+        let got = overlay_matches(&styled, std::slice::from_ref(&(1..2)), None, &theme);
         // The trailing `\x1b[0m` falls inside the match span, so it's
         // suppressed; the span closes with bg + fg resets.
         assert_eq!(got, format!("{fg}a{mbg}{mfg}b{bg_off}{fg_off}"));
@@ -423,7 +423,7 @@ mod tests {
         // closes, the syntax colour must resume — not a bare reset.
         let red = "\x1b[31m";
         let styled = format!("{red}abcd\x1b[0m");
-        let got = overlay_matches(&styled, &[1..2], None, &theme);
+        let got = overlay_matches(&styled, std::slice::from_ref(&(1..2)), None, &theme);
         assert_eq!(got, format!("{red}a{mbg}{mfg}b{bg_off}{red}cd\x1b[0m"));
     }
 
@@ -432,7 +432,7 @@ mod tests {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
         let (mbg, mfg, _, _, bg_off, fg_off) = match_seqs(&theme);
         assert_eq!(
-            overlay_matches("abc", &[1..3], None, &theme),
+            overlay_matches("abc", std::slice::from_ref(&(1..3)), None, &theme),
             format!("a{mbg}{mfg}bc{bg_off}{fg_off}")
         );
     }
