@@ -34,11 +34,9 @@ pub(crate) struct RenderedView {
 pub(crate) const GLOBAL_ACTIONS: &[HelpEntry] = &[
     (&[Action::Quit], "Quit"),
     (&[Action::Back], "Back / close current peek"),
-    (&[Action::ScrollUp], "Scroll up"),
-    (&[Action::ScrollDown], "Scroll down"),
+    (&[Action::ScrollUp, Action::ScrollDown], "Scroll up / down"),
     (&[Action::PageUp, Action::PageDown], "Page up / down"),
-    (&[Action::Top], "Jump to top"),
-    (&[Action::Bottom], "Jump to bottom"),
+    (&[Action::Top, Action::Bottom], "Jump to top / bottom"),
     (
         &[Action::CycleView, Action::CycleViewBack],
         "Cycle file's view modes (fwd / back)",

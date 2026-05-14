@@ -43,7 +43,11 @@ impl Binding {
             KeyCode::Esc => "Esc".to_string(),
             other => format!("{other:?}"),
         };
-        if self.ctrl { format!("Ctrl+{key}") } else { key }
+        if self.ctrl {
+            format!("Ctrl+{key}")
+        } else {
+            key
+        }
     }
 }
 

@@ -20,7 +20,7 @@ pub(crate) fn render_help_with_keys(
     // Key overhead for alignment (ANSI codes in paint_label)
     let sample_painted = theme.paint_label("x");
     let overhead = sample_painted.len() - 1;
-    let key_width = 16 + overhead;
+    let key_width = 19 + overhead;
 
     for (group, desc) in actions {
         // A help entry can bundle several actions under one description
