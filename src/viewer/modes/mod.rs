@@ -68,12 +68,15 @@ pub(crate) enum Position {
 
 /// Result of `Mode::handle`. `YesResetScroll` indicates that the active
 /// mode's scroll offset is no longer meaningful and should be set to 0
-/// before the redraw.
+/// before the redraw; `YesScrollTo(n)` asks the caller to scroll the
+/// active (caller-scrolled) mode to line `n` — used by search-match
+/// navigation in modes that don't own their scroll.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Handled {
     No,
     Yes,
     YesResetScroll,
+    YesScrollTo(usize),
 }
 
 impl Handled {
@@ -298,9 +301,13 @@ pub(crate) trait Mode {
         None
     }
 
-    /// Set or clear the active text-search query. Modes that support
-    /// in-document search (currently `ContentMode`) scan their content,
-    /// jump to the first match, and highlight matches on render. `None`
-    /// or an empty query clears any active search. Default no-op.
-    fn set_search(&mut self, _query: Option<&str>) {}
+    /// Set or clear the active text-search query. Searchable modes scan
+    /// their content, arm match highlighting, and return the line of the
+    /// first match for the caller to scroll into view (modes that own
+    /// their scroll position themselves instead and the return is
+    /// ignored). `None` or an empty query clears any active search.
+    /// Default no-op for modes without search.
+    fn set_search(&mut self, _query: Option<&str>) -> Option<usize> {
+        None
+    }
 }

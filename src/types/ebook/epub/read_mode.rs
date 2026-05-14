@@ -30,15 +30,18 @@ use crate::types::image::pipeline::render::{
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::{self, Chapter, Package};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
+        // With a search active these step matches instead of chapters.
         &[Action::NextChapter, Action::PrevChapter],
         "Next / previous chapter",
     ),
+    (&[Action::OpenSearch], "Search"),
     // Cycling these only affects cover-style chapters that render an
     // inline image, but the keys are declared unconditionally so the
     // user can pre-set them before stepping to a cover chapter.
@@ -80,6 +83,10 @@ pub(crate) struct EpubReadMode {
     /// access without an explicit invalidation.
     cache: Vec<Option<CachedChapter>>,
     warnings: Vec<String>,
+    /// Active text search over the current chapter's rendered lines.
+    /// Cleared on a chapter step or resize — both change the line set
+    /// the match indices point into.
+    search: Option<SearchState>,
 }
 
 /// Inputs that affect the rendered output for one chapter. Stored
@@ -113,6 +120,7 @@ impl EpubReadMode {
             current: 0,
             cache,
             warnings: Vec::new(),
+            search: None,
         }
     }
 
@@ -224,7 +232,8 @@ impl Mode for EpubReadMode {
         let lines =
             self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
         let total = lines.len();
-        let win = slice_window(lines, scroll, rows);
+        let mut win = slice_window(lines, scroll, rows);
+        search::overlay_window(&mut win, scroll, self.search.as_ref(), ctx.peek_theme);
         Ok(Window { lines: win, total })
     }
 
@@ -263,8 +272,20 @@ impl Mode for EpubReadMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        // Esc clears an active search before falling through to the
+        // global back / quit.
+        if action == Action::Back && self.search.is_some() {
+            self.search = None;
+            return Handled::Yes;
+        }
         match action {
+            // `n` / `p` step chapters — but while a search is active
+            // they navigate matches instead (Esc clears the search to
+            // get chapter stepping back).
             Action::NextChapter => {
+                if let Some(s) = self.search.as_mut() {
+                    return s.step(1).map(Handled::YesScrollTo).unwrap_or(Handled::Yes);
+                }
                 if self.chapters.is_empty() {
                     return Handled::No;
                 }
@@ -276,6 +297,9 @@ impl Mode for EpubReadMode {
                 Handled::YesResetScroll
             }
             Action::PrevChapter => {
+                if let Some(s) = self.search.as_mut() {
+                    return s.step(-1).map(Handled::YesScrollTo).unwrap_or(Handled::Yes);
+                }
                 if self.current == 0 {
                     return Handled::Yes;
                 }
@@ -315,10 +339,14 @@ impl Mode for EpubReadMode {
         if self.chapters.is_empty() {
             return Vec::new();
         }
-        vec![(
+        let mut segs = vec![(
             format!("ch {}/{}", self.current + 1, self.chapters.len()),
             theme.muted,
-        )]
+        )];
+        if let Some(search) = &self.search {
+            segs.push(search.status_segment(theme));
+        }
+        segs
     }
 
     fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> {
@@ -326,6 +354,35 @@ impl Mode for EpubReadMode {
             return Vec::new();
         }
         vec!["n/p:chapter"]
+    }
+
+    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {
+        // A width change re-wraps every chapter — match line indices no
+        // longer line up, so drop the search.
+        self.search = None;
+    }
+
+    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+        match query {
+            Some(q) if !q.is_empty() => {
+                // Scan the current chapter's rendered lines. The prompt
+                // only opens while viewing, so the cache is populated.
+                let lines = self
+                    .cache
+                    .get(self.current)
+                    .and_then(|c| c.as_ref())
+                    .map(|c| c.lines.as_slice())
+                    .unwrap_or(&[]);
+                let state = SearchState::scan(lines.iter(), q);
+                let first = state.first_line();
+                self.search = Some(state);
+                first
+            }
+            _ => {
+                self.search = None;
+                None
+            }
+        }
     }
 
     fn take_warnings(&mut self) -> Vec<String> {

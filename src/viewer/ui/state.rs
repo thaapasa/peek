@@ -311,7 +311,15 @@ impl ViewerState {
                         {
                             let f = self.frame_mut();
                             let active = f.active;
-                            f.modes[active].set_search(query);
+                            let target = f.modes[active].set_search(query);
+                            // Modes that own their scroll position
+                            // themselves; others get scrolled to the
+                            // first match here.
+                            if let Some(line) = target
+                                && !f.modes[active].owns_scroll()
+                            {
+                                f.scroll[active] = line;
+                            }
                         }
                         self.invalidate_active();
                     }
@@ -335,8 +343,10 @@ impl ViewerState {
         let f = self.frame_mut();
         let active = f.active;
         let handled = f.modes[active].handle(action);
-        if handled == Handled::YesResetScroll {
-            f.scroll[active] = 0;
+        match handled {
+            Handled::YesResetScroll => f.scroll[active] = 0,
+            Handled::YesScrollTo(n) => f.scroll[active] = n,
+            Handled::No | Handled::Yes => {}
         }
         handled.was_consumed()
     }

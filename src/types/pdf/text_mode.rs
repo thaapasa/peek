@@ -11,9 +11,18 @@ use syntect::highlighting::Color;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::viewer::ui::Action;
+use crate::viewer::search::{self, SearchState};
+use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::Doc;
+
+const EXTRA_ACTIONS: &[HelpEntry] = &[
+    (&[Action::OpenSearch], "Search"),
+    (
+        &[Action::NextMatch, Action::PrevMatch],
+        "Next / previous match",
+    ),
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct CacheKey {
@@ -30,6 +39,9 @@ pub(crate) struct PdfTextMode {
     doc: Doc,
     cache: Option<Cached>,
     warnings: Vec<String>,
+    /// Active text search over the rendered text. Match line indices
+    /// are the wrapped-line domain, so a resize clears it.
+    search: Option<SearchState>,
 }
 
 impl PdfTextMode {
@@ -38,6 +50,7 @@ impl PdfTextMode {
             doc,
             cache: None,
             warnings: Vec::new(),
+            search: None,
         }
     }
 
@@ -151,7 +164,8 @@ impl Mode for PdfTextMode {
         let lines =
             self.ensure_rendered(ctx.term_cols, ctx.peek_theme, ctx.peek_theme.style_mode)?;
         let total = lines.len();
-        let win = slice_window(lines, scroll, rows);
+        let mut win = slice_window(lines, scroll, rows);
+        search::overlay_window(&mut win, scroll, self.search.as_ref(), ctx.peek_theme);
         Ok(Window { lines: win, total })
     }
 
@@ -168,15 +182,66 @@ impl Mode for PdfTextMode {
         Ok(())
     }
 
-    fn handle(&mut self, _action: Action) -> Handled {
-        Handled::No
+    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {
+        // A width change re-wraps the text, so match line indices no
+        // longer line up — drop the search.
+        self.search = None;
     }
 
-    fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> {
-        Vec::new()
+    fn extra_actions(&self) -> &'static [HelpEntry] {
+        EXTRA_ACTIONS
+    }
+
+    fn handle(&mut self, action: Action) -> Handled {
+        match action {
+            Action::Back if self.search.is_some() => {
+                self.search = None;
+                Handled::Yes
+            }
+            Action::NextMatch => step_match(&mut self.search, 1),
+            Action::PrevMatch => step_match(&mut self.search, -1),
+            _ => Handled::No,
+        }
+    }
+
+    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+        match query {
+            Some(q) if !q.is_empty() => {
+                let lines = self
+                    .cache
+                    .as_ref()
+                    .map(|c| c.lines.as_slice())
+                    .unwrap_or(&[]);
+                let state = SearchState::scan(lines.iter(), q);
+                let first = state.first_line();
+                self.search = Some(state);
+                first
+            }
+            _ => {
+                self.search = None;
+                None
+            }
+        }
+    }
+
+    fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
+        self.search
+            .as_ref()
+            .map(|s| vec![s.status_segment(theme)])
+            .unwrap_or_default()
     }
 
     fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.warnings)
+    }
+}
+
+/// Step the search cursor and ask the viewer to scroll to the new
+/// match's line. `Handled::Yes` (no scroll) when there's no search or
+/// no matches.
+fn step_match(search: &mut Option<SearchState>, delta: isize) -> Handled {
+    match search.as_mut().and_then(|s| s.step(delta)) {
+        Some(line) => Handled::YesScrollTo(line),
+        None => Handled::Yes,
     }
 }

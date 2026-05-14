@@ -1,10 +1,13 @@
 //! Text-search primitives shared by the interactive search feature.
 //!
-//! Three pure pieces, no viewer state:
+//! Pure pieces, no per-mode state:
 //! - [`smart_case_sensitive`] resolves smart-case from a query string.
 //! - [`find_matches`] locates non-overlapping query occurrences in a line.
 //! - [`overlay_matches`] paints match backgrounds onto an already
 //!   ANSI-styled line.
+//! - [`SearchState`] holds the result of a scan — every match plus the
+//!   `n`/`p` cursor — and the helpers a mode needs to render and
+//!   navigate it. Shared by every searchable view.
 //!
 //! Match positions are byte offsets into *raw* (un-styled) line text;
 //! `overlay_matches` is the one place that bridges raw offsets to the
@@ -12,7 +15,14 @@
 
 use std::ops::Range;
 
+use syntect::highlighting::Color;
+
 use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
+
+/// Hard cap on collected search matches. A pathological query (a single
+/// common letter in a huge file) would otherwise build an unbounded
+/// `Vec`; past the cap the scan stops and the count reflects the cap.
+pub(crate) const MAX_MATCHES: usize = 100_000;
 
 /// Smart-case rule: a query with any uppercase character searches
 /// case-sensitively; an all-lowercase query searches case-insensitively.
@@ -166,6 +176,133 @@ pub(crate) fn overlay_matches(
     out
 }
 
+/// Strip every SGR escape from `s`, leaving only the visible text.
+fn strip_ansi(s: &str) -> String {
+    scan(s)
+        .filter_map(|t| match t {
+            Sgr::Text(text) => Some(text),
+            Sgr::Esc(_) => None,
+        })
+        .collect()
+}
+
+/// One search match: a byte range within the visible text of logical
+/// line `line`.
+struct MatchPos {
+    line: usize,
+    range: Range<usize>,
+}
+
+/// The result of a search scan: every match (flat, ordered by
+/// `(line, range.start)`) plus the index `n`/`p` cycle through. Shared
+/// by every searchable mode — each scans its own lines into one of
+/// these, then leans on the methods here to render and navigate.
+pub(crate) struct SearchState {
+    matches: Vec<MatchPos>,
+    current: usize,
+}
+
+impl SearchState {
+    /// Scan the visible text of `lines` for `query`. Each line's SGR
+    /// escapes are stripped before matching, so the returned ranges are
+    /// byte offsets into visible text — exactly what [`overlay_matches`]
+    /// expects. Smart-case is resolved from the query; the scan stops at
+    /// [`MAX_MATCHES`]. `lines` is anything string-like (`&str`,
+    /// `String`, `&String`) so streamed and cached sources both fit.
+    pub(crate) fn scan<S: AsRef<str>>(lines: impl Iterator<Item = S>, query: &str) -> SearchState {
+        let sensitive = smart_case_sensitive(query);
+        let mut matches = Vec::new();
+        'scan: for (idx, line) in lines.enumerate() {
+            let visible = strip_ansi(line.as_ref());
+            for range in find_matches(&visible, query, sensitive) {
+                matches.push(MatchPos { line: idx, range });
+                if matches.len() >= MAX_MATCHES {
+                    break 'scan;
+                }
+            }
+        }
+        SearchState {
+            matches,
+            current: 0,
+        }
+    }
+
+    /// Total match count.
+    #[cfg(test)]
+    pub(crate) fn match_count(&self) -> usize {
+        self.matches.len()
+    }
+
+    /// Line of the first match, or `None` when the query found nothing.
+    pub(crate) fn first_line(&self) -> Option<usize> {
+        self.matches.first().map(|m| m.line)
+    }
+
+    /// Move the `n`/`p` cursor by `delta` (wrapping at both ends) and
+    /// return the new current match's line. `None` when there are no
+    /// matches.
+    pub(crate) fn step(&mut self, delta: isize) -> Option<usize> {
+        let n = self.matches.len();
+        if n == 0 {
+            return None;
+        }
+        self.current = (self.current as isize + delta).rem_euclid(n as isize) as usize;
+        Some(self.matches[self.current].line)
+    }
+
+    /// Match ranges on logical line `line`, plus the local index (into
+    /// the returned `Vec`) of the current match when it falls on this
+    /// line. `None` when the line has no matches.
+    pub(crate) fn line_overlay(&self, line: usize) -> Option<(Vec<Range<usize>>, Option<usize>)> {
+        let lo = self.matches.partition_point(|m| m.line < line);
+        let hi = self.matches.partition_point(|m| m.line <= line);
+        if lo == hi {
+            return None;
+        }
+        let ranges = self.matches[lo..hi]
+            .iter()
+            .map(|m| m.range.clone())
+            .collect();
+        // `.then` (lazy) not `.then_some` — `current - lo` underflows
+        // for any line rendered after the current match's line.
+        let current = (lo..hi).contains(&self.current).then(|| self.current - lo);
+        Some((ranges, current))
+    }
+
+    /// Status-line segment for the active search: `cur/total` in the
+    /// muted colour, or `no match` in the warning colour.
+    pub(crate) fn status_segment(&self, theme: &PeekTheme) -> (String, Color) {
+        if self.matches.is_empty() {
+            ("no match".to_string(), theme.warning)
+        } else {
+            (
+                format!("{}/{}", self.current + 1, self.matches.len()),
+                theme.muted,
+            )
+        }
+    }
+}
+
+/// Paint search-match backgrounds onto a freshly-sliced viewport. `win`
+/// is the visible lines, `scroll` their offset into the full line list
+/// (so logical line indices line up with the scan). No-op when no
+/// search is active.
+pub(crate) fn overlay_window(
+    win: &mut [String],
+    scroll: usize,
+    search: Option<&SearchState>,
+    theme: &PeekTheme,
+) {
+    let Some(search) = search else {
+        return;
+    };
+    for (offset, line) in win.iter_mut().enumerate() {
+        if let Some((ranges, current)) = search.line_overlay(scroll + offset) {
+            *line = overlay_matches(line, &ranges, current, theme);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -298,5 +435,63 @@ mod tests {
             overlay_matches("abc", &[1..3], None, &theme),
             format!("a{mbg}{mfg}bc{bg_off}{fg_off}")
         );
+    }
+
+    #[test]
+    fn search_state_scan_finds_and_steps() {
+        let lines = ["alpha", "beta hit", "hit again", "delta"];
+        let mut s = SearchState::scan(lines.iter(), "hit");
+        assert_eq!(s.match_count(), 2);
+        assert_eq!(s.first_line(), Some(1));
+        // step forward, wrap, step back.
+        assert_eq!(s.step(1), Some(2));
+        assert_eq!(s.step(1), Some(1));
+        assert_eq!(s.step(-1), Some(2));
+    }
+
+    #[test]
+    fn search_state_strips_ansi_before_matching() {
+        // A styled line: the escape bytes must not shift the match
+        // offset, and must not themselves be searchable.
+        let styled = "\x1b[31mfn\x1b[0m main";
+        let s = SearchState::scan(std::iter::once(styled), "main");
+        let (ranges, _) = s.line_overlay(0).expect("match on line 0");
+        // "fn main" — "main" starts at visible byte 3.
+        assert_eq!(ranges, vec![3..7]);
+    }
+
+    #[test]
+    fn search_state_line_overlay_marks_current() {
+        let lines = ["x x", "x"];
+        let mut s = SearchState::scan(lines.iter(), "x");
+        // matches: line0@0, line0@2, line1@0. current = 0.
+        let (ranges, current) = s.line_overlay(0).unwrap();
+        assert_eq!(ranges, vec![0..1, 2..3]);
+        assert_eq!(current, Some(0));
+        // Advance to the third match (line 1); line 0 no longer current.
+        s.step(1);
+        s.step(1);
+        assert_eq!(s.line_overlay(0).unwrap().1, None);
+        assert_eq!(s.line_overlay(1).unwrap().1, Some(0));
+    }
+
+    #[test]
+    fn search_state_status_segment() {
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let hit = SearchState::scan(["a hit"].iter(), "hit");
+        assert_eq!(hit.status_segment(&theme).0, "1/1");
+        let miss = SearchState::scan(["abc"].iter(), "zzz");
+        assert_eq!(miss.status_segment(&theme).0, "no match");
+    }
+
+    #[test]
+    fn overlay_window_paints_only_matched_lines() {
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let s = SearchState::scan(["nope", "yes hit", "nope"].iter(), "hit");
+        let mut win = vec!["yes hit".to_string(), "nope".to_string()];
+        // Window starts at scroll 1 → win[0] is line 1 (has a match).
+        overlay_window(&mut win, 1, Some(&s), &theme);
+        assert!(win[0].contains("hit") && win[0].len() > "yes hit".len());
+        assert_eq!(win[1], "nope");
     }
 }

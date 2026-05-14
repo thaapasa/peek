@@ -608,23 +608,26 @@ content is already fully visible. The gutter does not pan; it stays anchored to 
 
 `/` opens a search prompt over the status line; type a query and Enter runs it. Matching is
 **exact substring** with **smart-case** — an all-lowercase query matches case-insensitively, any
-uppercase character makes the whole query case-sensitive. Available in the text-based views
-(source code, plain text, structured raw/pretty, SVG XML — i.e. `ContentMode`).
+uppercase character makes the whole query case-sensitive. Available in every text-rendering
+view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the EPUB **Read**
+view, the DOCX / ODT / RTF **Read** views, and the PDF **Text** view. The shared `SearchState`
+in `viewer/search.rs` backs all of them — each view scans its own lines into one.
 
 On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
-match (wrapping at the ends), scrolling each match's line into view. A match gets an explicit
-background **and** foreground pair — the syntax colour underneath is dropped so matched text
-looks uniform regardless of what it was (and resumes after the span). Both states' colours
-derive from the theme's `accent` hue: the current `n`/`p` match is vivid
-(`search_current_style`), the rest are muted/dark (`search_match_style`), each paired with a
-neutral contrasting foreground. The status line shows `cur/total` while a search is active, or
-`no match` when the query isn't found.
+match (wrapping at the ends), scrolling each match's line into view. (In the EPUB Read view
+`n`/`p` normally step chapters; while a search is active they navigate matches instead — `Esc`
+clears the search to get chapter stepping back.) A match gets an explicit background **and**
+foreground pair — the syntax colour underneath is dropped so matched text looks uniform
+regardless of what it was (and resumes after the span). Both states' colours derive from the
+theme's `accent` hue: the current `n`/`p` match is vivid (`search_current_style`), the rest are
+muted/dark (`search_match_style`), each paired with a neutral contrasting foreground. The status
+line shows `cur/total` while a search is active, or `no match` when the query isn't found.
 
-The scan is a single pass over the active view (raw `LineSource`, or the pretty-printed lines
-when in pretty mode), capped at 100,000 matches. Flipping the raw/pretty toggle clears the search
-— match line indices belong to one view's line domain. An empty-query Enter clears the search;
-so does `Esc` while a search is active (it clears matches first, then falls through to the
-normal back / quit behaviour on a second press).
+The scan is a single pass over the active view's lines, capped at 100,000 matches. An
+empty-query Enter clears the search; so does `Esc` while a search is active (it clears matches
+first, then falls through to the normal back / quit behaviour on a second press). Search clears
+when the scanned line set changes underneath it — the `ContentMode` raw/pretty toggle, an EPUB
+chapter step, or a terminal resize (the read-mode views key match indices to wrapped lines).
 
 Regex matching and incremental (search-as-you-type) are still planned — see
 [planned.md](planned.md#viewer-features-).

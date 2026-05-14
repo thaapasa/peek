@@ -1,4 +1,3 @@
-use std::ops::Range;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -10,7 +9,7 @@ use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::structured::pretty;
-use crate::viewer::search;
+use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry, count_wrap_segments, slice_styled_h, wrap_styled};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
@@ -103,7 +102,7 @@ pub(crate) struct ContentMode {
     /// Active text search, or `None`. Match positions are in the active
     /// branch's line domain (raw or pretty); cleared when that domain
     /// changes (the raw/pretty toggle).
-    search: Option<Search>,
+    search: Option<SearchState>,
 }
 
 const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
@@ -134,28 +133,6 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
         "Next / previous match",
     ),
 ];
-
-/// Hard cap on collected search matches. A pathological query (a single
-/// common letter in a huge file) would otherwise build an unbounded
-/// `Vec`; past the cap the scan stops and the count reflects the cap.
-const MAX_SEARCH_MATCHES: usize = 100_000;
-
-/// One search match: a byte range within the raw text of logical line
-/// `line`. `line` indexes the active branch's line domain — raw
-/// `LineSource` lines, or pretty-printed lines when `use_pretty`.
-struct MatchPos {
-    line: usize,
-    range: Range<usize>,
-}
-
-/// Active in-document search. Holds every match (flat, ordered by
-/// `(line, range.start)`) and the index `n`/`p` cycle through. The
-/// query string itself isn't retained — a re-search re-scans from the
-/// prompt.
-struct Search {
-    matches: Vec<MatchPos>,
-    current: usize,
-}
 
 impl ContentMode {
     #[allow(clippy::too_many_arguments)]
@@ -295,7 +272,7 @@ impl ContentMode {
         // is wrapped / h-sliced — wrap_styled and slice_styled_h carry
         // the background escapes across their cuts.
         let overlaid;
-        let styled: &str = match self.search_overlay(line_idx) {
+        let styled: &str = match self.search.as_ref().and_then(|s| s.line_overlay(line_idx)) {
             Some((ranges, current)) => {
                 overlaid = search::overlay_matches(styled, &ranges, current, peek_theme);
                 &overlaid
@@ -689,48 +666,17 @@ impl ContentMode {
         self.pretty_raw_lines = None;
     }
 
-    /// Search-overlay data for logical line `line`: the match byte
-    /// ranges on that line, plus the local index (into the returned
-    /// `Vec`) of the current match when it falls on this line. `None`
-    /// when no search is active or the line has no matches.
-    fn search_overlay(&self, line: usize) -> Option<(Vec<Range<usize>>, Option<usize>)> {
-        let search = self.search.as_ref()?;
-        let lo = search.matches.partition_point(|m| m.line < line);
-        let hi = search.matches.partition_point(|m| m.line <= line);
-        if lo == hi {
-            return None;
-        }
-        let ranges = search.matches[lo..hi]
-            .iter()
-            .map(|m| m.range.clone())
-            .collect();
-        // `.then` (lazy) not `.then_some` — `current - lo` underflows
-        // for any line rendered after the current match's line.
-        let current = (lo..hi)
-            .contains(&search.current)
-            .then(|| search.current - lo);
-        Some((ranges, current))
-    }
-
     /// Move the current-match cursor by `delta` (wrapping at the ends)
     /// and scroll that match's line to the top of the viewport. No-op
     /// when no search is active or there are no matches.
     fn step_match(&mut self, delta: isize) {
-        let line = {
-            let Some(search) = self.search.as_mut() else {
-                return;
-            };
-            let n = search.matches.len();
-            if n == 0 {
-                return;
-            }
-            search.current = (search.current as isize + delta).rem_euclid(n as isize) as usize;
-            search.matches[search.current].line
-        };
-        self.top_logical = line;
-        self.top_sub_row = 0;
-        self.h_scroll = 0;
-        self.clamp_top();
+        let line = self.search.as_mut().and_then(|s| s.step(delta));
+        if let Some(line) = line {
+            self.top_logical = line;
+            self.top_sub_row = 0;
+            self.h_scroll = 0;
+            self.clamp_top();
+        }
     }
 }
 
@@ -887,15 +833,9 @@ impl Mode for ContentMode {
         if self.soft_wrap {
             segs.push(("Wrap".to_string(), theme.muted));
         }
-        // Search position, shown only while a search is active. Uses
-        // the same muted color as the listing-view file counter.
+        // Search position, shown only while a search is active.
         if let Some(search) = &self.search {
-            let total = search.matches.len();
-            if total == 0 {
-                segs.push(("no match".to_string(), theme.warning));
-            } else {
-                segs.push((format!("{}/{}", search.current + 1, total), theme.muted));
-            }
+            segs.push(search.status_segment(theme));
         }
         segs
     }
@@ -1100,53 +1040,38 @@ impl Mode for ContentMode {
     /// case-insensitively, any uppercase makes it case-sensitive.
     ///
     /// The scan is one full pass over the active branch — `LineSource`
-    /// when raw, the pretty-printed string when pretty — capped at
-    /// `MAX_SEARCH_MATCHES` so a pathological query can't grow an
-    /// unbounded `Vec`.
-    fn set_search(&mut self, query: Option<&str>) {
+    /// when raw, the pretty-printed string when pretty. `ContentMode`
+    /// owns its scroll, so it positions itself on the first match and
+    /// the returned line is unused by the caller.
+    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
         let query = match query {
             Some(q) if !q.is_empty() => q,
             _ => {
                 self.search = None;
-                return;
+                return None;
             }
         };
-        let sensitive = search::smart_case_sensitive(query);
-        let mut matches: Vec<MatchPos> = Vec::new();
-
-        if self.use_pretty && matches!(self.pretty, Some(Ok(_))) {
-            if let Some(Ok(pretty)) = &self.pretty {
-                'scan: for (idx, line) in pretty.lines().enumerate() {
-                    for range in search::find_matches(line, query, sensitive) {
-                        matches.push(MatchPos { line: idx, range });
-                        if matches.len() >= MAX_SEARCH_MATCHES {
-                            break 'scan;
-                        }
-                    }
-                }
-            }
+        let search = if self.use_pretty
+            && let Some(Ok(pretty)) = &self.pretty
+        {
+            SearchState::scan(pretty.lines(), query)
         } else {
-            'scan: for (idx, line) in self.line_source.iter_all().enumerate() {
-                let Ok(line) = line else { break };
-                for range in search::find_matches(&line, query, sensitive) {
-                    matches.push(MatchPos { line: idx, range });
-                    if matches.len() >= MAX_SEARCH_MATCHES {
-                        break 'scan;
-                    }
-                }
-            }
-        }
-
-        if let Some(first) = matches.first() {
-            self.top_logical = first.line;
+            // `iter_all` yields `Result<String>`; a decode error becomes
+            // an empty line so line indices stay aligned with the view.
+            SearchState::scan(
+                self.line_source.iter_all().map(|r| r.unwrap_or_default()),
+                query,
+            )
+        };
+        let first = search.first_line();
+        if let Some(line) = first {
+            self.top_logical = line;
             self.top_sub_row = 0;
             self.h_scroll = 0;
         }
-        self.search = Some(Search {
-            matches,
-            current: 0,
-        });
+        self.search = Some(search);
         self.clamp_top();
+        first
     }
 }
 
@@ -1457,12 +1382,11 @@ mod tests {
     #[test]
     fn set_search_finds_matches_and_jumps() {
         let mut mode = plain_mode_from_bytes(b"alpha\nbeta\ngamma beta\ndelta\n");
-        mode.set_search(Some("beta"));
+        let first = mode.set_search(Some("beta"));
         let search = mode.search.as_ref().expect("search armed");
-        assert_eq!(search.matches.len(), 2);
-        assert_eq!(search.matches[0].line, 1);
-        assert_eq!(search.matches[1].line, 2);
-        assert_eq!(search.current, 0);
+        assert_eq!(search.match_count(), 2);
+        assert_eq!(search.first_line(), Some(1));
+        assert_eq!(first, Some(1));
         assert_eq!(mode.top_logical, 1, "jumped to first match's line");
     }
 
@@ -1476,21 +1400,18 @@ mod tests {
         mode.cached_cols = 80;
         mode.cached_rows = 1;
         mode.set_search(Some("hit"));
-        assert_eq!(mode.search.as_ref().unwrap().matches.len(), 2);
+        assert_eq!(mode.search.as_ref().unwrap().match_count(), 2);
         assert_eq!(mode.top_logical, 1);
 
         assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
-        assert_eq!(mode.search.as_ref().unwrap().current, 1);
         assert_eq!(mode.top_logical, 3);
 
         // Forward past the end wraps to the first match.
         assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
-        assert_eq!(mode.search.as_ref().unwrap().current, 0);
         assert_eq!(mode.top_logical, 1);
 
         // Backward past the start wraps to the last match.
         assert_eq!(mode.handle(Action::PrevMatch), Handled::Yes);
-        assert_eq!(mode.search.as_ref().unwrap().current, 1);
         assert_eq!(mode.top_logical, 3);
     }
 
