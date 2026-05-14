@@ -131,7 +131,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}
+          # key suffix bumped to discard caches that baked in ~/.cargo/bin
+          key: ${{ matrix.target }}-v2
+          # Don't cache ~/.cargo/bin — restoring it clobbers the rustup
+          # proxies the toolchain step installs, leaving `cargo` pointing at
+          # rustup-init.
+          cache-bin: false
 
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
