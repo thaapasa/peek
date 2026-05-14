@@ -7,6 +7,11 @@ use super::StyleMode;
 #[rustfmt::skip] const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
 #[rustfmt::skip] const RED: Color = Color { r: 255, g: 80, b: 80, a: 255 };
 #[rustfmt::skip] const YELLOW: Color = Color { r: 255, g: 255, b: 0, a: 255 };
+/// Neutral (unsaturated) text colors picked by `contrast_text` for
+/// search-match backgrounds — not pure black/white, to take the harsh
+/// edge off.
+#[rustfmt::skip] const NEUTRAL_DARK: Color = Color { r: 24, g: 24, b: 24, a: 255 };
+#[rustfmt::skip] const NEUTRAL_LIGHT: Color = Color { r: 180, g: 180, b: 180, a: 255 };
 
 /// Semantic color roles for all non-syntax UI output.
 #[derive(Clone)]
@@ -129,6 +134,37 @@ impl PeekTheme {
     pub fn paint_warning(&self, text: &str) -> String {
         self.paint(text, self.warning)
     }
+
+    /// `(background, foreground)` for a non-current search match. The
+    /// `accent` hue, muted (low saturation) and dark (low lightness) so
+    /// it sits quietly behind the text, paired with a neutral
+    /// contrasting foreground.
+    pub fn search_match_style(&self) -> (Color, Color) {
+        let (h, s, _) = rgb_to_hsl(self.accent);
+        let bg = hsl_to_rgb(h, (s * 0.4).min(0.4), 0.25);
+        (bg, contrast_text(bg))
+    }
+
+    /// `(background, foreground)` for the current search match. The same
+    /// `accent` hue as [`Self::search_match_style`] but forced vivid and
+    /// mid-light so the active match stands apart from the rest, paired
+    /// with a neutral contrasting foreground.
+    pub fn search_current_style(&self) -> (Color, Color) {
+        let (h, s, _) = rgb_to_hsl(self.accent);
+        let bg = hsl_to_rgb(h, s.max(0.7), 0.6);
+        (bg, contrast_text(bg))
+    }
+}
+
+/// A neutral, unsaturated text color with good contrast against `bg` —
+/// near-black on a light background, near-white on a dark one.
+fn contrast_text(bg: Color) -> Color {
+    let (_, _, l) = rgb_to_hsl(bg);
+    if l >= 0.5 {
+        NEUTRAL_DARK
+    } else {
+        NEUTRAL_LIGHT
+    }
 }
 
 /// Linearly interpolate between two colors.
@@ -144,6 +180,76 @@ pub fn lerp_color(a: Color, b: Color, t: f32) -> Color {
 /// Blend two colors by factor t (0.0 = all `a`, 1.0 = all `b`).
 fn blend(a: Color, b: Color, t: f32) -> Color {
     lerp_color(a, b, t)
+}
+
+/// RGB → HSL. Hue in degrees `[0, 360)`, saturation and lightness in
+/// `[0, 1]`. Achromatic inputs return hue 0, saturation 0.
+fn rgb_to_hsl(c: Color) -> (f32, f32, f32) {
+    let (r, g, b) = (c.r as f32 / 255.0, c.g as f32 / 255.0, c.b as f32 / 255.0);
+    let max = r.max(g).max(b);
+    let min = r.min(g).min(b);
+    let l = (max + min) / 2.0;
+    let d = max - min;
+    if d.abs() < f32::EPSILON {
+        return (0.0, 0.0, l);
+    }
+    let s = if l > 0.5 {
+        d / (2.0 - max - min)
+    } else {
+        d / (max + min)
+    };
+    let h = if max == r {
+        (g - b) / d + if g < b { 6.0 } else { 0.0 }
+    } else if max == g {
+        (b - r) / d + 2.0
+    } else {
+        (r - g) / d + 4.0
+    };
+    (h * 60.0, s, l)
+}
+
+/// HSL → RGB. Inverse of [`rgb_to_hsl`].
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> Color {
+    if s <= f32::EPSILON {
+        let v = (l * 255.0).round() as u8;
+        return Color {
+            r: v,
+            g: v,
+            b: v,
+            a: 255,
+        };
+    }
+    let q = if l < 0.5 {
+        l * (1.0 + s)
+    } else {
+        l + s - l * s
+    };
+    let p = 2.0 * l - q;
+    let h = h / 360.0;
+    let channel = |mut t: f32| -> u8 {
+        if t < 0.0 {
+            t += 1.0;
+        }
+        if t > 1.0 {
+            t -= 1.0;
+        }
+        let v = if t < 1.0 / 6.0 {
+            p + (q - p) * 6.0 * t
+        } else if t < 0.5 {
+            q
+        } else if t < 2.0 / 3.0 {
+            p + (q - p) * (2.0 / 3.0 - t) * 6.0
+        } else {
+            p
+        };
+        (v * 255.0).round() as u8
+    };
+    Color {
+        r: channel(h + 1.0 / 3.0),
+        g: channel(h),
+        b: channel(h - 1.0 / 3.0),
+        a: 255,
+    }
 }
 
 /// Find the foreground color for a scope name in the theme.

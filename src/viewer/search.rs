@@ -70,11 +70,17 @@ pub(crate) fn find_matches(haystack: &str, query: &str, sensitive: bool) -> Vec<
 /// of the active match (the one `n`/`p` landed on), or `None` when the
 /// active match is on another line.
 ///
-/// Every range gets `theme.search_match` as a background; the `current`
-/// range gets `theme.accent` instead so it stands out. Backgrounds are
-/// closed with `reset_bg` (`\x1b[49m`), which leaves foreground and
-/// attributes untouched. Returns `styled` unchanged when `ranges` is
-/// empty.
+/// A match gets an explicit background **and** foreground pair — the
+/// syntax colour underneath is dropped so matched text looks uniform
+/// regardless of what it was (an XML tag and the text inside it
+/// highlight the same). Inside a span the styled line's own foreground
+/// escapes are suppressed and tracked; when the span closes the syntax
+/// colour is restored so the rest of the line is unaffected.
+///
+/// Both states' colours come from the theme's `accent` hue — the
+/// current match vivid (`search_current_style`), the rest muted
+/// (`search_match_style`) — each paired with a neutral contrasting
+/// foreground. Returns `styled` unchanged when `ranges` is empty.
 pub(crate) fn overlay_matches(
     styled: &str,
     ranges: &[Range<usize>],
@@ -85,18 +91,26 @@ pub(crate) fn overlay_matches(
         return styled.to_string();
     }
     let sm = theme.style_mode;
-    let match_bg = sm.bg_seq(theme.search_match);
-    let current_bg = sm.bg_seq(theme.accent);
+    let (match_bg_c, match_fg_c) = theme.search_match_style();
+    let (current_bg_c, current_fg_c) = theme.search_current_style();
+    let match_bg = sm.bg_seq(match_bg_c);
+    let match_fg = sm.fg_seq(match_fg_c);
+    let current_bg = sm.bg_seq(current_bg_c);
+    let current_fg = sm.fg_seq(current_fg_c);
     let bg_off = sm.reset_bg();
+    let fg_off = sm.reset_fg();
 
-    let mut out = String::with_capacity(styled.len() + ranges.len() * 24);
+    let mut out = String::with_capacity(styled.len() + ranges.len() * 32);
     let bytes = styled.as_bytes();
     let mut i = 0;
     let mut raw_pos = 0usize;
     let mut open: Option<usize> = None;
     let mut next = 0usize;
+    // Last foreground escape seen — re-emitted when a match span closes
+    // so the syntax colour resumes.
+    let mut active_fg = String::new();
 
-    // Open / close background spans at every boundary the raw cursor has
+    // Open / close match spans at every boundary the raw cursor has
     // reached. Looped because adjacent ranges close one and open the
     // next at the same `raw_pos`.
     macro_rules! sync_boundaries {
@@ -105,16 +119,23 @@ pub(crate) fn overlay_matches(
                 if let Some(k) = open {
                     if raw_pos == ranges[k].end {
                         out.push_str(bg_off);
+                        if active_fg.is_empty() {
+                            out.push_str(fg_off);
+                        } else {
+                            out.push_str(&active_fg);
+                        }
                         open = None;
                         next = k + 1;
                         continue;
                     }
                 } else if next < ranges.len() && raw_pos == ranges[next].start {
-                    out.push_str(if current == Some(next) {
-                        &current_bg
+                    let (bg, fg) = if current == Some(next) {
+                        (&current_bg, &current_fg)
                     } else {
-                        &match_bg
-                    });
+                        (&match_bg, &match_fg)
+                    };
+                    out.push_str(bg);
+                    out.push_str(fg);
                     open = Some(next);
                     continue;
                 }
@@ -125,8 +146,10 @@ pub(crate) fn overlay_matches(
 
     while i < bytes.len() {
         if bytes[i] == 0x1b {
-            // Copy the SGR escape verbatim — it doesn't advance the raw
-            // cursor and must not be split by a background span.
+            // SGR escape: doesn't advance the raw cursor. Track the
+            // active foreground for post-span restore. Inside a span
+            // the styled line's own colours are suppressed so the match
+            // style stays uniform; outside, copy through.
             let start = i;
             i += 1;
             while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
@@ -135,7 +158,16 @@ pub(crate) fn overlay_matches(
             if i < bytes.len() {
                 i += 1;
             }
-            out.push_str(&styled[start..i]);
+            let esc = &styled[start..i];
+            if esc == "\x1b[0m" || esc == "\x1b[39m" {
+                active_fg.clear();
+            } else if !esc.starts_with("\x1b[48") && esc != "\x1b[49m" {
+                active_fg.clear();
+                active_fg.push_str(esc);
+            }
+            if open.is_none() {
+                out.push_str(esc);
+            }
             continue;
         }
         sync_boundaries!();
@@ -206,54 +238,80 @@ mod tests {
         assert_eq!(overlay_matches("hello", &[], None, &theme), "hello");
     }
 
+    /// Sequences for the non-current and current match styles, plus the
+    /// shared resets — keeps the overlay assertions readable.
+    fn match_seqs(theme: &PeekTheme) -> (String, String, String, String, String, String) {
+        let sm = theme.style_mode;
+        let (mbg, mfg) = theme.search_match_style();
+        let (cbg, cfg) = theme.search_current_style();
+        (
+            sm.bg_seq(mbg),
+            sm.fg_seq(mfg),
+            sm.bg_seq(cbg),
+            sm.fg_seq(cfg),
+            sm.reset_bg().to_string(),
+            sm.reset_fg().to_string(),
+        )
+    }
+
     #[test]
     fn overlay_plain_line_wraps_match() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let bg = theme.style_mode.bg_seq(theme.search_match);
-        let off = theme.style_mode.reset_bg();
-        // "abcde" with match 1..3 → a {bg} bc {off} de
+        let (mbg, mfg, _, _, bg_off, fg_off) = match_seqs(&theme);
+        // "abcde" with match 1..3 → a {mbg}{mfg} bc {bg_off}{fg_off} de.
+        // No prior syntax colour, so the span closes back to default fg.
         assert_eq!(
             overlay_matches("abcde", &[1..3], None, &theme),
-            format!("a{bg}bc{off}de")
+            format!("a{mbg}{mfg}bc{bg_off}{fg_off}de")
         );
     }
 
     #[test]
-    fn overlay_current_uses_accent_bg() {
+    fn overlay_current_uses_distinct_style() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let match_bg = theme.style_mode.bg_seq(theme.search_match);
-        let cur_bg = theme.style_mode.bg_seq(theme.accent);
-        let off = theme.style_mode.reset_bg();
-        // Two matches; index 1 is current.
+        let (mbg, mfg, cbg, cfg, bg_off, fg_off) = match_seqs(&theme);
+        // The current match's background must differ from the rest.
+        assert_ne!(mbg, cbg);
+        // Two matches; index 1 is current — it gets the vivid style.
         assert_eq!(
             overlay_matches("x1x2x", &[1..2, 3..4], Some(1), &theme),
-            format!("x{match_bg}1{off}x{cur_bg}2{off}x")
+            format!("x{mbg}{mfg}1{bg_off}{fg_off}x{cbg}{cfg}2{bg_off}{fg_off}x")
         );
     }
 
     #[test]
     fn overlay_skips_escape_sequences_for_raw_offset() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let bg = theme.style_mode.bg_seq(theme.search_match);
-        let off = theme.style_mode.reset_bg();
+        let (mbg, mfg, _, _, bg_off, fg_off) = match_seqs(&theme);
         // Styled "ab" where 'a' carries a fg escape; raw text is "ab",
         // match 1..2 must land on 'b' regardless of the escape bytes.
         let fg = theme.style_mode.fg_seq(theme.foreground);
         let styled = format!("{fg}ab\x1b[0m");
         let got = overlay_matches(&styled, &[1..2], None, &theme);
-        // The match runs to end-of-line: the line's own `\x1b[0m` is
-        // copied during the walk, then the span is flushed with `off`.
-        assert_eq!(got, format!("{fg}a{bg}b\x1b[0m{off}"));
+        // The trailing `\x1b[0m` falls inside the match span, so it's
+        // suppressed; the span closes with bg + fg resets.
+        assert_eq!(got, format!("{fg}a{mbg}{mfg}b{bg_off}{fg_off}"));
+    }
+
+    #[test]
+    fn overlay_restores_syntax_color_after_match() {
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let (mbg, mfg, _, _, bg_off, _) = match_seqs(&theme);
+        // A syntax fg ("red") is active across the match; after the span
+        // closes, the syntax colour must resume — not a bare reset.
+        let red = "\x1b[31m";
+        let styled = format!("{red}abcd\x1b[0m");
+        let got = overlay_matches(&styled, &[1..2], None, &theme);
+        assert_eq!(got, format!("{red}a{mbg}{mfg}b{bg_off}{red}cd\x1b[0m"));
     }
 
     #[test]
     fn overlay_match_to_end_of_line() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let bg = theme.style_mode.bg_seq(theme.search_match);
-        let off = theme.style_mode.reset_bg();
+        let (mbg, mfg, _, _, bg_off, fg_off) = match_seqs(&theme);
         assert_eq!(
             overlay_matches("abc", &[1..3], None, &theme),
-            format!("a{bg}bc{off}")
+            format!("a{mbg}{mfg}bc{bg_off}{fg_off}")
         );
     }
 }

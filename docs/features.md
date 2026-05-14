@@ -612,9 +612,12 @@ uppercase character makes the whole query case-sensitive. Available in the text-
 (source code, plain text, structured raw/pretty, SVG XML — i.e. `ContentMode`).
 
 On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
-match (wrapping at the ends), scrolling each match's line into view. All visible matches are
-painted with the theme's `search_match` background; the current `n`/`p` match gets the `accent`
-background so it stands out. The status line shows `cur/total` while a search is active, or
+match (wrapping at the ends), scrolling each match's line into view. A match gets an explicit
+background **and** foreground pair — the syntax colour underneath is dropped so matched text
+looks uniform regardless of what it was (and resumes after the span). Both states' colours
+derive from the theme's `accent` hue: the current `n`/`p` match is vivid
+(`search_current_style`), the rest are muted/dark (`search_match_style`), each paired with a
+neutral contrasting foreground. The status line shows `cur/total` while a search is active, or
 `no match` when the query isn't found.
 
 The scan is a single pass over the active view (raw `LineSource`, or the pretty-printed lines
