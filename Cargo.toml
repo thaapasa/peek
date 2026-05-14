@@ -1,6 +1,6 @@
 [package]
 name = "peek"
-version = "0.1.11"
+version = "0.2.0"
 edition = "2024"
 authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
 description = "Modern terminal file viewer — preview any file, any format"
