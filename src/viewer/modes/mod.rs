@@ -297,4 +297,10 @@ pub(crate) trait Mode {
     fn extract_target(&self) -> Option<ExtractTarget> {
         None
     }
+
+    /// Set or clear the active text-search query. Modes that support
+    /// in-document search (currently `ContentMode`) scan their content,
+    /// jump to the first match, and highlight matches on render. `None`
+    /// or an empty query clears any active search. Default no-op.
+    fn set_search(&mut self, _query: Option<&str>) {}
 }

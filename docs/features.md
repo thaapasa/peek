@@ -22,7 +22,8 @@ straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`)
 cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
-line-number gutter in text views. Search not yet.
+line-number gutter in text views. Text search (`/` opens the prompt, `n`/`p` cycle matches) works
+in the text / source / structured views.
 
 ### Print Mode ◐
 
@@ -603,6 +604,28 @@ Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 
 press (`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because
 content is already fully visible. The gutter does not pan; it stays anchored to the left edge.
 
+### Text Search ◐
+
+`/` opens a search prompt over the status line; type a query and Enter runs it. Matching is
+**exact substring** with **smart-case** — an all-lowercase query matches case-insensitively, any
+uppercase character makes the whole query case-sensitive. Available in the text-based views
+(source code, plain text, structured raw/pretty, SVG XML — i.e. `ContentMode`).
+
+On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
+match (wrapping at the ends), scrolling each match's line into view. All visible matches are
+painted with the theme's `search_match` background; the current `n`/`p` match gets the `accent`
+background so it stands out. The status line shows `cur/total` while a search is active, or
+`no match` when the query isn't found.
+
+The scan is a single pass over the active view (raw `LineSource`, or the pretty-printed lines
+when in pretty mode), capped at 100,000 matches. Flipping the raw/pretty toggle clears the search
+— match line indices belong to one view's line domain. An empty-query Enter clears the search;
+so does `Esc` while a search is active (it clears matches first, then falls through to the
+normal back / quit behaviour on a second press).
+
+Regex matching and incremental (search-as-you-type) are still planned — see
+[planned.md](planned.md#viewer-features-).
+
 ### Help Screen ◐
 
 `h` / `?` opens the help screen. Shows keyboard shortcuts and the active theme. Shortcut list is
@@ -669,13 +692,13 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `x`       | Toggle hex dump (no-op when hex is default) |
 | `a`       | Toggle about / status screen                |
 
-### Search
+### Search *(context: text / source / structured views)*
 
 | Key | Action                |
 |-----|-----------------------|
 | `/` | Open search prompt    |
 | `n` | Next search match     |
-| `N` | Previous search match |
+| `p` | Previous search match |
 
 ### Text Views *(context)*
 
@@ -765,8 +788,8 @@ downgrade colors from 24-bit to 256/16/none.
 
 `PeekTheme` derives the roles from the active syntect theme. All non-syntax UI (info screens, help,
 `--help`) uses these via `PeekTheme::paint()`. `.tmTheme` files embedded at compile time via
-`include_str!`. The gutter role drives the line-number column in ContentMode; the search-highlight
-role is defined but unused (search not implemented yet).
+`include_str!`. The gutter role drives the line-number column in ContentMode; the `search_match`
+role paints search-result backgrounds in the text views.
 
 ### Compatibility Modes ◐
 

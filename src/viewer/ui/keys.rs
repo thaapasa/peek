@@ -126,6 +126,12 @@ pub(crate) enum Action {
     NextChapter,
     /// Step back to the previous chapter (EPUB read mode).
     PrevChapter,
+    /// Open the text-search prompt (ContentMode).
+    OpenSearch,
+    /// Jump to the next search match (ContentMode).
+    NextMatch,
+    /// Jump to the previous search match (ContentMode).
+    PrevMatch,
     /// Toggle the sticky parent-directory breadcrumb at the top of a
     /// scrolled listing TOC view.
     ToggleStickyParents,
@@ -187,10 +193,13 @@ impl Action {
             Action::ToggleLineNumbers   => binds![B::plain(Char('l'))],
             Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
             Action::PlayPause           => binds![B::plain(Char(' '))],
-            Action::NextFrame           => binds![B::plain(Char('n'))], // n — also NextChapter (different mode)
-            Action::PrevFrame           => binds![B::plain(Char('p'))], // p — also PrevChapter (different mode)
+            Action::NextFrame           => binds![B::plain(Char('n'))], // n — also NextChapter / NextMatch (different mode)
+            Action::PrevFrame           => binds![B::plain(Char('p'))], // p — also PrevChapter / PrevMatch (different mode)
             Action::NextChapter         => binds![B::plain(Char('n'))],
             Action::PrevChapter         => binds![B::plain(Char('p'))],
+            Action::OpenSearch          => binds![B::plain(Char('/'))],
+            Action::NextMatch           => binds![B::plain(Char('n'))],
+            Action::PrevMatch           => binds![B::plain(Char('p'))],
             Action::ToggleStickyParents => binds![B::plain(Char('s'))],
             Action::Extract             => binds![B::plain(Char('e'))],
             Action::Descend             => binds![B::plain(Enter)],

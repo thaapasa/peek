@@ -229,6 +229,7 @@ src/
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
+    search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line)
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper

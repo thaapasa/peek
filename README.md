@@ -16,7 +16,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Documents** — PDF, DOCX, ODT, RTF, EPUB, CBZ
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
 - **Hex dump** fallback for binary, reachable from any view with `x`
-- **Interactive viewer** with live theme cycling, info screen, extraction
+- **Interactive viewer** with live theme cycling, info screen, extraction, text search
 
 peek is a single-file viewer: one path (or stdin) at a time. Run peek once per file.
 

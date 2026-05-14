@@ -389,11 +389,19 @@ horizontal pan is already in the viewer, so the marginal cost is small.
 
 ## Viewer Features
 
-### Text Search ☐
+### Text Search ◐
 
-`/` opens search prompt; type pattern, Enter searches. `n` / `N` jump to next / previous. Matches
-highlighted in content. Regex is desirable; plain text is the minimum. Applies to all text-based
-views (source, structured, document text, file info).
+Exact-substring search with smart-case shipped for the text views (`ContentMode`) — see
+[features.md → Text Search](features.md#text-search-). Still planned:
+
+- **Regex matching** — the "desirable" from the original spec. Plain substring is the shipped
+  minimum.
+- **Incremental search** — re-scan + re-highlight on every keystroke instead of confirm-on-Enter.
+- **Wider reach** — search in the file-info view, listings, and the hex dump. Today only
+  `ContentMode` participates.
+- **Lazy / bounded scan** — the current scan is one full pass over the active view, capped at
+  100,000 matches; a multi-GB file pays that pass up front. A lazy "search from here" would
+  scale better.
 
 ### Large File Safeguards ☐
 

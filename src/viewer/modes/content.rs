@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -9,6 +10,7 @@ use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::structured::pretty;
+use crate::viewer::search;
 use crate::viewer::ui::{Action, HelpEntry, count_wrap_segments, slice_styled_h, wrap_styled};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
@@ -97,6 +99,11 @@ pub(crate) struct ContentMode {
     cached_cols: usize,
     /// Last terminal row count seen (content area height).
     cached_rows: usize,
+
+    /// Active text search, or `None`. Match positions are in the active
+    /// branch's line domain (raw or pretty); cleared when that domain
+    /// changes (the raw/pretty toggle).
+    search: Option<Search>,
 }
 
 const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
@@ -107,6 +114,11 @@ const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Pan left / right (wrap off)",
     ),
+    (&[Action::OpenSearch], "Search"),
+    (
+        &[Action::NextMatch, Action::PrevMatch],
+        "Next / previous match",
+    ),
 ];
 
 const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
@@ -116,7 +128,34 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Pan left / right (wrap off)",
     ),
+    (&[Action::OpenSearch], "Search"),
+    (
+        &[Action::NextMatch, Action::PrevMatch],
+        "Next / previous match",
+    ),
 ];
+
+/// Hard cap on collected search matches. A pathological query (a single
+/// common letter in a huge file) would otherwise build an unbounded
+/// `Vec`; past the cap the scan stops and the count reflects the cap.
+const MAX_SEARCH_MATCHES: usize = 100_000;
+
+/// One search match: a byte range within the raw text of logical line
+/// `line`. `line` indexes the active branch's line domain — raw
+/// `LineSource` lines, or pretty-printed lines when `use_pretty`.
+struct MatchPos {
+    line: usize,
+    range: Range<usize>,
+}
+
+/// Active in-document search. Holds every match (flat, ordered by
+/// `(line, range.start)`) and the index `n`/`p` cycle through. The
+/// query string itself isn't retained — a re-search re-scans from the
+/// prompt.
+struct Search {
+    matches: Vec<MatchPos>,
+    current: usize,
+}
 
 impl ContentMode {
     #[allow(clippy::too_many_arguments)]
@@ -156,6 +195,7 @@ impl ContentMode {
             h_scroll: 0,
             cached_cols: 0,
             cached_rows: 0,
+            search: None,
         }
     }
 
@@ -251,6 +291,17 @@ impl ContentMode {
         usable_width: usize,
         first_skip: usize,
     ) -> bool {
+        // Paint search-match backgrounds onto the logical line before it
+        // is wrapped / h-sliced — wrap_styled and slice_styled_h carry
+        // the background escapes across their cuts.
+        let overlaid;
+        let styled: &str = match self.search_overlay(line_idx) {
+            Some((ranges, current)) => {
+                overlaid = search::overlay_matches(styled, &ranges, current, peek_theme);
+                &overlaid
+            }
+            None => styled,
+        };
         let line_num = line_idx + 1;
         if !self.soft_wrap {
             let body = slice_styled_h(styled, self.h_scroll, usable_width);
@@ -637,6 +688,50 @@ impl ContentMode {
         self.pretty_highlighted = None;
         self.pretty_raw_lines = None;
     }
+
+    /// Search-overlay data for logical line `line`: the match byte
+    /// ranges on that line, plus the local index (into the returned
+    /// `Vec`) of the current match when it falls on this line. `None`
+    /// when no search is active or the line has no matches.
+    fn search_overlay(&self, line: usize) -> Option<(Vec<Range<usize>>, Option<usize>)> {
+        let search = self.search.as_ref()?;
+        let lo = search.matches.partition_point(|m| m.line < line);
+        let hi = search.matches.partition_point(|m| m.line <= line);
+        if lo == hi {
+            return None;
+        }
+        let ranges = search.matches[lo..hi]
+            .iter()
+            .map(|m| m.range.clone())
+            .collect();
+        // `.then` (lazy) not `.then_some` — `current - lo` underflows
+        // for any line rendered after the current match's line.
+        let current = (lo..hi)
+            .contains(&search.current)
+            .then(|| search.current - lo);
+        Some((ranges, current))
+    }
+
+    /// Move the current-match cursor by `delta` (wrapping at the ends)
+    /// and scroll that match's line to the top of the viewport. No-op
+    /// when no search is active or there are no matches.
+    fn step_match(&mut self, delta: isize) {
+        let line = {
+            let Some(search) = self.search.as_mut() else {
+                return;
+            };
+            let n = search.matches.len();
+            if n == 0 {
+                return;
+            }
+            search.current = (search.current as isize + delta).rem_euclid(n as isize) as usize;
+            search.matches[search.current].line
+        };
+        self.top_logical = line;
+        self.top_sub_row = 0;
+        self.h_scroll = 0;
+        self.clamp_top();
+    }
 }
 
 impl Mode for ContentMode {
@@ -792,10 +887,35 @@ impl Mode for ContentMode {
         if self.soft_wrap {
             segs.push(("Wrap".to_string(), theme.muted));
         }
+        // Search position, shown only while a search is active. Uses
+        // the same muted color as the listing-view file counter.
+        if let Some(search) = &self.search {
+            let total = search.matches.len();
+            if total == 0 {
+                segs.push(("no match".to_string(), theme.warning));
+            } else {
+                segs.push((format!("{}/{}", search.current + 1, total), theme.muted));
+            }
+        }
         segs
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        // Esc clears an active search before falling through to the
+        // global Back (pop frame / quit) — matches less / vim. With no
+        // search active, Back is left untouched.
+        if action == Action::Back && self.search.is_some() {
+            self.search = None;
+            return Handled::Yes;
+        }
+        if action == Action::NextMatch {
+            self.step_match(1);
+            return Handled::Yes;
+        }
+        if action == Action::PrevMatch {
+            self.step_match(-1);
+            return Handled::Yes;
+        }
         if action == Action::ToggleLineNumbers {
             self.show_line_numbers = !self.show_line_numbers;
             return Handled::Yes;
@@ -826,6 +946,9 @@ impl Mode for ContentMode {
             // raw-mode `render_window` will detect `at() > 0` (the new
             // scroll) and reset itself before catching up.
             self.invalidate_pretty_caches();
+            // Match positions are in the old branch's line domain — they
+            // mean nothing in the new branch. Drop the search.
+            self.search = None;
             self.top_logical = 0;
             self.top_sub_row = 0;
             self.h_scroll = 0;
@@ -969,6 +1092,61 @@ impl Mode for ContentMode {
             self.h_scroll = 0;
             self.clamp_top();
         }
+    }
+
+    /// Scan the active branch for `query`, jump to the first match, and
+    /// arm match highlighting. `None` or an empty query clears the
+    /// search. Smart-case: an all-lowercase query matches
+    /// case-insensitively, any uppercase makes it case-sensitive.
+    ///
+    /// The scan is one full pass over the active branch — `LineSource`
+    /// when raw, the pretty-printed string when pretty — capped at
+    /// `MAX_SEARCH_MATCHES` so a pathological query can't grow an
+    /// unbounded `Vec`.
+    fn set_search(&mut self, query: Option<&str>) {
+        let query = match query {
+            Some(q) if !q.is_empty() => q,
+            _ => {
+                self.search = None;
+                return;
+            }
+        };
+        let sensitive = search::smart_case_sensitive(query);
+        let mut matches: Vec<MatchPos> = Vec::new();
+
+        if self.use_pretty && matches!(self.pretty, Some(Ok(_))) {
+            if let Some(Ok(pretty)) = &self.pretty {
+                'scan: for (idx, line) in pretty.lines().enumerate() {
+                    for range in search::find_matches(line, query, sensitive) {
+                        matches.push(MatchPos { line: idx, range });
+                        if matches.len() >= MAX_SEARCH_MATCHES {
+                            break 'scan;
+                        }
+                    }
+                }
+            }
+        } else {
+            'scan: for (idx, line) in self.line_source.iter_all().enumerate() {
+                let Ok(line) = line else { break };
+                for range in search::find_matches(&line, query, sensitive) {
+                    matches.push(MatchPos { line: idx, range });
+                    if matches.len() >= MAX_SEARCH_MATCHES {
+                        break 'scan;
+                    }
+                }
+            }
+        }
+
+        if let Some(first) = matches.first() {
+            self.top_logical = first.line;
+            self.top_sub_row = 0;
+            self.h_scroll = 0;
+        }
+        self.search = Some(Search {
+            matches,
+            current: 0,
+        });
+        self.clamp_top();
     }
 }
 
@@ -1272,5 +1450,131 @@ mod tests {
         mode_off.soft_wrap = false;
         let segs = mode_off.status_segments(&theme);
         assert!(!segs.iter().any(|(s, _)| s == "Wrap"));
+    }
+
+    /// `set_search` scans the raw branch, records every match in
+    /// document order, and jumps the viewport to the first match's line.
+    #[test]
+    fn set_search_finds_matches_and_jumps() {
+        let mut mode = plain_mode_from_bytes(b"alpha\nbeta\ngamma beta\ndelta\n");
+        mode.set_search(Some("beta"));
+        let search = mode.search.as_ref().expect("search armed");
+        assert_eq!(search.matches.len(), 2);
+        assert_eq!(search.matches[0].line, 1);
+        assert_eq!(search.matches[1].line, 2);
+        assert_eq!(search.current, 0);
+        assert_eq!(mode.top_logical, 1, "jumped to first match's line");
+    }
+
+    /// `NextMatch` / `PrevMatch` cycle the current-match cursor, wrapping
+    /// at both ends, and scroll the match's line into view.
+    #[test]
+    fn next_prev_match_wrap() {
+        let mut mode = plain_mode_from_bytes(b"x\nhit\nx\nhit\n");
+        // 1-row viewport so every line is its own scroll position —
+        // otherwise the 4-line doc fits whole and clamp pins top at 0.
+        mode.cached_cols = 80;
+        mode.cached_rows = 1;
+        mode.set_search(Some("hit"));
+        assert_eq!(mode.search.as_ref().unwrap().matches.len(), 2);
+        assert_eq!(mode.top_logical, 1);
+
+        assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
+        assert_eq!(mode.search.as_ref().unwrap().current, 1);
+        assert_eq!(mode.top_logical, 3);
+
+        // Forward past the end wraps to the first match.
+        assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
+        assert_eq!(mode.search.as_ref().unwrap().current, 0);
+        assert_eq!(mode.top_logical, 1);
+
+        // Backward past the start wraps to the last match.
+        assert_eq!(mode.handle(Action::PrevMatch), Handled::Yes);
+        assert_eq!(mode.search.as_ref().unwrap().current, 1);
+        assert_eq!(mode.top_logical, 3);
+    }
+
+    /// A `None` or empty query clears any active search.
+    #[test]
+    fn set_search_none_and_empty_clear() {
+        let mut mode = plain_mode_from_bytes(b"foo\nfoo\n");
+        mode.set_search(Some("foo"));
+        assert!(mode.search.is_some());
+        mode.set_search(None);
+        assert!(mode.search.is_none());
+        mode.set_search(Some("foo"));
+        assert!(mode.search.is_some());
+        mode.set_search(Some(""));
+        assert!(mode.search.is_none());
+    }
+
+    /// Flipping the raw/pretty toggle drops the search — match line
+    /// indices are in the old branch's domain and mean nothing in the
+    /// new one.
+    #[test]
+    fn toggle_raw_source_clears_search() {
+        let source = InputSource::stdin(Bytes::from_static(b"[1,2,1]"));
+        let line_source = source.open_line_source().unwrap();
+        let tm = Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain));
+        let mut mode = ContentMode::new(
+            source,
+            line_source,
+            Some(StructuredFormat::Json),
+            Some("JSON".to_string()),
+            tm,
+            PeekThemeName::IdeaDark,
+            false, // start raw
+            true,  // allow_pretty_toggle
+            false,
+            "Content",
+        );
+        mode.set_search(Some("1"));
+        assert!(mode.search.is_some());
+        assert_eq!(mode.handle(Action::ToggleRawSource), Handled::Yes);
+        assert!(mode.search.is_none(), "raw/pretty toggle clears search");
+    }
+
+    /// `Back` (Esc) clears an active search and is consumed; with no
+    /// search active it falls through untouched so the global
+    /// pop-frame / quit behaviour still applies.
+    #[test]
+    fn back_clears_search_then_falls_through() {
+        let mut mode = plain_mode_from_bytes(b"foo\nfoo\n");
+        assert_eq!(
+            mode.handle(Action::Back),
+            Handled::No,
+            "no search: Back untouched"
+        );
+        mode.set_search(Some("foo"));
+        assert!(mode.search.is_some());
+        assert_eq!(
+            mode.handle(Action::Back),
+            Handled::Yes,
+            "Esc consumed to clear search"
+        );
+        assert!(mode.search.is_none());
+        assert_eq!(
+            mode.handle(Action::Back),
+            Handled::No,
+            "search cleared: Back falls through again"
+        );
+    }
+
+    /// The search position segment appears only while a search is
+    /// active: `cur/total` when there are matches, `no match` when none.
+    #[test]
+    fn status_segments_show_search_position() {
+        let mut mode = plain_mode_from_bytes(b"hit\nhit\n");
+        let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
+        let theme = tm.peek_theme().clone();
+        assert!(!mode.status_segments(&theme).iter().any(|(s, _)| s == "1/2"));
+        mode.set_search(Some("hit"));
+        assert!(mode.status_segments(&theme).iter().any(|(s, _)| s == "1/2"));
+        mode.set_search(Some("zzz"));
+        assert!(
+            mode.status_segments(&theme)
+                .iter()
+                .any(|(s, _)| s == "no match")
+        );
     }
 }

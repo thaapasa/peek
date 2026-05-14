@@ -115,11 +115,58 @@ pub(crate) fn strip_ansi_width(s: &str) -> usize {
     width
 }
 
+/// The foreground + background SGR escapes active at a point in a styled
+/// string. Wrap / slice use it to re-establish style after a cut so a
+/// color (or a search-match background) doesn't bleed off or vanish at a
+/// chunk boundary. Foreground and background are tracked separately
+/// because syntect emits foreground-only escapes while the search
+/// overlay injects background escapes — a single "most recent SGR" slot
+/// would let one clobber the other.
+#[derive(Default)]
+struct ActiveStyle {
+    fg: String,
+    bg: String,
+}
+
+impl ActiveStyle {
+    /// Update from one complete escape sequence (`\x1b[..m`).
+    fn observe(&mut self, esc: &str) {
+        match esc {
+            "\x1b[0m" => {
+                self.fg.clear();
+                self.bg.clear();
+            }
+            "\x1b[39m" => self.fg.clear(),
+            "\x1b[49m" => self.bg.clear(),
+            _ if esc.starts_with("\x1b[48") => {
+                self.bg.clear();
+                self.bg.push_str(esc);
+            }
+            _ => {
+                self.fg.clear();
+                self.fg.push_str(esc);
+            }
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.fg.is_empty() && self.bg.is_empty()
+    }
+
+    /// Append the active foreground then background escapes to `buf`.
+    fn write(&self, buf: &mut String) {
+        buf.push_str(&self.fg);
+        buf.push_str(&self.bg);
+    }
+}
+
 /// Wrap a string containing SGR escape sequences into chunks of at most
-/// `width` visible terminal columns. The active foreground style is
-/// preserved across chunk boundaries: each non-empty chunk closes with a
-/// reset and the next reopens with the most recently seen non-reset SGR
-/// (so syntect's per-line colors don't bleed past a cut).
+/// `width` visible terminal columns. The active foreground + background
+/// style is preserved across chunk boundaries: each non-empty chunk
+/// closes with a reset and the next reopens with the most recently seen
+/// foreground and background SGRs (so syntect's per-line colors and the
+/// search overlay's match backgrounds don't bleed past — or vanish at —
+/// a cut).
 ///
 /// Wide characters (CJK width 2) are never split — a glyph that would
 /// straddle the boundary is pushed to the next chunk in full. Combining
@@ -133,7 +180,7 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     let mut col = 0usize;
-    let mut active_seq = String::new();
+    let mut active = ActiveStyle::default();
     let mut esc_buf = String::new();
     let mut in_escape = false;
 
@@ -142,12 +189,7 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
             esc_buf.push(c);
             if c.is_ascii_alphabetic() {
                 in_escape = false;
-                if esc_buf == "\x1b[0m" {
-                    active_seq.clear();
-                } else {
-                    active_seq.clear();
-                    active_seq.push_str(&esc_buf);
-                }
+                active.observe(&esc_buf);
                 cur.push_str(&esc_buf);
                 esc_buf.clear();
             }
@@ -157,14 +199,12 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
         } else {
             let cw = UnicodeWidthChar::width(c).unwrap_or(0);
             if cw > 0 && col + cw > width {
-                if !active_seq.is_empty() {
+                if !active.is_empty() {
                     cur.push_str("\x1b[0m");
                 }
                 out.push(std::mem::take(&mut cur));
                 col = 0;
-                if !active_seq.is_empty() {
-                    cur.push_str(&active_seq);
-                }
+                active.write(&mut cur);
             }
             cur.push(c);
             col += cw;
@@ -206,9 +246,9 @@ pub(crate) fn count_wrap_segments(s: &str, width: usize) -> usize {
 
 /// Slice a string containing SGR escape sequences to a horizontal window:
 /// skip the first `start_col` visible cells, return up to `max_cols`
-/// cells. Style continuity preserved — the most recent non-reset SGR
-/// active at the slice start is re-emitted at the head of the output, and
-/// any trailing reset is emitted at the tail.
+/// cells. Style continuity preserved — the foreground + background SGRs
+/// active at the slice start are re-emitted at the head of the output,
+/// and any trailing reset is emitted at the tail.
 ///
 /// Wide characters straddling either boundary are dropped rather than
 /// split. Combining marks at the start of the emit region attach to no
@@ -220,7 +260,7 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
     let mut out = String::new();
     let mut col = 0usize;
     let mut taken = 0usize;
-    let mut active_seq = String::new();
+    let mut active = ActiveStyle::default();
     let mut esc_buf = String::new();
     let mut in_escape = false;
     let mut started = false;
@@ -230,12 +270,7 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
             esc_buf.push(c);
             if c.is_ascii_alphabetic() {
                 in_escape = false;
-                if esc_buf == "\x1b[0m" {
-                    active_seq.clear();
-                } else {
-                    active_seq.clear();
-                    active_seq.push_str(&esc_buf);
-                }
+                active.observe(&esc_buf);
                 if started {
                     out.push_str(&esc_buf);
                 }
@@ -251,9 +286,7 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
                 continue;
             }
             if !started {
-                if !active_seq.is_empty() {
-                    out.push_str(&active_seq);
-                }
+                active.write(&mut out);
                 started = true;
             }
             if cw > 0 && taken + cw > max_cols {
@@ -264,7 +297,7 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
             col += cw;
         }
     }
-    if started && !active_seq.is_empty() {
+    if started && !active.is_empty() {
         out.push_str("\x1b[0m");
     }
     out
@@ -467,6 +500,32 @@ mod tests {
     }
 
     #[test]
+    fn wrap_styled_carries_background_across_cut() {
+        // A background SGR (the search overlay's shape) must survive a
+        // cut, not just foreground. bg on, "abcd", bg off; width 2.
+        let bg = "\x1b[48;2;1;2;3m";
+        let off = "\x1b[49m";
+        let input = format!("{bg}abcd{off}");
+        let chunks = wrap_styled(&input, 2);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0], format!("{bg}ab\x1b[0m"));
+        assert_eq!(chunks[1], format!("{bg}cd{off}"));
+    }
+
+    #[test]
+    fn wrap_styled_carries_fg_and_bg_together() {
+        // Foreground and background are tracked independently — both
+        // must reopen after a cut, neither clobbering the other.
+        let fg = "\x1b[31m";
+        let bg = "\x1b[48;2;1;2;3m";
+        let input = format!("{fg}{bg}abc");
+        let chunks = wrap_styled(&input, 2);
+        assert_eq!(chunks.len(), 2);
+        assert_eq!(chunks[0], format!("{fg}{bg}ab\x1b[0m"));
+        assert_eq!(chunks[1], format!("{fg}{bg}c"));
+    }
+
+    #[test]
     fn slice_styled_h_plain_window() {
         assert_eq!(slice_styled_h("0123456789", 3, 4), "3456");
     }
@@ -502,6 +561,17 @@ mod tests {
     fn slice_styled_h_wide_char_straddling_end_dropped() {
         // "ab你c" with start=0, max=3: a(1) b(2) 你 would push to 4>3 → drop.
         assert_eq!(slice_styled_h("ab你c", 0, 3), "ab");
+    }
+
+    #[test]
+    fn slice_styled_h_reemits_active_background_at_window_start() {
+        // A background active at the slice start must be re-emitted at
+        // the window head, same as a foreground.
+        let bg = "\x1b[48;2;1;2;3m";
+        let input = format!("{bg}abcdef\x1b[49m");
+        // Skip 2, take 3 — the window starts mid-background-span.
+        let out = slice_styled_h(&input, 2, 3);
+        assert_eq!(out, format!("{bg}cde\x1b[0m"));
     }
 
     #[test]

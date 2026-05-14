@@ -67,6 +67,16 @@ const MAX_STACK_DEPTH: usize = 16;
 /// `Registry` / `Args`.
 pub(crate) type ModeBuilder = Box<dyn Fn(&InputSource, &Detected) -> Result<Vec<Box<dyn Mode>>>>;
 
+/// What the modal [`Prompt`] is collecting input for — the action to run
+/// when the user confirms. Lets one prompt slot serve both the
+/// extract-save flow and text search.
+enum PromptKind {
+    /// Save the extracted item to the typed path.
+    Extract(Extracted),
+    /// Hand the typed query to the active mode's `set_search`.
+    Search,
+}
+
 /// One peek session — one `(source, detected, modes)` triple plus its
 /// per-mode scroll / view cache / position state. The recursive-peek
 /// stack is a `Vec<SessionFrame>`; the active session is always the
@@ -142,11 +152,10 @@ pub(crate) struct ViewerState {
     render_opts: RenderOptions,
 
     /// Modal prompt overlay. While `Some`, raw key events go to the
-    /// prompt and the status line shows its render. Paired
-    /// `pending_extract` is the work to run on confirm — keeps the
-    /// Prompt widget oblivious to its purpose.
-    prompt: Option<Prompt>,
-    pending_extract: Option<Extracted>,
+    /// prompt and the status line shows its render. The paired
+    /// [`PromptKind`] is the work to run on confirm — keeps the Prompt
+    /// widget oblivious to its purpose.
+    prompt: Option<(Prompt, PromptKind)>,
 
     /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
     /// one redraw.
@@ -174,7 +183,6 @@ impl ViewerState {
             screen: ScreenBuffer::new(),
             render_opts,
             prompt: None,
-            pending_extract: None,
             flash: None,
         })
     }
@@ -241,7 +249,7 @@ impl ViewerState {
     }
 
     pub(crate) fn active_prompt(&self) -> Option<&Prompt> {
-        self.prompt.as_ref()
+        self.prompt.as_ref().map(|(p, _)| p)
     }
 
     pub(crate) fn take_flash(&mut self) -> Option<String> {
@@ -249,43 +257,63 @@ impl ViewerState {
     }
 
     /// Open the save-to prompt; Enter writes `extracted` to the typed
-    /// path, Esc drops both without writing.
+    /// path, Esc drops it without writing.
     pub(crate) fn begin_extract_prompt(&mut self, extracted: Extracted) {
         let prefill = extracted.suggested_name.clone();
-        self.pending_extract = Some(extracted);
-        self.prompt = Some(Prompt::new("Save to", prefill));
+        self.prompt = Some((
+            Prompt::new("Save to", prefill),
+            PromptKind::Extract(extracted),
+        ));
+    }
+
+    /// Open the text-search prompt; Enter hands the query to the active
+    /// mode's `set_search`, Esc closes without changing the search.
+    fn begin_search_prompt(&mut self) {
+        self.prompt = Some((Prompt::new("Search", ""), PromptKind::Search));
     }
 
     pub(crate) fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
-        let Some(prompt) = self.prompt.as_mut() else {
+        let Some((prompt, _)) = self.prompt.as_mut() else {
             return Ok(false);
         };
-        match prompt.handle_key(key) {
+        let outcome = prompt.handle_key(key);
+        match outcome {
             PromptOutcome::Continue => Ok(true),
             PromptOutcome::Cancelled => {
-                self.prompt = None;
-                self.pending_extract = None;
-                self.flash = Some("extract cancelled".to_string());
+                let (_, kind) = self.prompt.take().expect("prompt present");
+                if matches!(kind, PromptKind::Extract(_)) {
+                    self.flash = Some("extract cancelled".to_string());
+                }
                 Ok(true)
             }
-            PromptOutcome::Confirmed(target) => {
-                self.prompt = None;
-                let Some(extracted) = self.pending_extract.take() else {
-                    return Ok(true);
-                };
-                let dest = if target.is_empty() {
-                    crate::extract::write::Output::resolve(None, &extracted.suggested_name)
-                } else if target == "-" {
-                    crate::extract::write::Output::Stdout
-                } else {
-                    crate::extract::write::Output::Path(target.into())
-                };
-                match crate::extract::write::write_extracted(&extracted, dest) {
-                    Ok(path) => {
-                        self.flash = Some(format!("wrote {}", path.display()));
+            PromptOutcome::Confirmed(value) => {
+                let (_, kind) = self.prompt.take().expect("prompt present");
+                match kind {
+                    PromptKind::Extract(extracted) => {
+                        let dest = if value.is_empty() {
+                            crate::extract::write::Output::resolve(None, &extracted.suggested_name)
+                        } else if value == "-" {
+                            crate::extract::write::Output::Stdout
+                        } else {
+                            crate::extract::write::Output::Path(value.into())
+                        };
+                        match crate::extract::write::write_extracted(&extracted, dest) {
+                            Ok(path) => {
+                                self.flash = Some(format!("wrote {}", path.display()));
+                            }
+                            Err(e) => {
+                                self.flash = Some(format!("extract failed: {e}"));
+                            }
+                        }
                     }
-                    Err(e) => {
-                        self.flash = Some(format!("extract failed: {e}"));
+                    PromptKind::Search => {
+                        let query = (!value.is_empty()).then_some(value.as_str());
+                        {
+                            let f = self.frame_mut();
+                            let active = f.active;
+                            f.modes[active].set_search(query);
+                        }
+                        self.invalidate_active();
                     }
                 }
                 Ok(true)
@@ -415,6 +443,10 @@ impl ViewerState {
                 self.descend()?;
                 Outcome::Redraw
             }
+            Action::OpenSearch => {
+                self.begin_search_prompt();
+                Outcome::Redraw
+            }
             // Mode-local actions: routed via the mode's own `handle` before
             // we get here. Listed explicitly so adding a new Action variant
             // forces a non-exhaustive-match compile error in this function
@@ -425,6 +457,8 @@ impl ViewerState {
             | Action::PrevFrame
             | Action::NextChapter
             | Action::PrevChapter
+            | Action::NextMatch
+            | Action::PrevMatch
             | Action::CycleBackground
             | Action::CycleImageMode
             | Action::CycleFitMode
@@ -932,7 +966,17 @@ mod tests {
     use crate::Args;
     use crate::viewer::Registry;
     use clap::Parser;
+    use crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
     use std::rc::Rc;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
 
     fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> ViewerState {
         let args = Args::parse_from(args_argv);
@@ -1175,6 +1219,32 @@ mod tests {
         // `peek <MANIFEST>/src` → `..` → `<MANIFEST>` (the project root).
         let expected_parent = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
         assert_eq!(new_path, expected_parent);
+    }
+
+    /// `/` opens the search prompt; typing a query and pressing Enter
+    /// confirms it, closes the prompt, and re-renders without quitting.
+    #[test]
+    fn search_prompt_confirm_runs_search_without_quitting() {
+        let source = fixture_source("test-data/theme.rs");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
+        assert_eq!(active_id(&state), ModeId::Content);
+
+        // `/` opens the prompt.
+        let outcome = state.apply(Action::OpenSearch).unwrap();
+        assert!(matches!(outcome, Outcome::Redraw));
+        assert!(state.prompt_active(), "search prompt should be open");
+
+        // Type "fn" then Enter.
+        for c in "fn".chars() {
+            state.handle_prompt_key(key(KeyCode::Char(c))).unwrap();
+        }
+        let redraw = state.handle_prompt_key(key(KeyCode::Enter)).unwrap();
+        assert!(redraw, "confirm should request a redraw");
+        assert!(!state.prompt_active(), "prompt closes on confirm");
+
+        // The post-confirm render must not panic.
+        state.ensure_active_rendered().unwrap();
     }
 
     /// Binary files: Tab must round-trip Hex ↔ Info. Without the

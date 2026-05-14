@@ -30,11 +30,19 @@ help screen — that's the authoritative reference.
 
 ## Text views
 
-| Key | Action                                       |
-|-----|----------------------------------------------|
-| `l` | Toggle line numbers                          |
-| `w` | Toggle soft line wrap                        |
-| `r` | Toggle pretty / raw (structured data)        |
+| Key       | Action                                       |
+|-----------|----------------------------------------------|
+| `l`       | Toggle line numbers                          |
+| `w`       | Toggle soft line wrap                        |
+| `r`       | Toggle pretty / raw (structured data)        |
+| `/`       | Open the search prompt                       |
+| `n` / `p` | Next / previous search match                 |
+
+Search is exact-substring with smart-case: an all-lowercase query matches case-insensitively;
+any uppercase character makes the query case-sensitive. Type the query and press Enter to run
+it — the viewer jumps to the first match. `n` / `p` cycle through matches (wrapping at the
+ends); the status line shows `cur/total`. `Esc` while a search is active clears the matches
+(press it again to leave the viewer); an empty-query Enter also clears the search.
 
 ## Image views
 
@@ -49,8 +57,8 @@ help screen — that's the authoritative reference.
 
 | Key       | Action                  |
 |-----------|-------------------------|
-| `p`       | Play / pause            |
-| `n` / `N` | Next / previous frame   |
+| `Space`   | Play / pause            |
+| `n` / `p` | Next / previous frame   |
 
 ## Listings (archives, PDF embeds, audio embeds, ISO, directories)
 
@@ -65,4 +73,4 @@ help screen — that's the authoritative reference.
 
 | Key       | Action               |
 |-----------|----------------------|
-| `n` / `N` | Next / previous page (or chapter) |
+| `n` / `p` | Next / previous page (or chapter) |
