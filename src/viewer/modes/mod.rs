@@ -18,7 +18,7 @@ use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 mod about;
 mod content;
@@ -231,7 +231,7 @@ pub(crate) trait Mode {
     /// theme cycle, mode switching). Used both for key dispatch and the
     /// help screen. Return a `&'static` slice — modes typically expose a
     /// fixed set, even if some are no-ops in some configurations.
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         &[]
     }
 

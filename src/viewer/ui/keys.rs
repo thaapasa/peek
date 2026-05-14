@@ -185,12 +185,19 @@ impl Action {
     }
 }
 
+/// One help-screen entry: a group of actions that share a description.
+/// In the help screen the keys render joined with " / "; in dispatch any
+/// action in the group matches. Most entries hold a single action — pair
+/// only actions that read naturally together (e.g. next / previous).
+pub(crate) type HelpEntry = (&'static [Action], &'static str);
+
 /// Find the first action this viewer allows whose bindings match `key`.
 /// Linear scan over a small `&'static` slice — sub-microsecond.
-pub(crate) fn dispatch(key: KeyEvent, allowed: &[(Action, &'static str)]) -> Option<Action> {
+pub(crate) fn dispatch(key: KeyEvent, allowed: &[HelpEntry]) -> Option<Action> {
     allowed
         .iter()
-        .find_map(|(a, _)| a.matches(key).then_some(*a))
+        .flat_map(|(actions, _)| actions.iter())
+        .find_map(|a| a.matches(key).then_some(*a))
 }
 
 /// Result of `ViewerState::apply` — what the event loop should do next.

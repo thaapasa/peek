@@ -9,7 +9,7 @@ use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::structured::pretty;
-use crate::viewer::ui::{Action, count_wrap_segments, slice_styled_h, wrap_styled};
+use crate::viewer::ui::{Action, HelpEntry, count_wrap_segments, slice_styled_h, wrap_styled};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
 /// Horizontal-scroll step size (columns) when wrap is off. Matches
@@ -99,19 +99,23 @@ pub(crate) struct ContentMode {
     cached_rows: usize,
 }
 
-const RAW_TOGGLE_ACTIONS: &[(Action, &str)] = &[
-    (Action::ToggleRawSource, "Toggle raw / pretty"),
-    (Action::ToggleLineNumbers, "Toggle line numbers"),
-    (Action::ToggleSoftWrap, "Toggle soft wrap"),
-    (Action::ScrollLeft, "Pan left (wrap off)"),
-    (Action::ScrollRight, "Pan right (wrap off)"),
+const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
+    (&[Action::ToggleRawSource], "Toggle raw / pretty"),
+    (&[Action::ToggleLineNumbers], "Toggle line numbers"),
+    (&[Action::ToggleSoftWrap], "Toggle soft wrap"),
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Pan left / right (wrap off)",
+    ),
 ];
 
-const LINE_NUMBER_ACTIONS: &[(Action, &str)] = &[
-    (Action::ToggleLineNumbers, "Toggle line numbers"),
-    (Action::ToggleSoftWrap, "Toggle soft wrap"),
-    (Action::ScrollLeft, "Pan left (wrap off)"),
-    (Action::ScrollRight, "Pan right (wrap off)"),
+const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
+    (&[Action::ToggleLineNumbers], "Toggle line numbers"),
+    (&[Action::ToggleSoftWrap], "Toggle soft wrap"),
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Pan left / right (wrap off)",
+    ),
 ];
 
 impl ContentMode {
@@ -760,7 +764,7 @@ impl Mode for ContentMode {
         Ok(())
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         if self.allow_pretty_toggle {
             RAW_TOGGLE_ACTIONS
         } else {

@@ -7,7 +7,7 @@ use super::scroll::{self, ScrollBounds};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 #[derive(Copy, Clone)]
 pub(crate) enum ImageKind {
@@ -61,14 +61,23 @@ pub(crate) struct ImageRenderMode {
     scroll_y: u32,
 }
 
-const IMAGE_ACTIONS: &[(Action, &str)] = &[
-    (Action::CycleBackground, "Cycle background (images)"),
-    (Action::CycleBackgroundBack, "Cycle background backward"),
-    (Action::CycleImageMode, "Cycle render mode (images)"),
-    (Action::CycleImageModeBack, "Cycle render mode backward"),
-    (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
-    (Action::ScrollLeft, "Scroll left (FitHeight)"),
-    (Action::ScrollRight, "Scroll right (FitHeight)"),
+const IMAGE_ACTIONS: &[HelpEntry] = &[
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background (images)",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode (images)",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Scroll left / right (FitHeight)",
+    ),
 ];
 
 impl ImageRenderMode {
@@ -219,7 +228,7 @@ impl Mode for ImageRenderMode {
         )
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         IMAGE_ACTIONS
     }
 

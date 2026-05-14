@@ -1,10 +1,10 @@
-use super::keys::Action;
+use super::keys::HelpEntry;
 use crate::theme::{PeekTheme, PeekThemeName};
 
 pub(crate) fn render_help_with_keys(
     theme: &PeekTheme,
     current_theme: PeekThemeName,
-    actions: &[(Action, &str)],
+    actions: &[HelpEntry],
 ) -> Vec<String> {
     let mut lines = Vec::new();
 
@@ -20,12 +20,19 @@ pub(crate) fn render_help_with_keys(
     // Key overhead for alignment (ANSI codes in paint_label)
     let sample_painted = theme.paint_label("x");
     let overhead = sample_painted.len() - 1;
-    let key_width = 14 + overhead;
+    let key_width = 16 + overhead;
 
-    for (action, desc) in actions {
+    for (group, desc) in actions {
+        // A help entry can bundle several actions under one description
+        // (e.g. next / previous) — render their keys joined with " / ".
+        let keys = group
+            .iter()
+            .map(|a| a.label_keys())
+            .collect::<Vec<_>>()
+            .join(" / ");
         lines.push(format!(
             "  {:<width$}{}",
-            theme.paint_label(action.label_keys()),
+            theme.paint_label(&keys),
             theme.paint_muted(desc),
             width = key_width,
         ));

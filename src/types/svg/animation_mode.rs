@@ -19,7 +19,7 @@ use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
 use crate::types::image::scroll::{self, ScrollBounds};
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 /// Maximum number of (frame, grid) prepared images held in memory.
 const FRAME_CACHE: usize = 64;
@@ -50,18 +50,29 @@ pub(crate) struct SvgAnimationMode {
     last_term: Option<TermSize>,
 }
 
-const SVG_ANIM_ACTIONS: &[(Action, &str)] = &[
-    (Action::PlayPause, "Play / pause"),
-    (Action::NextFrame, "Next frame"),
-    (Action::PrevFrame, "Previous frame"),
-    (Action::Extract, "Extract current frame as PNG"),
-    (Action::CycleBackground, "Cycle background (images)"),
-    (Action::CycleBackgroundBack, "Cycle background backward"),
-    (Action::CycleImageMode, "Cycle render mode (images)"),
-    (Action::CycleImageModeBack, "Cycle render mode backward"),
-    (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
-    (Action::ScrollLeft, "Scroll left (FitHeight)"),
-    (Action::ScrollRight, "Scroll right (FitHeight)"),
+const SVG_ANIM_ACTIONS: &[HelpEntry] = &[
+    (&[Action::PlayPause], "Play / pause"),
+    (
+        &[Action::NextFrame, Action::PrevFrame],
+        "Next / previous frame",
+    ),
+    (&[Action::Extract], "Extract current frame as PNG"),
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background (images)",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode (images)",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Scroll left / right (FitHeight)",
+    ),
 ];
 
 impl SvgAnimationMode {
@@ -221,7 +232,7 @@ impl Mode for SvgAnimationMode {
         scroll::apply(&mut self.scroll_x, &mut self.scroll_y, action, bounds)
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         SVG_ANIM_ACTIONS
     }
 

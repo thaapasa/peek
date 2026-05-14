@@ -15,7 +15,7 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{ExtractTarget, Mode, ModeId, Position, RenderCtx, Window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 use super::read::{DirEntry, DirEntryKind};
 
@@ -275,7 +275,7 @@ impl Mode for DirectoryMode {
         vec![(s, theme.muted)]
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         // Enter (Descend) is global; surface it here so the help screen
         // shows it under this mode too. No mode-private actions.
         &[]

@@ -9,7 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
-use crate::viewer::ui::{Action, GLOBAL_ACTIONS};
+use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 
 pub mod cell_size;
 pub mod hex;
@@ -346,11 +346,11 @@ impl Registry {
 
         // Help action union: globals + every preceding mode's extras,
         // deduped. Help itself contributes nothing new.
-        let mut help_actions: Vec<(Action, &'static str)> = GLOBAL_ACTIONS.to_vec();
+        let mut help_actions: Vec<HelpEntry> = GLOBAL_ACTIONS.to_vec();
         for m in &modes {
-            for (a, label) in m.extra_actions() {
-                if !help_actions.iter().any(|(b, _)| b == a) {
-                    help_actions.push((*a, *label));
+            for entry in m.extra_actions() {
+                if !help_actions.iter().any(|e| e == entry) {
+                    help_actions.push(*entry);
                 }
             }
         }

@@ -9,7 +9,7 @@ use super::pipeline::{FitMode, ImageConfig};
 use super::scroll::{self, ScrollBounds};
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 /// Animated image view (GIF/WebP). Owns the decoded frame list, current
 /// frame index, play/pause state, and image config (background + fit
@@ -33,18 +33,29 @@ pub(crate) struct AnimationMode {
     scroll_y: u32,
 }
 
-const ANIM_ACTIONS: &[(Action, &str)] = &[
-    (Action::PlayPause, "Play / pause"),
-    (Action::NextFrame, "Next frame"),
-    (Action::PrevFrame, "Previous frame"),
-    (Action::Extract, "Extract current frame as PNG"),
-    (Action::CycleBackground, "Cycle background (images)"),
-    (Action::CycleBackgroundBack, "Cycle background backward"),
-    (Action::CycleImageMode, "Cycle render mode (images)"),
-    (Action::CycleImageModeBack, "Cycle render mode backward"),
-    (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
-    (Action::ScrollLeft, "Scroll left (FitHeight)"),
-    (Action::ScrollRight, "Scroll right (FitHeight)"),
+const ANIM_ACTIONS: &[HelpEntry] = &[
+    (&[Action::PlayPause], "Play / pause"),
+    (
+        &[Action::NextFrame, Action::PrevFrame],
+        "Next / previous frame",
+    ),
+    (&[Action::Extract], "Extract current frame as PNG"),
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background (images)",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode (images)",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Scroll left / right (FitHeight)",
+    ),
 ];
 
 impl AnimationMode {
@@ -144,7 +155,7 @@ impl Mode for AnimationMode {
         )
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         ANIM_ACTIONS
     }
 

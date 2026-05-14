@@ -14,18 +14,27 @@ use crate::types::image::pipeline::render::{
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::Doc;
 
-const EXTRA_ACTIONS: &[(Action, &str)] = &[
-    (Action::NextChapter, "Next page"),
-    (Action::PrevChapter, "Previous page"),
-    (Action::CycleBackground, "Cycle background"),
-    (Action::CycleBackgroundBack, "Cycle background backward"),
-    (Action::CycleImageMode, "Cycle render mode"),
-    (Action::CycleImageModeBack, "Cycle render mode backward"),
-    (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
+const EXTRA_ACTIONS: &[HelpEntry] = &[
+    (
+        &[Action::NextChapter, Action::PrevChapter],
+        "Next / previous page",
+    ),
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
 ];
 
 /// Cap on inline image height in pipe / `--print` mode where
@@ -201,7 +210,7 @@ impl Mode for PdfPageMode {
         Ok(())
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         EXTRA_ACTIONS
     }
 

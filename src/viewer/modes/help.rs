@@ -1,15 +1,15 @@
 use anyhow::Result;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::HelpEntry;
 use crate::viewer::ui::help::render_help_with_keys;
 
 pub(crate) struct HelpMode {
-    actions: Vec<(Action, &'static str)>,
+    actions: Vec<HelpEntry>,
 }
 
 impl HelpMode {
-    pub(crate) fn new(actions: Vec<(Action, &'static str)>) -> Self {
+    pub(crate) fn new(actions: Vec<HelpEntry>) -> Self {
         Self { actions }
     }
 }

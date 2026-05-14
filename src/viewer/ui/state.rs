@@ -10,7 +10,7 @@ use crate::input::detect::Detected;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
-use super::keys::{self, Action, Outcome};
+use super::keys::{self, Action, HelpEntry, Outcome};
 use super::prompt::{Prompt, PromptOutcome};
 use super::screen::ScreenBuffer;
 use super::{content_rows, make_peek_theme, terminal_cols};
@@ -31,27 +31,32 @@ pub(crate) struct RenderedView {
 /// Global actions that work in every mode (unless the mode shadows the
 /// key via its own `extra_actions`). Used for both key dispatch and the
 /// help screen.
-pub(crate) const GLOBAL_ACTIONS: &[(Action, &str)] = &[
-    (Action::Quit, "Quit"),
-    (Action::Back, "Back / close current peek"),
-    (Action::ScrollUp, "Scroll up"),
-    (Action::ScrollDown, "Scroll down"),
-    (Action::PageUp, "Page up"),
-    (Action::PageDown, "Page down"),
-    (Action::Top, "Jump to top"),
-    (Action::Bottom, "Jump to bottom"),
-    (Action::CycleView, "Cycle file's view modes"),
-    (Action::CycleViewBack, "Cycle view modes (reverse)"),
-    (Action::SwitchInfo, "File info"),
-    (Action::ToggleHelp, "Toggle help"),
-    (Action::SwitchToHex, "Hex dump mode"),
-    (Action::SwitchToAbout, "About / status screen"),
-    (Action::CycleTheme, "Next theme"),
-    (Action::CycleThemeBack, "Previous theme"),
-    (Action::CycleColorMode, "Next color mode"),
-    (Action::CycleColorModeBack, "Previous color mode"),
-    (Action::Extract, "Extract selected entry / current frame"),
-    (Action::Descend, "Descend into selected entry / frame"),
+pub(crate) const GLOBAL_ACTIONS: &[HelpEntry] = &[
+    (&[Action::Quit], "Quit"),
+    (&[Action::Back], "Back / close current peek"),
+    (&[Action::ScrollUp], "Scroll up"),
+    (&[Action::ScrollDown], "Scroll down"),
+    (&[Action::PageUp, Action::PageDown], "Page up / down"),
+    (&[Action::Top], "Jump to top"),
+    (&[Action::Bottom], "Jump to bottom"),
+    (
+        &[Action::CycleView, Action::CycleViewBack],
+        "Cycle file's view modes (fwd / back)",
+    ),
+    (&[Action::SwitchInfo], "File info"),
+    (&[Action::ToggleHelp], "Toggle help"),
+    (&[Action::SwitchToHex], "Hex dump mode"),
+    (&[Action::SwitchToAbout], "About / status screen"),
+    (
+        &[Action::CycleTheme, Action::CycleThemeBack],
+        "Next / previous theme",
+    ),
+    (
+        &[Action::CycleColorMode, Action::CycleColorModeBack],
+        "Next / previous color mode",
+    ),
+    (&[Action::Extract], "Extract selected entry / current frame"),
+    (&[Action::Descend], "Descend into selected entry / frame"),
 ];
 
 /// Hard cap on session-stack depth. Real listings rarely nest beyond

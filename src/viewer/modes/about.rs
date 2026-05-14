@@ -4,7 +4,7 @@ use crossterm::terminal;
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::help::paint_logo;
 use crate::theme::PeekTheme;
-use crate::viewer::ui::Action;
+use crate::viewer::ui::HelpEntry;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
@@ -99,7 +99,7 @@ impl Mode for AboutMode {
         Ok(Window { lines, total })
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         // SwitchToAbout is global; no extras here. Listed for symmetry
         // with HexMode/InfoMode.
         &[]

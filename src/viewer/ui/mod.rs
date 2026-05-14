@@ -13,7 +13,7 @@ pub(crate) mod prompt;
 pub(crate) mod screen;
 pub(crate) mod state;
 
-pub(crate) use keys::{Action, Outcome};
+pub(crate) use keys::{Action, HelpEntry, Outcome};
 pub(crate) use state::{GLOBAL_ACTIONS, ViewerState};
 
 /// Enter the alternate screen and raw mode, run the closure, then always clean up.

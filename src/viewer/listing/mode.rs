@@ -20,7 +20,7 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, Position, RenderCtx, Window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 /// Width (chars) of the size column, including thousands separators.
 const SIZE_COL_WIDTH: usize = 12;
@@ -298,10 +298,10 @@ impl Mode for ListingMode {
         segs
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
-        const ACTIONS: &[(Action, &str)] = &[
-            (Action::ToggleStickyParents, "Pin parent path"),
-            (Action::Extract, "Extract selected entry"),
+    fn extra_actions(&self) -> &'static [HelpEntry] {
+        const ACTIONS: &[HelpEntry] = &[
+            (&[Action::ToggleStickyParents], "Pin parent path"),
+            (&[Action::Extract], "Extract selected entry"),
         ];
         ACTIONS
     }

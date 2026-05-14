@@ -30,21 +30,30 @@ use crate::types::image::pipeline::render::{
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::{self, Chapter, Package};
 
-const EXTRA_ACTIONS: &[(Action, &str)] = &[
-    (Action::NextChapter, "Next chapter"),
-    (Action::PrevChapter, "Previous chapter"),
+const EXTRA_ACTIONS: &[HelpEntry] = &[
+    (
+        &[Action::NextChapter, Action::PrevChapter],
+        "Next / previous chapter",
+    ),
     // Cycling these only affects cover-style chapters that render an
     // inline image, but the keys are declared unconditionally so the
     // user can pre-set them before stepping to a cover chapter.
-    (Action::CycleBackground, "Cycle background (cover image)"),
-    (Action::CycleBackgroundBack, "Cycle background backward"),
-    (Action::CycleImageMode, "Cycle render mode (cover image)"),
-    (Action::CycleImageModeBack, "Cycle render mode backward"),
-    (Action::CycleFitMode, "Cycle fit (contain / width / height)"),
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background (cover image)",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode (cover image)",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
 ];
 
 /// Heuristic threshold: chapters that produce at most this many
@@ -249,7 +258,7 @@ impl Mode for EpubReadMode {
         Ok(())
     }
 
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] {
+    fn extra_actions(&self) -> &'static [HelpEntry] {
         EXTRA_ACTIONS
     }
 
