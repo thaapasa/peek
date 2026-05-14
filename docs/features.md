@@ -609,9 +609,10 @@ content is already fully visible. The gutter does not pan; it stays anchored to 
 `/` opens a search prompt over the status line; type a query and Enter runs it. Matching is
 **exact substring** with **smart-case** — an all-lowercase query matches case-insensitively, any
 uppercase character makes the whole query case-sensitive. Available in every text-rendering
-view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the EPUB **Read**
-view, the DOCX / ODT / RTF **Read** views, and the PDF **Text** view. The shared `SearchState`
-in `viewer/search.rs` backs all of them — each view scans its own lines into one.
+view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the rendered HTML
+view, the EPUB **Read** view, the DOCX / ODT / RTF **Read** views, and the PDF **Text** view.
+The shared `SearchState` in `viewer/search.rs` backs all of them — each view scans its own
+lines into one.
 
 On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
 match (wrapping at the ends), scrolling each match's line into view. (In the EPUB Read view
