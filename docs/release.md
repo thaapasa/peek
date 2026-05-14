@@ -4,11 +4,16 @@ How peek is packaged and published. User-facing install: [README.md](../README.m
 
 ## Pipeline
 
-`.github/workflows/release.yml`, manual dispatch (`workflow_dispatch`, no inputs). Three jobs:
+`.github/workflows/release.yml`, manual dispatch (`workflow_dispatch`) with one input: `bump` —
+`patch` (default) / `minor` / `major`. The version bump happens *in* the pipeline; nothing is
+bumped or committed locally. Three jobs:
 
-1. **`prepare`** (ubuntu-24.04) — reads version from `Cargo.toml`, computes `TAG=vX.Y.Z`, fails fast
-   if the tag exists on `origin`. Records previous tag (for release notes) and the dispatched SHA.
-2. **`build`** — 5-target matrix, all built from the SHA from `prepare`:
+1. **`prepare`** (ubuntu-24.04) — reads the current version from `Cargo.toml`, applies the `bump`
+   level to compute `vX.Y.Z`, fails fast if that tag exists on `origin`. Bumps `Cargo.toml` +
+   the `peek` entry in `Cargo.lock`, commits as `github-actions[bot]` on a fresh
+   `release/vX.Y.Z` branch, and force-pushes that branch. Outputs the new version, tag, previous
+   tag (for release notes), branch name, and the branch commit SHA.
+2. **`build`** — 5-target matrix, all built from the release-branch SHA:
     - `aarch64-apple-darwin` on `macos-14`
     - `x86_64-apple-darwin` on `macos-14` (cross-compiled from aarch64; macOS ships a universal SDK
       so `rustup target add` works out of the box, and the free `macos-13` Intel runner is gone)
@@ -19,17 +24,32 @@ How peek is packaged and published. User-facing install: [README.md](../README.m
    Each emits `peek-<version>-<target>.tar.gz` (`.zip` on Windows) + `.sha256` companion. Unix
    builds are stripped via the release profile. Each archive also bundles the matching Pdfium
    dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
-3. **`release`** — downloads artifacts, creates and pushes the tag at the built SHA, publishes a
-   GitHub Release with all 5 archives + 5 `.sha256` + `install.sh` + auto-generated notes (
-   `git log <previous-tag>..<tag>`).
+3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`:
+   `--ff-only` when `main` hasn't moved, otherwise a `--no-ff` merge commit (the log line says
+   which). Pushes `main`, tags the **release-branch commit** (see below), publishes a GitHub
+   Release with all 5 archives + 5 `.sha256` + `install.sh` + auto-generated notes
+   (`git log <previous-tag>..<tag>`), and deletes the release branch.
 
-Workflow needs `contents: write` to push the tag and create the release. No other secrets.
+The bump commit only ever reaches `main` through a *successful* release — a failed `build`
+leaves nothing but the throwaway `release/vX.Y.Z` branch. Merge-before-tag ordering means the
+tag is only created once `main` actually has the commit.
+
+The tag points at the release-branch commit that was *built*, not the merge commit. On a
+`--no-ff` merge the merge commit's tree picks up whatever raced onto `main` after the branch was
+cut — code the release artifacts don't contain — so tagging it would misrepresent the release.
+The built commit is reachable from `main` through the merge either way, so `git checkout vX.Y.Z`
+still works.
+
+Workflow needs `contents: write` to push the branch, push `main`, push the tag, and create the
+release. No other secrets.
 
 ## Cutting a release
 
-1. Bump `version` in `Cargo.toml` on `main`. Commit, push.
-2. **Actions → Release → Run workflow**, branch `main`, dispatch.
-3. Wait for all three jobs. Verify the release page has 5 archives + 5 `.sha256` + `install.sh`.
+1. **Actions → Release → Run workflow**, branch `main`, pick the `bump` level (default `patch`),
+   dispatch.
+2. Wait for all three jobs. The pipeline bumps the version, builds, merges to `main`, tags, and
+   publishes — no local bump or commit needed.
+3. Verify the release page has 5 archives + 5 `.sha256` + `install.sh`.
 4. Smoke-test the installer:
 
    ```sh
@@ -91,24 +111,27 @@ doesn't enter the interactive viewer; the Unix tty-reopen trick has no Windows e
 
 ## Recovering from a failed release
 
-Workflow refuses to run if `vX.Y.Z` already exists on `origin`. If a run fails partway and the tag
-was already pushed, delete release + tag before retrying:
+Where the failure lands decides the cleanup:
 
-```sh
-gh release delete vX.Y.Z --cleanup-tag -y    # deletes release + remote tag
-git fetch --prune --prune-tags                # sync local tag list
-git tag -d vX.Y.Z 2>/dev/null || true         # belt and braces
-```
+- **`prepare` or `build` failed** — `main` is untouched, no tag exists. The only residue is the
+  `release/vX.Y.Z` branch. The next run force-pushes that branch anyway, so cleanup is optional;
+  delete it for tidiness with `git push origin --delete release/vX.Y.Z`. Fix and re-dispatch.
+- **`release` failed after the tag was pushed** — `main` already has the bump commit and the tag
+  exists. Delete the release + tag before retrying:
 
-Then either:
+  ```sh
+  gh release delete vX.Y.Z --cleanup-tag -y    # deletes release + remote tag
+  git push origin --delete release/vX.Y.Z      # drop the release branch
+  git fetch --prune --prune-tags               # sync local tag list
+  ```
 
-- **Re-dispatch the same version** — transient failure (CI flake, GitHub outage), code unchanged →
-  just run the workflow again.
-- **Bump and re-dispatch** — content bug (bad binary, missing file) → bump `Cargo.toml` to the next
-  patch, commit, push, dispatch.
+  The bump commit stays on `main` — re-dispatching with the same `bump` level would compute a
+  *new* version on top of it. To re-cut the *same* version, hard-reset `main` back past the bump
+  commit and force-push first, or just accept the version skip and re-dispatch.
 
-If the failure happened *before* the tag was pushed (`prepare` or `build`), nothing needs cleanup —
-fix and re-dispatch.
+Re-dispatch with the same `bump` level for a transient failure (CI flake, GitHub outage); the
+pipeline recomputes the version from `Cargo.toml` each run, so a clean `main` always yields the
+expected next version.
 
 ## Install script
 

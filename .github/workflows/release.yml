@@ -2,48 +2,87 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump level
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 permissions:
   contents: write
 
 jobs:
   prepare:
-    name: Prepare release
+    name: Prepare release branch
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       previous_tag: ${{ steps.version.outputs.previous_tag }}
-      sha: ${{ github.sha }}
+      branch: ${{ steps.version.outputs.branch }}
+      sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Read version from Cargo.toml
+      - name: Compute bumped version
         id: version
         run: |
           set -euo pipefail
-          VERSION=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/^version = "([^"]+)".*/\1/')
-          if [ -z "$VERSION" ]; then
+          CURRENT=$(grep -m1 '^version = ' Cargo.toml | sed -E 's/^version = "([^"]+)".*/\1/')
+          if [ -z "$CURRENT" ]; then
             echo "::error::could not parse version from Cargo.toml"
             exit 1
           fi
+          IFS=. read -r MAJOR MINOR PATCH <<EOF
+          $CURRENT
+          EOF
+          case '${{ inputs.bump }}' in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          VERSION="$MAJOR.$MINOR.$PATCH"
           TAG="v$VERSION"
+          BRANCH="release/$TAG"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           PREVIOUS_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1 || true)
           echo "previous_tag=$PREVIOUS_TAG" >> "$GITHUB_OUTPUT"
-          echo "Releasing $TAG (previous: ${PREVIOUS_TAG:-none})"
+          echo "Bumping $CURRENT -> $VERSION (${{ inputs.bump }}), branch $BRANCH (previous tag: ${PREVIOUS_TAG:-none})"
 
       - name: Fail if tag already exists on origin
         run: |
           set -euo pipefail
           TAG='${{ steps.version.outputs.tag }}'
           if git ls-remote --tags origin "refs/tags/$TAG" | grep -q "$TAG"; then
-            echo "::error::tag $TAG already exists on origin — bump Cargo.toml or delete the existing release+tag before re-running (see docs/release.md)"
+            echo "::error::tag $TAG already exists on origin — delete the existing release+tag before re-running (see docs/release.md)"
             exit 1
           fi
+
+      - name: Create release branch with version bump
+        id: commit
+        run: |
+          set -euo pipefail
+          VERSION='${{ steps.version.outputs.version }}'
+          BRANCH='${{ steps.version.outputs.branch }}'
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          # Bump the package version in Cargo.toml (first occurrence) and the
+          # matching peek entry in Cargo.lock so --locked builds stay valid.
+          sed -i -E '0,/^version = "[^"]+"/s//version = "'"$VERSION"'"/' Cargo.toml
+          perl -0pi -e 's/(name = "peek"\nversion = ")[^"]+/${1}'"$VERSION"'/' Cargo.lock
+          git checkout -B "$BRANCH"
+          git add Cargo.toml Cargo.lock
+          git commit -m "Bump version to $VERSION"
+          git push --force origin "$BRANCH"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.target }}
@@ -152,19 +191,19 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Create release
+    name: Merge and release
     needs: [prepare, build]
     runs-on: ubuntu-24.04
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       TAG: ${{ needs.prepare.outputs.tag }}
+      BRANCH: ${{ needs.prepare.outputs.branch }}
       PREVIOUS_TAG: ${{ needs.prepare.outputs.previous_tag }}
-      SHA: ${{ needs.prepare.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: main
 
       - name: Download artifacts
         uses: actions/download-artifact@v7
@@ -172,12 +211,28 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Create and push tag
+      - name: Merge release branch into main
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git tag "$TAG" "$SHA"
+          git fetch origin "$BRANCH"
+          if git merge --ff-only "origin/$BRANCH"; then
+            echo "fast-forward merge into main"
+          else
+            echo "main moved since the release branch was cut — recording a merge commit"
+            git merge --no-ff "origin/$BRANCH" -m "Merge $BRANCH"
+          fi
+          git push origin main
+
+      - name: Create and push tag
+        run: |
+          set -euo pipefail
+          # Tag the release-branch commit that was actually built, not the
+          # merge commit — on a --no-ff merge the merge commit's tree includes
+          # whatever raced onto main, which the release artifacts don't have.
+          # That commit is reachable from main after the merge regardless.
+          git tag "$TAG" '${{ needs.prepare.outputs.sha }}'
           git push origin "$TAG"
 
       - name: Generate release notes
@@ -216,3 +271,6 @@ jobs:
             artifacts/*.zip.sha256
             install.sh
           fail_on_unmatched_files: true
+
+      - name: Delete release branch
+        run: git push origin --delete "$BRANCH"
