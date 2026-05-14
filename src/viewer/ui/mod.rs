@@ -5,7 +5,9 @@ use crossterm::{cursor, execute, terminal};
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthChar;
 
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+use crate::theme::{
+    ActiveStyle, PeekTheme, PeekThemeName, RESET_ALL, Sgr, StyleMode, load_embedded_theme, scan,
+};
 
 pub(crate) mod help;
 pub(crate) mod keys;
@@ -99,65 +101,14 @@ fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
 /// escape sequences. CJK and emoji are treated as 2 cols; combining marks
 /// as 0 cols (per `unicode-width`).
 pub(crate) fn strip_ansi_width(s: &str) -> usize {
-    let mut width = 0;
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if c == '\x1b' {
-            in_escape = true;
-        } else {
-            width += UnicodeWidthChar::width(c).unwrap_or(0);
-        }
-    }
-    width
-}
-
-/// The foreground + background SGR escapes active at a point in a styled
-/// string. Wrap / slice use it to re-establish style after a cut so a
-/// color (or a search-match background) doesn't bleed off or vanish at a
-/// chunk boundary. Foreground and background are tracked separately
-/// because syntect emits foreground-only escapes while the search
-/// overlay injects background escapes — a single "most recent SGR" slot
-/// would let one clobber the other.
-#[derive(Default)]
-struct ActiveStyle {
-    fg: String,
-    bg: String,
-}
-
-impl ActiveStyle {
-    /// Update from one complete escape sequence (`\x1b[..m`).
-    fn observe(&mut self, esc: &str) {
-        match esc {
-            "\x1b[0m" => {
-                self.fg.clear();
-                self.bg.clear();
-            }
-            "\x1b[39m" => self.fg.clear(),
-            "\x1b[49m" => self.bg.clear(),
-            _ if esc.starts_with("\x1b[48") => {
-                self.bg.clear();
-                self.bg.push_str(esc);
-            }
-            _ => {
-                self.fg.clear();
-                self.fg.push_str(esc);
-            }
-        }
-    }
-
-    fn is_empty(&self) -> bool {
-        self.fg.is_empty() && self.bg.is_empty()
-    }
-
-    /// Append the active foreground then background escapes to `buf`.
-    fn write(&self, buf: &mut String) {
-        buf.push_str(&self.fg);
-        buf.push_str(&self.bg);
-    }
+    scan(s)
+        .filter_map(|t| match t {
+            Sgr::Text(text) => Some(text),
+            Sgr::Esc(_) => None,
+        })
+        .flat_map(str::chars)
+        .map(|c| UnicodeWidthChar::width(c).unwrap_or(0))
+        .sum()
 }
 
 /// Wrap a string containing SGR escape sequences into chunks of at most
@@ -181,33 +132,28 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
     let mut cur = String::new();
     let mut col = 0usize;
     let mut active = ActiveStyle::default();
-    let mut esc_buf = String::new();
-    let mut in_escape = false;
 
-    for c in s.chars() {
-        if in_escape {
-            esc_buf.push(c);
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-                active.observe(&esc_buf);
-                cur.push_str(&esc_buf);
-                esc_buf.clear();
+    for token in scan(s) {
+        match token {
+            Sgr::Esc(esc) => {
+                active.observe(esc);
+                cur.push_str(esc);
             }
-        } else if c == '\x1b' {
-            in_escape = true;
-            esc_buf.push(c);
-        } else {
-            let cw = UnicodeWidthChar::width(c).unwrap_or(0);
-            if cw > 0 && col + cw > width {
-                if !active.is_empty() {
-                    cur.push_str("\x1b[0m");
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+                    if cw > 0 && col + cw > width {
+                        if !active.is_empty() {
+                            cur.push_str(RESET_ALL);
+                        }
+                        out.push(std::mem::take(&mut cur));
+                        col = 0;
+                        active.write(&mut cur);
+                    }
+                    cur.push(c);
+                    col += cw;
                 }
-                out.push(std::mem::take(&mut cur));
-                col = 0;
-                active.write(&mut cur);
             }
-            cur.push(c);
-            col += cw;
         }
     }
     out.push(cur);
@@ -224,15 +170,9 @@ pub(crate) fn count_wrap_segments(s: &str, width: usize) -> usize {
     }
     let mut count = 1usize;
     let mut col = 0usize;
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-            }
-        } else if c == '\x1b' {
-            in_escape = true;
-        } else {
+    for token in scan(s) {
+        let Sgr::Text(text) = token else { continue };
+        for c in text.chars() {
             let cw = UnicodeWidthChar::width(c).unwrap_or(0);
             if cw > 0 && col + cw > width {
                 count += 1;
@@ -261,44 +201,39 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
     let mut col = 0usize;
     let mut taken = 0usize;
     let mut active = ActiveStyle::default();
-    let mut esc_buf = String::new();
-    let mut in_escape = false;
     let mut started = false;
 
-    for c in s.chars() {
-        if in_escape {
-            esc_buf.push(c);
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
-                active.observe(&esc_buf);
+    'outer: for token in scan(s) {
+        match token {
+            Sgr::Esc(esc) => {
+                active.observe(esc);
                 if started {
-                    out.push_str(&esc_buf);
+                    out.push_str(esc);
                 }
-                esc_buf.clear();
             }
-        } else if c == '\x1b' {
-            in_escape = true;
-            esc_buf.push(c);
-        } else {
-            let cw = UnicodeWidthChar::width(c).unwrap_or(0);
-            if col < start_col {
-                col += cw;
-                continue;
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+                    if col < start_col {
+                        col += cw;
+                        continue;
+                    }
+                    if !started {
+                        active.write(&mut out);
+                        started = true;
+                    }
+                    if cw > 0 && taken + cw > max_cols {
+                        break 'outer;
+                    }
+                    out.push(c);
+                    taken += cw;
+                    col += cw;
+                }
             }
-            if !started {
-                active.write(&mut out);
-                started = true;
-            }
-            if cw > 0 && taken + cw > max_cols {
-                break;
-            }
-            out.push(c);
-            taken += cw;
-            col += cw;
         }
     }
     if started && !active.is_empty() {
-        out.push_str("\x1b[0m");
+        out.push_str(RESET_ALL);
     }
     out
 }
@@ -309,23 +244,19 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
 pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
     let mut result = String::with_capacity(s.len());
     let mut width = 0;
-    let mut in_escape = false;
-    for c in s.chars() {
-        if in_escape {
-            result.push(c);
-            if c.is_ascii_alphabetic() {
-                in_escape = false;
+    'outer: for token in scan(s) {
+        match token {
+            Sgr::Esc(esc) => result.push_str(esc),
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+                    if width + cw > max_width {
+                        break 'outer;
+                    }
+                    result.push(c);
+                    width += cw;
+                }
             }
-        } else if c == '\x1b' {
-            in_escape = true;
-            result.push(c);
-        } else {
-            let cw = UnicodeWidthChar::width(c).unwrap_or(0);
-            if width + cw > max_width {
-                break;
-            }
-            result.push(c);
-            width += cw;
         }
     }
     result

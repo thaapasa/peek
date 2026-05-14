@@ -54,8 +54,9 @@ src/
   theme/
     mod.rs             — re-exports PeekThemeName, StyleMode, PeekTheme, ThemeManager, helpers
     name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme
+    sgr.rs             — Low-level SGR mechanics: color/attr encoders, RESET_* consts, palette quantization, escape tokenizer (scan/Sgr) + classify + ActiveStyle (fg/bg tracked across a styled stream)
     style_mode.rs      — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
-    peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend
+    peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)

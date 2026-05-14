@@ -16,5 +16,5 @@ mod style_mode;
 pub use manager::ThemeManager;
 pub use name::{PeekThemeName, load_embedded_theme};
 pub use peek_theme::{PeekTheme, lerp_color};
-pub use sgr::Attr;
+pub use sgr::{ActiveStyle, Attr, RESET_ALL, Sgr, scan};
 pub use style_mode::StyleMode;

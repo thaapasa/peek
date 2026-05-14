@@ -12,7 +12,7 @@
 
 use std::ops::Range;
 
-use crate::theme::PeekTheme;
+use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
 
 /// Smart-case rule: a query with any uppercase character searches
 /// case-sensitively; an all-lowercase query searches case-insensitively.
@@ -101,14 +101,13 @@ pub(crate) fn overlay_matches(
     let fg_off = sm.reset_fg();
 
     let mut out = String::with_capacity(styled.len() + ranges.len() * 32);
-    let bytes = styled.as_bytes();
-    let mut i = 0;
     let mut raw_pos = 0usize;
     let mut open: Option<usize> = None;
     let mut next = 0usize;
-    // Last foreground escape seen — re-emitted when a match span closes
-    // so the syntax colour resumes.
-    let mut active_fg = String::new();
+    // Tracks the styled line's own foreground so it can be restored when
+    // a match span closes (only `.fg()` is read — the input is
+    // foreground-only syntect output).
+    let mut active = ActiveStyle::default();
 
     // Open / close match spans at every boundary the raw cursor has
     // reached. Looped because adjacent ranges close one and open the
@@ -119,11 +118,8 @@ pub(crate) fn overlay_matches(
                 if let Some(k) = open {
                     if raw_pos == ranges[k].end {
                         out.push_str(bg_off);
-                        if active_fg.is_empty() {
-                            out.push_str(fg_off);
-                        } else {
-                            out.push_str(&active_fg);
-                        }
+                        let fg = active.fg();
+                        out.push_str(if fg.is_empty() { fg_off } else { fg });
                         open = None;
                         next = k + 1;
                         continue;
@@ -144,37 +140,26 @@ pub(crate) fn overlay_matches(
         };
     }
 
-    while i < bytes.len() {
-        if bytes[i] == 0x1b {
-            // SGR escape: doesn't advance the raw cursor. Track the
-            // active foreground for post-span restore. Inside a span
-            // the styled line's own colours are suppressed so the match
-            // style stays uniform; outside, copy through.
-            let start = i;
-            i += 1;
-            while i < bytes.len() && !bytes[i].is_ascii_alphabetic() {
-                i += 1;
+    for token in scan(styled) {
+        match token {
+            Sgr::Esc(esc) => {
+                // Track the syntax foreground for post-span restore.
+                // Inside a span the styled line's own colours are
+                // suppressed so the match style stays uniform; outside,
+                // copy through.
+                active.observe(esc);
+                if open.is_none() {
+                    out.push_str(esc);
+                }
             }
-            if i < bytes.len() {
-                i += 1;
+            Sgr::Text(text) => {
+                for ch in text.chars() {
+                    sync_boundaries!();
+                    out.push(ch);
+                    raw_pos += ch.len_utf8();
+                }
             }
-            let esc = &styled[start..i];
-            if esc == "\x1b[0m" || esc == "\x1b[39m" {
-                active_fg.clear();
-            } else if !esc.starts_with("\x1b[48") && esc != "\x1b[49m" {
-                active_fg.clear();
-                active_fg.push_str(esc);
-            }
-            if open.is_none() {
-                out.push_str(esc);
-            }
-            continue;
         }
-        sync_boundaries!();
-        let ch = styled[i..].chars().next().expect("char boundary");
-        out.push(ch);
-        i += ch.len_utf8();
-        raw_pos += ch.len_utf8();
     }
     // Flush a span that runs to end-of-line.
     sync_boundaries!();
