@@ -21,6 +21,30 @@ impl Binding {
         let has_ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         self.ctrl == has_ctrl
     }
+
+    /// Human-readable name of this key for help screens (e.g. `Up`,
+    /// `Shift+Tab`, `Ctrl+c`). The single place key-display cosmetics
+    /// live — `Action::label_keys` derives its labels from here.
+    pub fn label(self) -> String {
+        let key = match self.code {
+            KeyCode::Char(' ') => "Space".to_string(),
+            KeyCode::Char(c) => c.to_string(),
+            KeyCode::Up => "Up".to_string(),
+            KeyCode::Down => "Down".to_string(),
+            KeyCode::Left => "Left".to_string(),
+            KeyCode::Right => "Right".to_string(),
+            KeyCode::Home => "Home".to_string(),
+            KeyCode::End => "End".to_string(),
+            KeyCode::PageUp => "PgUp".to_string(),
+            KeyCode::PageDown => "PgDn".to_string(),
+            KeyCode::Tab => "Tab".to_string(),
+            KeyCode::BackTab => "Shift+Tab".to_string(),
+            KeyCode::Enter => "Enter".to_string(),
+            KeyCode::Esc => "Esc".to_string(),
+            other => format!("{other:?}"),
+        };
+        if self.ctrl { format!("Ctrl+{key}") } else { key }
+    }
 }
 
 /// Every semantic key action peek's interactive viewers can take.
@@ -114,14 +138,14 @@ pub(crate) enum Action {
 }
 
 impl Action {
-    /// The physical-key bindings and human-readable help label for this
-    /// action. Single source of truth — `bindings()` and `label_keys()`
-    /// are thin accessors over this. Each binding list is wrapped in an
-    /// inline `const { }` block so the `&[..]` array lives in static
-    /// storage (user `const fn` calls aren't implicitly promoted). Edit
-    /// this map to rebind.
+    /// Physical keys that trigger this action — the single source of
+    /// truth for the key map. `label_keys()` derives its help text from
+    /// these, so a key and its label can't drift. Each binding list is
+    /// wrapped in an inline `const { }` block so the `&[..]` array lives
+    /// in static storage (user `const fn` calls aren't implicitly
+    /// promoted). Edit this map to rebind.
     #[rustfmt::skip]
-    fn keymap(self) -> (&'static [Binding], &'static str) {
+    pub fn bindings(self) -> &'static [Binding] {
         use Binding as B;
         use KeyCode::*;
 
@@ -131,53 +155,54 @@ impl Action {
         }
 
         match self {
-            Action::Quit                => (binds![B::plain(Char('q')), B::ctrl('c')],        "q"),
-            Action::ScrollUp            => (binds![B::plain(Up), B::plain(Char('k'))],        "Up / k"),
-            Action::ScrollDown          => (binds![B::plain(Down), B::plain(Char('j'))],      "Down / j"),
-            Action::PageUp              => (binds![B::plain(PageUp)],                         "PgUp"),
-            Action::PageDown            => (binds![B::plain(PageDown)],                       "PgDn"),
-            Action::Top                 => (binds![B::plain(Home), B::plain(Char('g'))],      "Home / g"),
-            Action::Bottom              => (binds![B::plain(End), B::plain(Char('G'))],       "End / G"),
-            Action::SwitchInfo          => (binds![B::plain(Char('i'))],                      "i"),
-            Action::ToggleHelp          => (binds![B::plain(Char('h')), B::plain(Char('?'))], "h / ?"),
-            Action::CycleView           => (binds![B::plain(Tab)],                            "Tab"),
-            Action::CycleViewBack       => (binds![B::plain(BackTab)],                        "Shift+Tab"),
-            Action::CycleTheme          => (binds![B::plain(Char('t'))],                      "t"),
-            Action::CycleThemeBack      => (binds![B::plain(Char('T'))],                      "T"),
-            Action::CycleColorMode      => (binds![B::plain(Char('c'))],                      "c"),
-            Action::CycleColorModeBack  => (binds![B::plain(Char('C'))],                      "C"),
-            Action::SwitchToHex         => (binds![B::plain(Char('x'))],                      "x"),
-            Action::SwitchToAbout       => (binds![B::plain(Char('a'))],                      "a"),
-            Action::CycleBackground     => (binds![B::plain(Char('b'))],                      "b"),
-            Action::CycleBackgroundBack => (binds![B::plain(Char('B'))],                      "B"),
-            Action::CycleImageMode      => (binds![B::plain(Char('m'))],                      "m"),
-            Action::CycleImageModeBack  => (binds![B::plain(Char('M'))],                      "M"),
-            Action::CycleFitMode        => (binds![B::plain(Char('f'))],                      "f"),
-            Action::ScrollLeft          => (binds![B::plain(Left)],                           "Left"),
-            Action::ScrollRight         => (binds![B::plain(Right)],                          "Right"),
-            Action::ToggleRawSource     => (binds![B::plain(Char('r'))],                      "r"),
-            Action::ToggleLineNumbers   => (binds![B::plain(Char('l'))],                      "l"),
-            Action::ToggleSoftWrap      => (binds![B::plain(Char('w'))],                      "w"),
-            Action::PlayPause           => (binds![B::plain(Char(' '))],                      "Space"),
-            Action::NextFrame           => (binds![B::plain(Char('n'))],                      "n"), // n — also NextChapter (different mode)
-            Action::PrevFrame           => (binds![B::plain(Char('p'))],                      "p"), // p — also PrevChapter (different mode)
-            Action::NextChapter         => (binds![B::plain(Char('n'))],                      "n"),
-            Action::PrevChapter         => (binds![B::plain(Char('p'))],                      "p"),
-            Action::ToggleStickyParents => (binds![B::plain(Char('s'))],                      "s"),
-            Action::Extract             => (binds![B::plain(Char('e'))],                      "e"),
-            Action::Descend             => (binds![B::plain(Enter)],                          "Enter"),
-            Action::Back                => (binds![B::plain(Esc)],                            "Esc"),
+            Action::Quit                => binds![B::plain(Char('q')), B::ctrl('c')],
+            Action::ScrollUp            => binds![B::plain(Up), B::plain(Char('k'))],
+            Action::ScrollDown          => binds![B::plain(Down), B::plain(Char('j'))],
+            Action::PageUp              => binds![B::plain(PageUp)],
+            Action::PageDown            => binds![B::plain(PageDown)],
+            Action::Top                 => binds![B::plain(Home), B::plain(Char('g'))],
+            Action::Bottom              => binds![B::plain(End), B::plain(Char('G'))],
+            Action::SwitchInfo          => binds![B::plain(Char('i'))],
+            Action::ToggleHelp          => binds![B::plain(Char('h')), B::plain(Char('?'))],
+            Action::CycleView           => binds![B::plain(Tab)],
+            Action::CycleViewBack       => binds![B::plain(BackTab)],
+            Action::CycleTheme          => binds![B::plain(Char('t'))],
+            Action::CycleThemeBack      => binds![B::plain(Char('T'))],
+            Action::CycleColorMode      => binds![B::plain(Char('c'))],
+            Action::CycleColorModeBack  => binds![B::plain(Char('C'))],
+            Action::SwitchToHex         => binds![B::plain(Char('x'))],
+            Action::SwitchToAbout       => binds![B::plain(Char('a'))],
+            Action::CycleBackground     => binds![B::plain(Char('b'))],
+            Action::CycleBackgroundBack => binds![B::plain(Char('B'))],
+            Action::CycleImageMode      => binds![B::plain(Char('m'))],
+            Action::CycleImageModeBack  => binds![B::plain(Char('M'))],
+            Action::CycleFitMode        => binds![B::plain(Char('f'))],
+            Action::ScrollLeft          => binds![B::plain(Left)],
+            Action::ScrollRight         => binds![B::plain(Right)],
+            Action::ToggleRawSource     => binds![B::plain(Char('r'))],
+            Action::ToggleLineNumbers   => binds![B::plain(Char('l'))],
+            Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
+            Action::PlayPause           => binds![B::plain(Char(' '))],
+            Action::NextFrame           => binds![B::plain(Char('n'))], // n — also NextChapter (different mode)
+            Action::PrevFrame           => binds![B::plain(Char('p'))], // p — also PrevChapter (different mode)
+            Action::NextChapter         => binds![B::plain(Char('n'))],
+            Action::PrevChapter         => binds![B::plain(Char('p'))],
+            Action::ToggleStickyParents => binds![B::plain(Char('s'))],
+            Action::Extract             => binds![B::plain(Char('e'))],
+            Action::Descend             => binds![B::plain(Enter)],
+            Action::Back                => binds![B::plain(Esc)],
         }
     }
 
-    /// Physical keys that trigger this action.
-    pub fn bindings(self) -> &'static [Binding] {
-        self.keymap().0
-    }
-
-    /// Human-readable label of the keys for help screens (e.g. "q / Esc").
-    pub fn label_keys(self) -> &'static str {
-        self.keymap().1
+    /// Human-readable label of the keys for help screens — the action's
+    /// equivalent keys joined with ", " (e.g. "Up, k"). Derived from
+    /// `bindings()`; help entries join several actions' labels with " / ".
+    pub fn label_keys(self) -> String {
+        self.bindings()
+            .iter()
+            .map(|b| b.label())
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     pub fn matches(self, key: KeyEvent) -> bool {
