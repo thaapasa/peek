@@ -326,6 +326,9 @@ loop {
     }
 
     Event::Key(key) =>
+        if state.prompt_active()                     // modal overlay open?
+            state.handle_prompt_key(key)             // keys go to the input
+            -> consumed: redraw; continue
         let action = state.dispatch_key(key)         // mode extras + globals
         try state.try_active_scroll(action)          // byte-offset for hex
             -> consumed: invalidate + redraw
@@ -341,6 +344,33 @@ loop {
 
 `redraw` calls `state.ensure_active_rendered()` (lazy mode render), composes the status line (name,
 mode label, status segments, theme), then `state.draw()`.
+
+### Modal prompt overlay (`viewer/ui/prompt.rs`)
+
+A single `Option<(Prompt, PromptKind)>` slot on `ViewerState`. While `Some`, raw key events route
+straight to the `Prompt` (readline-style text input) and the status line shows its render instead
+of the usual segments — globals and mode keys are inert until the prompt closes. `PromptKind` is
+the work to run on confirm, so one overlay serves two flows: `Extract` (save-to path, writes the
+`Extracted` payload) and `Search` (hands the typed query to the active mode's `set_search`). Esc
+cancels; an empty-query confirm clears.
+
+### Text search (`viewer/search.rs`)
+
+`/` opens the `Search` prompt; confirm calls `Mode::set_search(Some(query))` on the active mode.
+Searchable modes scan their own lines into a `SearchState` — every match plus the `n`/`p` cursor —
+and arm highlight overlays. `search.rs` holds the shared pieces: `smart_case_sensitive` (any
+uppercase ⇒ case-sensitive), `find_matches` (non-overlapping byte ranges, exact substring),
+`overlay_matches` (paints `search_match` / `search_current` colours onto an already-SGR-styled
+line, dropping the syntax colour under a match), and `SearchState` itself. The scan is one full
+pass over the active view's lines, capped at `MAX_MATCHES` (100 000).
+
+`set_search` returns the first match's line for the caller to scroll to (caller-scrolled modes
+ignore the return and scroll themselves). `n`/`p` go through `step_search`, a `handle` helper
+shared by every caller-scrolled searchable mode — it steps the `SearchState` cursor and returns
+`Handled::YesScrollTo(line)`. `ContentMode`, the rendered HTML view, and the EPUB / DOCX / ODT /
+RTF / PDF-text read views all implement `set_search`; the default trait impl is a no-op so
+non-text modes opt out for free. A mode drops its `SearchState` when the scanned line set changes
+underneath it (raw/pretty toggle, chapter step, resize).
 
 ### View cycle: Tab, `i`, `h`, `x`, `a`
 
