@@ -10,7 +10,7 @@ use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -198,8 +198,8 @@ impl Mode for PdfTextMode {
                 self.search = None;
                 Handled::Yes
             }
-            Action::NextMatch => step_match(&mut self.search, 1),
-            Action::PrevMatch => step_match(&mut self.search, -1),
+            Action::NextMatch => step_search(&mut self.search, 1),
+            Action::PrevMatch => step_search(&mut self.search, -1),
             _ => Handled::No,
         }
     }
@@ -233,15 +233,5 @@ impl Mode for PdfTextMode {
 
     fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.warnings)
-    }
-}
-
-/// Step the search cursor and ask the viewer to scroll to the new
-/// match's line. `Handled::Yes` (no scroll) when there's no search or
-/// no matches.
-fn step_match(search: &mut Option<SearchState>, delta: isize) -> Handled {
-    match search.as_mut().and_then(|s| s.step(delta)) {
-        Some(line) => Handled::YesScrollTo(line),
-        None => Handled::Yes,
     }
 }

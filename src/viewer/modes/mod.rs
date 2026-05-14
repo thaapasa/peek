@@ -18,6 +18,7 @@ use crate::info::{FileInfo, RenderOptions};
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
+use crate::viewer::search::SearchState;
 use crate::viewer::ui::{Action, HelpEntry};
 
 mod about;
@@ -121,6 +122,17 @@ pub(crate) fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<
     let start = scroll.min(lines.len());
     let end = start.saturating_add(rows).min(lines.len());
     lines[start..end].to_vec()
+}
+
+/// `handle` helper for the `NextMatch` / `PrevMatch` keys: step the
+/// search cursor and ask the caller to scroll to the new match's line.
+/// `Handled::Yes` (no scroll) when there's no search or no matches.
+/// Shared by every caller-scrolled searchable mode.
+pub(crate) fn step_search(search: &mut Option<SearchState>, delta: isize) -> Handled {
+    match search.as_mut().and_then(|s| s.step(delta)) {
+        Some(line) => Handled::YesScrollTo(line),
+        None => Handled::Yes,
+    }
 }
 
 /// Selection the active mode hands to `crate::extract::extract` on the

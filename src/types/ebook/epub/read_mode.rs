@@ -29,7 +29,7 @@ use crate::types::image::pipeline::render::{
 };
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -283,8 +283,8 @@ impl Mode for EpubReadMode {
             // they navigate matches instead (Esc clears the search to
             // get chapter stepping back).
             Action::NextChapter => {
-                if let Some(s) = self.search.as_mut() {
-                    return s.step(1).map(Handled::YesScrollTo).unwrap_or(Handled::Yes);
+                if self.search.is_some() {
+                    return step_search(&mut self.search, 1);
                 }
                 if self.chapters.is_empty() {
                     return Handled::No;
@@ -297,8 +297,8 @@ impl Mode for EpubReadMode {
                 Handled::YesResetScroll
             }
             Action::PrevChapter => {
-                if let Some(s) = self.search.as_mut() {
-                    return s.step(-1).map(Handled::YesScrollTo).unwrap_or(Handled::Yes);
+                if self.search.is_some() {
+                    return step_search(&mut self.search, -1);
                 }
                 if self.current == 0 {
                     return Handled::Yes;
