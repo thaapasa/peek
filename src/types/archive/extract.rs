@@ -11,7 +11,7 @@ use std::path::Path;
 
 use bytes::Bytes;
 
-use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
+use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::types::archive::reader::open_seekable;
@@ -55,7 +55,7 @@ fn extract_cpio(
     compression: CpioCompression,
 ) -> Result<Extracted, ExtractError> {
     let raw = source.read_bytes().map_err(ExtractError::Other)?;
-    let target_str = target.to_string_lossy();
+    let target_str = forward_slash_key(target);
     let found = match compression {
         CpioCompression::None => crate::types::archive::backends::cpio::find_entry(
             std::io::Cursor::new(&raw[..]),
@@ -83,7 +83,7 @@ fn extract_zip(
     let reader = open_seekable(source).map_err(ExtractError::Other)?;
     let mut archive = zip::ZipArchive::new(reader).map_err(|e| ExtractError::Other(e.into()))?;
 
-    let target_str = target.to_string_lossy();
+    let target_str = forward_slash_key(target);
     let mut found_idx = None;
     for i in 0..archive.len() {
         let file = archive
@@ -139,16 +139,16 @@ fn extract_tar(
     let entries = archive
         .entries()
         .map_err(|e| ExtractError::Other(e.into()))?;
-    let target_str = target.to_string_lossy();
+    let target_str = forward_slash_key(target);
     for entry in entries {
         let mut entry = entry.map_err(|e| ExtractError::Other(e.into()))?;
         let path = entry
             .path()
             .map_err(|e| ExtractError::Other(e.into()))?
             .into_owned();
-        let path_str = path.to_string_lossy();
+        let path_str = forward_slash_key(&path);
         let stored = path_str.trim_start_matches("./").trim_start_matches('/');
-        if stored != target_str.as_ref() {
+        if stored != target_str.as_str() {
             continue;
         }
         let size = entry.size();
@@ -193,7 +193,7 @@ fn extract_7z(
     let mut archive = sevenz_rust2::ArchiveReader::new(reader, sevenz_rust2::Password::empty())
         .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e}")))?;
 
-    let target_str = target.to_string_lossy();
+    let target_str = forward_slash_key(target);
     // Validate the entry exists and respect size cap before decompressing.
     let entry = archive
         .archive()
@@ -236,7 +236,7 @@ fn extract_ar(
         )));
     }
 
-    let target_str = target.to_string_lossy();
+    let target_str = forward_slash_key(target);
     let mut header = [0u8; HEADER_LEN];
     loop {
         let n = reader
@@ -325,6 +325,15 @@ mod tests {
     /// every backend keeps the extract tests structurally identical.
     const STABLE_ENTRY: &str = "fibonacci.py";
 
+    /// All shared archive fixtures also contain `config/theme.rs` —
+    /// a nested entry used to exercise subdirectory lookups. The bug
+    /// this guards against: building the lookup key with
+    /// `PathBuf::to_string_lossy()` after a component-by-component
+    /// `push` uses the host OS separator (`\` on Windows), so
+    /// comparing against archive members (always `/`-separated) fails.
+    const SUBPATH_ENTRY: &str = "config/theme.rs";
+    const SUBPATH_ENTRY_SIZE: usize = 2_956;
+
     #[test]
     fn extract_zip_returns_known_entry() {
         let extracted = extract(&fixture("archive.zip"), ArchiveFormat::Zip, STABLE_ENTRY)
@@ -389,6 +398,33 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted.source.read_bytes().unwrap();
         assert_eq!(bytes.len(), 2_250);
+    }
+
+    /// Extract a forward-slash subpath through every archive backend
+    /// that exposes nested entries. Guards against the Windows-only
+    /// regression where the sanitized lookup key carried backslashes
+    /// and never matched the archive's stored entry names.
+    #[test]
+    fn extract_subpath_entry_across_backends() {
+        let cases: &[(&str, ArchiveFormat)] = &[
+            ("archive.zip", ArchiveFormat::Zip),
+            ("archive.tar", ArchiveFormat::Tar),
+            ("archive.tar.gz", ArchiveFormat::TarGz),
+            ("archive.tar.bz2", ArchiveFormat::TarBz2),
+            ("archive.tar.xz", ArchiveFormat::TarXz),
+            ("archive.tar.zst", ArchiveFormat::TarZst),
+            ("archive.tar.lz4", ArchiveFormat::TarLz4),
+            ("archive.7z", ArchiveFormat::SevenZ),
+            ("archive.cpio", ArchiveFormat::Cpio),
+            ("archive.cpio.gz", ArchiveFormat::CpioGz),
+        ];
+        for (name, format) in cases {
+            let extracted = extract(&fixture(name), *format, SUBPATH_ENTRY)
+                .unwrap_or_else(|e| panic!("{name} subpath extract: {e}"));
+            assert_eq!(extracted.suggested_name, "theme.rs", "{name}");
+            let bytes = extracted.source.read_bytes().unwrap();
+            assert_eq!(bytes.len(), SUBPATH_ENTRY_SIZE, "{name}");
+        }
     }
 
     #[test]

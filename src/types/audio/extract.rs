@@ -6,7 +6,7 @@
 //! re-detect as Image and route through the ASCII pipeline; lyrics
 //! re-detect as plain text).
 
-use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
+use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 use crate::input::InputSource;
 use crate::input::detect::AudioFormat;
 
@@ -18,7 +18,7 @@ pub fn extract(
     key: &str,
 ) -> Result<Extracted, ExtractError> {
     let safe = sanitize_entry_path(key)?;
-    let safe_str = safe.to_string_lossy().into_owned();
+    let safe_str = forward_slash_key(&safe);
 
     let probed = package::probe(source, format).map_err(ExtractError::Other)?;
     let (bytes, suggested) = package::read_embed(&probed, &safe_str)

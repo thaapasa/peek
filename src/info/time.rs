@@ -105,7 +105,9 @@ fn format_local_short(secs: i64) -> Option<String> {
 }
 
 /// Short timezone offset: `+3`, `-5`, `+0` for whole-hour zones; the
-/// minute component appears only when nonzero (`+5:30`).
+/// minute component appears only when nonzero (`+5:30`). Only the Unix
+/// `localtime_r` path consumes this; on Windows we fall back to UTC.
+#[cfg(unix)]
 fn format_offset_short(secs: i64) -> String {
     let sign = if secs >= 0 { '+' } else { '-' };
     let abs = secs.unsigned_abs();

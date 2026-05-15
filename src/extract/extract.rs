@@ -145,6 +145,26 @@ pub(crate) fn sanitize_entry_path(raw: &str) -> Result<PathBuf, ExtractError> {
     Ok(out)
 }
 
+/// Render a sanitized entry path as a forward-slash key for archive /
+/// container lookup. `PathBuf::push` uses the OS separator (`\` on
+/// Windows), but archive members, PDF embedded-file names, and audio
+/// embed keys are all `/`-separated regardless of host — so comparing
+/// the raw `to_string_lossy()` of a sanitized PathBuf fails on Windows.
+/// This helper rebuilds the key from the path's `Normal` components,
+/// joined by `/`.
+pub(crate) fn forward_slash_key(p: &Path) -> String {
+    let mut out = String::new();
+    for c in p.components() {
+        if let Component::Normal(seg) = c {
+            if !out.is_empty() {
+                out.push('/');
+            }
+            out.push_str(&seg.to_string_lossy());
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -353,5 +373,21 @@ mod tests {
             sanitize_entry_path(""),
             Err(ExtractError::InvalidKey(_))
         ));
+    }
+
+    /// `forward_slash_key` must rebuild the lookup key with `/`
+    /// regardless of host OS separator. `PathBuf::push` uses `\` on
+    /// Windows, which previously leaked into archive / PDF / audio
+    /// lookups and made nested entries unreachable.
+    #[test]
+    fn forward_slash_key_joins_components_with_slash() {
+        let p = sanitize_entry_path("config/theme.rs").unwrap();
+        assert_eq!(forward_slash_key(&p), "config/theme.rs");
+
+        let p = sanitize_entry_path("a/b/c/d.txt").unwrap();
+        assert_eq!(forward_slash_key(&p), "a/b/c/d.txt");
+
+        let p = sanitize_entry_path("flat.txt").unwrap();
+        assert_eq!(forward_slash_key(&p), "flat.txt");
     }
 }

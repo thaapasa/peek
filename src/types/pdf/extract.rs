@@ -3,14 +3,14 @@
 //! [`super::package::Doc::list_embeds`] — the same string the
 //! listing-mode surface uses.
 
-use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
+use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 use crate::input::InputSource;
 
 use super::package;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let safe = sanitize_entry_path(key)?;
-    let safe_str = safe.to_string_lossy().into_owned();
+    let safe_str = forward_slash_key(&safe);
 
     let doc = package::open_doc(source).map_err(ExtractError::Other)?;
     let bytes = doc

@@ -13,5 +13,5 @@
 mod extract;
 pub mod write;
 
-pub(crate) use extract::sanitize_entry_path;
 pub use extract::{ExtractError, ExtractOptions, Extracted, extract};
+pub(crate) use extract::{forward_slash_key, sanitize_entry_path};
