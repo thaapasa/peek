@@ -63,6 +63,15 @@ malformed (defends against unterminated quoted strings). The csv crate's per-rec
 Malformed rows render as a single `<error>` cell painted in the theme's warning color, and
 the status bar shows the running malformed count.
 
+## Search
+
+`/` opens the search prompt. Matches are scoped to a single cell — a
+query that would span the comma between two columns yields nothing.
+Substring scan, smart-case (all-lowercase query → case-insensitive; any
+uppercase → case-sensitive). `n` / `p` step through matches, wrapping at
+the ends; the viewport scrolls vertically and pans horizontally to
+bring each match's cell into view. `Esc` clears the search.
+
 ## Print mode
 
 `peek --print foo.csv` (or piping into another tool) emits the table to stdout using the

@@ -23,6 +23,7 @@
 //! table layout never depends on the deepest row consumed.
 
 use std::borrow::Cow;
+use std::ops::Range;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -32,6 +33,7 @@ use unicode_width::UnicodeWidthStr;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry};
 
 use super::parse::{CellKind, CsvData, classify_cell};
@@ -88,6 +90,29 @@ pub(crate) struct CsvTableMode {
     #[allow(dead_code)]
     theme_manager: Rc<crate::theme::ThemeManager>,
     label: &'static str,
+    /// Active cell-scoped search, or `None`. Cleared by raw/pretty-style
+    /// state changes (none yet here) and by `Back` / empty query.
+    search: Option<CsvSearch>,
+}
+
+/// Match-position cache for an active CSV search. Each [`CsvMatch`]
+/// covers a single occurrence inside one cell; multi-occurrence cells
+/// produce multiple entries with the same `(record_idx, col_idx)` and
+/// different byte ranges. Ranges are byte offsets into the cell's
+/// *display* form (post [`display_cell`]) so they line up with
+/// `overlay_matches`.
+struct CsvSearch {
+    matches: Vec<CsvMatch>,
+    /// Active-match index into `matches`. Unused when `matches` is empty.
+    cursor: usize,
+}
+
+#[derive(Clone)]
+struct CsvMatch {
+    record_idx: usize,
+    col_idx: usize,
+    /// Byte range inside the cell's display form.
+    range: Range<usize>,
 }
 
 const TABLE_ACTIONS: &[HelpEntry] = &[
@@ -96,6 +121,11 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
     (
         &[Action::ScrollLeft, Action::ScrollRight],
         "Pan columns left / right",
+    ),
+    (&[Action::OpenSearch], "Search cells"),
+    (
+        &[Action::NextMatch, Action::PrevMatch],
+        "Next / previous match",
     ),
 ];
 
@@ -122,6 +152,7 @@ impl CsvTableMode {
             theme_name,
             theme_manager,
             label: "Table",
+            search: None,
         }
     }
 
@@ -242,6 +273,100 @@ impl CsvTableMode {
         }
     }
 
+    /// Match ranges (in display-form bytes) for one cell, plus which of
+    /// them is the active cursor match. Empty when no search is active
+    /// or the cell has no matches.
+    fn cell_match_ranges(
+        &self,
+        record_idx: usize,
+        col_idx: usize,
+    ) -> (Vec<Range<usize>>, Option<usize>) {
+        let Some(s) = &self.search else {
+            return (Vec::new(), None);
+        };
+        if s.matches.is_empty() {
+            return (Vec::new(), None);
+        }
+        let mut ranges = Vec::new();
+        let mut current: Option<usize> = None;
+        for (i, m) in s.matches.iter().enumerate() {
+            if m.record_idx == record_idx && m.col_idx == col_idx {
+                if i == s.cursor {
+                    current = Some(ranges.len());
+                }
+                ranges.push(m.range.clone());
+            }
+        }
+        (ranges, current)
+    }
+
+    /// Build a `CsvSearch` from the loaded records. Drives the reader
+    /// to EOF first so search is exhaustive — the user expects a search
+    /// to span the whole file.
+    fn build_search(&mut self, query: &str) -> CsvSearch {
+        let _ = self.data.ensure_all();
+        let sensitive = smart_case_sensitive(query);
+        let mut matches: Vec<CsvMatch> = Vec::new();
+        let cols = self.widths.len();
+        'records: for (record_idx, rec) in self.data.records.iter().enumerate() {
+            if rec.malformed {
+                continue;
+            }
+            for (col_idx, cell) in rec.cells.iter().enumerate().take(cols) {
+                let display = display_cell(cell);
+                for r in find_matches(&display, query, sensitive) {
+                    matches.push(CsvMatch {
+                        record_idx,
+                        col_idx,
+                        range: r,
+                    });
+                    if matches.len() >= MAX_MATCHES {
+                        break 'records;
+                    }
+                }
+            }
+        }
+        CsvSearch { matches, cursor: 0 }
+    }
+
+    /// Step the search cursor by `delta`, wrapping at both ends, and
+    /// scroll the new match into view.
+    fn step_match(&mut self, delta: isize) {
+        let Some(s) = self.search.as_mut() else {
+            return;
+        };
+        let n = s.matches.len();
+        if n == 0 {
+            return;
+        }
+        let cur = s.cursor as isize;
+        let next = ((cur + delta).rem_euclid(n as isize)) as usize;
+        s.cursor = next;
+        self.scroll_to_current_match();
+    }
+
+    /// Bring the current match's cell into view: scroll vertically and
+    /// pan horizontally. The header row is always visible, so a match
+    /// in record 0 (when `has_header` is on) just pans columns.
+    fn scroll_to_current_match(&mut self) {
+        let Some(s) = &self.search else { return };
+        if s.matches.is_empty() {
+            return;
+        }
+        let m = &s.matches[s.cursor];
+        let record_idx = m.record_idx;
+        let col_idx = m.col_idx;
+        if !self.has_header || record_idx >= self.body_start() {
+            let body_idx = record_idx.saturating_sub(self.body_start());
+            self.top_record = body_idx;
+            self.clamp_top();
+        }
+        if col_idx < self.widths.len() {
+            self.h_col = col_idx;
+            self.clamp_h_col();
+        }
+    }
+
     /// Build the header row painted with `theme.heading`. Returns
     /// `String::new()` when there's no header (the caller should skip
     /// emitting it).
@@ -260,7 +385,8 @@ impl CsvTableMode {
             }
             let cell = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
-            let painted = render_cell(cell, *w, theme.heading, align, theme);
+            let (ranges, current) = self.cell_match_ranges(0, i);
+            let painted = render_cell(cell, *w, theme.heading, align, theme, &ranges, current);
             out.push_str(&painted);
         }
         out
@@ -308,7 +434,10 @@ impl CsvTableMode {
                 )
             };
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
-            out.push_str(&render_cell(cell, *w, color, align, theme));
+            let (ranges, current) = self.cell_match_ranges(rec_idx, i);
+            out.push_str(&render_cell(
+                cell, *w, color, align, theme, &ranges, current,
+            ));
         }
         Some(out)
     }
@@ -319,36 +448,78 @@ impl CsvTableMode {
 /// Sanitises embedded newlines / tabs via [`display_cell`]; the inserted
 /// `↵` marker is repainted with `theme.muted` so it reads as
 /// non-content. Padding sits outside the colored span.
+///
+/// `match_ranges` are byte offsets into the cell's *display* form, used
+/// to overlay search-match backgrounds. `current_idx` picks the active
+/// match within `match_ranges` (cursor) — receives the brighter
+/// background. Ranges that fall in the truncated tail are dropped.
 fn render_cell(
     cell: &str,
     width: usize,
     color: Color,
     align: Alignment,
     theme: &PeekTheme,
+    match_ranges: &[Range<usize>],
+    current_idx: Option<usize>,
 ) -> String {
     let display = display_cell(cell);
     let cell_w = display.width();
-    let (content, pad): (Cow<str>, usize) = if cell_w > width {
-        let mut t = take_cols(&display, width.saturating_sub(1));
-        t.push(TRUNCATE_MARKER);
-        (Cow::Owned(t), 0)
+    let (content, prefix_len, pad): (Cow<str>, usize, usize) = if cell_w > width {
+        let t = take_cols(&display, width.saturating_sub(1));
+        let prefix = t.len();
+        let mut c = t;
+        c.push(TRUNCATE_MARKER);
+        (Cow::Owned(c), prefix, 0)
     } else {
-        (display, width - cell_w)
+        let len = display.len();
+        (display, len, width - cell_w)
     };
 
-    let mut out = String::with_capacity(content.len() + pad + 24);
+    let mut inner = String::with_capacity(content.len() + 24);
+    paint_content_with_markers(&mut inner, &content, color, theme);
+
+    if !match_ranges.is_empty() {
+        let (kept, kept_current) = filter_ranges_for_prefix(match_ranges, current_idx, prefix_len);
+        if !kept.is_empty() {
+            inner = overlay_matches(&inner, &kept, kept_current, theme);
+        }
+    }
+
+    let mut out = String::with_capacity(inner.len() + pad);
     if matches!(align, Alignment::Right) {
         for _ in 0..pad {
             out.push(' ');
         }
     }
-    paint_content_with_markers(&mut out, &content, color, theme);
+    out.push_str(&inner);
     if matches!(align, Alignment::Left) {
         for _ in 0..pad {
             out.push(' ');
         }
     }
     out
+}
+
+/// Drop ranges whose end exceeds `prefix_len` (i.e. fall inside the
+/// truncation-replaced tail). Adjusts `current` if it pointed at a
+/// dropped range — clears it. Kept ranges keep their original offsets
+/// because the surviving prefix bytes are identical.
+fn filter_ranges_for_prefix(
+    ranges: &[Range<usize>],
+    current: Option<usize>,
+    prefix_len: usize,
+) -> (Vec<Range<usize>>, Option<usize>) {
+    let mut kept: Vec<Range<usize>> = Vec::with_capacity(ranges.len());
+    let mut kept_current: Option<usize> = None;
+    for (i, r) in ranges.iter().enumerate() {
+        if r.end <= prefix_len {
+            if current == Some(i) {
+                kept_current = Some(kept.len());
+            }
+            kept.push(r.clone());
+        }
+    }
+    (kept, kept_current)
 }
 
 /// Walk `content` char by char, painting `↵` markers with `theme.muted`
@@ -575,6 +746,8 @@ impl Mode for CsvTableMode {
                         ctx.peek_theme.foreground,
                         align,
                         ctx.peek_theme,
+                        &[],
+                        None,
                     ));
                 }
             }
@@ -661,6 +834,18 @@ impl Mode for CsvTableMode {
                 self.clamp_top();
                 Handled::Yes
             }
+            Action::NextMatch => {
+                self.step_match(1);
+                Handled::Yes
+            }
+            Action::PrevMatch => {
+                self.step_match(-1);
+                Handled::Yes
+            }
+            Action::Back if self.search.is_some() => {
+                self.search = None;
+                Handled::Yes
+            }
             _ => Handled::No,
         }
     }
@@ -703,7 +888,31 @@ impl Mode for CsvTableMode {
         if !self.has_header {
             segs.push(("Header off".to_string(), theme.label));
         }
+        // Search position, shown only while a search is active.
+        if let Some(s) = &self.search {
+            let label = if s.matches.is_empty() {
+                "no match".to_string()
+            } else {
+                format!("{}/{}", s.cursor + 1, s.matches.len())
+            };
+            segs.push((label, theme.label));
+        }
         segs
+    }
+
+    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+        let query = match query {
+            Some(q) if !q.is_empty() => q,
+            _ => {
+                self.search = None;
+                return None;
+            }
+        };
+        let search = self.build_search(query);
+        self.search = Some(search);
+        self.scroll_to_current_match();
+        // CsvTableMode owns scroll, so the caller doesn't need a line index.
+        None
     }
 }
 
@@ -729,7 +938,15 @@ impl CsvTableMode {
                 paint_content_with_markers(&mut painted, &cell, theme.heading, theme);
                 out.push_str(&painted);
             } else {
-                out.push_str(&render_cell(&cell, *w, theme.heading, align, theme));
+                out.push_str(&render_cell(
+                    &cell,
+                    *w,
+                    theme.heading,
+                    align,
+                    theme,
+                    &[],
+                    None,
+                ));
             }
         }
         out
@@ -888,7 +1105,15 @@ mod tests {
     fn render_cell_right_align_puts_pad_on_left() {
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
-        let out = render_cell("42", 5, theme.foreground, Alignment::Right, &theme);
+        let out = render_cell(
+            "42",
+            5,
+            theme.foreground,
+            Alignment::Right,
+            &theme,
+            &[],
+            None,
+        );
         // Three pad spaces precede the content.
         assert!(out.starts_with("   "));
         assert!(out.contains("42"));
@@ -898,7 +1123,15 @@ mod tests {
     fn render_cell_left_align_puts_pad_on_right() {
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
-        let out = render_cell("hi", 5, theme.foreground, Alignment::Left, &theme);
+        let out = render_cell(
+            "hi",
+            5,
+            theme.foreground,
+            Alignment::Left,
+            &theme,
+            &[],
+            None,
+        );
         assert!(out.ends_with("   "));
     }
 
@@ -939,7 +1172,7 @@ mod tests {
             for (i, cell) in rec.cells.iter().enumerate() {
                 let w = 60usize;
                 let align = Alignment::Left;
-                let rendered = render_cell(cell, w, theme.foreground, align, &theme);
+                let rendered = render_cell(cell, w, theme.foreground, align, &theme, &[], None);
                 assert!(
                     !rendered.contains('\n'),
                     "row {i} cell rendered with embedded newline: {rendered:?}"
@@ -965,7 +1198,15 @@ mod tests {
         let cell = multi.cells.iter().find(|c| c.contains('\n')).unwrap();
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
-        let rendered = render_cell(cell, 120, theme.foreground, Alignment::Left, &theme);
+        let rendered = render_cell(
+            cell,
+            120,
+            theme.foreground,
+            Alignment::Left,
+            &theme,
+            &[],
+            None,
+        );
         assert!(
             rendered.contains('\u{21B5}'),
             "embedded \\n should render as ↵, got: {rendered}"
@@ -1018,5 +1259,143 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert!(!data.header_heuristic, "row 0 typed → no header");
         assert_eq!(data.column_count(), 5);
+    }
+
+    // --- Search -------------------------------------------------------------
+
+    fn make_mode_from_str(text: &str) -> CsvTableMode {
+        let src = stdin(text);
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        mode.cached_cols = 80;
+        mode.cached_rows = 10;
+        mode
+    }
+
+    #[test]
+    fn search_finds_matches_in_cells_only() {
+        let mut mode =
+            make_mode_from_str("name,city\nAlice,Helsinki\nBob,Helsingborg\nCarol,Tampere\n");
+        mode.set_search(Some("Helsi"));
+        let s = mode.search.as_ref().expect("search armed");
+        assert_eq!(s.matches.len(), 2, "two cells start with Helsi");
+        // First match: record_idx 1 (Alice / Helsinki), col_idx 1.
+        assert_eq!(s.matches[0].record_idx, 1);
+        assert_eq!(s.matches[0].col_idx, 1);
+        assert_eq!(s.matches[1].record_idx, 2);
+        assert_eq!(s.matches[1].col_idx, 1);
+    }
+
+    #[test]
+    fn search_does_not_match_across_cells() {
+        // Substring "Alice,30" appears only across the field separator.
+        let mut mode = make_mode_from_str("name,age\nAlice,30\nBob,25\n");
+        mode.set_search(Some("Alice,30"));
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(
+            s.matches.len(),
+            0,
+            "match must stay inside one cell — no cross-delimiter join"
+        );
+    }
+
+    #[test]
+    fn search_step_wraps_and_pans_h_col() {
+        let mut mode = make_mode_from_str("a,b,c\nfoo,x,y\nbar,foo,z\nbaz,w,foo\n");
+        mode.set_search(Some("foo"));
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 3);
+        // Cursor on first match: col 0 → h_col panned to 0.
+        assert_eq!(s.cursor, 0);
+        assert_eq!(mode.h_col, 0);
+
+        mode.handle(Action::NextMatch);
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 1);
+        // Second match is in col 1.
+        assert_eq!(mode.h_col, 1);
+
+        mode.handle(Action::NextMatch);
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 2);
+        assert_eq!(mode.h_col, 2);
+
+        // Wrap to first match.
+        mode.handle(Action::NextMatch);
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 0);
+
+        // Backward wraps the other way.
+        mode.handle(Action::PrevMatch);
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 2);
+    }
+
+    #[test]
+    fn search_smart_case() {
+        // All-lowercase query is case-insensitive.
+        let mut mode = make_mode_from_str("city\nHelsinki\nhelsinki\nOulu\n");
+        mode.set_search(Some("helsinki"));
+        assert_eq!(mode.search.as_ref().unwrap().matches.len(), 2);
+        // Mixed case query is case-sensitive.
+        mode.set_search(Some("Helsinki"));
+        assert_eq!(mode.search.as_ref().unwrap().matches.len(), 1);
+    }
+
+    #[test]
+    fn search_empty_query_clears() {
+        let mut mode = make_mode_from_str("a\nfoo\n");
+        mode.set_search(Some("foo"));
+        assert!(mode.search.is_some());
+        mode.set_search(None);
+        assert!(mode.search.is_none());
+        mode.set_search(Some("foo"));
+        assert!(mode.search.is_some());
+        mode.set_search(Some(""));
+        assert!(mode.search.is_none());
+    }
+
+    #[test]
+    fn back_clears_search() {
+        let mut mode = make_mode_from_str("a\nfoo\n");
+        mode.set_search(Some("foo"));
+        assert_eq!(mode.handle(Action::Back), Handled::Yes);
+        assert!(mode.search.is_none());
+        // Second Back with no search falls through.
+        assert_eq!(mode.handle(Action::Back), Handled::No);
+    }
+
+    #[test]
+    fn search_status_segment_shows_position() {
+        // "no match" is unique to the search segment, so it's the cleaner
+        // signal — the row-position segment can collide with `M/N` shapes.
+        let mut mode = make_mode_from_str("a\nfoo\nfoo\n");
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        mode.set_search(Some("zzz"));
+        let segs = mode.status_segments(&theme);
+        assert!(segs.iter().any(|(s, _)| s == "no match"));
+        mode.set_search(None);
+        let segs = mode.status_segments(&theme);
+        assert!(!segs.iter().any(|(s, _)| s == "no match"));
+    }
+
+    #[test]
+    fn search_matches_inside_multiline_cell_use_display_form() {
+        // books.csv has a record whose description spans two lines via
+        // an embedded \n. Searching the display-form text — across the
+        // `↵` glyph — must still locate the match.
+        let src = fixture("test-data/books.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        mode.cached_cols = 200;
+        mode.cached_rows = 30;
+        // "Includes worked examples" lives on the second physical line
+        // of the Refactoring book's description cell.
+        mode.set_search(Some("Includes worked"));
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 1);
+        // It's in column 3 (description), not the title / author columns.
+        assert_eq!(s.matches[0].col_idx, 3);
     }
 }
