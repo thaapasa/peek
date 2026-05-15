@@ -2,7 +2,7 @@ use std::io;
 use std::time::Duration;
 
 use anyhow::Result;
-use crossterm::event::{self, Event};
+use crossterm::event::{self, Event, KeyEventKind};
 
 use crate::info::RenderOptions;
 use crate::input::InputSource;
@@ -97,6 +97,12 @@ fn event_loop(
 
         while let Some(ev) = event_opt {
             match ev {
+                // Windows console emits both Press and Release events;
+                // Unix only emits Press. Drop Release (and any non-press
+                // kinds) so a single key tap doesn't fire its action twice
+                // — otherwise `h` toggles Help open then immediately shut.
+                Event::Key(key)
+                    if !matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) => {}
                 Event::Key(key) => {
                     // Modal prompt: keys go straight to the input,
                     // skipping Action dispatch and coalescing (the
