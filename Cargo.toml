@@ -93,6 +93,17 @@ symphonia = { version = "0.5", features = ["all-codecs", "all-formats", "opt-sim
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+# CONIN$ reopen after consuming piped stdin (Windows only). Scoped to
+# `src/input/stdin.rs::reopen_stdin_from_tty` — no other module touches
+# Win32 console handles.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Console",
+] }
+
 [dev-dependencies]
 # Font rasterization for glyph atlas generation
 fontdue = "0.9"

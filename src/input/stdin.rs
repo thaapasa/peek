@@ -80,7 +80,66 @@ fn resolve_tty_path() -> Option<String> {
     None
 }
 
-#[cfg(not(unix))]
+/// Windows counterpart: reopen the console input buffer through the
+/// reserved device name `CONIN$` and route `STD_INPUT_HANDLE` at it.
+/// crossterm on Windows reads via `GetStdHandle(STD_INPUT_HANDLE)`, so
+/// `SetStdHandle` is the handle the event loop will pick up. The
+/// C-runtime fd 0 stays pointed at the consumed pipe — peek doesn't
+/// read stdin through libc, so that's fine.
+///
+/// No-op when the process has no attached console (GUI launch, daemon-
+/// like contexts): `CreateFileW("CONIN$", …)` returns
+/// `INVALID_HANDLE_VALUE` and we silently bail, matching the Unix
+/// `ttyname()`-returns-nothing path.
+///
+/// All Win32 console FFI lives in this function — nothing else in the
+/// codebase touches `windows-sys` or console handles.
+#[cfg(windows)]
 fn reopen_stdin_from_tty() {
-    // TODO: Windows support via CONIN$
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Storage::FileSystem::{
+        CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+    };
+    use windows_sys::Win32::System::Console::{STD_INPUT_HANDLE, SetStdHandle};
+
+    // UTF-16, NUL-terminated — `CreateFileW` takes a wide string.
+    let name: Vec<u16> = std::ffi::OsStr::new("CONIN$")
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+
+    // SAFETY: `name` is a valid NUL-terminated UTF-16 buffer for the
+    // lifetime of the call. The other pointer args are explicitly null
+    // (no security attributes / no template file), which CreateFileW
+    // documents as valid.
+    let handle = unsafe {
+        CreateFileW(
+            name.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            std::ptr::null(),
+            OPEN_EXISTING,
+            0,
+            std::ptr::null_mut(),
+        )
+    };
+    if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+        return;
+    }
+
+    // SAFETY: `handle` is a freshly-opened, owned console handle.
+    // Ownership transfers to the standard-handle table; we intentionally
+    // do not close it here — `SetStdHandle` retains the handle for the
+    // process's lifetime.
+    unsafe {
+        SetStdHandle(STD_INPUT_HANDLE, handle);
+    }
+}
+
+#[cfg(all(not(unix), not(windows)))]
+fn reopen_stdin_from_tty() {
+    // Other targets (wasm, etc.) — peek is a CLI binary so this arm is
+    // effectively unreachable, but keeping a no-op fallback means the
+    // module still builds out-of-tree.
 }
