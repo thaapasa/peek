@@ -29,6 +29,19 @@ shrink. One deliberate press beats constant automatic churn.
 Cells wider than their column truncate with an ellipsis (`…`). The full value is visible in
 the Source view.
 
+## Column alignment
+
+Numeric columns (Int / Float only across the seed body) right-align so digits line up;
+everything else stays left-aligned. Alignment is inferred once from the seed and stays
+stable for the session — toggling the header doesn't reshuffle data alignment.
+
+## Multi-line cells
+
+CSV records may embed `\n` inside a quoted cell. peek collapses each such cell to a single
+visual row, replacing the embedded newline with a muted `↵` marker. Tabs become spaces and
+carriage returns are dropped — none of those characters can break the terminal cursor or
+push following columns onto the next row.
+
 ## Header detection
 
 Row 0 is treated as a header when every cell in row 0 looks like text (not int, float, bool,

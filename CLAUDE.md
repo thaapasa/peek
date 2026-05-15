@@ -90,7 +90,7 @@ src/
       detect.rs        — format_from_ext: `.csv` / `.tsv` → CsvFormat
       parse.rs         — Streaming CSV record reader over `csv::Reader<Box<dyn Read>>`. Seed scan (first 1000 records into memory + header heuristic + delimiter sniff + UTF-8/UTF-16 BOM detect); subsequent records pulled lazily via `ensure_record(idx)`. UTF-16 LE/BE transcoded eagerly to UTF-8 byte buffer. Malformed guard: > 4 MiB per record OR > 10 000 physical lines OR csv-crate error → `<error>` row + malformed counter; reader resyncs on next newline.
       compose.rs       — compose(): CsvTableMode (primary) + paired Source ContentMode
-      table_mode.rs    — CsvTableMode: aligned table with sticky header, monotonic auto-widen (grows widths as wider cells scroll into view; sticky header repaints on every change), `Shift+R` reflow widths from viewport (opt-in shrink), `Shift+H` toggle header, Left/Right column-step horizontal pan. Print mode uses seed widths only — single-row overflow pushes following columns of that row past the terminal edge.
+      table_mode.rs    — CsvTableMode: aligned table with sticky header, monotonic auto-widen (grows widths as wider cells scroll into view; sticky header repaints on every change), `Shift+R` reflow widths from viewport (opt-in shrink), `Shift+H` toggle header, Left/Right column-step horizontal pan. Per-column Alignment inferred from seed body (Int/Float only → Right). Embedded `\n` collapses to a muted `↵` glyph via `display_cell`; `\t` → space, `\r` dropped. Cell-scoped `/` search: scans every cell's display-form bytes, matches stay inside one cell (never cross delimiters); `n`/`p` step matches and pan h_col + scroll top_record to bring the match's cell into view. Print mode uses seed widths only — single-row overflow pushes following columns of that row past the terminal edge.
       info.rs          — CsvStats { format, delimiter, encoding, has_bom, header_detected, columns: Vec<ColumnStats>, loaded_records, total_records, malformed_count, sampled } + ColumnStats / ColumnType (Int/Float/Bool/Date/String/Mixed)
       info_gather.rs   — gather: per-column type inference + width / empty counts over the seed sample
       info_render.rs   — render_section (CSV + Columns blocks)
@@ -246,7 +246,8 @@ src/
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
       stats.rs         — Stats: aggregate counts / sizes computed by tree walk
       build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
-      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive / comic / ebook / document / pdf / audio / disk_image)
+      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive / comic / ebook / document / pdf / audio / disk_image / directory). Leaf-name `/` search: scans every row's last path segment, n/p navigates with wrap; file matches update selection, directory matches only scroll into view via viewport.scroll_to_row
+      viewport.rs      — ListingViewport: scroll + selection state + sticky-chain math. `select_row` pins a file selection; `scroll_to_row` brings any row (file or dir) into the content slot without moving the selection cursor
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)

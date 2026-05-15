@@ -66,12 +66,33 @@ navigate matches instead, and `Esc` clears the search to get chapter stepping ba
 
 ## Listings (archives, PDF embeds, audio embeds, ISO, directories)
 
-| Key       | Action                                |
-|-----------|---------------------------------------|
-| `Up`/`Down` | Move selection                      |
+| Key       | Action                                       |
+|-----------|----------------------------------------------|
+| `Up`/`Down` | Move selection                             |
 | `Enter`   | Descend into selected entry (recursive peek) |
-| `e`       | Extract selected entry                |
-| `s`       | Toggle sticky parent breadcrumb       |
+| `e`       | Extract selected entry                       |
+| `s`       | Toggle sticky parent breadcrumb              |
+| `/`       | Search leaf names (last path segment only)   |
+| `n` / `p` | Next / previous match                        |
+
+Listing search matches the last path segment of each row only — `sub/` finds nothing because
+no leaf carries a slash. Directory leaves participate so a search for an ancestor name brings
+that subtree into view; the file selection only moves when the active match lands on a file
+row, so Extract / Descend still target a descendable entry.
+
+## CSV / TSV table
+
+| Key        | Action                                                 |
+|------------|--------------------------------------------------------|
+| `Shift+H`  | Toggle the header row                                  |
+| `Shift+R`  | Reflow column widths from the viewport (opt-in shrink) |
+| `Left` / `Right` | Pan one column left / right                      |
+| `/`        | Search inside cells (single-cell scope)                |
+| `n` / `p`  | Next / previous match                                  |
+
+CSV search is scoped to a single cell — a query that would span the delimiter between two
+columns yields nothing. `n` / `p` cycle through matches and pan / scroll to bring each
+match's cell into view.
 
 ## Multi-page / multi-chapter (PDF, EPUB, CBZ)
 

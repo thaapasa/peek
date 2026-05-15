@@ -261,13 +261,19 @@ repaints on every width change), and shrink only when the user presses `Shift+R`
 viewport). `Shift+H` toggles the header on/off, overriding the heuristic (row 0 all-text →
 header on; row 0 has a typed cell → header off). `Left` / `Right` pan one column at a time
 when the table is wider than the terminal. Per-column type inference (int / float / bool /
-date / string / mixed) is sampled from the seed and rendered in the info section; the file's
-total record count, delimiter, encoding, and malformed-row counter sit alongside it. Encoding
-is UTF-8 native, with transparent UTF-16 LE/BE → UTF-8 transcode at the byte-source boundary.
-Malformed records (over 4 MiB raw, over 10 000 physical lines, or rejected by the csv crate)
-render as a single `<error>` row in `theme.warning` and bump the status-bar counter. Print
-mode renders the seed widths only (no auto-widen) and allows long cells to overflow rightward
-for that one row — alignment resumes on the next row.
+date / string / mixed) is sampled from the seed and rendered in the info section; numeric
+columns (int / float only) are right-aligned in the body and header so digits line up. The
+file's total record count, delimiter, encoding, and malformed-row counter sit alongside the
+column stats. Encoding is UTF-8 native, with transparent UTF-16 LE/BE → UTF-8 transcode at
+the byte-source boundary. Multi-line cells (embedded `\n` from a quoted record) collapse to
+one visual row with a muted `↵` glyph marking the line break; `\t` becomes a space and
+`\r` is dropped so nothing can break the terminal cursor. `/` opens a single-cell-scoped
+search (substring, smart-case); `n` / `p` step matches, panning columns and scrolling rows
+to bring each match into view. Malformed records (over 4 MiB raw, over 10 000 physical
+lines, or rejected by the csv crate) render as a single `<error>` row in `theme.warning`
+and bump the status-bar counter. Print mode renders the seed widths only (no auto-widen)
+and allows long cells to overflow rightward for that one row — alignment resumes on the
+next row.
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):
 
@@ -433,6 +439,14 @@ first / last file, PgUp/Dn page-scroll then snap selection to the first visible 
 selected leaf gets a highlighted background + arrow marker. `e` extracts the selected entry —
 see [Extraction](#extraction-) below. Tab cycles TOC ↔ Info; `x` still drops into the raw hex
 dump of the archive bytes.
+
+`/` opens a **leaf-name search**. The query matches against the last path segment of each
+row only — `sub/` finds nothing because no leaf carries a slash. Directory leaves
+participate, so a search for an ancestor name brings that subtree into view; the file
+selection only moves when the match lands on a file row, so Extract / Descend still target a
+descendable entry. `n` / `p` step matches with wrap. Same `/` search is wired into every
+ListingMode consumer — archives, ISO 9660, PDF `/EmbeddedFiles`, audio embed bundles,
+directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 
 | Format      | Extensions                     | Status |
 |-------------|--------------------------------|--------|
@@ -624,9 +638,11 @@ content is already fully visible. The gutter does not pan; it stays anchored to 
 **exact substring** with **smart-case** — an all-lowercase query matches case-insensitively, any
 uppercase character makes the whole query case-sensitive. Available in every text-rendering
 view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the rendered HTML
-view, the EPUB **Read** view, the DOCX / ODT / RTF **Read** views, and the PDF **Text** view.
-The shared `SearchState` in `viewer/search.rs` backs all of them — each view scans its own
-lines into one.
+view, the EPUB **Read** view, the DOCX / ODT / RTF **Read** views, the PDF **Text** view, the
+CSV / TSV **Table** view (single-cell scope — a query can't span a delimiter), and every
+listing TOC (leaf-name scope — matches the last path segment only, so `sub/` finds nothing).
+The shared search primitives in `viewer/search.rs` back all of them — each view scans its
+own content domain into one.
 
 On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
 match (wrapping at the ends), scrolling each match's line into view. (In the EPUB Read view
