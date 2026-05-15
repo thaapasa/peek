@@ -1,4 +1,4 @@
-install_dir := env_var_or_default("PEEK_INSTALL_DIR", env_var("HOME") / ".local/bin")
+install_dir := env_var_or_default("PEEK_INSTALL_DIR", env_var_or_default("HOME", env_var_or_default("USERPROFILE", "")) / ".local/bin")
 
 default:
     @just --list
