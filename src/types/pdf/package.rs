@@ -13,7 +13,9 @@
 //!
 //! The Pdfium dynamic library is located in this priority order:
 //!   1. The directory of the running executable (release-tarball layout).
-//!   2. The compile-time `.pdfium/lib` under the project root (dev fallback).
+//!   2. The compile-time `.pdfium/{lib,bin}` under the project root (dev
+//!      fallback — Unix builds drop the dylib under `lib/`, Windows
+//!      builds drop `pdfium.dll` under `bin/`).
 //!   3. System library paths (`Pdfium::bind_to_system_library`).
 //!
 //! All three are tried before surfacing a missing-library error.
@@ -60,18 +62,25 @@ fn locate_bindings() -> Result<Box<dyn PdfiumLibraryBindings>> {
         }
     }
 
-    // 2. Project-local `.pdfium/lib` (dev workflow). `CARGO_MANIFEST_DIR`
+    // 2. Project-local `.pdfium/{lib,bin}` (dev workflow). `CARGO_MANIFEST_DIR`
     //    is baked in at compile time — only useful when running from
     //    the dev's own machine. Released binaries land elsewhere and
     //    fall through to system search.
-    let dev_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(".pdfium")
-        .join("lib");
-    if dev_dir.exists() {
+    //
+    //    The pdfium-binaries release layout varies by platform: macOS
+    //    and Linux drop `libpdfium.{dylib,so}` under `lib/`; Windows
+    //    drops `pdfium.dll` under `bin/`. Probe both so the dev path
+    //    works regardless of host.
+    let dev_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".pdfium");
+    for subdir in ["lib", "bin"] {
+        let dev_dir = dev_root.join(subdir);
+        if !dev_dir.exists() {
+            continue;
+        }
         let path = Pdfium::pdfium_platform_library_name_at_path(&dev_dir);
         match Pdfium::bind_to_library(&path) {
             Ok(b) => return Ok(b),
-            Err(e) => errors.push(format!(".pdfium/lib bind: {e}")),
+            Err(e) => errors.push(format!(".pdfium/{subdir} bind: {e}")),
         }
     }
 

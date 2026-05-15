@@ -426,8 +426,9 @@ FileType::Pdf => {
 User gets Tab cycling through `page render → text extract → embed listing → Info`, `n`/`p` stepping
 pages in the page view, `e` extracting attachments from the listing, `x` toggling to hex, `i`
 jumping to Info. Pdfium is dynamically loaded from `libpdfium.*` shipped alongside the binary; the
-loader path-search is in `pdf::package::locate_bindings` (exe dir → `.pdfium/lib` dev fallback →
-system).
+loader path-search is in `pdf::package::locate_bindings` (exe dir → `.pdfium/{lib,bin}` dev
+fallback — Windows pdfium tarball ships the dll under `bin/`, Unix tarballs ship the dylib under
+`lib/` → system).
 
 ## Adding a new theme
 
