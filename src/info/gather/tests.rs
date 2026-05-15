@@ -233,13 +233,18 @@ fn html_dashboard_parses_with_lenient_xml() {
 // Text fixtures
 // ---------------------------------------------------------------------------
 
+/// End-to-end text stats on a fixture pinned to LF in
+/// `.gitattributes` (`*.rs ... eol=lf`). `*.py` without an explicit
+/// `eol=lf` would auto-CRLF on Windows under default
+/// `core.autocrlf=true`, breaking the `LineEndings::Lf` assertion;
+/// the .rs fixture stays portable.
 #[test]
-fn python_fibonacci_text_metrics() {
-    let info = gather_fixture("test-data/fibonacci.py");
+fn rust_theme_text_metrics() {
+    let info = gather_fixture("test-data/theme.rs");
     let FileExtras::Text(stats) = &info.extras else {
         panic!("expected Text extras");
     };
-    assert_eq!(stats.line_count, 80);
+    assert_eq!(stats.line_count, 104);
     assert!(matches!(stats.line_endings, LineEndings::Lf));
     assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(4))));
     assert!(matches!(stats.encoding, Encoding::Utf8));
@@ -253,16 +258,6 @@ fn typescript_event_bus_uses_two_space_indent() {
     };
     assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(2))));
     assert!(stats.line_count > 0);
-}
-
-#[test]
-fn rust_theme_uses_four_space_indent() {
-    let info = gather_fixture("test-data/theme.rs");
-    let FileExtras::Text(stats) = &info.extras else {
-        panic!("expected Text extras");
-    };
-    assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(4))));
-    assert!(matches!(stats.line_endings, LineEndings::Lf));
 }
 
 #[test]

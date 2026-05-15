@@ -342,7 +342,14 @@ impl Registry {
         // Dedupe by ModeId so a file-type arm that pre-pushes one of these
         // (e.g. DiskImage → Info) doesn't end up with two copies in the
         // mode list (which would break `i:Info` jump and Tab cycle).
-        push_unique_mode(&mut modes, Box::new(HexMode::new(source, 0)?));
+        //
+        // Directories opt out of Hex: they have no byte stream to hex-dump.
+        // The Unix path tolerated `File::open` on a directory (silent 0-byte
+        // file), so HexMode's constructor accidentally succeeded; Windows
+        // rejects directory handles outright (`Access is denied`).
+        if !matches!(file_type, FileType::Directory) {
+            push_unique_mode(&mut modes, Box::new(HexMode::new(source, 0)?));
+        }
         push_unique_mode(&mut modes, Box::new(InfoMode::new()));
         push_unique_mode(&mut modes, Box::new(AboutMode::new()));
 
