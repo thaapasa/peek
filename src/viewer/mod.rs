@@ -317,6 +317,11 @@ impl Registry {
                         source, detected, args, &ctx, &mut modes, *fmt,
                     )?;
                 }
+                FileType::Csv(fmt) => {
+                    crate::types::csv::compose::compose(
+                        source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
+                }
                 FileType::Directory => {
                     crate::types::directory::compose::compose(
                         source, detected, args, &ctx, &mut modes,

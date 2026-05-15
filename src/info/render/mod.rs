@@ -77,6 +77,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Audio(stats) => {
             crate::types::audio::info_render::render_section(lines, stats, theme);
         }
+        FileExtras::Csv(stats) => {
+            crate::types::csv::info_render::render_section(lines, stats, theme);
+        }
         FileExtras::Directory(stats) => {
             crate::types::directory::info::render_section(lines, stats, theme);
         }

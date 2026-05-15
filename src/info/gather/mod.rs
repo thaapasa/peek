@@ -20,7 +20,8 @@ use anyhow::Result;
 use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
-    AudioFormat, ComicFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
+    AudioFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
+    EbookFormat, FileType,
 };
 use crate::input::mime;
 
@@ -265,6 +266,7 @@ fn gather_extras_in_memory(
             crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
         FileType::Audio(fmt) => audio_gather(source, *fmt),
+        FileType::Csv(fmt) => csv_gather(source, *fmt),
         // Directory only ever appears via a real `File` source; the
         // virtual-source path can't construct one.
         FileType::Directory => crate::types::binary::info::gather_extras(magic_mime),
@@ -274,6 +276,13 @@ fn gather_extras_in_memory(
 
 fn audio_gather(source: &InputSource, fmt: AudioFormat) -> FileExtras {
     crate::types::audio::info_gather::gather_extras(source, fmt)
+}
+
+fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
+    match crate::types::csv::parse::CsvData::open(source, fmt) {
+        Ok(data) => FileExtras::Csv(crate::types::csv::info_gather::gather(&data, fmt)),
+        Err(_) => crate::types::binary::info::gather_extras(None),
+    }
 }
 
 fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) -> FileExtras {
@@ -355,6 +364,7 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
             *fmt,
         ),
         FileType::Audio(fmt) => audio_gather(&InputSource::File(path.to_path_buf()), *fmt),
+        FileType::Csv(fmt) => csv_gather(&InputSource::File(path.to_path_buf()), *fmt),
         FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),
         FileType::Directory => crate::types::directory::info::gather_extras(path),
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),

@@ -199,6 +199,8 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
             AudioFormat::Mka => "audio/x-matroska",
             AudioFormat::Wma => "audio/x-ms-wma",
         },
+        FileType::Csv(crate::input::detect::CsvFormat::Csv) => "text/csv",
+        FileType::Csv(crate::input::detect::CsvFormat::Tsv) => "text/tab-separated-values",
         // For Image, Archive, Compressed, and Binary, the magic-byte
         // MIME is more specific than any generic registered fallback
         // would be.

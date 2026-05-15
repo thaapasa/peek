@@ -8,6 +8,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Source code       | 100+ languages via syntect (Rust, Python, Go, TS, …)        |
 | Markup            | Markdown, HTML, XML, SQL                                    |
 | Structured data   | JSON / JSONC / JSON5 / JSONL, YAML, TOML, XML               |
+| Tabular data      | CSV, TSV (aligned table view)                               |
 | Documents         | DOCX, ODT, RTF                                              |
 | PDF               | `.pdf` (paged render + text + embeds)                       |
 | Ebooks            | EPUB                                                        |

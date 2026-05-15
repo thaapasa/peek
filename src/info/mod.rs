@@ -19,6 +19,7 @@ pub use crate::types::archive::info::ArchiveStats;
 pub use crate::types::audio::AudioStats;
 pub use crate::types::binary::info::BinaryInfo;
 pub use crate::types::comic::ComicStats;
+pub use crate::types::csv::CsvStats;
 pub use crate::types::directory::info::DirectoryStats;
 pub use crate::types::disk_image::info::DiskImageInfo;
 pub use crate::types::document::DocumentStats;
@@ -88,6 +89,7 @@ pub enum FileExtras {
     Document(DocumentStats),
     Pdf(PdfStats),
     Audio(AudioStats),
+    Csv(CsvStats),
 }
 
 #[cfg(unix)]

@@ -16,6 +16,7 @@
   - [Markdown](./file-types/markdown.md)
   - [HTML](./file-types/html.md)
   - [Structured data](./file-types/structured-data.md)
+  - [CSV / TSV](./file-types/csv.md)
   - [Documents](./file-types/documents.md)
   - [PDF](./file-types/pdf.md)
   - [Ebooks](./file-types/ebooks.md)

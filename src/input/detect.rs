@@ -13,6 +13,7 @@ use crate::input::mime;
 pub use crate::types::archive::format::ArchiveFormat;
 pub use crate::types::audio::format::AudioFormat;
 pub use crate::types::comic::format::ComicFormat;
+pub use crate::types::csv::format::CsvFormat;
 pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
@@ -21,6 +22,7 @@ pub use crate::types::structured::format::StructuredFormat;
 use crate::types::archive::detect as archive_detect;
 use crate::types::audio::detect as audio_detect;
 use crate::types::comic::detect as comic_detect;
+use crate::types::csv::detect as csv_detect;
 use crate::types::disk_image::detect as disk_image_detect;
 use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
@@ -79,6 +81,9 @@ pub enum FileType {
     /// container / codec / channels / bit depth / sample rate + tag
     /// fields (title / artist / album / etc). No playback.
     Audio(AudioFormat),
+    /// Tabular data (`.csv` / `.tsv`). Drives an aligned table view
+    /// over a streaming record reader, paired with a raw Source view.
+    Csv(CsvFormat),
     /// Binary / unknown
     Binary,
 }
@@ -610,6 +615,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = audio_detect::format_from_ext(&ext) {
         return Some(FileType::Audio(fmt));
+    }
+    if let Some(fmt) = csv_detect::format_from_ext(&ext) {
+        return Some(FileType::Csv(fmt));
     }
     if let Some(fmt) = structured_detect::format_from_ext(&ext) {
         return Some(FileType::Structured(fmt));

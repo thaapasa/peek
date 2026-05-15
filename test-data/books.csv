@@ -1,0 +1,30 @@
+isbn,title,author,description,year,price
+978-0-13-468599-1,"The Pragmatic Programmer","Hunt, Andrew and Thomas, David","Tips, tricks, and best practices for software engineers.",2019,42.99
+978-0-262-51087-5,"Structure and Interpretation of Computer Programs","Abelson, Harold and Sussman, Gerald Jay","Foundational text on computer science using Scheme.",1996,55.00
+978-0-201-63361-0,"Design Patterns","Gamma, Erich et al.","Elements of reusable object-oriented software.",1994,49.95
+978-0-321-12521-7,"Refactoring","Fowler, Martin","Improving the design of existing code.
+Includes worked examples in Java.",2018,47.99
+978-1-491-95414-4,"Designing Data-Intensive Applications","Kleppmann, Martin","Big ideas behind reliable, scalable, and maintainable systems.",2017,52.99
+978-0-13-235088-4,"Clean Code","Martin, Robert C.","A handbook of agile software craftsmanship.",2008,38.99
+978-0-13-475759-9,"Effective Java","Bloch, Joshua","Best practices for the Java platform, 3rd edition.",2017,44.99
+978-0-13-468599-2,"The Mythical Man-Month","Brooks, Frederick P. Jr.","Essays on software engineering, anniversary edition.",1995,39.99
+978-1-59327-220-3,"The Linux Command Line","Shotts, William E.","A complete introduction to the bash shell.",2019,29.95
+978-1-449-31884-7,"JavaScript: The Good Parts","Crockford, Douglas","A beautiful, elegant, lightweight subset of JavaScript.",2008,29.99
+978-0-596-00712-6,"Beautiful Code","Oram, Andy and Wilson, Greg","Leading programmers explain how they think.",2007,49.99
+978-0-13-291029-9,"Working Effectively with Legacy Code","Feathers, Michael","Strategies for changing untested code without breaking it.",2004,49.95
+978-0-201-83595-3,"The Art of Computer Programming Vol. 1","Knuth, Donald E.","Fundamental algorithms,
+third edition.",1997,79.99
+978-0-201-89685-5,"Code Complete","McConnell, Steve","A practical handbook of software construction, 2nd edition.",2004,42.99
+978-1-617-29413-1,"Grokking Algorithms","Bhargava, Aditya","An illustrated guide for programmers and other curious people.",2016,34.99
+978-0-13-590561-2,"Computer Networking","Kurose, James and Ross, Keith","A top-down approach, 8th edition.",2021,189.99
+978-0-262-03384-8,"Introduction to Algorithms","Cormen, Thomas H. et al.","Comprehensive third edition (CLRS).",2009,99.00
+978-0-321-77403-2,"The C++ Programming Language","Stroustrup, Bjarne","The definitive reference, 4th edition.",2013,69.99
+978-0-13-110362-7,"The C Programming Language","Kernighan, Brian W. and Ritchie, Dennis M.","The classic K&R, 2nd edition.",1988,42.99
+978-1-617-29512-1,"Real-World Cryptography","Wong, David","Practical cryptography for software engineers.",2021,59.99
+978-0-201-48567-7,"Programming Pearls","Bentley, Jon","Essays on algorithms and problem solving, 2nd edition.",1999,34.95
+978-1-491-92395-8,"You Don't Know JS Yet","Simpson, Kyle","Get started — a deep dive into JavaScript fundamentals.",2020,24.99
+978-0-13-313079-0,"Operating System Concepts","Silberschatz, Avi et al.","The dinosaur book, 10th edition.",2018,150.00
+978-0-13-468603-5,"Refactoring to Patterns","Kerievsky, Joshua","Improving designs through systematic refactoring.",2004,45.99
+978-0-321-93570-6,"The C Standard Library","Plauger, P. J.","A tutorial and reference.",1992,89.99
+978-1-491-90499-9,"High Performance Browser Networking","Grigorik, Ilya","What every web developer should know about networking.",2013,49.99
+978-0-13-468639-4,"Database Internals","Petrov, Alex","A deep-dive into how distributed data systems work.",2019,54.99

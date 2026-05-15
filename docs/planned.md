@@ -25,11 +25,9 @@ Highlighted source + format-aware Info section ship today (see
 
 ### Structured Data Additions ☐
 
-Pending entries from the Structured Data table in [features.md](features.md):
+CSV / TSV shipped — see [features.md](features.md#structured-data--config-files).
 
-- **CSV / TSV** (`.csv`, `.tsv`) — render as a formatted table with column alignment.
-
-JSONL streaming for multi-GB logs is also still pending — the current implementation reads the
+JSONL streaming for multi-GB logs is still pending — the current implementation reads the
 whole file into memory, which is fine for most logs but breaks down for very large ones.
 
 ### Document Files ☐

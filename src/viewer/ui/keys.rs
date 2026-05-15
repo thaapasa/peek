@@ -145,6 +145,12 @@ pub(crate) enum Action {
     /// Pop the current session off the stack. At stack depth 1 this
     /// exits the viewer; deeper, it returns to the parent session.
     Back,
+    /// Reflow CSV column widths from the currently-visible viewport.
+    /// CsvTableMode only; no-op elsewhere.
+    ReflowWidths,
+    /// Toggle the CSV header row on / off. CsvTableMode only; no-op
+    /// elsewhere.
+    ToggleHeader,
 }
 
 impl Action {
@@ -204,6 +210,8 @@ impl Action {
             Action::Extract             => binds![B::plain(Char('e'))],
             Action::Descend             => binds![B::plain(Enter)],
             Action::Back                => binds![B::plain(Esc)],
+            Action::ReflowWidths        => binds![B::plain(Char('R'))],
+            Action::ToggleHeader        => binds![B::plain(Char('H'))],
         }
     }
 

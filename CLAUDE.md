@@ -84,6 +84,16 @@ src/
       detect.rs        — format_from_ext: extension → StructuredFormat
       info.rs          — StructuredInfo / StructuredStats / TopLevelKind + gather_extras (per-format stats) + render_section (Format)
       pretty.rs        — JSON / YAML / TOML / XML pretty-printers (used by ContentMode)
+    csv/
+      mod.rs           — Module wiring; re-exports CsvStats
+      format.rs        — CsvFormat enum (Csv/Tsv) + default_delimiter
+      detect.rs        — format_from_ext: `.csv` / `.tsv` → CsvFormat
+      parse.rs         — Streaming CSV record reader over `csv::Reader<Box<dyn Read>>`. Seed scan (first 1000 records into memory + header heuristic + delimiter sniff + UTF-8/UTF-16 BOM detect); subsequent records pulled lazily via `ensure_record(idx)`. UTF-16 LE/BE transcoded eagerly to UTF-8 byte buffer. Malformed guard: > 4 MiB per record OR > 10 000 physical lines OR csv-crate error → `<error>` row + malformed counter; reader resyncs on next newline.
+      compose.rs       — compose(): CsvTableMode (primary) + paired Source ContentMode
+      table_mode.rs    — CsvTableMode: aligned table with sticky header, monotonic auto-widen (grows widths as wider cells scroll into view; sticky header repaints on every change), `Shift+R` reflow widths from viewport (opt-in shrink), `Shift+H` toggle header, Left/Right column-step horizontal pan. Print mode uses seed widths only — single-row overflow pushes following columns of that row past the terminal edge.
+      info.rs          — CsvStats { format, delimiter, encoding, has_bom, header_detected, columns: Vec<ColumnStats>, loaded_records, total_records, malformed_count, sampled } + ColumnStats / ColumnType (Int/Float/Bool/Date/String/Mixed)
+      info_gather.rs   — gather: per-column type inference + width / empty counts over the seed sample
+      info_render.rs   — render_section (CSV + Columns blocks)
     image/
       mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
       compose.rs       — compose(): push AnimationMode for animated GIF/WebP, ImageRenderMode for static raster

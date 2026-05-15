@@ -67,6 +67,11 @@ html2text = { version = "0.17", features = ["css", "css_ext"] }
 # subset (control words, groups, runs).
 rtf-parser = "0.4.2"
 
+# CSV / TSV parsing for the aligned table view. Pure Rust; handles quoting,
+# escaping, embedded newlines, configurable delimiter. We use the record
+# reader only (no Serde derive) so the dependency surface stays minimal.
+csv = "1"
+
 # PDF rendering + text + attachments. Wraps Google's Pdfium (C++) via dlopen
 # at process start. The libpdfium.dylib / .so / .dll is shipped alongside
 # the peek binary in the release tarball (release.yml grabs it per-target

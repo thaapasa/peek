@@ -478,7 +478,9 @@ impl ViewerState {
             | Action::ToggleSoftWrap
             | Action::CycleBackgroundBack
             | Action::CycleImageModeBack
-            | Action::ToggleStickyParents => Outcome::Unhandled,
+            | Action::ToggleStickyParents
+            | Action::ReflowWidths
+            | Action::ToggleHeader => Outcome::Unhandled,
         })
     }
 

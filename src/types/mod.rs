@@ -8,6 +8,7 @@ pub mod archive;
 pub mod audio;
 pub mod binary;
 pub mod comic;
+pub mod csv;
 pub mod directory;
 pub mod disk_image;
 pub mod document;

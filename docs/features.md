@@ -247,13 +247,27 @@ formatter / outline mode still planned.
 | YAML       | `.yaml`, `.yml`     | ✅      |
 | TOML       | `.toml`             | ✅      |
 | XML        | `.xml`              | ✅      |
-| CSV        | `.csv`, `.tsv`      | ☐      |
+| CSV / TSV  | `.csv`, `.tsv`      | ✅      |
 
 JSONC and JSON5 default to **raw** (the pretty path collapses comments / JSON5 syntax, so
 defaulting to it would silently lose information); `r` toggles into the strict-JSON pretty form
 when needed. JSON Lines defaults to pretty: each non-empty line round-trips through serde_json
-and is separated by a blank line. Pending entries (CSV/TSV) live in
-[planned.md](planned.md#structured-data-additions-).
+and is separated by a blank line.
+
+CSV / TSV open in an aligned table view: sticky header row + separator under it, body rows
+streamed lazily through a `csv` crate record reader. Column widths are seeded from the first
+1000 records, auto-widen monotonically as wider cells scroll into view (the sticky header
+repaints on every width change), and shrink only when the user presses `Shift+R` (reflow from
+viewport). `Shift+H` toggles the header on/off, overriding the heuristic (row 0 all-text →
+header on; row 0 has a typed cell → header off). `Left` / `Right` pan one column at a time
+when the table is wider than the terminal. Per-column type inference (int / float / bool /
+date / string / mixed) is sampled from the seed and rendered in the info section; the file's
+total record count, delimiter, encoding, and malformed-row counter sit alongside it. Encoding
+is UTF-8 native, with transparent UTF-16 LE/BE → UTF-8 transcode at the byte-source boundary.
+Malformed records (over 4 MiB raw, over 10 000 physical lines, or rejected by the csv crate)
+render as a single `<error>` row in `theme.warning` and bump the status-bar counter. Print
+mode renders the seed widths only (no auto-widen) and allows long cells to overflow rightward
+for that one row — alignment resumes on the next row.
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):
 
