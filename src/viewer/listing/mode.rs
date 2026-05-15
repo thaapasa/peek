@@ -10,6 +10,8 @@
 //! the *content* slot — not behind the sticky breadcrumb) under one
 //! reconcile path so individual mode methods can't drift.
 
+use std::ops::Range;
+
 use anyhow::Result;
 use syntect::highlighting::Color;
 
@@ -20,6 +22,7 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry};
 
 /// Width (chars) of the size column, including thousands separators.
@@ -39,6 +42,25 @@ pub struct ListingMode {
     rows: Vec<TreeRow>,
     pending_warnings: Vec<String>,
     viewport: ListingViewport,
+    /// Active leaf-name search, if any. Matches every row (files +
+    /// directories); navigation moves the file selection when the
+    /// current match is on a file row, and just scrolls the row into
+    /// view when it's on a directory.
+    search: Option<ListingSearch>,
+}
+
+/// One leaf-name match: the row it sits on plus the byte ranges inside
+/// that row's leaf string. Multi-hit leaves carry several ranges.
+#[derive(Clone)]
+struct LeafMatch {
+    row_idx: usize,
+    ranges: Vec<Range<usize>>,
+}
+
+struct ListingSearch {
+    matches: Vec<LeafMatch>,
+    /// Active-match index. Unused when `matches` is empty.
+    cursor: usize,
 }
 
 /// One rendered row in the TOC. Holds enough metadata to render
@@ -80,6 +102,7 @@ impl ListingMode {
             rows,
             pending_warnings: warnings,
             viewport,
+            search: None,
         }
     }
 
@@ -90,6 +113,7 @@ impl ListingMode {
 
     fn paint_row(
         &self,
+        row_idx: usize,
         row: &TreeRow,
         theme: &PeekTheme,
         mtime_text: Option<(&str, usize)>,
@@ -99,7 +123,16 @@ impl ListingMode {
         let size = format_size(row.size, row.is_dir);
         let painted_perms = paint_perms(&perms, theme);
         let painted_size = paint_size(&size, row.size, row.is_dir, theme);
-        let painted_path = paint_tree_path(&row.prefix, &row.leaf, row.is_dir, theme, selected);
+        let (ranges, current) = self.leaf_match_ranges(row_idx);
+        let painted_path = paint_tree_path(
+            &row.prefix,
+            &row.leaf,
+            row.is_dir,
+            theme,
+            selected,
+            &ranges,
+            current,
+        );
         match mtime_text {
             Some((text, width)) => {
                 let padded = format!("{text:<width$}");
@@ -110,6 +143,79 @@ impl ListingMode {
                 format!("{painted_perms}  {painted_size}  {painted_path}")
             }
         }
+    }
+
+    /// Match ranges (in the row's leaf bytes) and which one is the
+    /// active cursor, for `paint_row`. Empty when no search is active
+    /// or the row carries no hits.
+    fn leaf_match_ranges(&self, row_idx: usize) -> (Vec<Range<usize>>, Option<usize>) {
+        let Some(s) = &self.search else {
+            return (Vec::new(), None);
+        };
+        if s.matches.is_empty() {
+            return (Vec::new(), None);
+        }
+        let cursor_row = s.matches.get(s.cursor).map(|m| m.row_idx);
+        let current_is_here = cursor_row == Some(row_idx);
+        for m in &s.matches {
+            if m.row_idx == row_idx {
+                let current = if current_is_here {
+                    // The cursor is on this row; pick the first range as
+                    // the current (we don't sub-index inside a leaf).
+                    Some(0)
+                } else {
+                    None
+                };
+                return (m.ranges.clone(), current);
+            }
+        }
+        (Vec::new(), None)
+    }
+
+    fn build_search(&self, query: &str) -> ListingSearch {
+        let sensitive = smart_case_sensitive(query);
+        let mut matches: Vec<LeafMatch> = Vec::new();
+        for (i, row) in self.rows.iter().enumerate() {
+            let ranges = find_matches(&row.leaf, query, sensitive);
+            if !ranges.is_empty() {
+                matches.push(LeafMatch { row_idx: i, ranges });
+            }
+            if matches.len() >= MAX_MATCHES {
+                break;
+            }
+        }
+        ListingSearch { matches, cursor: 0 }
+    }
+
+    /// Bring the current match's row into view. When the match is a
+    /// file, update the file selection so Extract / Descend target it;
+    /// when it's a directory, only scroll.
+    fn scroll_to_current_match(&mut self) {
+        let Some(s) = &self.search else { return };
+        let Some(m) = s.matches.get(s.cursor) else {
+            return;
+        };
+        let row_idx = m.row_idx;
+        let is_file = self.rows[row_idx].inner_path.is_some();
+        if is_file {
+            self.viewport.select_row(&self.rows, row_idx);
+        } else {
+            self.viewport.scroll_to_row(&self.rows, row_idx);
+        }
+    }
+
+    fn step_match(&mut self, delta: isize) {
+        let Some(s) = self.search.as_mut() else {
+            return;
+        };
+        let n = s.matches.len();
+        if n == 0 {
+            return;
+        }
+        let cur = s.cursor as isize;
+        let next = ((cur + delta).rem_euclid(n as isize)) as usize;
+        s.cursor = next;
+        self.scroll_to_current_match();
     }
 
     /// Mtime column is padded to the widest stringified mtime in the
@@ -144,7 +250,7 @@ impl ListingMode {
                     None
                 };
                 let selected = Some(*row_idx) == selected_idx;
-                let line = self.paint_row(row, theme, mtime_text, selected);
+                let line = self.paint_row(*row_idx, row, theme, mtime_text, selected);
                 if selected {
                     paint_selected_marker(&line, theme)
                 } else {
@@ -215,7 +321,7 @@ impl Mode for ListingMode {
             } else {
                 None
             };
-            out.write_line(&self.paint_row(row, ctx.peek_theme, mtime_text, false))?;
+            out.write_line(&self.paint_row(i, row, ctx.peek_theme, mtime_text, false))?;
         }
         Ok(())
     }
@@ -295,6 +401,14 @@ impl Mode for ListingMode {
         if !self.viewport.sticky_enabled() {
             segs.push(("sticky off".to_string(), theme.muted));
         }
+        if let Some(search) = &self.search {
+            let label = if search.matches.is_empty() {
+                "no match".to_string()
+            } else {
+                format!("match {}/{}", search.cursor + 1, search.matches.len())
+            };
+            segs.push((label, theme.label));
+        }
         segs
     }
 
@@ -302,16 +416,50 @@ impl Mode for ListingMode {
         const ACTIONS: &[HelpEntry] = &[
             (&[Action::ToggleStickyParents], "Pin parent path"),
             (&[Action::Extract], "Extract selected entry"),
+            (&[Action::OpenSearch], "Search leaf names"),
+            (
+                &[Action::NextMatch, Action::PrevMatch],
+                "Next / previous match",
+            ),
         ];
         ACTIONS
     }
 
     fn handle(&mut self, action: Action) -> Handled {
-        if action == Action::ToggleStickyParents {
-            self.viewport.toggle_sticky(&self.rows);
-            return Handled::Yes;
+        match action {
+            Action::ToggleStickyParents => {
+                self.viewport.toggle_sticky(&self.rows);
+                Handled::Yes
+            }
+            Action::NextMatch => {
+                self.step_match(1);
+                Handled::Yes
+            }
+            Action::PrevMatch => {
+                self.step_match(-1);
+                Handled::Yes
+            }
+            Action::Back if self.search.is_some() => {
+                self.search = None;
+                Handled::Yes
+            }
+            _ => Handled::No,
         }
-        Handled::No
+    }
+
+    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+        let query = match query {
+            Some(q) if !q.is_empty() => q,
+            _ => {
+                self.search = None;
+                return None;
+            }
+        };
+        let search = self.build_search(query);
+        self.search = Some(search);
+        self.scroll_to_current_match();
+        // ListingMode owns scroll, so no line index to return.
+        None
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
@@ -493,12 +641,19 @@ fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
 /// with a trailing `/` for directory entries. When `selected`, the
 /// leaf gets a `selection`-coloured background — a stronger cue than
 /// the arrow alone for which row the next extract action will target.
+///
+/// `match_ranges` (with optional `current_match` index) overlays the
+/// search-match background on the matched portion of the leaf. When
+/// the row is also selected, the selection bg takes priority (matches
+/// repaint over it once the selection bg has been laid down).
 fn paint_tree_path(
     prefix: &str,
     leaf: &str,
     is_dir: bool,
     theme: &PeekTheme,
     selected: bool,
+    match_ranges: &[Range<usize>],
+    current_match: Option<usize>,
 ) -> String {
     let leaf_color = if is_dir {
         theme.accent
@@ -506,22 +661,20 @@ fn paint_tree_path(
         theme.foreground
     };
     let trailing = if is_dir { "/" } else { "" };
-    let painted_leaf = if selected {
-        // Build the leaf+trailing as one bg-painted run so the
-        // highlight covers the dir slash too without a gap.
-        let mut buf = String::new();
-        theme.paint_into(&mut buf, leaf, leaf_color);
-        if !trailing.is_empty() {
-            theme.paint_into(&mut buf, trailing, theme.muted);
-        }
-        theme.paint_bg(&buf, theme.selection)
-    } else {
-        let mut buf = theme.paint(leaf, leaf_color);
-        if !trailing.is_empty() {
-            buf.push_str(&theme.paint(trailing, theme.muted));
-        }
-        buf
-    };
+
+    // Paint the leaf, then optionally overlay search-match backgrounds
+    // on it. overlay_matches operates on a styled string and skips its
+    // SGR escapes, so the foreground colour stays intact outside hits.
+    let mut painted_leaf = theme.paint(leaf, leaf_color);
+    if !match_ranges.is_empty() {
+        painted_leaf = overlay_matches(&painted_leaf, match_ranges, current_match, theme);
+    }
+    if !trailing.is_empty() {
+        painted_leaf.push_str(&theme.paint(trailing, theme.muted));
+    }
+    if selected {
+        painted_leaf = theme.paint_bg(&painted_leaf, theme.selection);
+    }
     format!("{}{painted_leaf}", theme.paint(prefix, theme.muted))
 }
 
@@ -687,5 +840,134 @@ mod tests {
         let segs = lm.status_segments(tm.peek_theme());
         // 3 files in sample tree; deep.txt is selected (1st file).
         assert_eq!(segs[0].0, "1/3 (test)");
+    }
+
+    fn plain_theme() -> crate::theme::ThemeManager {
+        crate::theme::ThemeManager::new(
+            crate::theme::PeekThemeName::IdeaDark,
+            crate::theme::StyleMode::Plain,
+        )
+    }
+
+    #[test]
+    fn search_matches_files_and_directories_by_leaf() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        // "inner" matches one file leaf.
+        lm.set_search(Some("inner"));
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 1);
+        assert_eq!(s.matches[0].row_idx, 3, "inner.txt is row 3");
+        // Selection moved to the file match.
+        assert_eq!(lm.viewport.selected(), Some(3));
+    }
+
+    #[test]
+    fn search_includes_directory_leaves() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.set_search(Some("deeper"));
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 1);
+        assert_eq!(s.matches[0].row_idx, 1, "deeper/ is row 1");
+        // Match is a directory — file selection must stay on the
+        // original file (deep.txt = row 2).
+        assert_eq!(lm.viewport.selected(), Some(2));
+    }
+
+    #[test]
+    fn search_leaf_only_no_full_path_matches() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        // "sub/" appears in the joined path but not in any single leaf.
+        lm.set_search(Some("sub/"));
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(
+            s.matches.len(),
+            0,
+            "search is leaf-scoped — slashes never match"
+        );
+    }
+
+    #[test]
+    fn search_step_cycles_with_wrap() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        // ".txt" appears on every file leaf (3 files).
+        lm.set_search(Some(".txt"));
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 3);
+        assert_eq!(s.cursor, 0);
+        let row0 = s.matches[0].row_idx;
+        assert_eq!(lm.viewport.selected(), Some(row0));
+
+        lm.handle(Action::NextMatch);
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 1);
+        assert_eq!(lm.viewport.selected(), Some(s.matches[1].row_idx));
+
+        lm.handle(Action::NextMatch);
+        lm.handle(Action::NextMatch);
+        // Wrapped around.
+        let s = lm.search.as_ref().unwrap();
+        assert_eq!(s.cursor, 0);
+    }
+
+    #[test]
+    fn search_smart_case() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        // All-lowercase → case-insensitive: matches README.txt.
+        lm.set_search(Some("readme"));
+        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 1);
+        // Mixed-case → case-sensitive: original casing must match.
+        lm.set_search(Some("README"));
+        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 1);
+        lm.set_search(Some("Readme"));
+        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 0);
+    }
+
+    #[test]
+    fn back_clears_search() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.set_search(Some("inner"));
+        assert!(lm.search.is_some());
+        assert_eq!(lm.handle(Action::Back), Handled::Yes);
+        assert!(lm.search.is_none());
+        // Back with no search falls through.
+        assert_eq!(lm.handle(Action::Back), Handled::No);
+    }
+
+    #[test]
+    fn search_empty_query_clears() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.set_search(Some("inner"));
+        assert!(lm.search.is_some());
+        lm.set_search(Some(""));
+        assert!(lm.search.is_none());
+        lm.set_search(Some("inner"));
+        assert!(lm.search.is_some());
+        lm.set_search(None);
+        assert!(lm.search.is_none());
+    }
+
+    #[test]
+    fn status_segment_shows_search_position() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        let tm = plain_theme();
+        let theme = tm.peek_theme();
+        lm.set_search(Some(".txt"));
+        let segs = lm.status_segments(theme);
+        assert!(segs.iter().any(|(s, _)| s == "match 1/3"));
+        lm.set_search(Some("zzz"));
+        let segs = lm.status_segments(theme);
+        assert!(segs.iter().any(|(s, _)| s == "no match"));
+        lm.set_search(None);
+        let segs = lm.status_segments(theme);
+        assert!(!segs.iter().any(|(s, _)| s.starts_with("match ")));
+        assert!(!segs.iter().any(|(s, _)| s == "no match"));
     }
 }

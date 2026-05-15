@@ -151,6 +151,38 @@ impl ListingViewport {
         self.reconcile(rows);
     }
 
+    /// Pin selection to a specific file row (must be a file, i.e. carry
+    /// an `inner_path`). Caller is responsible for that invariant —
+    /// `reconcile` here only enforces visibility and top clamp.
+    pub fn select_row(&mut self, rows: &[TreeRow], row_idx: usize) {
+        if row_idx < rows.len() && rows[row_idx].inner_path.is_some() {
+            self.selected = Some(row_idx);
+        }
+        self.reconcile(rows);
+    }
+
+    /// Scroll a row into view without changing the file selection.
+    /// Used by listing search when the active match lands on a
+    /// directory row; selection (file-only) stays put, but the matched
+    /// directory still needs to be visible.
+    pub fn scroll_to_row(&mut self, rows: &[TreeRow], row_idx: usize) {
+        if row_idx >= rows.len() {
+            return;
+        }
+        let viewport = self.viewport_rows.max(1);
+        let sticky_len = self.sticky_chain_len_at(rows, self.top);
+        let content = viewport.saturating_sub(sticky_len).max(1);
+        if row_idx < self.top {
+            self.top = row_idx;
+        } else if row_idx >= self.top + content {
+            self.top = row_idx.saturating_sub(content - 1);
+        }
+        let max = self.max_top(rows);
+        if self.top > max {
+            self.top = max;
+        }
+    }
+
     fn reconcile(&mut self, rows: &[TreeRow]) {
         if rows.is_empty() {
             self.top = 0;
