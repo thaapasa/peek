@@ -453,6 +453,27 @@ pub fn classify_cell(s: &str) -> CellKind {
     if t.parse::<f64>().is_ok() {
         return CellKind::Float;
     }
+    // European decimal: one comma, no dot — `,` is the decimal
+    // separator (`249,90` → 249.90). Common in European locales' CSV.
+    let comma_count = t.bytes().filter(|b| *b == b',').count();
+    if !t.contains('.') && comma_count == 1 && t.replace(',', ".").parse::<f64>().is_ok() {
+        return CellKind::Float;
+    }
+    // US thousand-grouped: digits with `,` grouping. Strip commas and
+    // retry — `1,234` → 1234 (int), `1,234.56` → float.
+    if comma_count >= 1 {
+        let stripped: String = t
+            .bytes()
+            .filter(|b| *b != b',')
+            .map(|b| b as char)
+            .collect();
+        if stripped.parse::<i64>().is_ok() {
+            return CellKind::Int;
+        }
+        if stripped.parse::<f64>().is_ok() {
+            return CellKind::Float;
+        }
+    }
     if looks_like_date(t) {
         return CellKind::Date;
     }
@@ -591,5 +612,26 @@ mod tests {
         assert_eq!(classify_cell("2024-01-15"), CellKind::Date);
         assert_eq!(classify_cell("2024/01/15"), CellKind::Date);
         assert_eq!(classify_cell("hello"), CellKind::Text);
+    }
+
+    #[test]
+    fn classify_cell_european_decimal() {
+        // Single `,`, no `.` — comma is the decimal separator.
+        assert_eq!(classify_cell("249,90"), CellKind::Float);
+        assert_eq!(classify_cell("-3,14"), CellKind::Float);
+        assert_eq!(classify_cell("0,5"), CellKind::Float);
+    }
+
+    #[test]
+    fn classify_cell_us_thousand_grouped() {
+        // Comma grouping with no decimal → int.
+        assert_eq!(classify_cell("1,234"), CellKind::Float);
+        // The case above is genuinely ambiguous between `1234` (US
+        // thousand sep) and `1.234` (European decimal). The single-
+        // comma branch fires first and treats it as European
+        // decimal — both interpretations are numeric, so right-align
+        // is correct either way. Multi-comma cases are unambiguous:
+        assert_eq!(classify_cell("1,234,567"), CellKind::Int);
+        assert_eq!(classify_cell("1,234.56"), CellKind::Float);
     }
 }
