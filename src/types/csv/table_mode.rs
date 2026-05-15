@@ -34,7 +34,7 @@ use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
 
-use super::parse::CsvData;
+use super::parse::{CellKind, CsvData, classify_cell};
 
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
@@ -54,6 +54,15 @@ const TRUNCATE_MARKER: char = '…';
 /// truncated with [`TRUNCATE_MARKER`].
 const MAX_COLUMN_WIDTH: usize = 64;
 
+/// Horizontal alignment of a column's body cells. Inferred at open
+/// time: numeric columns (Int / Float only across the seed body) get
+/// right-alignment so digits line up; everything else stays left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Alignment {
+    Left,
+    Right,
+}
+
 pub(crate) struct CsvTableMode {
     data: CsvData,
     /// Per-column widths. Monotonic — auto-widen grows them, `Shift+R`
@@ -63,6 +72,10 @@ pub(crate) struct CsvTableMode {
     /// Seed widths captured at open time. Print-mode rendering uses
     /// these directly; interactive rendering may grow `widths` past them.
     seed_widths: Vec<usize>,
+    /// Per-column horizontal alignment, inferred from the seed scan.
+    /// Stable across the session — toggling the header doesn't shift
+    /// numeric data to text.
+    align: Vec<Alignment>,
     /// Runtime override of the parser's header heuristic. `Shift+H`
     /// toggles; reset to the heuristic on construction.
     has_header: bool,
@@ -94,9 +107,12 @@ impl CsvTableMode {
     ) -> Self {
         let widths = seed_widths(&data);
         let has_header = data.header_heuristic;
+        let body_start = if has_header { 1 } else { 0 };
+        let align = infer_alignments(&data, body_start);
         Self {
             seed_widths: widths.clone(),
             widths,
+            align,
             has_header,
             data,
             top_record: 0,
@@ -243,7 +259,8 @@ impl CsvTableMode {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
             let cell = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
-            let painted = render_cell(cell, *w, theme.heading, theme);
+            let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
+            let painted = render_cell(cell, *w, theme.heading, align, theme);
             out.push_str(&painted);
         }
         out
@@ -290,37 +307,101 @@ impl CsvTableMode {
                     theme.foreground,
                 )
             };
-            out.push_str(&render_cell(cell, *w, color, theme));
+            let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
+            out.push_str(&render_cell(cell, *w, color, align, theme));
         }
         Some(out)
     }
 }
 
 /// Render one cell into its column. Truncates wider content with
-/// [`TRUNCATE_MARKER`] and right-pads narrower content. Sanitizes
-/// embedded newlines / tabs via [`display_cell`] first so a multi-line
-/// cell collapses onto a single visual row.
-fn render_cell(cell: &str, width: usize, color: Color, theme: &PeekTheme) -> String {
+/// [`TRUNCATE_MARKER`] and pads narrower content according to `align`.
+/// Sanitises embedded newlines / tabs via [`display_cell`]; the inserted
+/// `↵` marker is repainted with `theme.muted` so it reads as
+/// non-content. Padding sits outside the colored span.
+fn render_cell(
+    cell: &str,
+    width: usize,
+    color: Color,
+    align: Alignment,
+    theme: &PeekTheme,
+) -> String {
     let display = display_cell(cell);
     let cell_w = display.width();
-    if cell_w == width {
-        return theme.paint(&display, color);
+    let (content, pad): (Cow<str>, usize) = if cell_w > width {
+        let mut t = take_cols(&display, width.saturating_sub(1));
+        t.push(TRUNCATE_MARKER);
+        (Cow::Owned(t), 0)
+    } else {
+        (display, width - cell_w)
+    };
+
+    let mut out = String::with_capacity(content.len() + pad + 24);
+    if matches!(align, Alignment::Right) {
+        for _ in 0..pad {
+            out.push(' ');
+        }
     }
-    if cell_w > width {
-        let truncated = take_cols(&display, width.saturating_sub(1));
-        let mut out = String::with_capacity(truncated.len() + 4);
-        out.push_str(&truncated);
-        out.push(TRUNCATE_MARKER);
-        return theme.paint(&out, color);
+    paint_content_with_markers(&mut out, &content, color, theme);
+    if matches!(align, Alignment::Left) {
+        for _ in 0..pad {
+            out.push(' ');
+        }
     }
-    // Pad with spaces to the column width.
-    let pad = width - cell_w;
-    let mut out = String::with_capacity(display.len() + pad);
-    out.push_str(&display);
-    for _ in 0..pad {
-        out.push(' ');
+    out
+}
+
+/// Walk `content` char by char, painting `↵` markers with `theme.muted`
+/// and everything else with `base`. Emits one final reset. No-op-fast
+/// when there are no markers — single fg span + reset, identical to
+/// `theme.paint(content, base)`.
+fn paint_content_with_markers(out: &mut String, content: &str, base: Color, theme: &PeekTheme) {
+    let style_mode = theme.style_mode;
+    let mut current_is_marker = false;
+    let mut span_open = false;
+    for c in content.chars() {
+        let want_marker = c == '\u{21B5}';
+        if !span_open || want_marker != current_is_marker {
+            let color = if want_marker { theme.muted } else { base };
+            out.push_str(&style_mode.fg_seq(color));
+            span_open = true;
+            current_is_marker = want_marker;
+        }
+        out.push(c);
     }
-    theme.paint(&out, color)
+    if span_open {
+        out.push_str(style_mode.reset());
+    }
+}
+
+/// Infer per-column alignment from the seed body. Right-align when
+/// every non-empty body cell classifies as Int or Float and at least
+/// one such cell exists; otherwise left.
+fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
+    let cols = data.column_count();
+    let mut numeric = vec![true; cols];
+    let mut any_typed = vec![false; cols];
+    for rec in data.records.iter().skip(body_start) {
+        if rec.malformed {
+            continue;
+        }
+        for (i, cell) in rec.cells.iter().enumerate().take(cols) {
+            match classify_cell(cell) {
+                CellKind::Empty => {}
+                CellKind::Int | CellKind::Float => any_typed[i] = true,
+                _ => numeric[i] = false,
+            }
+        }
+    }
+    (0..cols)
+        .map(|i| {
+            if numeric[i] && any_typed[i] {
+                Alignment::Right
+            } else {
+                Alignment::Left
+            }
+        })
+        .collect()
 }
 
 /// Sanitize a cell's content for single-row display. Embedded newlines
@@ -473,15 +554,26 @@ impl Mode for CsvTableMode {
                 let raw = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
                 let cell = display_cell(raw);
                 let cell_w = cell.width();
+                let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
                 if cell_w > *w {
                     // Print-mode overflow: emit cell in full, push the rest
-                    // of this row rightward past terminal edge.
-                    row.push_str(&ctx.peek_theme.paint(&cell, ctx.peek_theme.foreground));
+                    // of this row rightward past terminal edge. Re-paint
+                    // the marker glyph muted in line with the interactive
+                    // path so a multi-line cell prints consistently.
+                    let mut painted = String::new();
+                    paint_content_with_markers(
+                        &mut painted,
+                        &cell,
+                        ctx.peek_theme.foreground,
+                        ctx.peek_theme,
+                    );
+                    row.push_str(&painted);
                 } else {
                     row.push_str(&render_cell(
                         &cell,
                         *w,
                         ctx.peek_theme.foreground,
+                        align,
                         ctx.peek_theme,
                     ));
                 }
@@ -631,11 +723,13 @@ impl CsvTableMode {
             let raw = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
             let cell = display_cell(raw);
             let cell_w = cell.width();
+            let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
             if cell_w > *w {
-                // Overflow: emit full header text, push rest rightward.
-                out.push_str(&theme.paint(&cell, theme.heading));
+                let mut painted = String::new();
+                paint_content_with_markers(&mut painted, &cell, theme.heading, theme);
+                out.push_str(&painted);
             } else {
-                out.push_str(&render_cell(&cell, *w, theme.heading, theme));
+                out.push_str(&render_cell(&cell, *w, theme.heading, align, theme));
             }
         }
         out
@@ -775,5 +869,154 @@ mod tests {
         let segs = mode.status_segments(&theme);
         assert!(segs.iter().any(|(s, _)| s == "1/2"));
         assert!(segs.iter().any(|(s, _)| s == "col 1/2"));
+    }
+
+    #[test]
+    fn numeric_columns_right_align() {
+        // `id`, `salary` are numeric; `name`, `department`, `start_date`,
+        // `active` are not. Right-align matches the numeric columns only.
+        let src = stdin("id,name,age\n1,Alice,30\n2,Bob,25\n");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        assert_eq!(
+            mode.align,
+            vec![Alignment::Right, Alignment::Left, Alignment::Right]
+        );
+    }
+
+    #[test]
+    fn render_cell_right_align_puts_pad_on_left() {
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let out = render_cell("42", 5, theme.foreground, Alignment::Right, &theme);
+        // Three pad spaces precede the content.
+        assert!(out.starts_with("   "));
+        assert!(out.contains("42"));
+    }
+
+    #[test]
+    fn render_cell_left_align_puts_pad_on_right() {
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let out = render_cell("hi", 5, theme.foreground, Alignment::Left, &theme);
+        assert!(out.ends_with("   "));
+    }
+
+    // --- Fixture-based tests ------------------------------------------------
+
+    use std::path::PathBuf;
+
+    fn fixture(rel: &str) -> InputSource {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push(rel);
+        InputSource::File(p)
+    }
+
+    /// books.csv has two records with embedded `\n` in their description
+    /// cell. Rendering must collapse the cell to a single visual row —
+    /// no raw newline can survive into the output, or the terminal
+    /// breaks alignment for following columns.
+    #[test]
+    fn fixture_books_multiline_cells_have_no_raw_newlines() {
+        let src = fixture("test-data/books.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        // Sanity: fixture still carries embedded newlines.
+        let multi = data
+            .records
+            .iter()
+            .filter(|r| !r.malformed)
+            .filter(|r| r.cells.iter().any(|c| c.contains('\n')))
+            .count();
+        assert_eq!(multi, 2, "books.csv should have two multi-line cells");
+
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        // Render every record; no rendered line may contain a literal `\n`.
+        for rec in &data.records {
+            if rec.malformed {
+                continue;
+            }
+            for (i, cell) in rec.cells.iter().enumerate() {
+                let w = 60usize;
+                let align = Alignment::Left;
+                let rendered = render_cell(cell, w, theme.foreground, align, &theme);
+                assert!(
+                    !rendered.contains('\n'),
+                    "row {i} cell rendered with embedded newline: {rendered:?}"
+                );
+                assert!(
+                    !rendered.contains('\r'),
+                    "row {i} cell rendered with embedded CR: {rendered:?}"
+                );
+            }
+        }
+    }
+
+    /// books.csv embedded-newline cells render with the `↵` marker.
+    #[test]
+    fn fixture_books_embedded_newline_renders_as_marker() {
+        let src = fixture("test-data/books.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        let multi = data
+            .records
+            .iter()
+            .find(|r| !r.malformed && r.cells.iter().any(|c| c.contains('\n')))
+            .expect("at least one multi-line row");
+        let cell = multi.cells.iter().find(|c| c.contains('\n')).unwrap();
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let rendered = render_cell(cell, 120, theme.foreground, Alignment::Left, &theme);
+        assert!(
+            rendered.contains('\u{21B5}'),
+            "embedded \\n should render as ↵, got: {rendered}"
+        );
+    }
+
+    /// employees.csv: header detected, 6 columns, numeric columns
+    /// (`id`, `salary`) right-aligned.
+    #[test]
+    fn fixture_employees_alignment_and_header() {
+        let src = fixture("test-data/employees.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        assert_eq!(data.delimiter, b',');
+        assert!(data.header_heuristic, "header row detected");
+        assert_eq!(data.column_count(), 6);
+        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        // id (int), name (text), department (text), salary (float),
+        // start_date (date), active (bool).
+        assert_eq!(mode.align[0], Alignment::Right, "id column");
+        assert_eq!(mode.align[1], Alignment::Left, "name column");
+        assert_eq!(mode.align[3], Alignment::Right, "salary column");
+        assert_eq!(mode.align[4], Alignment::Left, "start_date column");
+    }
+
+    /// measurements.tsv uses tab delimiter via extension.
+    #[test]
+    fn fixture_measurements_tsv_tab_delimiter() {
+        let src = fixture("test-data/measurements.tsv");
+        let data = CsvData::open(&src, CsvFormat::Tsv).unwrap();
+        assert_eq!(data.delimiter, b'\t');
+        assert!(data.header_heuristic);
+        assert_eq!(data.column_count(), 6);
+    }
+
+    /// euro-prices.csv uses `;` despite the `.csv` extension — the
+    /// content sniff overrides the default.
+    #[test]
+    fn fixture_euro_prices_sniffs_semicolon() {
+        let src = fixture("test-data/euro-prices.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        assert_eq!(data.delimiter, b';', "semicolon should win over comma");
+        assert!(data.header_heuristic);
+    }
+
+    /// sensor-log.csv has no header — row 0 begins with a numeric Unix
+    /// timestamp, so the heuristic must classify it as data.
+    #[test]
+    fn fixture_sensor_log_no_header() {
+        let src = fixture("test-data/sensor-log.csv");
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        assert!(!data.header_heuristic, "row 0 typed → no header");
+        assert_eq!(data.column_count(), 5);
     }
 }
