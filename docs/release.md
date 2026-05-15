@@ -24,6 +24,12 @@ bumped or committed locally. Three jobs:
    Each emits `peek-<version>-<target>.tar.gz` (`.zip` on Windows) + `.sha256` companion. Unix
    builds are stripped via the release profile. Each archive also bundles the matching Pdfium
    dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
+
+   `cargo test --release --locked --target <target>` runs on every *native* matrix entry before
+   bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
+   targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from
+   the arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure
+   in any target halts the matrix (`fail-fast: true`) so no release artifacts publish.
 3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`:
    `--ff-only` when `main` hasn't moved, otherwise a `--no-ff` merge commit (the log line says
    which). Pushes `main`, tags the **release-branch commit** (see below), publishes a GitHub
@@ -46,7 +52,8 @@ release. No other secrets.
 ## Cutting a release
 
 1. **Actions → Release → Run workflow**, branch `main`, pick the `bump` level (default `patch`),
-   dispatch.
+   optionally fill in **Highlights** (free-form markdown — appears above the auto-generated commit
+   list on the release page; leave empty to ship only the commit list), dispatch.
 2. Wait for all three jobs. The pipeline bumps the version, builds, merges to `main`, tags, and
    publishes — no local bump or commit needed.
 3. Verify the release page has 5 archives + 5 `.sha256` + `install.sh`.

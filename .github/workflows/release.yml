@@ -11,6 +11,11 @@ on:
           - minor
           - major
         default: patch
+      notes:
+        description: Highlights for the release notes (optional). Plain markdown, multi-line OK. Rendered above the auto-generated commit list.
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -91,32 +96,43 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
+        # `test: true` runs `cargo test` for this target before bundling
+        # artifacts — only set when the target matches the runner's
+        # native arch (no emulator dependency). x86_64-apple-darwin is
+        # cross-built from the arm64 macos-14 runner, so its test
+        # binaries can't be run directly; ubuntu / windows / arm-mac
+        # entries are all native and do exercise the suite.
         include:
           - target: aarch64-apple-darwin
             runner: macos-14
             archive: tar.gz
             pdfium_asset: pdfium-mac-arm64.tgz
             pdfium_lib: lib/libpdfium.dylib
+            test: true
           - target: x86_64-apple-darwin
             runner: macos-14
             archive: tar.gz
             pdfium_asset: pdfium-mac-x64.tgz
             pdfium_lib: lib/libpdfium.dylib
+            test: false
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
             archive: tar.gz
             pdfium_asset: pdfium-linux-x64.tgz
             pdfium_lib: lib/libpdfium.so
+            test: true
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
             archive: tar.gz
             pdfium_asset: pdfium-linux-arm64.tgz
             pdfium_lib: lib/libpdfium.so
+            test: true
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             archive: zip
             pdfium_asset: pdfium-win-x64.tgz
             pdfium_lib: bin/pdfium.dll
+            test: true
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
     steps:
@@ -140,6 +156,14 @@ jobs:
 
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Test on every native target before bundling artifacts —
+      # catches arch- / OS-specific regressions in targets CI doesn't
+      # cover (arm linux, both macs). Cross-compiled targets are
+      # skipped via `matrix.test`.
+      - name: Test
+        if: matrix.test
+        run: cargo test --release --locked --target ${{ matrix.target }}
 
       - name: Bundle Pdfium
         shell: bash
@@ -242,9 +266,20 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        # Pass the dispatch input through an env var instead of `${{ }}`
+        # interpolation so backticks / quotes / newlines in the
+        # highlights message can't break the shell script.
+        env:
+          HIGHLIGHTS: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           {
+            if [ -n "$HIGHLIGHTS" ]; then
+              echo "## Highlights"
+              echo
+              echo "$HIGHLIGHTS"
+              echo
+            fi
             echo "## Install"
             echo
             echo '```sh'
