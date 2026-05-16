@@ -17,6 +17,7 @@ pub mod hex;
 pub mod interactive;
 pub(crate) mod listing;
 pub(crate) mod modes;
+pub(crate) mod paged;
 pub(crate) mod search;
 pub(crate) mod ui;
 

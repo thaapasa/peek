@@ -24,12 +24,15 @@ use syntect::highlighting::Color;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
+use crate::types::image::pipeline::ImageConfig;
 use crate::types::image::pipeline::render::{
     self as image_render, GridWindow, TermSize, prepare_decoded,
 };
-use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
+use crate::viewer::paged::{
+    self, CachedRender, PageCacheKey, cycle_image_config, render_cached, step_paged,
+};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -64,11 +67,6 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
 /// source also has an `<img>`, the first image is rendered inline.
 const COVER_LIKE_LINE_THRESHOLD: usize = 3;
 
-/// Cap on inline image height in pipe / `--print` mode where
-/// `term_rows` is unbounded; otherwise an image-aspect chapter would
-/// dominate the output.
-const PIPE_IMAGE_MAX_ROWS: u32 = 30;
-
 pub(crate) struct EpubReadMode {
     source: InputSource,
     /// Image config snapshot — only the cover-image render path uses
@@ -81,31 +79,12 @@ pub(crate) struct EpubReadMode {
     /// can change the rendered output (width, rows, style mode, image
     /// config), so any of them shifting forces a re-render on next
     /// access without an explicit invalidation.
-    cache: Vec<Option<CachedChapter>>,
+    cache: Vec<Option<CachedRender>>,
     warnings: Vec<String>,
     /// Active text search over the current chapter's rendered lines.
     /// Cleared on a chapter step or resize — both change the line set
     /// the match indices point into.
     search: Option<SearchState>,
-}
-
-/// Inputs that affect the rendered output for one chapter. Stored
-/// alongside the cached lines so the cache invalidates automatically
-/// when the user cycles color (`c`), background (`b`), image mode
-/// (`m`), or fit (`f`) — or when the terminal resizes.
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct CacheKey {
-    width: usize,
-    rows: usize,
-    style_mode: StyleMode,
-    image_mode: ImageMode,
-    background: Background,
-    fit: FitMode,
-}
-
-struct CachedChapter {
-    key: CacheKey,
-    lines: Vec<String>,
 }
 
 impl EpubReadMode {
@@ -124,17 +103,6 @@ impl EpubReadMode {
         }
     }
 
-    fn key_for(&self, width: usize, rows: usize, style_mode: StyleMode) -> CacheKey {
-        CacheKey {
-            width,
-            rows,
-            style_mode,
-            image_mode: self.image_config.mode,
-            background: self.image_config.background,
-            fit: self.image_config.fit,
-        }
-    }
-
     fn ensure_rendered(
         &mut self,
         width: usize,
@@ -145,72 +113,70 @@ impl EpubReadMode {
             return Ok(&[]);
         }
         let idx = self.current;
-        let key = self.key_for(width, rows, style_mode);
-        let needs = self
-            .cache
-            .get(idx)
-            .and_then(|c| c.as_ref())
-            .map(|c| c.key != key)
-            .unwrap_or(true);
-        if needs {
-            let lines = self.render_chapter(idx, &key)?;
-            self.cache[idx] = Some(CachedChapter { key, lines });
-        }
-        Ok(&self
-            .cache
-            .get(idx)
-            .and_then(|c| c.as_ref())
-            .expect("cache populated")
-            .lines)
+        let key = PageCacheKey::build(&self.image_config, width, rows, style_mode);
+        // Disjoint-borrow split: render closure captures `&self.source`,
+        // `&self.chapters`, `self.image_config` (Copy), and
+        // `&mut self.warnings` while `render_cached` holds
+        // `&mut self.cache`.
+        let source = &self.source;
+        let chapters = &self.chapters;
+        let image_config = self.image_config;
+        let warnings = &mut self.warnings;
+        render_cached(&mut self.cache, idx, key, |k| {
+            render_chapter(source, chapters, image_config, idx, k, warnings)
+        })
     }
+}
 
-    fn render_chapter(&mut self, idx: usize, key: &CacheKey) -> Result<Vec<String>> {
-        let chapter = self.chapters[idx].clone();
-        let mut zip = match package::open_zip(&self.source) {
-            Ok(z) => z,
-            Err(e) => {
-                self.warnings.push(format!("chapter {}: {e:#}", idx + 1));
-                return Ok(vec![format!("[chapter {} unavailable]", idx + 1)]);
-            }
-        };
-        let raw_bytes = match package::read_entry(&mut zip, &chapter.full_path) {
-            Ok(b) => b,
-            Err(e) => {
-                self.warnings.push(format!("chapter {}: {e:#}", idx + 1));
-                return Ok(vec![format!("[chapter {} unavailable]", idx + 1)]);
-            }
-        };
-        let raw_html = std::str::from_utf8(&raw_bytes).unwrap_or("");
-        let labeled = label_images(raw_html);
-        let text_lines = crate::types::html::render::render(
-            labeled.as_bytes(),
-            key.width.max(20),
-            key.style_mode,
-        )?;
-
-        let non_empty = text_lines.iter().filter(|l| !l.trim().is_empty()).count();
-        if non_empty > COVER_LIKE_LINE_THRESHOLD {
-            return Ok(text_lines);
+fn render_chapter(
+    source: &InputSource,
+    chapters: &[Chapter],
+    image_config: ImageConfig,
+    idx: usize,
+    key: &PageCacheKey,
+    warnings: &mut Vec<String>,
+) -> Result<Vec<String>> {
+    let chapter = chapters[idx].clone();
+    let mut zip = match package::open_zip(source) {
+        Ok(z) => z,
+        Err(e) => {
+            warnings.push(format!("chapter {}: {e:#}", idx + 1));
+            return Ok(vec![format!("[chapter {} unavailable]", idx + 1)]);
         }
-        let Some(img_src) = first_img_src(raw_html) else {
-            return Ok(text_lines);
-        };
-        let chapter_dir = parent_dir(&chapter.full_path);
-        let img_path = resolve_relative(chapter_dir, &img_src);
-        match render_inline_image(
-            &mut zip,
-            &img_path,
-            self.image_config,
-            key.style_mode,
-            key.width as u32,
-            key.rows,
-        ) {
-            Ok(img_lines) => Ok(img_lines),
-            Err(e) => {
-                self.warnings
-                    .push(format!("chapter {} image {img_path}: {e:#}", idx + 1));
-                Ok(text_lines)
-            }
+    };
+    let raw_bytes = match package::read_entry(&mut zip, &chapter.full_path) {
+        Ok(b) => b,
+        Err(e) => {
+            warnings.push(format!("chapter {}: {e:#}", idx + 1));
+            return Ok(vec![format!("[chapter {} unavailable]", idx + 1)]);
+        }
+    };
+    let raw_html = std::str::from_utf8(&raw_bytes).unwrap_or("");
+    let labeled = label_images(raw_html);
+    let text_lines =
+        crate::types::html::render::render(labeled.as_bytes(), key.width.max(20), key.style_mode)?;
+
+    let non_empty = text_lines.iter().filter(|l| !l.trim().is_empty()).count();
+    if non_empty > COVER_LIKE_LINE_THRESHOLD {
+        return Ok(text_lines);
+    }
+    let Some(img_src) = first_img_src(raw_html) else {
+        return Ok(text_lines);
+    };
+    let chapter_dir = parent_dir(&chapter.full_path);
+    let img_path = resolve_relative(chapter_dir, &img_src);
+    match render_inline_image(
+        &mut zip,
+        &img_path,
+        image_config,
+        key.style_mode,
+        key.width as u32,
+        key.rows,
+    ) {
+        Ok(img_lines) => Ok(img_lines),
+        Err(e) => {
+            warnings.push(format!("chapter {} image {img_path}: {e:#}", idx + 1));
+            Ok(text_lines)
         }
     }
 }
@@ -278,58 +244,30 @@ impl Mode for EpubReadMode {
             self.search = None;
             return Handled::Yes;
         }
+        // Image controls — mutate the stored config; cache key change
+        // auto-invalidates any cover-rendered chapter on next access.
+        // Text-only chapters are unaffected but still re-render (cheap),
+        // which keeps the implementation uniform.
+        if let Some(h) = cycle_image_config(action, &mut self.image_config) {
+            return h;
+        }
         match action {
             // `n` / `p` step chapters — but while a search is active
             // they navigate matches instead (Esc clears the search to
             // get chapter stepping back).
             Action::NextChapter => {
                 if self.search.is_some() {
-                    return step_search(&mut self.search, 1);
+                    step_search(&mut self.search, 1)
+                } else {
+                    step_paged(&mut self.current, self.chapters.len(), 1)
                 }
-                if self.chapters.is_empty() {
-                    return Handled::No;
-                }
-                let next = (self.current + 1).min(self.chapters.len() - 1);
-                if next == self.current {
-                    return Handled::Yes;
-                }
-                self.current = next;
-                Handled::YesResetScroll
             }
             Action::PrevChapter => {
                 if self.search.is_some() {
-                    return step_search(&mut self.search, -1);
+                    step_search(&mut self.search, -1)
+                } else {
+                    step_paged(&mut self.current, self.chapters.len(), -1)
                 }
-                if self.current == 0 {
-                    return Handled::Yes;
-                }
-                self.current = self.current.saturating_sub(1);
-                Handled::YesResetScroll
-            }
-            // Image controls — mutate the stored config; cache key
-            // change auto-invalidates any cover-rendered chapter on
-            // next access. Text-only chapters are unaffected by this
-            // change but their cache still re-renders (cheap), which
-            // keeps the implementation uniform.
-            Action::CycleBackground => {
-                self.image_config.background = self.image_config.background.next();
-                Handled::Yes
-            }
-            Action::CycleBackgroundBack => {
-                self.image_config.background = self.image_config.background.prev();
-                Handled::Yes
-            }
-            Action::CycleImageMode => {
-                self.image_config.mode = self.image_config.mode.next();
-                Handled::Yes
-            }
-            Action::CycleImageModeBack => {
-                self.image_config.mode = self.image_config.mode.prev();
-                Handled::Yes
-            }
-            Action::CycleFitMode => {
-                self.image_config.fit = self.image_config.fit.next();
-                Handled::Yes
             }
             _ => Handled::No,
         }
@@ -620,17 +558,9 @@ fn render_inline_image(
     let img = image::load_from_memory(&bytes)?;
     let mut config = base_config;
     config.style_mode = style_mode;
-    // Pipe contexts pass `usize::MAX` for term_rows; cap so the image
-    // doesn't dominate piped output. Interactive callers pass the live
-    // viewport height and want the image to fit it.
-    let rows = if term_rows == usize::MAX {
-        PIPE_IMAGE_MAX_ROWS
-    } else {
-        term_rows.min(u32::MAX as usize) as u32
-    };
     let term = TermSize {
         cols: term_cols,
-        rows,
+        rows: paged::pipe_rows(term_rows),
         cell_h_over_w: cell_aspect_h_over_w(),
     };
     let prep = prepare_decoded(img, &config, term);
