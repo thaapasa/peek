@@ -41,13 +41,23 @@ detect::detect(source) --> FileType
 
 ### InputSource (`input/source.rs`)
 
-Decouples "where data comes from" from "how it's displayed". `File` holds a `PathBuf` and reads on
-demand; `Stdin` holds pre-buffered bytes. All viewers and modes take `&InputSource` and call
-`read_text()` / `read_bytes()` — image, animation, and SVG modes decode from either path or memory.
+Decouples "where data comes from" from "how it's displayed". Four variants: `File` (path on
+disk, reads on demand), `Memory { bytes: Bytes, name }` (stdin, small extracted archive
+entries, encoded animation frames — `Bytes::clone` is a refcount bump, not a copy),
+`FileRange { base, offset, len, name }` (zero-copy offset+limit view used by ISO extracts and
+uncompressed archive entries), and `TempFile { file: Arc<NamedTempFile>, name }` (large
+extracted archive entries spooled to `$TMPDIR/peek-*` — RAII unlink on last `Arc` drop).
+
+All viewers and modes take `&InputSource` and call `read_text()` / `read_bytes()` — image,
+animation, and SVG modes decode from any variant. `read_bytes()` returns `Bytes` so the
+`Memory` arm is a refcount clone and accidental copies have to be spelled `.to_vec()` at the
+call site.
 
 For random-access reads without slurping, `open_byte_source() -> Box<dyn ByteSource>` returns a
-seeking handle. `HexMode` uses this to read just the visible window per scroll. `File` seeks per
-call; `Stdin` slices the buffered bytes.
+seeking handle. `HexMode` uses this to read just the visible window per scroll. `File` and
+`TempFile` seek per call; `Memory` slices the buffered `Bytes`; `FileRange` wraps a `File`
+reader with offset translation. The `TempFile` byte source carries its own `Arc<NamedTempFile>`
+clone so reads outlive any drop of the source.
 
 For line-oriented streaming, `open_line_source() -> LineSource` (in `input/lines.rs`) does one pass
 of the source to count newlines and capture sparse byte-offset anchors (every 1024 lines), then

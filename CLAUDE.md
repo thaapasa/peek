@@ -29,7 +29,7 @@ src/
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/
     mod.rs             — re-exports InputSource, ByteSource, LineSource
-    source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource
+    source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len} / TempFile{Arc<NamedTempFile>}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource / TempFileByteSource (holds the Arc so reads outlive the source). read_bytes() returns bytes::Bytes; Memory arm is a refcount clone
     lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
     detect.rs          — File-type detection orchestrator (magic-byte / extension / content-sniff priority + Detected / FileType / CompressionFormat); per-type format enums + detection helpers live alongside their types under `types/<x>/{format,detect}.rs` and are re-exported here
     compression.rs     — decompress_bytes (5 codecs: gz/bz2/xz/zst/lz4) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
@@ -211,7 +211,7 @@ src/
       format.rs        — ArchiveFormat enum + label
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
       info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
-      extract.rs       — Per-format entry extract (Phase 1: spool to memory, 256 MB cap, path sanitised); zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]. decompress_tar() delegates codec dispatch to crate::input::compression::decompress_bytes
+      extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]/ar. decompress_tar() delegates codec dispatch to crate::input::compression::decompress_bytes
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>

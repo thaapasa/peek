@@ -148,16 +148,17 @@ off by default. Everything else is pure Rust or low-friction C bindings.
 #### Extract enhancements
 
 Extract from archive entries ships today via `--extract <KEY>` and `e` in the viewer (see
-[features.md → Extraction](features.md#extraction-)). Phase 1 always decompresses the entry into
-memory with a 256 MB cap. Still planned:
+[features.md → Extraction](features.md#extraction-)). Entries ≥ 16 MiB now spool to a
+`NamedTempFile` (`InputSource::TempFile`), lifting the in-memory 256 MiB cap for the common
+case. Still planned:
 
 - **Stored zip / uncompressed tar → `FileRange`** — when the entry is stored as-is in the
   archive, expose the entry as a zero-copy offset+limit view into the backing file rather than
-  buffering. Same path that ISO extracts already use. Removes the memory cap for the common case
-  of "tar of large binaries".
-- **Tempfile spool for big compressed entries** — entries that have to be decompressed but exceed
-  ~64 MB land in a tempfile-backed `InputSource::File` instead of a `Bytes` buffer, lifting the
-  current 256 MB hard cap.
+  spooling. Same path that ISO extracts already use. Saves the spool write for "tar of large
+  uncompressed binaries".
+- **Stream-walk tar/cpio off a `TempFile` source** — recursive descent into an archive entry
+  that itself contains a tar/cpio re-buffers the outer entry via `source.read_bytes()`. Switch
+  to a streaming walk over `open_byte_source()` so nested big-on-big stays disk-only.
 - **RAR extract** — once RAR listing lands, extract reuses the unrar wrapper; same listing-only
   caveats apply.
 

@@ -682,8 +682,13 @@ showcase — cycling themes with `t` while on About previews how each theme pain
 
 Pull an inner item out of a container as a standalone file. Three sources currently:
 
-- **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst]`, `.7z`): extract a single file by its
-  inner path. Phase 1 always decompresses into memory with a 256 MB cap.
+- **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst|.lz4]`, `.7z`, `.cpio[.gz]`, `.ar`):
+  extract a single file by its inner path. Entries ≥ 16 MiB spool to a `NamedTempFile` in
+  `$TMPDIR/peek-*` (random-access reads without holding the whole payload in RAM); smaller
+  entries stay in `Bytes`. The temp file unlinks automatically when the last reference to the
+  extracted `InputSource` drops (RAII via `Arc<NamedTempFile>`). The 256 MiB cap survives only
+  on the in-memory fallback path. Pass `--no-tempfile` to force RAM-only behaviour (cap
+  dropped — the user has opted in to OOM risk).
 - **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
   backing image — no decompression, no buffering, multi-GB ISOs unaffected.
 - **Animation frames** (`.gif`, `.webp`, animated SVG): extract a single composited frame as a

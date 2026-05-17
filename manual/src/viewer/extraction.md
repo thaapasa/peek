@@ -4,8 +4,10 @@ Pull an inner item out of a container as a standalone file.
 
 ## Sources
 
-- **Archive entries** (ZIP, tar [+ gz/bz2/xz/zst/lz4], 7-Zip, cpio) — extract a single file by
-  its inner path. Always decompressed into memory with a 256 MB cap.
+- **Archive entries** (ZIP, tar [+ gz/bz2/xz/zst/lz4], 7-Zip, cpio, ar) — extract a single file
+  by its inner path. Entries ≥ 16 MiB spool to a temporary file in `$TMPDIR/peek-*` (random-
+  access reads without holding the whole payload in RAM); smaller entries stay in memory. The
+  temp file is unlinked automatically when the extracted view is closed.
 - **ISO entries** (`.iso`) — zero-copy via a `FileRange` view over the backing image. No
   decompression, no buffering, multi-GB ISOs unaffected.
 - **PDF embedded files** (`/EmbeddedFiles` attachments) — extracted as a memory source.
@@ -41,3 +43,10 @@ frame. Either way, a status-line prompt opens prefilled with a suggested filenam
 cancels, `Enter` writes. Path safety rejects traversal (`..`) before any TOC lookup.
 
 DMG extract is intentionally unsupported — UDIF block decompression is a separate effort.
+
+## `--no-tempfile`
+
+Pass `--no-tempfile` to force the archive extract path to keep payloads in RAM instead of
+spooling. This bypasses the safety cap that normally rejects a memory-only entry past 256 MiB,
+so use only when you'd rather risk OOM than touch `$TMPDIR` (read-only filesystem, exotic
+sandbox, etc.).

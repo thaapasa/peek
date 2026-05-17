@@ -24,6 +24,7 @@
 | `--extract`      |       | Extract a single inner item — see [Extraction](./viewer/extraction.md) |
 | `-o` / `--output`|       | Output path for `--extract` (or `-` for stdout)               |
 | `--extract-size` |       | Output size for animation frame extract                       |
+| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  |
 | `--update`       |       | Check for newer release and re-run `install.sh`               |
 
 ## Notes
