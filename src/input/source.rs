@@ -78,18 +78,22 @@ impl InputSource {
                 .with_context(|| format!("{name} is not valid UTF-8")),
             Self::FileRange { name, .. } => {
                 let raw = self.read_bytes()?;
-                String::from_utf8(raw).with_context(|| format!("{name} is not valid UTF-8"))
+                std::str::from_utf8(&raw)
+                    .map(str::to_owned)
+                    .with_context(|| format!("{name} is not valid UTF-8"))
             }
         }
     }
 
-    /// Full content as raw bytes.
-    pub fn read_bytes(&self) -> Result<Vec<u8>> {
+    /// Full content as raw bytes. Returns `Bytes` so the in-memory arm is
+    /// a refcount clone (no copy) and downstream consumers can sub-slice
+    /// without allocating.
+    pub fn read_bytes(&self) -> Result<Bytes> {
         match self {
-            Self::File(path) => {
-                fs::read(path).with_context(|| format!("failed to read {}", path.display()))
-            }
-            Self::Memory { bytes, .. } => Ok(bytes.to_vec()),
+            Self::File(path) => fs::read(path)
+                .map(Bytes::from)
+                .with_context(|| format!("failed to read {}", path.display())),
+            Self::Memory { bytes, .. } => Ok(bytes.clone()),
             Self::FileRange {
                 base, offset, len, ..
             } => read_file_range(base, *offset, *len),
@@ -208,7 +212,7 @@ impl InputSource {
     }
 }
 
-fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
+fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Bytes> {
     let mut f = File::open(base).with_context(|| format!("failed to open {}", base.display()))?;
     f.seek(SeekFrom::Start(offset))
         .with_context(|| format!("failed to seek in {}", base.display()))?;
@@ -226,7 +230,7 @@ fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
         }
     }
     buf.truncate(filled);
-    Ok(buf)
+    Ok(Bytes::from(buf))
 }
 
 /// Random-access byte reader. Implementations may seek (`File`) or slice
@@ -482,7 +486,7 @@ mod tests {
     fn input_source_file_range_round_trip() {
         let path = write_temp("range", b"AAAAhelloBBBB");
         let src = InputSource::file_range(path.clone(), 4, 5, "hello".to_string());
-        assert_eq!(src.read_bytes().unwrap(), b"hello");
+        assert_eq!(src.read_bytes().unwrap().as_ref(), b"hello");
         assert_eq!(src.read_text().unwrap(), "hello");
         assert_eq!(src.name(), "hello");
         assert!(src.path().is_none());

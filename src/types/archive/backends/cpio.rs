@@ -26,6 +26,7 @@
 use std::io::{self, Read};
 
 use anyhow::{Context, Result, anyhow, bail};
+use bytes::Bytes;
 
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
@@ -76,7 +77,7 @@ pub(crate) fn find_entry<R: Read>(
     reader: R,
     target: &str,
     max_bytes: u64,
-) -> Result<Option<Vec<u8>>> {
+) -> Result<Option<Bytes>> {
     let mut cpio = CpioReader::new(reader);
     while let Some(hdr) = cpio.next_header()? {
         let stored = hdr.path.trim_start_matches("./").trim_start_matches('/');
@@ -172,14 +173,14 @@ impl<R: Read> CpioReader<R> {
     /// `next_header` calls; the body is consumed and `body_remaining`
     /// drops to zero. Post-body padding is drained on the next
     /// `next_header` call.
-    fn read_body(&mut self) -> Result<Vec<u8>> {
+    fn read_body(&mut self) -> Result<Bytes> {
         let n = self.body_remaining as usize;
         let mut buf = vec![0u8; n];
         self.inner
             .read_exact(&mut buf)
             .context("short cpio entry body")?;
         self.body_remaining = 0;
-        Ok(buf)
+        Ok(Bytes::from(buf))
     }
 
     fn drain_pending(&mut self) -> Result<()> {

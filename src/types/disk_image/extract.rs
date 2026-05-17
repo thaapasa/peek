@@ -104,7 +104,7 @@ mod tests {
             .expect("ISO extract");
         assert_eq!(extracted.suggested_name, "README.txt");
         let bytes = extracted.source.read_bytes().unwrap();
-        assert_eq!(bytes, b"primary\n");
+        assert_eq!(bytes.as_ref(), b"primary\n");
     }
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
         .expect("nested ISO extract");
         assert_eq!(extracted.suggested_name, "deep.txt");
         let bytes = extracted.source.read_bytes().unwrap();
-        assert_eq!(bytes, b"deep\n");
+        assert_eq!(bytes.as_ref(), b"deep\n");
     }
 
     #[test]

@@ -14,6 +14,7 @@
 use std::io::Read;
 
 use anyhow::{Context, Result, anyhow};
+use bytes::Bytes;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
@@ -56,13 +57,13 @@ pub(crate) fn open(source: &InputSource) -> Result<Package> {
 }
 
 /// Read one entry from the EPUB ZIP into a fresh buffer.
-pub(crate) fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Vec<u8>> {
+pub(crate) fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Bytes> {
     let mut file = zip
         .by_name(path)
         .with_context(|| format!("EPUB entry {path:?} not found"))?;
     let mut buf = Vec::with_capacity(file.size() as usize);
     file.read_to_end(&mut buf)?;
-    Ok(buf)
+    Ok(Bytes::from(buf))
 }
 
 /// Open a fresh ZIP handle over the source. Each chapter read takes
@@ -81,7 +82,7 @@ pub(crate) fn open_zip(source: &InputSource) -> Result<ZipArchive<Box<dyn ReadSe
 fn read_container_opf_path(zip: &mut ZipArchive<Box<dyn ReadSeek>>) -> Result<String> {
     let bytes =
         read_entry(zip, "META-INF/container.xml").context("EPUB missing META-INF/container.xml")?;
-    let mut reader = Reader::from_reader(bytes.as_slice());
+    let mut reader = Reader::from_reader(bytes.as_ref());
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf)? {

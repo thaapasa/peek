@@ -1,7 +1,7 @@
 //! Extract a single entry out of an archive (zip / tar / 7z) as an
 //! in-memory [`InputSource`]. The entry is decompressed into a
-//! [`Bytes`] buffer capped at [`MAX_EXTRACT_BYTES`] — bigger entries
-//! error out rather than triggering OOM.
+//! [`bytes::Bytes`] buffer capped at [`MAX_EXTRACT_BYTES`] — bigger
+//! entries error out rather than triggering OOM.
 //!
 //! Path safety: keys go through `extract::sanitize_entry_path` before
 //! any TOC lookup so traversal (`..`) is rejected.
@@ -114,7 +114,7 @@ fn extract_zip(
     let mut buf = Vec::with_capacity(file.size() as usize);
     file.read_to_end(&mut buf)
         .map_err(|e| ExtractError::Other(e.into()))?;
-    Ok(in_memory_extract(target, buf))
+    Ok(in_memory_extract(target, Bytes::from(buf)))
 }
 
 #[derive(Clone, Copy)]
@@ -135,7 +135,7 @@ fn extract_tar(
 ) -> Result<Extracted, ExtractError> {
     let raw = source.read_bytes().map_err(ExtractError::Other)?;
     let decompressed = decompress_tar(&raw, compression)?;
-    let mut archive = tar::Archive::new(std::io::Cursor::new(&decompressed[..]));
+    let mut archive = tar::Archive::new(std::io::Cursor::new(decompressed.as_ref()));
     let entries = archive
         .entries()
         .map_err(|e| ExtractError::Other(e.into()))?;
@@ -161,7 +161,7 @@ fn extract_tar(
         entry
             .read_to_end(&mut buf)
             .map_err(|e| ExtractError::Other(e.into()))?;
-        return Ok(in_memory_extract(target, buf));
+        return Ok(in_memory_extract(target, Bytes::from(buf)));
     }
     Err(ExtractError::NotFound(raw_key.to_string()))
 }
@@ -169,19 +169,20 @@ fn extract_tar(
 /// Decompress a compressed tar payload. Delegates codec dispatch to
 /// [`crate::input::compression::decompress_bytes`] so the same five
 /// codec implementations cover both transparent single-stream
-/// decompression and tar extraction.
-fn decompress_tar(raw: &[u8], compression: TarCompression) -> Result<Vec<u8>, ExtractError> {
+/// decompression and tar extraction. None arm refcount-clones the
+/// input `Bytes` (no copy).
+fn decompress_tar(raw: &Bytes, compression: TarCompression) -> Result<Bytes, ExtractError> {
     use crate::input::compression::decompress_bytes;
     use crate::input::detect::CompressionFormat;
     let fmt = match compression {
-        TarCompression::None => return Ok(raw.to_vec()),
+        TarCompression::None => return Ok(raw.clone()),
         TarCompression::Gz => CompressionFormat::Gz,
         TarCompression::Bz2 => CompressionFormat::Bz2,
         TarCompression::Xz => CompressionFormat::Xz,
         TarCompression::Zst => CompressionFormat::Zst,
         TarCompression::Lz4 => CompressionFormat::Lz4,
     };
-    decompress_bytes(raw, fmt).map_err(ExtractError::Other)
+    decompress_bytes(raw.as_ref(), fmt).map_err(ExtractError::Other)
 }
 
 fn extract_7z(
@@ -210,7 +211,7 @@ fn extract_7z(
     let buf = archive
         .read_file(&target_str)
         .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e}")))?;
-    Ok(in_memory_extract(target, buf))
+    Ok(in_memory_extract(target, Bytes::from(buf)))
 }
 
 /// Extract a single ar entry. ar uses 60-byte ASCII headers; walk
@@ -285,7 +286,7 @@ fn extract_ar(
             reader
                 .read_exact(&mut buf)
                 .map_err(|e| ExtractError::Other(e.into()))?;
-            return Ok(in_memory_extract(target, buf));
+            return Ok(in_memory_extract(target, Bytes::from(buf)));
         }
 
         let mut skip = vec![0u8; (payload_size + pad) as usize];
@@ -296,14 +297,14 @@ fn extract_ar(
     Err(ExtractError::NotFound(raw_key.to_string()))
 }
 
-fn in_memory_extract(target: &Path, buf: Vec<u8>) -> Extracted {
+fn in_memory_extract(target: &Path, buf: Bytes) -> Extracted {
     let suggested_name = target
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("extracted")
         .to_string();
     Extracted {
-        source: InputSource::memory(Bytes::from(buf), suggested_name.clone()),
+        source: InputSource::memory(buf, suggested_name.clone()),
         suggested_name,
     }
 }

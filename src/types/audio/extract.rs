@@ -31,7 +31,7 @@ pub fn extract(
     Ok(Extracted {
         suggested_name: suggested,
         source: InputSource::Memory {
-            bytes: bytes.into(),
+            bytes,
             name: safe_str,
         },
     })

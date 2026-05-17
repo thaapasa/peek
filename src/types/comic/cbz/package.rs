@@ -10,6 +10,7 @@
 use std::io::Read;
 
 use anyhow::{Context, Result};
+use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::input::InputSource;
@@ -66,13 +67,13 @@ pub(crate) fn open_zip(source: &InputSource) -> Result<ZipArchive<Box<dyn ReadSe
 }
 
 /// Read one page's bytes out of the ZIP.
-pub(crate) fn read_page(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Vec<u8>> {
+pub(crate) fn read_page(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Bytes> {
     let mut entry = zip
         .by_name(path)
         .with_context(|| format!("CBZ entry {path:?} not found"))?;
     let mut buf = Vec::with_capacity(entry.size() as usize);
     entry.read_to_end(&mut buf)?;
-    Ok(buf)
+    Ok(Bytes::from(buf))
 }
 
 fn has_page_extension(name: &str) -> bool {

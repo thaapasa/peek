@@ -4,7 +4,7 @@
 //! `archive::extract::decompress_tar`) by tar extraction so the codec
 //! dispatch lives in one place.
 //!
-//! Decompression is batch (reads the whole stream into a `Vec<u8>`).
+//! Decompression is batch (reads the whole stream into a buffer).
 //! Streaming inner-content rendering would need a different shape
 //! since most viewers — pretty-print, syntax highlight, image decode —
 //! want the full buffer upfront. The output is capped at
@@ -34,7 +34,7 @@ pub const MAX_DECOMPRESS_BYTES: u64 = 256 * 1024 * 1024;
 
 /// Decompress `raw` according to `fmt`. Returns the inner bytes, or an
 /// error explaining the codec failure / cap breach.
-pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Vec<u8>> {
+pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Bytes> {
     // Cap reads at one byte past the limit so we can distinguish
     // "exactly at cap" from "exceeded cap".
     let take_limit = MAX_DECOMPRESS_BYTES + 1;
@@ -80,7 +80,7 @@ pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Vec<u8>> {
             "decompressed stream exceeds {MAX_DECOMPRESS_BYTES}-byte cap (got > {MAX_DECOMPRESS_BYTES} bytes)"
         );
     }
-    Ok(out)
+    Ok(Bytes::from(out))
 }
 
 /// Best-effort name for the in-memory decompressed source. Strips the
@@ -135,7 +135,7 @@ pub fn resolve_transparent(source: InputSource, detected: Detected) -> (InputSou
     match decompress_bytes(&raw, fmt) {
         Ok(decoded) => {
             let inner_name = stripped_name(&outer_name, fmt);
-            let inner = InputSource::memory(Bytes::from(decoded), inner_name);
+            let inner = InputSource::memory(decoded, inner_name);
             let mut inner_detected = redetect(&inner)
                 .unwrap_or_else(|_| Detected::new(FileType::Binary, detected.magic_mime.clone()));
             inner_detected.decompressed_from = Some(DecompressionContext {
@@ -215,7 +215,7 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Gz).unwrap();
-        assert_eq!(out, b"hello peek single-stream test\n");
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
@@ -226,7 +226,7 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Bz2).unwrap();
-        assert_eq!(out, b"hello peek single-stream test\n");
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
@@ -237,7 +237,7 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Xz).unwrap();
-        assert_eq!(out, b"hello peek single-stream test\n");
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
@@ -248,7 +248,7 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Zst).unwrap();
-        assert_eq!(out, b"hello peek single-stream test\n");
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
@@ -259,7 +259,7 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Lz4).unwrap();
-        assert_eq!(out, b"hello peek single-stream test\n");
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]

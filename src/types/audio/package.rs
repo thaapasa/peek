@@ -12,6 +12,7 @@
 use std::io::Cursor;
 
 use anyhow::Result;
+use bytes::Bytes;
 use symphonia::core::codecs::CodecType;
 use symphonia::core::formats::FormatOptions;
 use symphonia::core::io::MediaSourceStream;
@@ -52,7 +53,7 @@ pub struct Probed {
 pub struct EmbedVisual {
     pub media_type: String,
     pub usage_root: &'static str,
-    pub data: Vec<u8>,
+    pub data: Bytes,
 }
 
 /// Listing entry kind we synthesised from a [`Probed`]. Carries enough
@@ -223,13 +224,13 @@ pub fn visual_filename(visual: &EmbedVisual) -> String {
 /// Resolve a listing key (e.g. `pictures/front_cover.jpg`) to raw
 /// payload bytes plus a suggested extract filename. Returns `None` for
 /// unknown keys — caller maps that to `ExtractError::NotFound`.
-pub fn read_embed(probed: &Probed, key: &str) -> Option<(Vec<u8>, String)> {
+pub fn read_embed(probed: &Probed, key: &str) -> Option<(Bytes, String)> {
     let entries = build_listing_keyed(probed);
     let (path, kind, _) = entries.into_iter().find(|(p, _, _)| p == key)?;
     let suggested = path.rsplit('/').next().unwrap_or(&path).to_string();
     let bytes = match kind {
         EmbedKind::Picture(idx) => probed.visuals.get(idx)?.data.clone(),
-        EmbedKind::Lyrics => probed.lyrics.as_ref()?.as_bytes().to_vec(),
+        EmbedKind::Lyrics => Bytes::copy_from_slice(probed.lyrics.as_ref()?.as_bytes()),
     };
     Some((bytes, suggested))
 }
@@ -247,7 +248,7 @@ fn convert_visual(v: &SymVisual) -> EmbedVisual {
     EmbedVisual {
         media_type: v.media_type.clone(),
         usage_root: v.usage.map(visual_usage_root).unwrap_or("picture"),
-        data: v.data.to_vec(),
+        data: Bytes::copy_from_slice(&v.data),
     }
 }
 
@@ -476,7 +477,7 @@ mod tests {
         EmbedVisual {
             media_type: mime.to_string(),
             usage_root: usage,
-            data: body.to_vec(),
+            data: Bytes::copy_from_slice(body),
         }
     }
 
@@ -541,7 +542,7 @@ mod tests {
     fn read_embed_returns_picture_bytes() {
         let probed = synthetic_probed(vec![pic("front_cover", "image/jpeg", b"FRONT")], None);
         let (bytes, name) = read_embed(&probed, "pictures/front_cover.jpg").unwrap();
-        assert_eq!(bytes, b"FRONT");
+        assert_eq!(bytes.as_ref(), b"FRONT");
         assert_eq!(name, "front_cover.jpg");
     }
 
@@ -549,7 +550,7 @@ mod tests {
     fn read_embed_returns_lyrics_bytes() {
         let probed = synthetic_probed(vec![], Some("hello world".to_string()));
         let (bytes, name) = read_embed(&probed, "lyrics/lyrics.txt").unwrap();
-        assert_eq!(bytes, b"hello world");
+        assert_eq!(bytes.as_ref(), b"hello world");
         assert_eq!(name, "lyrics.txt");
     }
 

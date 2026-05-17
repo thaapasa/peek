@@ -400,7 +400,7 @@ pub fn open_doc(source: &InputSource) -> Result<Doc> {
     let bytes = source.read_bytes().context("failed to read PDF source")?;
     let pdf_version = read_pdf_version(&bytes);
     let document = pdfium
-        .load_pdf_from_byte_vec(bytes, None)
+        .load_pdf_from_byte_vec(bytes.into(), None)
         .context("pdfium failed to parse PDF")?;
     Ok(Doc {
         inner: Arc::new(DocInner {
