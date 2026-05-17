@@ -73,6 +73,11 @@ jobs:
 
       - name: Create release branch with version bump
         id: commit
+        # Pass the dispatch input through an env var instead of `${{ }}`
+        # interpolation so backticks / quotes / newlines in the
+        # highlights message can't break the shell script.
+        env:
+          HIGHLIGHTS: ${{ inputs.notes }}
         run: |
           set -euo pipefail
           VERSION='${{ steps.version.outputs.version }}'
@@ -85,7 +90,14 @@ jobs:
           perl -0pi -e 's/(name = "peek"\nversion = ")[^"]+/${1}'"$VERSION"'/' Cargo.lock
           git checkout -B "$BRANCH"
           git add Cargo.toml Cargo.lock
-          git commit -m "Bump version to $VERSION"
+          # When highlights are supplied, attach them as the commit body so
+          # the bump commit doubles as the release-notes record (visible in
+          # `git log` long after the GitHub Release UI is gone).
+          if [ -n "$HIGHLIGHTS" ]; then
+            git commit -m "Bump version to $VERSION" -m "$HIGHLIGHTS"
+          else
+            git commit -m "Bump version to $VERSION"
+          fi
           git push --force origin "$BRANCH"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
