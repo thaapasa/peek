@@ -72,6 +72,17 @@ fn build_extracted_source(
                 suggested_name.to_string(),
             )
         }
+        InputSource::TempFile { .. } => {
+            // ISO sitting inside a spooled archive entry. Tempfile path
+            // can't outlive the source Arc, so building a FileRange
+            // against it would dangle. Materialise the requested range
+            // into memory — rare path (recursive ISO peek inside a
+            // large archive) doesn't pay for an Arc-aware FileRange.
+            let bytes = source.read_bytes().unwrap_or_default();
+            let start = (offset as usize).min(bytes.len());
+            let end = (start + len as usize).min(bytes.len());
+            InputSource::memory(bytes.slice(start..end), suggested_name.to_string())
+        }
     }
 }
 

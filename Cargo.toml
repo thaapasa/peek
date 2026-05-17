@@ -51,6 +51,12 @@ gif = "0.14"
 # extract results — `Bytes::slice` is a refcount bump, not a copy.
 bytes = "1"
 
+# RAII-cleanup temporary files. Backs `InputSource::TempFile` so the
+# archive extractor can spool large entries to disk (random-access reads
+# without holding the whole entry in RAM) and the file unlinks
+# automatically when the last `Arc<NamedTempFile>` clone drops.
+tempfile = "3"
+
 # Archive listing (TOC viewer). Listing-only paths read just the entry
 # headers — no payload decompression — so multi-GB archives list cheaply.
 zip = { version = "8", default-features = false, features = ["deflate"] }

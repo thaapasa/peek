@@ -63,6 +63,7 @@ fn main() -> Result<()> {
         let opts = extract::ExtractOptions {
             svg_size: args.extract_size,
             view_cols,
+            no_tempfile: args.no_tempfile,
         };
         let extracted = extract::extract(&source, &detected, key, &opts)
             .with_context(|| format!("failed to extract {key:?} from {}", source.name()))?;
@@ -192,6 +193,7 @@ fn run_view(
             render_opts,
             modes,
             mode_builder,
+            args.no_tempfile,
         )
         .with_context(|| format!("failed to render {source_name}"))?;
     } else {

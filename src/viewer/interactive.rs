@@ -23,6 +23,7 @@ use crate::viewer::ui::{
 /// Modes are owned for the duration of the call. The first mode in the
 /// list is the initial active view; `Tab`, `i`, `h`, `x` switch among
 /// modes by id (Info, Help, Hex).
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     source: InputSource,
     detected: Detected,
@@ -31,6 +32,7 @@ pub fn run(
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
+    no_tempfile: bool,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         event_loop(
@@ -42,6 +44,7 @@ pub fn run(
             render_opts,
             modes,
             mode_builder,
+            no_tempfile,
         )
     })
 }
@@ -56,6 +59,7 @@ fn event_loop(
     render_opts: RenderOptions,
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
+    no_tempfile: bool,
 ) -> Result<()> {
     let name = source.name().to_string();
     let mut state = ViewerState::new(
@@ -66,6 +70,7 @@ fn event_loop(
         render_opts,
         modes,
         mode_builder,
+        no_tempfile,
     )?;
 
     redraw(stdout, &mut state, &name)?;

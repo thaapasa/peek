@@ -34,6 +34,11 @@ pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
             let buf = source.read_bytes()?;
             Ok(Box::new(Cursor::new(buf)))
         }
+        InputSource::TempFile { file, .. } => {
+            let f = std::fs::File::open(file.path())
+                .with_context(|| format!("failed to open tempfile {}", file.path().display()))?;
+            Ok(Box::new(f))
+        }
     }
 }
 

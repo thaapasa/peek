@@ -2,23 +2,31 @@ use std::cell::{Cell, RefCell};
 use std::fs::{self, File};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
+use tempfile::NamedTempFile;
 
 /// Source of input content.
 ///
 /// `File` reads a path on disk. `Memory` wraps already-buffered bytes
-/// (stdin, an extracted in-memory archive entry, an encoded animation
+/// (stdin, a small extracted archive entry, an encoded animation
 /// frame). `FileRange` is an offset+limit view into a disk file — used
 /// when an extractor can map an inner item directly to a byte range of
 /// the backing file (ISO entry, uncompressed archive entry) without
-/// decompressing or copying.
+/// decompressing or copying. `TempFile` is a spooled extract — large
+/// archive entries land in `$TMPDIR/peek-*` and unlink automatically
+/// when the last clone drops (RAII via `tempfile::NamedTempFile`), so
+/// random-access reads (hex dump, lazy line index) over multi-GB
+/// archive entries don't have to fit in RAM.
 ///
 /// `Memory` holds `bytes::Bytes` so cloning the source is a refcount
 /// bump rather than a buffer duplication. Sub-slicing in-memory bytes
 /// (e.g. extracting an entry from a stdin-piped archive) uses
-/// `Bytes::slice` and stays in `Memory`.
+/// `Bytes::slice` and stays in `Memory`. `TempFile` clones share the
+/// `Arc<NamedTempFile>` so the on-disk file lives until every reference
+/// drops.
 ///
 /// **Invariants for `FileRange`:** `base` always points at a disk file
 /// (never an in-memory blob — that case stays in `Memory`). Nested
@@ -35,6 +43,10 @@ pub enum InputSource {
         base: PathBuf,
         offset: u64,
         len: u64,
+        name: String,
+    },
+    TempFile {
+        file: Arc<NamedTempFile>,
         name: String,
     },
 }
@@ -68,6 +80,16 @@ impl InputSource {
         }
     }
 
+    /// Wrap an already-written `NamedTempFile` as a source. The `Arc`
+    /// shares the unlink-on-drop guard across `InputSource` clones and
+    /// the `ByteSource` opened from this source.
+    pub fn temp_file(file: NamedTempFile, name: impl Into<String>) -> Self {
+        Self::TempFile {
+            file: Arc::new(file),
+            name: name.into(),
+        }
+    }
+
     /// Full content as UTF-8 text.
     pub fn read_text(&self) -> Result<String> {
         match self {
@@ -76,7 +98,7 @@ impl InputSource {
             Self::Memory { bytes, name } => std::str::from_utf8(bytes)
                 .map(|s| s.to_owned())
                 .with_context(|| format!("{name} is not valid UTF-8")),
-            Self::FileRange { name, .. } => {
+            Self::FileRange { name, .. } | Self::TempFile { name, .. } => {
                 let raw = self.read_bytes()?;
                 std::str::from_utf8(&raw)
                     .map(str::to_owned)
@@ -97,27 +119,33 @@ impl InputSource {
             Self::FileRange {
                 base, offset, len, ..
             } => read_file_range(base, *offset, *len),
+            Self::TempFile { file, .. } => fs::read(file.path())
+                .map(Bytes::from)
+                .with_context(|| format!("failed to read tempfile {}", file.path().display())),
         }
     }
 
-    /// Display name: filename for files, stored name for memory/range.
+    /// Display name: filename for files, stored name for memory/range/temp.
     pub fn name(&self) -> &str {
         match self {
             Self::File(path) => path.file_name().and_then(|n| n.to_str()).unwrap_or("?"),
             Self::Memory { name, .. } => name,
             Self::FileRange { name, .. } => name,
+            Self::TempFile { name, .. } => name,
         }
     }
 
     /// Filesystem path, when one is meaningful for the user-visible
     /// source. `None` for in-memory and for ranged views (the backing
     /// file path of a range is an internal handle, not the path of the
-    /// inner item the user is viewing).
+    /// inner item the user is viewing). `TempFile` also returns `None`
+    /// — the temp path is internal scratch, not the user's path.
     pub fn path(&self) -> Option<&Path> {
         match self {
             Self::File(path) => Some(path.as_path()),
             Self::Memory { .. } => None,
             Self::FileRange { .. } => None,
+            Self::TempFile { .. } => None,
         }
     }
 
@@ -197,7 +225,8 @@ impl InputSource {
     /// Open a streaming byte reader. For files, holds the file handle
     /// and seeks per read. For in-memory sources, shares the buffered
     /// `Bytes` (zero-copy). For ranges, wraps a file reader with offset
-    /// translation.
+    /// translation. For tempfiles, opens the on-disk path and carries an
+    /// `Arc<NamedTempFile>` so the file outlives any drop of the source.
     pub fn open_byte_source(&self) -> Result<Box<dyn ByteSource>> {
         match self {
             Self::File(path) => Ok(Box::new(FileByteSource::open(path)?)),
@@ -207,6 +236,13 @@ impl InputSource {
             } => {
                 let f = FileByteSource::open(base)?;
                 Ok(Box::new(RangeByteSource::new(Box::new(f), *offset, *len)))
+            }
+            Self::TempFile { file, .. } => {
+                let inner = FileByteSource::open(file.path())?;
+                Ok(Box::new(TempFileByteSource {
+                    inner,
+                    _temp: file.clone(),
+                }))
             }
         }
     }
@@ -337,6 +373,25 @@ impl ByteSource for BytesByteSource {
         let start = offset as usize;
         let end = (start + len).min(self.bytes.len());
         Ok(self.bytes.slice(start..end))
+    }
+}
+
+/// Random-access byte source backed by an on-disk `NamedTempFile`.
+/// Delegates reads to an inner `FileByteSource` and holds the
+/// `Arc<NamedTempFile>` so the temp file isn't unlinked while reads are
+/// still possible.
+pub struct TempFileByteSource {
+    inner: FileByteSource,
+    _temp: Arc<NamedTempFile>,
+}
+
+impl ByteSource for TempFileByteSource {
+    fn len(&self) -> u64 {
+        self.inner.len()
+    }
+
+    fn read_range(&self, offset: u64, len: usize) -> Result<Bytes> {
+        self.inner.read_range(offset, len)
     }
 }
 

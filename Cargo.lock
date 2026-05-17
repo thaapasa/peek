@@ -1519,6 +1519,7 @@ dependencies = [
  "symphonia",
  "syntect",
  "tar",
+ "tempfile",
  "toml",
  "two-face",
  "unicode-width",

@@ -206,7 +206,7 @@ fn detect_with(source: &InputSource, ignore_name: bool) -> Result<Detected> {
                 Some(name.as_str())
             },
         )),
-        InputSource::FileRange { name, .. } => {
+        InputSource::FileRange { name, .. } | InputSource::TempFile { name, .. } => {
             let buf = source.read_bytes()?;
             Ok(detect_bytes_named(
                 &buf,

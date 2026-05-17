@@ -140,6 +140,13 @@ pub struct Args {
     #[arg(long = "extract-size", value_name = "PX", hide_short_help = true)]
     pub extract_size: Option<u32>,
 
+    /// Force extract operations to keep payloads in RAM instead of
+    /// spooling large archive entries to a tempfile. Drops the 256 MiB
+    /// in-memory cap on the extract path — use only when you'd rather
+    /// risk OOM than touch `$TMPDIR`.
+    #[arg(long = "no-tempfile", hide_short_help = true)]
+    pub no_tempfile: bool,
+
     /// Override terminal cell aspect ratio (height ÷ width) for image
     /// scaling. Auto-detected by default; set explicitly (e.g. `2.0`) when
     /// detection is wrong.

@@ -30,6 +30,11 @@ pub struct ExtractOptions {
     /// same width would produce, so extract-then-render output
     /// matches plain render output. Ignored when `svg_size` is set.
     pub view_cols: Option<u32>,
+    /// Force in-memory materialisation on the archive extract path,
+    /// bypassing the tempfile spool. Also drops the 256 MiB safety cap
+    /// since the user explicitly chose the memory path. CLI:
+    /// `--no-tempfile`.
+    pub no_tempfile: bool,
 }
 
 /// `Unsupported` = container has no extractor; `NotFound` / `InvalidKey`
@@ -86,7 +91,7 @@ pub fn extract(
         FileType::Svg => {
             crate::types::svg::extract::extract(source, key, opts.svg_size, opts.view_cols)
         }
-        FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key),
+        FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key, opts),
         FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
         FileType::Ebook(EbookFormat::Epub)
         | FileType::Comic(ComicFormat::Cbz)
@@ -95,6 +100,7 @@ pub fn extract(
                 source,
                 crate::input::detect::ArchiveFormat::Zip,
                 key,
+                opts,
             )
         }
         FileType::Document(DocumentFormat::Rtf) => {

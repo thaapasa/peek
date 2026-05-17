@@ -160,9 +160,15 @@ pub(crate) struct ViewerState {
     /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
     /// one redraw.
     flash: Option<String>,
+
+    /// Mirror of the CLI `--no-tempfile` flag. Threaded into every
+    /// `ExtractOptions` the interactive viewer builds so user choice
+    /// persists across descend / extract presses.
+    no_tempfile: bool,
 }
 
 impl ViewerState {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source: InputSource,
         detected: Detected,
@@ -171,6 +177,7 @@ impl ViewerState {
         render_opts: RenderOptions,
         modes: Vec<Box<dyn Mode>>,
         mode_builder: ModeBuilder,
+        no_tempfile: bool,
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name, style_mode);
         let file_info = crate::info::gather(&source, &detected)?;
@@ -184,6 +191,7 @@ impl ViewerState {
             render_opts,
             prompt: None,
             flash: None,
+            no_tempfile,
         })
     }
 
@@ -500,7 +508,10 @@ impl ViewerState {
             self.flash = Some("nothing selected to extract".to_string());
             return;
         };
-        let opts = crate::extract::ExtractOptions::default();
+        let opts = crate::extract::ExtractOptions {
+            no_tempfile: self.no_tempfile,
+            ..Default::default()
+        };
         let f = self.frame();
         match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
             Ok(extracted) => self.begin_extract_prompt(extracted),
@@ -521,7 +532,10 @@ impl ViewerState {
             self.flash = Some("nothing to descend into".to_string());
             return Ok(());
         };
-        let opts = crate::extract::ExtractOptions::default();
+        let opts = crate::extract::ExtractOptions {
+            no_tempfile: self.no_tempfile,
+            ..Default::default()
+        };
         let extracted = {
             let f = self.frame();
             match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
@@ -1006,6 +1020,7 @@ mod tests {
             RenderOptions::default(),
             modes,
             mode_builder,
+            args.no_tempfile,
         )
         .unwrap()
     }
