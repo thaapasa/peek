@@ -16,6 +16,7 @@ pub mod ebook;
 pub mod html;
 pub mod image;
 pub mod markdown;
+pub mod objfile;
 pub mod pdf;
 pub mod sql;
 pub mod structured;

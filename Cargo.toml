@@ -100,6 +100,11 @@ pdfium-render = "0.9"
 # readers.
 symphonia = { version = "0.5", features = ["all-codecs", "all-formats", "opt-simd"] }
 
+# Object-file parsing (ELF / Mach-O / PE / COFF). One read-only API
+# across all four formats, so the objfile viewer needs no per-format
+# parser. `write` feature dropped — peek never emits object files.
+object = { version = "0.36", default-features = false, features = ["read", "std"] }
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

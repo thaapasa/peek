@@ -265,6 +265,7 @@ impl Registry {
                     | FileType::Archive(_)
                     | FileType::Compressed(_)
                     | FileType::DiskImage(_)
+                    | FileType::ObjectFile
                     | FileType::Audio(_)
             ) {
                 modes.push(ctx.text_content_mode(source, file_type, args)?);
@@ -311,6 +312,11 @@ impl Registry {
                 FileType::DiskImage(fmt) => {
                     crate::types::disk_image::compose::compose(
                         source, detected, args, &ctx, &mut modes, *fmt,
+                    )?;
+                }
+                FileType::ObjectFile => {
+                    crate::types::objfile::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
                     )?;
                 }
                 FileType::Audio(fmt) => {

@@ -110,6 +110,7 @@ pub fn mimes_for_path(
             FileType::Binary
             | FileType::Archive(_)
             | FileType::Compressed(_)
+            | FileType::ObjectFile
             | FileType::DiskImage(_) => "application/octet-stream",
             _ => "text/plain",
         }));
@@ -201,10 +202,14 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         },
         FileType::Csv(crate::input::detect::CsvFormat::Csv) => "text/csv",
         FileType::Csv(crate::input::detect::CsvFormat::Tsv) => "text/tab-separated-values",
-        // For Image, Archive, Compressed, and Binary, the magic-byte
-        // MIME is more specific than any generic registered fallback
-        // would be.
-        FileType::Image | FileType::Archive(_) | FileType::Compressed(_) | FileType::Binary => {
+        // For Image, Archive, Compressed, ObjectFile, and Binary, the
+        // magic-byte MIME is more specific than any generic registered
+        // fallback would be.
+        FileType::Image
+        | FileType::Archive(_)
+        | FileType::Compressed(_)
+        | FileType::ObjectFile
+        | FileType::Binary => {
             return None;
         }
     })

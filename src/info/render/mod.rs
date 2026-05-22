@@ -56,6 +56,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Binary(info) => {
             crate::types::binary::info::render_section(lines, info, theme);
         }
+        FileExtras::ObjectFile(info) => {
+            crate::types::objfile::info_render::render_section(lines, info, theme);
+        }
         FileExtras::Archive(stats) => {
             crate::types::archive::info::render_section(lines, stats, theme);
         }

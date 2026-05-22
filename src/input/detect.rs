@@ -73,6 +73,10 @@ pub enum FileType {
     /// Disk image (ISO / DMG / etc). Drives a metadata-only info view —
     /// volume descriptor / trailer parsing, no filesystem walk.
     DiskImage(DiskImageFormat),
+    /// Object file — ELF / Mach-O / PE / COFF executable, shared
+    /// library, or relocatable object. Drives a metadata Info view plus
+    /// streamed Sections / Symbols tables (no extract).
+    ObjectFile,
     /// Filesystem directory. One-level listing view. Selecting a child
     /// file descends into peek; selecting a child directory re-targets
     /// the current frame (no stack of directories).
@@ -354,7 +358,14 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if let Some(fmt) = audio_detect::format_from_mime(mime) {
         return Some(FileType::Audio(fmt));
     }
-    if mime.starts_with("video/") || mime.starts_with("application/x-executable") {
+    if mime.starts_with("application/x-executable")
+        || mime == "application/x-mach-binary"
+        || mime == "application/x-msdownload"
+        || mime == "application/vnd.microsoft.portable-executable"
+    {
+        return Some(FileType::ObjectFile);
+    }
+    if mime.starts_with("video/") {
         return Some(FileType::Binary);
     }
     None
