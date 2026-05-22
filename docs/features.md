@@ -467,6 +467,10 @@ Three views, Tab-cycled:
 - **Methods** — table: modifiers, name, signature. Descriptors are decoded to source form —
   `(Ljava/lang/String;I)V` renders as `(String, int) -> void`.
 
+Field types and method signatures are syntax-coloured the way a Java / Rust highlighter would
+show them — primitive types, class names, array brackets, and punctuation each in their own
+theme colour, so a signature reads at a glance.
+
 Both tables use the shared `TableMode` (sticky header, content-fitted columns, horizontal pan,
 `/` search) — the same mode object files use.
 
@@ -477,7 +481,8 @@ Two deliberate departures from a naive `javap` port:
   the field is omitted rather than shown misleadingly.
 - **`descriptor` is a formatter, not a parser.** `cafebabe` already parses descriptors into
   typed values, but its `Display` re-emits the raw JVM form (`(I)V`). The `descriptor` module
-  turns those typed values into readable text; it never re-parses raw descriptor strings.
+  turns those typed values into readable, colour-tagged spans; it never re-parses raw
+  descriptor strings.
 
 No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
 is not implemented; the Methods view shows signatures only.

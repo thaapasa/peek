@@ -1,45 +1,78 @@
-//! Render `cafebabe` JVM type descriptors human-readably.
+//! Render `cafebabe` JVM type descriptors as syntax-highlighted spans.
 //!
 //! cafebabe parses descriptors into structured types, but its `Display`
 //! emits the raw JVM form (`I`, `[B`, `(I)V`). These helpers turn that
-//! into source-like text — `int`, `byte[]`, `(int) -> void`.
+//! into source-like, colour-tagged text — `int`, `byte[]`,
+//! `(int) -> void` — so a signature reads like a highlighted source line.
 
 use cafebabe::descriptors::{FieldDescriptor, FieldType, MethodDescriptor, ReturnDescriptor};
 
+use crate::viewer::table::CellRole;
+
+/// A styled token: display text plus the table colour role it paints
+/// with. A type / signature renders as a sequence of these.
+pub type Span = (String, CellRole);
+
+// Colour roles picked to mimic a Java / Rust highlighter:
+//   primitive types & `void` → `Primary` (accent  — the keyword colour)
+//   class types              → `Tag`     (label   — the entity-name colour)
+//   array `[]`               → `Numeric` (accent/value blend, distinct)
+//   punctuation `( ) , ->`   → `Muted`
+const PRIMITIVE: CellRole = CellRole::Primary;
+const CLASS: CellRole = CellRole::Tag;
+const ARRAY: CellRole = CellRole::Numeric;
+const PUNCT: CellRole = CellRole::Muted;
+
 /// A field / parameter / return type — `int`, `String`, `byte[][]`.
-pub fn field(d: &FieldDescriptor<'_>) -> String {
-    let mut s = base_type(&d.field_type);
-    for _ in 0..d.dimensions {
-        s.push_str("[]");
+pub fn field(d: &FieldDescriptor<'_>) -> Vec<Span> {
+    let mut spans = vec![base_type(&d.field_type)];
+    if d.dimensions > 0 {
+        spans.push(("[]".repeat(d.dimensions as usize), ARRAY));
     }
-    s
+    spans
 }
 
 /// A method signature — `(int, String) -> void`.
-pub fn method(d: &MethodDescriptor<'_>) -> String {
-    let params: Vec<String> = d.parameters.iter().map(field).collect();
-    format!("({}) -> {}", params.join(", "), return_type(&d.return_type))
+pub fn method(d: &MethodDescriptor<'_>) -> Vec<Span> {
+    let mut spans: Vec<Span> = vec![("(".to_string(), PUNCT)];
+    for (i, p) in d.parameters.iter().enumerate() {
+        if i > 0 {
+            spans.push((", ".to_string(), PUNCT));
+        }
+        spans.extend(field(p));
+    }
+    spans.push((")".to_string(), PUNCT));
+    spans.push((" -> ".to_string(), PUNCT));
+    spans.extend(return_type(&d.return_type));
+    spans
 }
 
-fn return_type(r: &ReturnDescriptor<'_>) -> String {
+fn return_type(r: &ReturnDescriptor<'_>) -> Vec<Span> {
     match r {
-        ReturnDescriptor::Void => "void".to_string(),
+        ReturnDescriptor::Void => vec![("void".to_string(), PRIMITIVE)],
         ReturnDescriptor::Return(d) => field(d),
     }
 }
 
-fn base_type(t: &FieldType<'_>) -> String {
-    match t {
-        FieldType::Byte => "byte".to_string(),
-        FieldType::Char => "char".to_string(),
-        FieldType::Double => "double".to_string(),
-        FieldType::Float => "float".to_string(),
-        FieldType::Integer => "int".to_string(),
-        FieldType::Long => "long".to_string(),
-        FieldType::Short => "short".to_string(),
-        FieldType::Boolean => "boolean".to_string(),
+/// The base (non-array) type as a single span.
+fn base_type(t: &FieldType<'_>) -> Span {
+    let primitive = match t {
+        FieldType::Byte => "byte",
+        FieldType::Char => "char",
+        FieldType::Double => "double",
+        FieldType::Float => "float",
+        FieldType::Integer => "int",
+        FieldType::Long => "long",
+        FieldType::Short => "short",
+        FieldType::Boolean => "boolean",
         // `ClassName` derefs to the fully-qualified internal name
         // (`java/lang/String`); show only the simple last segment.
-        FieldType::Object(class_name) => class_name.rsplit('/').next().unwrap_or("?").to_string(),
-    }
+        FieldType::Object(class_name) => {
+            return (
+                class_name.rsplit('/').next().unwrap_or("?").to_string(),
+                CLASS,
+            );
+        }
+    };
+    (primitive.to_string(), PRIMITIVE)
 }

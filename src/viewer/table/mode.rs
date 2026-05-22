@@ -328,17 +328,75 @@ fn plain_row(row: &[Cell], columns: &[Column]) -> String {
 }
 
 /// Painted row — same visible text as `plain_row`, each cell coloured by
-/// its [`CellRole`] against `theme`.
+/// its [`CellRole`] against `theme`. A cell carrying `spans` is painted
+/// token-by-token via [`paint_spans`].
 fn painted_row(row: &[Cell], columns: &[Column], theme: &PeekTheme) -> String {
     let last = columns.len().saturating_sub(1);
     row.iter()
         .enumerate()
         .map(|(i, c)| {
-            let padded = fmt_plain(&c.text, &columns[i], i == last);
-            paint_cell(&padded, c.role, theme)
+            let col = &columns[i];
+            let is_last = i == last;
+            match &c.spans {
+                Some(spans) => paint_spans(spans, col, is_last, theme),
+                None => paint_cell(&fmt_plain(&c.text, col, is_last), c.role, theme),
+            }
         })
         .collect::<Vec<_>>()
         .join("  ")
+}
+
+/// Paint a multi-span cell — each span coloured by its own role — into
+/// the layout `fmt_plain` would produce for the same plain text: padded
+/// to a fixed column's width, or truncated with a `…` when wider.
+fn paint_spans(
+    spans: &[(String, CellRole)],
+    col: &Column,
+    is_last: bool,
+    theme: &PeekTheme,
+) -> String {
+    let total: usize = spans
+        .iter()
+        .map(|(t, _)| UnicodeWidthStr::width(t.as_str()))
+        .sum();
+    let flexible = is_last || col.width == 0;
+
+    if flexible || total <= col.width {
+        let mut out = String::new();
+        for (t, role) in spans {
+            out.push_str(&paint_cell(t, *role, theme));
+        }
+        if flexible {
+            return out;
+        }
+        let pad = " ".repeat(col.width - total);
+        return match col.align {
+            Align::Left => out + &pad,
+            Align::Right => pad + &out,
+        };
+    }
+
+    // Wider than a fixed column — truncate spans to width-1, add `…`.
+    let budget = col.width.saturating_sub(1);
+    let mut out = String::new();
+    let mut used = 0usize;
+    for (t, role) in spans {
+        if used >= budget {
+            break;
+        }
+        let w = UnicodeWidthStr::width(t.as_str());
+        let painted = if used + w <= budget {
+            used += w;
+            paint_cell(t, *role, theme)
+        } else {
+            let part = take_cols(t, budget - used);
+            used = budget;
+            paint_cell(&part, *role, theme)
+        };
+        out.push_str(&painted);
+    }
+    out.push_str(&paint_cell("\u{2026}", CellRole::Muted, theme));
+    out
 }
 
 fn paint_cell(padded: &str, role: CellRole, theme: &PeekTheme) -> String {
@@ -407,4 +465,64 @@ fn truncate(s: &str, max: usize) -> String {
         return s.to_string();
     }
     format!("{}\u{2026}", take_cols(s, max.saturating_sub(1)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    fn plain_theme() -> PeekTheme {
+        // Plain style mode: paint helpers emit no escapes, so painted
+        // output equals the visible text — assertions stay readable.
+        ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)
+            .peek_theme()
+            .clone()
+    }
+
+    fn col(width: usize, align: Align) -> Column {
+        Column {
+            header: "h",
+            width,
+            align,
+        }
+    }
+
+    fn spans(parts: &[(&str, CellRole)]) -> Vec<(String, CellRole)> {
+        parts.iter().map(|(t, r)| (t.to_string(), *r)).collect()
+    }
+
+    #[test]
+    fn paint_spans_flexible_column_is_verbatim() {
+        let theme = plain_theme();
+        let s = spans(&[
+            ("(", CellRole::Muted),
+            ("int", CellRole::Primary),
+            (")", CellRole::Muted),
+        ]);
+        assert_eq!(paint_spans(&s, &col(0, Align::Left), true, &theme), "(int)");
+    }
+
+    #[test]
+    fn paint_spans_fixed_column_pads_to_width() {
+        let theme = plain_theme();
+        let s = spans(&[("int", CellRole::Primary)]);
+        assert_eq!(
+            paint_spans(&s, &col(6, Align::Left), false, &theme),
+            "int   "
+        );
+        assert_eq!(
+            paint_spans(&s, &col(6, Align::Right), false, &theme),
+            "   int"
+        );
+    }
+
+    #[test]
+    fn paint_spans_over_width_truncates_with_ellipsis() {
+        let theme = plain_theme();
+        let s = spans(&[("verylongtypename", CellRole::Tag)]);
+        let out = paint_spans(&s, &col(5, Align::Left), false, &theme);
+        assert_eq!(out.chars().count(), 5);
+        assert!(out.ends_with('\u{2026}'));
+    }
 }

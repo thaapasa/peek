@@ -40,6 +40,11 @@ pub(crate) enum Align {
 pub(crate) struct Cell {
     pub text: String,
     pub role: CellRole,
+    /// Multi-colour cell: when `Some`, the cell is painted span-by-span
+    /// (each `(text, role)` pair one token) instead of as a single
+    /// `role`-coloured block. `text` mirrors the concatenated span text
+    /// so width and search math stay correct.
+    pub spans: Option<Vec<(String, CellRole)>>,
 }
 
 /// Colour role for a cell — resolved against the live theme at render
@@ -65,9 +70,25 @@ pub(crate) enum CellRole {
 /// from pushing the table off-screen; longer cells truncate with `…`.
 const MAX_FIXED_WIDTH: usize = 40;
 
-/// Construct a cell.
+/// Construct a single-colour cell.
 pub(crate) fn cell(text: String, role: CellRole) -> Cell {
-    Cell { text, role }
+    Cell {
+        text,
+        role,
+        spans: None,
+    }
+}
+
+/// Construct a multi-colour cell from styled spans — each `(text, role)`
+/// pair is painted as its own token. Used for syntax-highlighted type
+/// signatures. The cell's plain `text` is the span concatenation.
+pub(crate) fn cell_spans(spans: Vec<(String, CellRole)>) -> Cell {
+    let text: String = spans.iter().map(|(t, _)| t.as_str()).collect();
+    Cell {
+        text,
+        role: CellRole::Name,
+        spans: Some(spans),
+    }
 }
 
 /// Build columns whose fixed widths are fitted to the actual cell

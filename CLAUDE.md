@@ -251,7 +251,7 @@ src/
       info.rs          — ClassfileInfo { meta: Option<ClassfileMeta>, error } + ClassfileMeta (keeps cafebabe's ClassAccessFlags semantic; render maps it)
       info_gather.rs   — gather_extras: cafebabe parse_class_with_options (bytecode parsing off) → ClassfileMeta
       info_render.rs   — render_section (Class File section) + version / access-flag → label maps
-      descriptor.rs    — Render cafebabe descriptor types human-readably (`(Ljava/lang/String;I)V` → `(String, int) -> void`)
+      descriptor.rs    — Render cafebabe descriptor types as syntax-highlighted spans (`(Ljava/lang/String;I)V` → coloured `(String, int) -> void`: primitives / class names / `[]` / punctuation each a CellRole)
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
@@ -272,7 +272,7 @@ src/
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips
     table/
-      mod.rs           — Generic aligned-table view shared by objfile + classfile: Table / Column / Cell / CellRole / Align data + cell / fit_columns (content-fitted widths). CsvTableMode does NOT use this — streaming backing, cell-scoped search
+      mod.rs           — Generic aligned-table view shared by objfile + classfile: Table / Column / Cell / CellRole / Align data + cell / cell_spans (multi-colour token cell) / fit_columns (content-fitted widths). CsvTableMode does NOT use this — streaming backing, cell-scoped search
       mode.rs          — TableMode: sticky-header table over materialised rows, live-theme cell repaint, vertical scroll + Left/Right pan + `/` search (minimal reveal_h_scroll pan)
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers

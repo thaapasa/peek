@@ -8,7 +8,7 @@ use cafebabe::{
 
 use super::descriptor;
 use crate::input::InputSource;
-use crate::viewer::table::{Align, Cell, CellRole, Table, cell, fit_columns};
+use crate::viewer::table::{Align, Cell, CellRole, Table, cell, cell_spans, fit_columns};
 
 /// Both rendered tables for one classfile.
 pub struct ClassfileTables {
@@ -36,7 +36,7 @@ fn build_fields(class: &ClassFile<'_>) -> Table {
         .map(|f| {
             vec![
                 cell(field_modifiers(f.access_flags), CellRole::Tag),
-                cell(descriptor::field(&f.descriptor), CellRole::Muted),
+                cell_spans(descriptor::field(&f.descriptor)),
                 cell(f.name.to_string(), CellRole::Name),
             ]
         })
@@ -65,7 +65,7 @@ fn build_methods(class: &ClassFile<'_>) -> Table {
             vec![
                 cell(method_modifiers(m.access_flags), CellRole::Tag),
                 cell(m.name.to_string(), CellRole::Primary),
-                cell(descriptor::method(&m.descriptor), CellRole::Muted),
+                cell_spans(descriptor::method(&m.descriptor)),
             ]
         })
         .collect();
@@ -138,4 +138,40 @@ fn method_modifiers(f: MethodAccessFlags) -> String {
         v.push("native");
     }
     v.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn sample() -> InputSource {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("test-data/Sample.class");
+        InputSource::File(p)
+    }
+
+    /// A method signature reaches the Methods table as a multi-colour
+    /// span cell — punctuation, primitives and class names tagged with
+    /// distinct roles — not one flat block.
+    #[test]
+    fn method_signature_cell_is_multi_span() {
+        let tables = build(&sample()).unwrap();
+        let spans = tables
+            .methods
+            .rows
+            .iter()
+            .filter_map(|r| r.get(2)) // Signature is the third column.
+            .find_map(|c| c.spans.as_ref())
+            .expect("a method signature renders as spans");
+        assert!(
+            spans.iter().any(|(t, _)| t == "("),
+            "signature opens with ("
+        );
+        let roles: std::collections::HashSet<_> = spans
+            .iter()
+            .map(|(_, r)| std::mem::discriminant(r))
+            .collect();
+        assert!(roles.len() > 1, "signature uses multiple colour roles");
+    }
 }
