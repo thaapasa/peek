@@ -23,6 +23,7 @@ use crate::viewer::ui::{Action, HelpEntry};
 
 mod about;
 mod content;
+mod gutter;
 mod help;
 mod hex;
 mod info;

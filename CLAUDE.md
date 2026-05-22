@@ -274,6 +274,7 @@ src/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
       content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed); wrap/scroll geometry delegated to `viewer::wrap_scroll`, pretty branch to `pretty_view`, active branch exposed to the geometry via the `ContentLines` LineProvider
       pretty_view.rs   — PrettyView: the lazy structured pretty-print branch — one-shot parse (size-capped at PRETTY_MAX_BYTES), size-cap / parse-error fallback state, theme-keyed rendered-line cache. ContentMode keeps the raw-vs-pretty view state + windowing
+      gutter.rs        — Gutter: ContentMode's line-number gutter — on/off state + digit-width sizing, per-visual-row `prefix` (interactive), whole-Vec `apply` (pipe)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing

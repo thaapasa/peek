@@ -4,6 +4,7 @@ use std::rc::Rc;
 use anyhow::Result;
 use syntect::highlighting::Color;
 
+use super::gutter::Gutter;
 use super::pretty_view::{PrettyView, SyntaxRef};
 use super::{Handled, Mode, ModeId, Position, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
@@ -53,7 +54,8 @@ pub(crate) struct ContentMode {
     theme_manager: Rc<ThemeManager>,
     use_pretty: bool,
     allow_pretty_toggle: bool,
-    show_line_numbers: bool,
+    /// Line-number gutter — its on/off state plus the painting logic.
+    gutter: Gutter,
     label: &'static str,
 
     /// Wrap-aware scroll position — logical line, visual sub-row, and
@@ -204,7 +206,7 @@ impl ContentMode {
             theme_manager,
             use_pretty: cfg.start_pretty && cfg.pretty_target.is_some(),
             allow_pretty_toggle: cfg.allow_pretty_toggle,
-            show_line_numbers: cfg.line_numbers,
+            gutter: Gutter::new(cfg.line_numbers),
             label: cfg.label,
             wrap: WrapScroll::new(true),
             cached_cols: 0,
@@ -218,82 +220,8 @@ impl ContentMode {
     fn usable_width(&self, total: usize) -> usize {
         self.cached_cols
             .max(1)
-            .saturating_sub(self.gutter_visible_width(total))
+            .saturating_sub(self.gutter.visible_width(total))
             .max(1)
-    }
-
-    /// Number of digits in `n`, minimum 2 (so a 9-line file's gutter
-    /// doesn't bounce in width as you scroll past line 9 vs line 99).
-    fn gutter_digit_width(total: usize) -> usize {
-        let mut digits = 1;
-        let mut n = total;
-        while n >= 10 {
-            n /= 10;
-            digits += 1;
-        }
-        digits.max(2)
-    }
-
-    /// Mutate `lines` in place, prepending a right-aligned line-number
-    /// gutter painted in the theme's gutter color. `start` is the
-    /// 0-based line index of `lines[0]` in the full source; `total` is
-    /// the source's total line count, used to size the gutter so the
-    /// width is stable across the visible window.
-    ///
-    /// Used by the print/pipe path (`render_to_pipe`) only — interactive
-    /// rendering uses `gutter_prefix` per visual row so wrap continuation
-    /// rows can blank the gutter.
-    fn apply_gutter(lines: &mut [String], start: usize, total: usize, peek_theme: &PeekTheme) {
-        if total == 0 || lines.is_empty() {
-            return;
-        }
-        let width = Self::gutter_digit_width(total);
-        let style_mode = peek_theme.style_mode;
-        let fg_open = style_mode.fg_seq(peek_theme.gutter);
-        let reset = style_mode.reset();
-        for (offset, line) in lines.iter_mut().enumerate() {
-            let n = start + offset + 1;
-            let gutter = format!("{fg_open}{n:>width$} │ {reset}");
-            let mut prefixed = String::with_capacity(gutter.len() + line.len());
-            prefixed.push_str(&gutter);
-            prefixed.push_str(line);
-            *line = prefixed;
-        }
-    }
-
-    /// Visible-cell width of the line-number gutter, including the
-    /// trailing " │ " separator. Zero when line numbers are off or the
-    /// source is empty. The same width is reserved on continuation rows
-    /// (gutter blanked) so wrapped text aligns under its first segment.
-    fn gutter_visible_width(&self, total: usize) -> usize {
-        if self.show_line_numbers && total > 0 {
-            Self::gutter_digit_width(total) + 3
-        } else {
-            0
-        }
-    }
-
-    /// Build the gutter prefix for one visual row. `line_num = Some(n)`
-    /// for the first wrap segment of a logical line; `None` for
-    /// continuation rows (gutter blanked but width preserved). Returns
-    /// an empty string when the gutter is disabled.
-    fn gutter_prefix(
-        &self,
-        line_num: Option<usize>,
-        total: usize,
-        peek_theme: &PeekTheme,
-    ) -> String {
-        if !self.show_line_numbers || total == 0 {
-            return String::new();
-        }
-        let width = Self::gutter_digit_width(total);
-        let style_mode = peek_theme.style_mode;
-        let fg = style_mode.fg_seq(peek_theme.gutter);
-        let reset = style_mode.reset();
-        match line_num {
-            Some(n) => format!("{fg}{n:>width$} │ {reset}"),
-            None => format!("{fg}{:>width$} │ {reset}", ""),
-        }
     }
 
     /// Convert one styled logical line into one or more visual rows
@@ -328,7 +256,7 @@ impl ContentMode {
         let line_num = line_idx + 1;
         if !self.wrap.soft_wrap() {
             let body = slice_styled_h(styled, self.wrap.h_scroll(), usable_width);
-            let prefix = self.gutter_prefix(Some(line_num), total, peek_theme);
+            let prefix = self.gutter.prefix(Some(line_num), total, peek_theme);
             out.push(format!("{prefix}{body}"));
             return out.len() >= max_rows;
         }
@@ -338,9 +266,9 @@ impl ContentMode {
                 continue;
             }
             let prefix = if seg_idx == 0 {
-                self.gutter_prefix(Some(line_num), total, peek_theme)
+                self.gutter.prefix(Some(line_num), total, peek_theme)
             } else {
-                self.gutter_prefix(None, total, peek_theme)
+                self.gutter.prefix(None, total, peek_theme)
             };
             out.push(format!("{prefix}{seg}"));
             if out.len() >= max_rows {
@@ -613,17 +541,15 @@ impl Mode for ContentMode {
                     ctx.theme_name,
                     ctx.peek_theme.style_mode,
                 )?;
-                if self.show_line_numbers {
-                    let total = lines.len();
-                    Self::apply_gutter(&mut lines, 0, total, ctx.peek_theme);
-                }
+                let total = lines.len();
+                self.gutter.apply(&mut lines, 0, total, ctx.peek_theme);
                 for line in &lines {
                     out.write_line(line)?;
                 }
-            } else if self.show_line_numbers {
+            } else if self.gutter.enabled() {
                 let mut lines: Vec<String> = pretty.lines().map(String::from).collect();
                 let total = lines.len();
-                Self::apply_gutter(&mut lines, 0, total, ctx.peek_theme);
+                self.gutter.apply(&mut lines, 0, total, ctx.peek_theme);
                 for line in &lines {
                     out.write_line(line)?;
                 }
@@ -641,8 +567,8 @@ impl Mode for ContentMode {
         // for byte-for-byte fidelity (matches `cat` and the pre-A1
         // un-highlighted path).
         let total = self.line_source.total_lines();
-        let gutter_width = if self.show_line_numbers && total > 0 {
-            Some(Self::gutter_digit_width(total))
+        let gutter_width = if self.gutter.enabled() && total > 0 {
+            Some(Gutter::digit_width(total))
         } else {
             None
         };
@@ -737,7 +663,7 @@ impl Mode for ContentMode {
             return Handled::Yes;
         }
         if action == Action::ToggleLineNumbers {
-            self.show_line_numbers = !self.show_line_numbers;
+            self.gutter.toggle();
             return Handled::Yes;
         }
         if action == Action::ToggleSoftWrap {
