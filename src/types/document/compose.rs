@@ -20,42 +20,47 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: DocumentFormat,
 ) -> Result<()> {
+    // Per-format dispatch lives here, the one match — `compose_zip`
+    // takes the already-parsed doc so it never re-matches `fmt`.
     match fmt {
-        DocumentFormat::Docx | DocumentFormat::Odt => compose_zip(source, fmt, modes),
+        DocumentFormat::Docx => compose_zip(
+            source,
+            document::docx::package::open(source),
+            fmt.label(),
+            modes,
+        ),
+        DocumentFormat::Odt => compose_zip(
+            source,
+            document::odt::package::open(source),
+            fmt.label(),
+            modes,
+        ),
         DocumentFormat::Rtf => compose_rtf(source, modes),
     }
 }
 
+/// Wire a ZIP-backed word document into the read view + ZIP TOC.
+/// `parsed` is the format's already-attempted `ast::Doc`; `label`
+/// names it in warnings and the TOC. Format-agnostic — DOCX and ODT
+/// both parse to `ast::Doc` and feed this same pipeline.
 fn compose_zip(
     source: &InputSource,
-    fmt: DocumentFormat,
+    parsed: Result<document::ast::Doc>,
+    label: &'static str,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     let mut warnings = Vec::new();
-    let parsed = match fmt {
-        DocumentFormat::Docx => document::docx::package::open(source),
-        DocumentFormat::Odt => document::odt::package::open(source),
-        DocumentFormat::Rtf => unreachable!("RTF handled by compose_rtf"),
-    };
     match parsed {
         Ok(doc) => modes.push(Box::new(RenderedTextMode::new(DocRenderer::new(doc)))),
-        Err(e) => warnings.push(format!("{} unreadable: {e:#}", fmt.label())),
+        Err(e) => warnings.push(format!("{label} unreadable: {e:#}")),
     }
     let (entries, mut listing_warnings) =
         match archive::reader::list_entries(source, ArchiveFormat::Zip) {
             Ok(e) => (e, Vec::new()),
-            Err(e) => (
-                Vec::new(),
-                vec![format!("Failed to list {}: {e:#}", fmt.label())],
-            ),
+            Err(e) => (Vec::new(), vec![format!("Failed to list {label}: {e:#}")]),
         };
     warnings.append(&mut listing_warnings);
-    modes.push(Box::new(ListingMode::new(
-        fmt.label(),
-        "TOC",
-        entries,
-        warnings,
-    )));
+    modes.push(Box::new(ListingMode::new(label, "TOC", entries, warnings)));
     Ok(())
 }
 
