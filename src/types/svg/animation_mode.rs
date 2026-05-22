@@ -19,6 +19,9 @@ use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
 use crate::types::image::scroll::{self, ScrollBounds};
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::paged::{
+    CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP, cycle_image_config,
+};
 use crate::viewer::ui::{Action, HelpEntry};
 
 /// Maximum number of (frame, grid) prepared images held in memory.
@@ -57,18 +60,9 @@ const SVG_ANIM_ACTIONS: &[HelpEntry] = &[
         "Next / previous frame",
     ),
     (&[Action::Extract], "Extract current frame as PNG"),
-    (
-        &[Action::CycleBackground, Action::CycleBackgroundBack],
-        "Cycle background (images)",
-    ),
-    (
-        &[Action::CycleImageMode, Action::CycleImageModeBack],
-        "Cycle render mode (images)",
-    ),
-    (
-        &[Action::CycleFitMode],
-        "Cycle fit (contain / width / height)",
-    ),
+    CYCLE_BACKGROUND_HELP,
+    CYCLE_IMAGE_MODE_HELP,
+    CYCLE_FIT_HELP,
     (
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
@@ -237,6 +231,16 @@ impl Mode for SvgAnimationMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        if let Some(h) = cycle_image_config(action, &mut self.config) {
+            // Any image-config change invalidates the rasterized-frame
+            // cache; a fit change additionally re-anchors the pan.
+            if action == Action::CycleFitMode {
+                self.scroll_x = 0;
+                self.scroll_y = 0;
+            }
+            self.invalidate_cache();
+            return h;
+        }
         match action {
             Action::PlayPause => {
                 self.playing = !self.playing;
@@ -254,33 +258,6 @@ impl Mode for SvgAnimationMode {
                 let n = self.model.frames.len();
                 self.current = (self.current + n - 1) % n;
                 self.last_advance = Instant::now();
-                Handled::Yes
-            }
-            Action::CycleBackground => {
-                self.config.background = self.config.background.next();
-                self.invalidate_cache();
-                Handled::Yes
-            }
-            Action::CycleBackgroundBack => {
-                self.config.background = self.config.background.prev();
-                self.invalidate_cache();
-                Handled::Yes
-            }
-            Action::CycleImageMode => {
-                self.config.mode = self.config.mode.next();
-                self.invalidate_cache();
-                Handled::Yes
-            }
-            Action::CycleImageModeBack => {
-                self.config.mode = self.config.mode.prev();
-                self.invalidate_cache();
-                Handled::Yes
-            }
-            Action::CycleFitMode => {
-                self.config.fit = self.config.fit.next();
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                self.invalidate_cache();
                 Handled::Yes
             }
             _ => Handled::No,

@@ -16,17 +16,13 @@ use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
+use crate::viewer::modes::{
+    Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
+};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
 
-const EXTRA_ACTIONS: &[HelpEntry] = &[
-    (&[Action::OpenSearch], "Search"),
-    (
-        &[Action::NextMatch, Action::PrevMatch],
-        "Next / previous match",
-    ),
-];
+const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PREV_MATCH_HELP];
 
 /// Turns a parsed document into width-wrapped, ANSI-styled lines.
 ///

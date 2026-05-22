@@ -6,7 +6,7 @@ use syntect::highlighting::Color;
 
 use super::gutter::Gutter;
 use super::pretty_view::{PrettyView, SyntaxRef};
-use super::{Handled, Mode, ModeId, Position, RenderCtx, Window};
+use super::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window};
 use crate::input::detect::StructuredFormat;
 use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
@@ -119,10 +119,7 @@ const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
         "Pan left / right (wrap off)",
     ),
     (&[Action::OpenSearch], "Search"),
-    (
-        &[Action::NextMatch, Action::PrevMatch],
-        "Next / previous match",
-    ),
+    NEXT_PREV_MATCH_HELP,
 ];
 
 const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
@@ -133,10 +130,7 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
         "Pan left / right (wrap off)",
     ),
     (&[Action::OpenSearch], "Search"),
-    (
-        &[Action::NextMatch, Action::PrevMatch],
-        "Next / previous match",
-    ),
+    NEXT_PREV_MATCH_HELP,
 ];
 
 /// The logical-line view of the active branch — the streaming raw

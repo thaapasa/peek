@@ -21,7 +21,7 @@ use unicode_width::UnicodeWidthStr;
 use super::{Align, Cell, CellRole, Column, Table};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{SearchState, overlay_matches, reveal_h_scroll};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
 
@@ -57,10 +57,7 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
         "Pan left / right",
     ),
     (&[Action::OpenSearch], "Search"),
-    (
-        &[Action::NextMatch, Action::PrevMatch],
-        "Next / previous match",
-    ),
+    NEXT_PREV_MATCH_HELP,
 ];
 
 impl TableMode {

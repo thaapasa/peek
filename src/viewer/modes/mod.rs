@@ -139,6 +139,14 @@ pub(crate) fn step_search(search: &mut Option<SearchState>, delta: isize) -> Han
     }
 }
 
+/// Help row for the `n` / `p` match-navigation keys. Every searchable
+/// mode advertises it identically — declared once here so the wording
+/// stays consistent and can't drift mode to mode.
+pub(crate) const NEXT_PREV_MATCH_HELP: HelpEntry = (
+    &[Action::NextMatch, Action::PrevMatch],
+    "Next / previous match",
+);
+
 /// Selection the active mode hands to `crate::extract::extract` on the
 /// extract key. Modes without a selection return `None`.
 #[derive(Clone, Debug)]

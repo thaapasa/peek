@@ -21,7 +21,9 @@ use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
-use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::modes::{
+    ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
+};
 use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -417,10 +419,7 @@ impl Mode for ListingMode {
             (&[Action::ToggleStickyParents], "Pin parent path"),
             (&[Action::Extract], "Extract selected entry"),
             (&[Action::OpenSearch], "Search leaf names"),
-            (
-                &[Action::NextMatch, Action::PrevMatch],
-                "Next / previous match",
-            ),
+            NEXT_PREV_MATCH_HELP,
         ];
         ACTIONS
     }

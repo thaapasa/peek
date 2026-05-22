@@ -150,25 +150,36 @@ pub(crate) fn cycle_image_config(action: Action, cfg: &mut ImageConfig) -> Optio
     }
 }
 
-/// Mode-local help entries shared by every paged-image mode: page
-/// navigation plus the image-config cycle keys.
+/// Help rows for the five image-config cycle keys that
+/// [`cycle_image_config`] handles. Kept next to the handler — and
+/// pinned to it by `image_config_help_pinned_to_handler` — so an image
+/// mode's help screen and its key handling cannot drift. Image /
+/// animation / paged modes splice these into their own `extra_actions`;
+/// EPUB overrides the background / render-mode labels (its keys only
+/// bite on cover-image chapters).
+pub(crate) const CYCLE_BACKGROUND_HELP: HelpEntry = (
+    &[Action::CycleBackground, Action::CycleBackgroundBack],
+    "Cycle background",
+);
+pub(crate) const CYCLE_IMAGE_MODE_HELP: HelpEntry = (
+    &[Action::CycleImageMode, Action::CycleImageModeBack],
+    "Cycle render mode",
+);
+pub(crate) const CYCLE_FIT_HELP: HelpEntry = (
+    &[Action::CycleFitMode],
+    "Cycle fit (contain / width / height)",
+);
+
+/// Mode-local help entries for [`PagedImageMode`]: page navigation plus
+/// the shared image-config block.
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
         &[Action::NextChapter, Action::PrevChapter],
         "Next / previous page",
     ),
-    (
-        &[Action::CycleBackground, Action::CycleBackgroundBack],
-        "Cycle background",
-    ),
-    (
-        &[Action::CycleImageMode, Action::CycleImageModeBack],
-        "Cycle render mode",
-    ),
-    (
-        &[Action::CycleFitMode],
-        "Cycle fit (contain / width / height)",
-    ),
+    CYCLE_BACKGROUND_HELP,
+    CYCLE_IMAGE_MODE_HELP,
+    CYCLE_FIT_HELP,
 ];
 
 /// Renders one page of a paged-image document to ASCII-art lines.
@@ -364,5 +375,36 @@ mod tests {
     fn pipe_rows_caps_unbounded() {
         assert_eq!(pipe_rows(usize::MAX), PIPE_IMAGE_MAX_ROWS);
         assert_eq!(pipe_rows(42), 42);
+    }
+
+    /// The shared image-config help rows and `cycle_image_config` (the
+    /// handler every image mode dispatches through) must agree on the
+    /// key set — otherwise a mode's help screen advertises a key it
+    /// ignores, or vice versa.
+    #[test]
+    fn image_config_help_pinned_to_handler() {
+        let mut cfg = ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit: FitMode::Contain,
+        };
+        // Every key the shared help rows advertise is one the handler
+        // actually consumes.
+        for (keys, _) in [CYCLE_BACKGROUND_HELP, CYCLE_IMAGE_MODE_HELP, CYCLE_FIT_HELP] {
+            for &action in keys {
+                assert!(
+                    cycle_image_config(action, &mut cfg).is_some(),
+                    "{action:?} is advertised in a CYCLE_*_HELP row but cycle_image_config ignores it",
+                );
+            }
+        }
+        // Unrelated keys fall through untouched.
+        for action in [Action::NextMatch, Action::OpenSearch, Action::Back] {
+            assert!(cycle_image_config(action, &mut cfg).is_none());
+        }
     }
 }

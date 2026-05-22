@@ -31,7 +31,7 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry, take_cols};
 
@@ -118,10 +118,7 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
         "Pan columns left / right",
     ),
     (&[Action::OpenSearch], "Search cells"),
-    (
-        &[Action::NextMatch, Action::PrevMatch],
-        "Next / previous match",
-    ),
+    NEXT_PREV_MATCH_HELP,
 ];
 
 impl CsvTableMode {

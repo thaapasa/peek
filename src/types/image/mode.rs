@@ -7,6 +7,9 @@ use super::scroll::{self, ScrollBounds};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::paged::{
+    CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP, cycle_image_config,
+};
 use crate::viewer::ui::{Action, HelpEntry};
 
 #[derive(Copy, Clone)]
@@ -62,18 +65,9 @@ pub(crate) struct ImageRenderMode {
 }
 
 const IMAGE_ACTIONS: &[HelpEntry] = &[
-    (
-        &[Action::CycleBackground, Action::CycleBackgroundBack],
-        "Cycle background (images)",
-    ),
-    (
-        &[Action::CycleImageMode, Action::CycleImageModeBack],
-        "Cycle render mode (images)",
-    ),
-    (
-        &[Action::CycleFitMode],
-        "Cycle fit (contain / width / height)",
-    ),
+    CYCLE_BACKGROUND_HELP,
+    CYCLE_IMAGE_MODE_HELP,
+    CYCLE_FIT_HELP,
     (
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
@@ -233,31 +227,16 @@ impl Mode for ImageRenderMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
-        match action {
-            Action::CycleBackground => {
-                self.config.background = self.config.background.next();
-                Handled::Yes
-            }
-            Action::CycleBackgroundBack => {
-                self.config.background = self.config.background.prev();
-                Handled::Yes
-            }
-            Action::CycleImageMode => {
-                self.config.mode = self.config.mode.next();
-                Handled::Yes
-            }
-            Action::CycleImageModeBack => {
-                self.config.mode = self.config.mode.prev();
-                Handled::Yes
-            }
-            Action::CycleFitMode => {
-                self.config.fit = self.config.fit.next();
+        if let Some(h) = cycle_image_config(action, &mut self.config) {
+            // A fit change re-anchors the image; the old pan offset is
+            // meaningless against the new geometry.
+            if action == Action::CycleFitMode {
                 self.scroll_x = 0;
                 self.scroll_y = 0;
-                Handled::Yes
             }
-            _ => Handled::No,
+            return h;
         }
+        Handled::No
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

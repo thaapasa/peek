@@ -9,6 +9,9 @@ use super::pipeline::{FitMode, ImageConfig};
 use super::scroll::{self, ScrollBounds};
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
+use crate::viewer::paged::{
+    CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP, cycle_image_config,
+};
 use crate::viewer::ui::{Action, HelpEntry};
 
 /// Animated image view (GIF/WebP). Owns the decoded frame list, current
@@ -40,18 +43,9 @@ const ANIM_ACTIONS: &[HelpEntry] = &[
         "Next / previous frame",
     ),
     (&[Action::Extract], "Extract current frame as PNG"),
-    (
-        &[Action::CycleBackground, Action::CycleBackgroundBack],
-        "Cycle background (images)",
-    ),
-    (
-        &[Action::CycleImageMode, Action::CycleImageModeBack],
-        "Cycle render mode (images)",
-    ),
-    (
-        &[Action::CycleFitMode],
-        "Cycle fit (contain / width / height)",
-    ),
+    CYCLE_BACKGROUND_HELP,
+    CYCLE_IMAGE_MODE_HELP,
+    CYCLE_FIT_HELP,
     (
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
@@ -160,6 +154,14 @@ impl Mode for AnimationMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        if let Some(h) = cycle_image_config(action, &mut self.config) {
+            // A fit change re-anchors the frame; the old pan is stale.
+            if action == Action::CycleFitMode {
+                self.scroll_x = 0;
+                self.scroll_y = 0;
+            }
+            return h;
+        }
         match action {
             Action::PlayPause => {
                 self.playing = !self.playing;
@@ -177,28 +179,6 @@ impl Mode for AnimationMode {
                 let n = self.frames.len();
                 self.current = (self.current + n - 1) % n;
                 self.last_advance = Instant::now();
-                Handled::Yes
-            }
-            Action::CycleBackground => {
-                self.config.background = self.config.background.next();
-                Handled::Yes
-            }
-            Action::CycleBackgroundBack => {
-                self.config.background = self.config.background.prev();
-                Handled::Yes
-            }
-            Action::CycleImageMode => {
-                self.config.mode = self.config.mode.next();
-                Handled::Yes
-            }
-            Action::CycleImageModeBack => {
-                self.config.mode = self.config.mode.prev();
-                Handled::Yes
-            }
-            Action::CycleFitMode => {
-                self.config.fit = self.config.fit.next();
-                self.scroll_x = 0;
-                self.scroll_y = 0;
                 Handled::Yes
             }
             _ => Handled::No,

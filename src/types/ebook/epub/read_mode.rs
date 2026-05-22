@@ -31,7 +31,7 @@ use crate::types::image::pipeline::render::{
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::paged::{
-    self, CachedRender, PageCacheKey, cycle_image_config, render_cached, step_paged,
+    self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, render_cached, step_paged,
 };
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -56,10 +56,7 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
         &[Action::CycleImageMode, Action::CycleImageModeBack],
         "Cycle render mode (cover image)",
     ),
-    (
-        &[Action::CycleFitMode],
-        "Cycle fit (contain / width / height)",
-    ),
+    CYCLE_FIT_HELP,
 ];
 
 /// Heuristic threshold: chapters that produce at most this many
