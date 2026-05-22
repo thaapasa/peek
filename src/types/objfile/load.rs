@@ -16,8 +16,8 @@ pub struct Loaded<'data> {
 
 /// Architecture inventory of a universal (fat) Mach-O container.
 pub struct FatSummary {
-    /// Friendly arch label for every slice, in container order.
-    pub architectures: Vec<String>,
+    /// Architecture of every slice, in container order.
+    pub architectures: Vec<object::Architecture>,
     /// Index into `architectures` of the slice actually parsed.
     pub selected: usize,
 }
@@ -48,10 +48,8 @@ fn load_fat<'data, A: FatArch>(data: &'data [u8], arches: &[A]) -> Result<Loaded
     if arches.is_empty() {
         bail!("universal binary contains no architecture slices");
     }
-    let architectures: Vec<String> = arches
-        .iter()
-        .map(|a| arch_label(a.architecture()))
-        .collect();
+    let architectures: Vec<object::Architecture> =
+        arches.iter().map(|a| a.architecture()).collect();
     // Prefer the slice matching the host architecture; fall back to the
     // first slice when the container doesn't carry it.
     let host = host_architecture();
@@ -83,19 +81,5 @@ fn host_architecture() -> Option<object::Architecture> {
         Some(Architecture::X86_64)
     } else {
         None
-    }
-}
-
-/// Friendly label for the common architectures; anything else falls
-/// back to the `object` enum's debug name (still readable — `S390x` etc).
-pub fn arch_label(a: object::Architecture) -> String {
-    use object::Architecture;
-    match a {
-        Architecture::X86_64 => "x86-64".to_string(),
-        Architecture::I386 => "x86 (i386)".to_string(),
-        Architecture::Aarch64 => "AArch64".to_string(),
-        Architecture::Arm => "ARM".to_string(),
-        Architecture::Unknown => "unknown".to_string(),
-        other => format!("{other:?}"),
     }
 }
