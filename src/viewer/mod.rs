@@ -21,6 +21,7 @@ pub(crate) mod paged;
 pub(crate) mod search;
 pub(crate) mod table;
 pub(crate) mod ui;
+pub(crate) mod wrap_scroll;
 
 /// Highlight text content as colored terminal lines.
 ///

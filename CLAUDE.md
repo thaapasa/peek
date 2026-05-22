@@ -262,6 +262,7 @@ src/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
+    wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + the LineProvider seam. ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineProvider (raw LineSource vs pretty cache)
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
@@ -271,7 +272,7 @@ src/
       viewport.rs      — ListingViewport: scroll + selection state + sticky-chain math. `select_row` pins a file selection; `scroll_to_row` brings any row (file or dir) into the content slot without moving the selection cursor
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
-      content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed)
+      content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed); wrap/scroll geometry delegated to `viewer::wrap_scroll`, active branch exposed to it via the `ContentLines` LineProvider
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing

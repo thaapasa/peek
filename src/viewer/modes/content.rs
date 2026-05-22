@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -10,13 +11,9 @@ use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::structured::pretty;
 use crate::viewer::search::{self, SearchState};
-use crate::viewer::ui::{Action, HelpEntry, count_wrap_segments, slice_styled_h, wrap_styled};
+use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, wrap_styled};
+use crate::viewer::wrap_scroll::{LineProvider, WrapScroll};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
-
-/// Horizontal-scroll step size (columns) when wrap is off. Matches
-/// `less -S` feel: small enough to land naturally on indented code,
-/// big enough that panning a wide log line doesn't take 20 keypresses.
-const H_SCROLL_STEP: usize = 8;
 
 /// Pretty-printing the structured form of a file requires holding the
 /// whole document — there's no streaming JSON pretty-printer. Reads above
@@ -78,20 +75,12 @@ pub(crate) struct ContentMode {
     show_line_numbers: bool,
     label: &'static str,
 
-    /// Soft-wrap on by default. When on, vertical scroll moves visual
-    /// rows (not logical lines) and the gutter blanks out continuation
-    /// rows. When off, lines truncate at viewport width and Left/Right
-    /// pan via `h_scroll`.
-    soft_wrap: bool,
-    /// Top visible logical line index. Owned scroll state — replaces
-    /// `ViewerState::scroll[active]` for ContentMode.
-    top_logical: usize,
-    /// Visual-row offset inside `top_logical`'s wrap segments. Used only
-    /// when `soft_wrap` is on; reset on toggle, position restore, and
-    /// after Top jumps.
-    top_sub_row: usize,
-    /// Horizontal column offset when `soft_wrap` is off.
-    h_scroll: usize,
+    /// Wrap-aware scroll position — logical line, visual sub-row, and
+    /// horizontal pan. Owned scroll state; replaces
+    /// `ViewerState::scroll[active]` for ContentMode. Soft-wrap is on by
+    /// default: vertical scroll then moves visual rows and the gutter
+    /// blanks continuation rows; off, lines truncate and Left/Right pan.
+    wrap: WrapScroll,
     /// Last terminal column count seen — set on every render and via
     /// `on_resize`. `scroll()` reads this rather than querying the
     /// terminal directly. (HexMode follows the same pattern.)
@@ -134,6 +123,63 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
     ),
 ];
 
+/// The logical-line view of the active branch — the streaming raw
+/// `LineSource`, or the materialised pretty-print cache. `WrapScroll`'s
+/// geometry reads lines through this `LineProvider` so it stays
+/// branch-agnostic.
+enum ContentLines<'a> {
+    Raw(&'a LineSource),
+    Pretty(&'a [String]),
+}
+
+impl<'a> ContentLines<'a> {
+    /// Pick the active branch. Pretty only when pretty mode is on *and*
+    /// its cache is built — `Pretty(&[])` before the first pretty
+    /// render keeps the geometry seeing an empty view, matching the
+    /// pre-lift `current_total` (which returned 0 in that window).
+    ///
+    /// A free constructor, not a `&self` method on `ContentMode`: it
+    /// borrows the individual line-data fields, leaving `self.wrap`
+    /// free for the `&mut` borrow the geometry methods take alongside.
+    fn new(
+        use_pretty: bool,
+        has_syntax: bool,
+        line_source: &'a LineSource,
+        pretty_highlighted: Option<&'a (PeekThemeName, StyleMode, Vec<String>)>,
+        pretty_raw_lines: Option<&'a Vec<String>>,
+    ) -> Self {
+        if !use_pretty {
+            return ContentLines::Raw(line_source);
+        }
+        let cache: Option<&'a Vec<String>> = if has_syntax {
+            pretty_highlighted.map(|(_, _, lines)| lines)
+        } else {
+            pretty_raw_lines
+        };
+        ContentLines::Pretty(cache.map_or(&[], Vec::as_slice))
+    }
+}
+
+impl LineProvider for ContentLines<'_> {
+    fn total(&self) -> usize {
+        match self {
+            ContentLines::Raw(ls) => ls.total_lines(),
+            ContentLines::Pretty(lines) => lines.len(),
+        }
+    }
+
+    fn line(&self, idx: usize) -> Option<Cow<'_, str>> {
+        match self {
+            ContentLines::Raw(ls) => ls
+                .window(idx..idx + 1)
+                .ok()
+                .and_then(|mut v| v.drain(..).next())
+                .map(Cow::Owned),
+            ContentLines::Pretty(lines) => lines.get(idx).map(|s| Cow::Borrowed(s.as_str())),
+        }
+    }
+}
+
 impl ContentMode {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
@@ -166,14 +212,20 @@ impl ContentMode {
             allow_pretty_toggle,
             show_line_numbers,
             label,
-            soft_wrap: true,
-            top_logical: 0,
-            top_sub_row: 0,
-            h_scroll: 0,
+            wrap: WrapScroll::new(true),
             cached_cols: 0,
             cached_rows: 0,
             search: None,
         }
+    }
+
+    /// Visible columns left for content after the line-number gutter.
+    /// The wrap geometry and h-scroll slicing all work in this width.
+    fn usable_width(&self, total: usize) -> usize {
+        self.cached_cols
+            .max(1)
+            .saturating_sub(self.gutter_visible_width(total))
+            .max(1)
     }
 
     /// Number of digits in `n`, minimum 2 (so a 9-line file's gutter
@@ -280,8 +332,8 @@ impl ContentMode {
             None => styled,
         };
         let line_num = line_idx + 1;
-        if !self.soft_wrap {
-            let body = slice_styled_h(styled, self.h_scroll, usable_width);
+        if !self.wrap.soft_wrap() {
+            let body = slice_styled_h(styled, self.wrap.h_scroll(), usable_width);
             let prefix = self.gutter_prefix(Some(line_num), total, peek_theme);
             out.push(format!("{prefix}{body}"));
             return out.len() >= max_rows;
@@ -304,153 +356,33 @@ impl ContentMode {
         false
     }
 
-    /// Total logical line count of the currently-active branch. Raw
-    /// branch reads from `LineSource` (cheap); pretty branch reads from
-    /// the materialized cache (only valid after first render). Returns
-    /// 0 when the pretty cache hasn't been built yet (scroll handler
-    /// runs after render so this case is unusual but defensive).
+    /// Total logical line count of the currently-active branch.
     fn current_total(&self) -> usize {
-        if self.use_pretty {
-            if let Some((_, _, lines)) = &self.pretty_highlighted {
-                return lines.len();
-            }
-            if let Some(lines) = &self.pretty_raw_lines {
-                return lines.len();
-            }
-            0
-        } else {
-            self.line_source.total_lines()
-        }
+        ContentLines::new(
+            self.use_pretty,
+            self.syntax_token.is_some(),
+            &self.line_source,
+            self.pretty_highlighted.as_ref(),
+            self.pretty_raw_lines.as_ref(),
+        )
+        .total()
     }
 
-    /// Number of wrap segments for the logical line at `idx` given the
-    /// usable visual width. Returns 1 when wrap is off (each logical
-    /// line is one visual row) or when the line text isn't reachable.
-    fn segment_count_at(&self, idx: usize, usable: usize) -> usize {
-        if !self.soft_wrap || usable == 0 {
-            return 1;
-        }
-        if self.use_pretty {
-            if let Some((_, _, lines)) = &self.pretty_highlighted
-                && let Some(l) = lines.get(idx)
-            {
-                return count_wrap_segments(l, usable);
-            }
-            if let Some(lines) = &self.pretty_raw_lines
-                && let Some(l) = lines.get(idx)
-            {
-                return count_wrap_segments(l, usable);
-            }
-            1
-        } else {
-            self.line_source
-                .window(idx..idx + 1)
-                .ok()
-                .and_then(|v| v.into_iter().next())
-                .map(|l| count_wrap_segments(&l, usable))
-                .unwrap_or(1)
-        }
-    }
-
-    /// Walk backward from EOF accumulating segment counts until at least
-    /// `rows` visual rows are below the candidate top. Returns
-    /// `(top_logical, top_sub_row)` — the position that places the file
-    /// end exactly at the bottom of the viewport (or the file start when
-    /// the document is shorter than the viewport).
-    fn bottom_position(&self, total: usize, usable: usize, rows: usize) -> (usize, usize) {
-        if total == 0 || rows == 0 {
-            return (0, 0);
-        }
-        if !self.soft_wrap {
-            return (total.saturating_sub(rows), 0);
-        }
-        let mut accum = 0usize;
-        let mut idx = total;
-        while idx > 0 {
-            idx -= 1;
-            let segs = self.segment_count_at(idx, usable);
-            accum += segs;
-            if accum >= rows {
-                return (idx, accum - rows);
-            }
-        }
-        (0, 0)
-    }
-
-    /// Re-clamp the current top position so it never sits past the
-    /// effective bottom. Called after every scroll mutation so
-    /// `top_logical` / `top_sub_row` stay valid even when the user
-    /// pages aggressively or the viewport just shrank.
+    /// Re-clamp the wrap position against the active branch so it never
+    /// sits past the effective bottom. Called after every scroll
+    /// mutation and at the end of each render — a resize or theme cycle
+    /// can change wrap segment counts and strand the viewport.
     fn clamp_top(&mut self) {
-        let total = self.current_total();
-        if total == 0 {
-            self.top_logical = 0;
-            self.top_sub_row = 0;
-            return;
-        }
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
+        let cl = ContentLines::new(
+            self.use_pretty,
+            self.syntax_token.is_some(),
+            &self.line_source,
+            self.pretty_highlighted.as_ref(),
+            self.pretty_raw_lines.as_ref(),
+        );
+        let usable = self.usable_width(cl.total());
         let rows = self.cached_rows.max(1);
-        let (max_l, max_s) = self.bottom_position(total, usable, rows);
-        if self.top_logical > max_l {
-            self.top_logical = max_l;
-            self.top_sub_row = max_s;
-        } else if self.top_logical == max_l && self.top_sub_row > max_s {
-            self.top_sub_row = max_s;
-        }
-        if !self.soft_wrap {
-            self.top_sub_row = 0;
-        }
-    }
-
-    /// Advance `(top_logical, top_sub_row)` by one visual row downward.
-    /// In wrap-on, walks segments within the current line then rolls
-    /// over to the next line. In wrap-off, just bumps `top_logical`.
-    fn step_visual_down(&mut self) {
-        let total = self.current_total();
-        if total == 0 {
-            return;
-        }
-        if !self.soft_wrap {
-            self.top_logical = self.top_logical.saturating_add(1);
-            return;
-        }
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
-        let segs = self.segment_count_at(self.top_logical, usable);
-        if self.top_sub_row + 1 < segs {
-            self.top_sub_row += 1;
-        } else {
-            self.top_logical = self.top_logical.saturating_add(1);
-            self.top_sub_row = 0;
-        }
-    }
-
-    /// Step `(top_logical, top_sub_row)` upward by one visual row.
-    fn step_visual_up(&mut self) {
-        let total = self.current_total();
-        if total == 0 {
-            return;
-        }
-        if !self.soft_wrap {
-            self.top_logical = self.top_logical.saturating_sub(1);
-            return;
-        }
-        if self.top_sub_row > 0 {
-            self.top_sub_row -= 1;
-            return;
-        }
-        if self.top_logical == 0 {
-            return;
-        }
-        self.top_logical -= 1;
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
-        let segs = self.segment_count_at(self.top_logical, usable);
-        self.top_sub_row = segs.saturating_sub(1);
+        self.wrap.clamp(&cl, usable, rows);
     }
 
     /// Run pretty-print if it's the first time pretty mode is rendered.
@@ -548,13 +480,11 @@ impl ContentMode {
             });
         }
 
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
-        let top_logical = self.top_logical.min(total - 1);
-        let mut first_skip = if self.soft_wrap { self.top_sub_row } else { 0 };
+        let usable = self.usable_width(total);
+        let top_logical = self.wrap.top_logical().min(total - 1);
+        let mut first_skip = self.wrap.first_skip();
 
-        let lookahead = if self.soft_wrap {
+        let lookahead = if self.wrap.soft_wrap() {
             rows.saturating_add(8)
         } else {
             rows
@@ -597,11 +527,9 @@ impl ContentMode {
             });
         }
 
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
-        let top_logical = self.top_logical.min(total - 1);
-        let mut first_skip = if self.soft_wrap { self.top_sub_row } else { 0 };
+        let usable = self.usable_width(total);
+        let top_logical = self.wrap.top_logical().min(total - 1);
+        let mut first_skip = self.wrap.first_skip();
 
         if let Some(hl) = self.highlighter.as_mut() {
             let theme_changed = hl.active_theme() != ctx.theme_name;
@@ -614,7 +542,7 @@ impl ContentMode {
         // Lookahead buffer: each visible logical line yields ≥ 1 visual
         // row so `rows` lines is enough; the small margin absorbs cases
         // where `first_skip` swallows leading segments of the top line.
-        let lookahead = if self.soft_wrap {
+        let lookahead = if self.wrap.soft_wrap() {
             rows.saturating_add(8)
         } else {
             rows
@@ -672,8 +600,7 @@ impl ContentMode {
     fn step_match(&mut self, delta: isize) {
         let line = self.search.as_mut().and_then(|s| s.step(delta));
         if let Some(line) = line {
-            self.top_logical = line;
-            self.top_sub_row = 0;
+            self.wrap.jump_to_line(line);
             self.reveal_match_h(line);
             self.clamp_top();
         }
@@ -684,13 +611,11 @@ impl ContentMode {
     /// to 0; with wrap off, pan minimally via `search::reveal_h_scroll`
     /// so an already-visible hit isn't disturbed.
     fn reveal_match_h(&mut self, line: usize) {
-        if self.soft_wrap {
-            self.h_scroll = 0;
+        if self.wrap.soft_wrap() {
+            self.wrap.clear_h_scroll();
             return;
         }
-        let total = self.current_total();
-        let gutter = self.gutter_visible_width(total);
-        let usable = self.cached_cols.saturating_sub(gutter).max(1);
+        let usable = self.usable_width(self.current_total());
         let span = self
             .search
             .as_ref()
@@ -699,10 +624,11 @@ impl ContentMode {
                 let r = ranges.get(current?)?;
                 Some((r.start, r.end))
             });
-        self.h_scroll = match span {
-            Some((start, end)) => search::reveal_h_scroll(self.h_scroll, usable, start, end),
+        let h = match span {
+            Some((start, end)) => search::reveal_h_scroll(self.wrap.h_scroll(), usable, start, end),
             None => 0,
         };
+        self.wrap.set_h_scroll(h);
     }
 }
 
@@ -856,7 +782,7 @@ impl Mode for ContentMode {
         // Surface wrap state only when on (default-on convention: the
         // segment's absence means "off"; matches color-mode segment
         // which only appears when changed off the default).
-        if self.soft_wrap {
+        if self.wrap.soft_wrap() {
             segs.push(("Wrap".to_string(), theme.muted));
         }
         // Search position, shown only while a search is active.
@@ -887,11 +813,9 @@ impl Mode for ContentMode {
             return Handled::Yes;
         }
         if action == Action::ToggleSoftWrap {
-            self.soft_wrap = !self.soft_wrap;
-            // Logical line stays put; only sub-row / h-scroll need
-            // resetting so post-flip the viewport is coherent.
-            self.top_sub_row = 0;
-            self.h_scroll = 0;
+            // Logical line stays put; sub-row / h-scroll reset so the
+            // post-flip viewport is coherent — handled by `toggle_wrap`.
+            self.wrap.toggle_wrap();
             return Handled::Yes;
         }
         if action == Action::ToggleRawSource
@@ -915,9 +839,8 @@ impl Mode for ContentMode {
             // Match positions are in the old branch's line domain — they
             // mean nothing in the new branch. Drop the search.
             self.search = None;
-            self.top_logical = 0;
-            self.top_sub_row = 0;
-            self.h_scroll = 0;
+            self.wrap.jump_to_top();
+            self.wrap.clear_h_scroll();
             Handled::Yes
         } else {
             Handled::No
@@ -929,8 +852,14 @@ impl Mode for ContentMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        let total = self.current_total();
-        if total == 0 {
+        let cl = ContentLines::new(
+            self.use_pretty,
+            self.syntax_token.is_some(),
+            &self.line_source,
+            self.pretty_highlighted.as_ref(),
+            self.pretty_raw_lines.as_ref(),
+        );
+        if cl.total() == 0 {
             // No content yet — nothing to navigate. Still consume the
             // action so it doesn't fall through to a nonsensical global.
             return matches!(
@@ -945,51 +874,28 @@ impl Mode for ContentMode {
                     | Action::ScrollRight
             );
         }
-        let cols = self.cached_cols.max(1);
-        let gutter_w = self.gutter_visible_width(total);
-        let usable = cols.saturating_sub(gutter_w).max(1);
+        let usable = self.usable_width(cl.total());
         let rows = self.cached_rows.max(1);
         match action {
-            Action::ScrollUp => {
-                self.step_visual_up();
-            }
-            Action::ScrollDown => {
-                self.step_visual_down();
-            }
+            Action::ScrollUp => self.wrap.step_up(&cl, usable),
+            Action::ScrollDown => self.wrap.step_down(&cl, usable),
             Action::PageUp => {
-                let step = rows.saturating_sub(1).max(1);
-                for _ in 0..step {
-                    self.step_visual_up();
+                for _ in 0..rows.saturating_sub(1).max(1) {
+                    self.wrap.step_up(&cl, usable);
                 }
             }
             Action::PageDown => {
-                let step = rows.saturating_sub(1).max(1);
-                for _ in 0..step {
-                    self.step_visual_down();
+                for _ in 0..rows.saturating_sub(1).max(1) {
+                    self.wrap.step_down(&cl, usable);
                 }
             }
-            Action::Top => {
-                self.top_logical = 0;
-                self.top_sub_row = 0;
-            }
-            Action::Bottom => {
-                let (l, s) = self.bottom_position(total, usable, rows);
-                self.top_logical = l;
-                self.top_sub_row = s;
-            }
-            Action::ScrollLeft => {
-                if !self.soft_wrap {
-                    self.h_scroll = self.h_scroll.saturating_sub(H_SCROLL_STEP);
-                }
-            }
-            Action::ScrollRight => {
-                if !self.soft_wrap {
-                    self.h_scroll = self.h_scroll.saturating_add(H_SCROLL_STEP);
-                }
-            }
+            Action::Top => self.wrap.jump_to_top(),
+            Action::Bottom => self.wrap.jump_to_bottom(&cl, usable, rows),
+            Action::ScrollLeft => self.wrap.pan_left(),
+            Action::ScrollRight => self.wrap.pan_right(),
             _ => return false,
         }
-        self.clamp_top();
+        self.wrap.clamp(&cl, usable, rows);
         true
     }
 
@@ -1042,7 +948,7 @@ impl Mode for ContentMode {
         if self.use_pretty {
             Position::Unknown
         } else {
-            Position::Line(self.top_logical)
+            Position::Line(self.wrap.top_logical())
         }
     }
 
@@ -1053,9 +959,8 @@ impl Mode for ContentMode {
             Position::Unknown => None,
         };
         if let Some(l) = line {
-            self.top_logical = l;
-            self.top_sub_row = 0;
-            self.h_scroll = 0;
+            self.wrap.jump_to_line(l);
+            self.wrap.clear_h_scroll();
             self.clamp_top();
         }
     }
@@ -1092,8 +997,7 @@ impl Mode for ContentMode {
         let first = search.first_line();
         self.search = Some(search);
         if let Some(line) = first {
-            self.top_logical = line;
-            self.top_sub_row = 0;
+            self.wrap.jump_to_line(line);
             self.reveal_match_h(line);
         }
         self.clamp_top();
@@ -1190,7 +1094,7 @@ mod tests {
             assert_eq!(line, &whole[i], "forward window 0..10 line {i} drift");
         }
 
-        mode.top_logical = 10;
+        mode.wrap = WrapScroll::for_test(true, 10, 0, 0);
         let w1 = mode.render_window(&ctx, 0, 10).unwrap();
         assert_eq!(w1.lines.len(), 10);
         for (i, line) in w1.lines.iter().enumerate() {
@@ -1200,7 +1104,7 @@ mod tests {
         // Backward jump triggers a highlighter reset; output must still
         // match (this is the regression-prone path — wrong reset and
         // multi-line block-comment highlighting goes sideways).
-        mode.top_logical = 0;
+        mode.wrap = WrapScroll::for_test(true, 0, 0, 0);
         let w_back = mode.render_window(&ctx, 0, 5).unwrap();
         for (i, line) in w_back.lines.iter().enumerate() {
             assert_eq!(line, &whole[i], "backward jump line {i} drift");
@@ -1286,18 +1190,18 @@ mod tests {
         let mut mode = plain_mode_from_bytes(b"AAAAAAAAAAAAAAAAAAAA\nBBBB\n");
         mode.cached_cols = 10;
         mode.cached_rows = 1;
-        assert!(mode.soft_wrap, "default-on");
-        assert_eq!((mode.top_logical, mode.top_sub_row), (0, 0));
+        assert!(mode.wrap.soft_wrap(), "default-on");
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (0, 0));
 
         assert!(mode.scroll(Action::ScrollDown));
-        assert_eq!((mode.top_logical, mode.top_sub_row), (0, 1));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (0, 1));
 
         assert!(mode.scroll(Action::ScrollDown));
-        assert_eq!((mode.top_logical, mode.top_sub_row), (1, 0));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (1, 0));
 
         // Past bottom — clamp_top pins us to the bottom position.
         assert!(mode.scroll(Action::ScrollDown));
-        assert_eq!((mode.top_logical, mode.top_sub_row), (1, 0));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (1, 0));
     }
 
     /// Wrap-on ScrollUp from `(N, 0)` lands on the *last* segment of
@@ -1307,19 +1211,18 @@ mod tests {
         let mut mode = plain_mode_from_bytes(b"AAAAAAAAAAAAAAAAAAAA\nBBBB\n");
         mode.cached_cols = 10;
         mode.cached_rows = 1;
-        mode.top_logical = 1;
-        mode.top_sub_row = 0;
+        mode.wrap = WrapScroll::for_test(true, 1, 0, 0);
 
         assert!(mode.scroll(Action::ScrollUp));
         // line 0 has 2 segments → last segment index is 1.
-        assert_eq!((mode.top_logical, mode.top_sub_row), (0, 1));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (0, 1));
 
         assert!(mode.scroll(Action::ScrollUp));
-        assert_eq!((mode.top_logical, mode.top_sub_row), (0, 0));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (0, 0));
 
         // Already at top — saturate.
         assert!(mode.scroll(Action::ScrollUp));
-        assert_eq!((mode.top_logical, mode.top_sub_row), (0, 0));
+        assert_eq!((mode.wrap.top_logical(), mode.wrap.top_sub_row()), (0, 0));
     }
 
     /// Wrap-off ScrollRight steps `h_scroll` by `H_SCROLL_STEP` (8 cols)
@@ -1330,20 +1233,20 @@ mod tests {
         let mut mode = plain_mode_from_bytes(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n");
         mode.cached_cols = 80;
         mode.cached_rows = 5;
-        mode.soft_wrap = false;
+        mode.wrap = WrapScroll::for_test(false, 0, 0, 0);
 
-        assert_eq!(mode.h_scroll, 0);
+        assert_eq!(mode.wrap.h_scroll(), 0);
         assert!(mode.scroll(Action::ScrollRight));
-        assert_eq!(mode.h_scroll, 8);
+        assert_eq!(mode.wrap.h_scroll(), 8);
         assert!(mode.scroll(Action::ScrollRight));
-        assert_eq!(mode.h_scroll, 16);
+        assert_eq!(mode.wrap.h_scroll(), 16);
         assert!(mode.scroll(Action::ScrollLeft));
-        assert_eq!(mode.h_scroll, 8);
+        assert_eq!(mode.wrap.h_scroll(), 8);
 
         for _ in 0..5 {
             mode.scroll(Action::ScrollLeft);
         }
-        assert_eq!(mode.h_scroll, 0);
+        assert_eq!(mode.wrap.h_scroll(), 0);
     }
 
     /// Wrap-on Left/Right do not move `h_scroll` — h-scroll is only
@@ -1353,11 +1256,11 @@ mod tests {
         let mut mode = plain_mode_from_bytes(b"AAAAAAAAAAAAAAAAAAAA\n");
         mode.cached_cols = 10;
         mode.cached_rows = 5;
-        assert!(mode.soft_wrap);
+        assert!(mode.wrap.soft_wrap());
 
         mode.scroll(Action::ScrollRight);
         mode.scroll(Action::ScrollRight);
-        assert_eq!(mode.h_scroll, 0);
+        assert_eq!(mode.wrap.h_scroll(), 0);
     }
 
     /// `ToggleSoftWrap` flips wrap, resets `top_sub_row` and `h_scroll`,
@@ -1367,23 +1270,20 @@ mod tests {
         let mut mode = plain_mode_from_bytes(b"AAAAAAAAAAAAAAAAAAAA\nBBBB\n");
         mode.cached_cols = 10;
         mode.cached_rows = 5;
-        mode.top_logical = 1;
-        mode.top_sub_row = 0;
-        mode.soft_wrap = false;
-        mode.h_scroll = 16;
+        mode.wrap = WrapScroll::for_test(false, 1, 0, 16);
 
         let r = mode.handle(Action::ToggleSoftWrap);
         assert_eq!(r, Handled::Yes);
-        assert!(mode.soft_wrap);
-        assert_eq!(mode.top_logical, 1);
-        assert_eq!(mode.top_sub_row, 0);
-        assert_eq!(mode.h_scroll, 0);
+        assert!(mode.wrap.soft_wrap());
+        assert_eq!(mode.wrap.top_logical(), 1);
+        assert_eq!(mode.wrap.top_sub_row(), 0);
+        assert_eq!(mode.wrap.h_scroll(), 0);
 
         // Flip back: top_logical stays, sub-row + h-scroll already 0.
         let r = mode.handle(Action::ToggleSoftWrap);
         assert_eq!(r, Handled::Yes);
-        assert!(!mode.soft_wrap);
-        assert_eq!(mode.top_logical, 1);
+        assert!(!mode.wrap.soft_wrap());
+        assert_eq!(mode.wrap.top_logical(), 1);
     }
 
     /// `status_segments` emits a `Wrap` segment when wrap is on and
@@ -1398,7 +1298,7 @@ mod tests {
         assert!(segs.iter().any(|(s, _)| s == "Wrap"));
 
         let mut mode_off = plain_mode_from_bytes(b"hi\n");
-        mode_off.soft_wrap = false;
+        mode_off.wrap = WrapScroll::for_test(false, 0, 0, 0);
         let segs = mode_off.status_segments(&theme);
         assert!(!segs.iter().any(|(s, _)| s == "Wrap"));
     }
@@ -1413,7 +1313,7 @@ mod tests {
         assert_eq!(search.match_count(), 2);
         assert_eq!(search.first_line(), Some(1));
         assert_eq!(first, Some(1));
-        assert_eq!(mode.top_logical, 1, "jumped to first match's line");
+        assert_eq!(mode.wrap.top_logical(), 1, "jumped to first match's line");
     }
 
     /// `NextMatch` / `PrevMatch` cycle the current-match cursor, wrapping
@@ -1427,18 +1327,18 @@ mod tests {
         mode.cached_rows = 1;
         mode.set_search(Some("hit"));
         assert_eq!(mode.search.as_ref().unwrap().match_count(), 2);
-        assert_eq!(mode.top_logical, 1);
+        assert_eq!(mode.wrap.top_logical(), 1);
 
         assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
-        assert_eq!(mode.top_logical, 3);
+        assert_eq!(mode.wrap.top_logical(), 3);
 
         // Forward past the end wraps to the first match.
         assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
-        assert_eq!(mode.top_logical, 1);
+        assert_eq!(mode.wrap.top_logical(), 1);
 
         // Backward past the start wraps to the last match.
         assert_eq!(mode.handle(Action::PrevMatch), Handled::Yes);
-        assert_eq!(mode.top_logical, 3);
+        assert_eq!(mode.wrap.top_logical(), 3);
     }
 
     /// A `None` or empty query clears any active search.
