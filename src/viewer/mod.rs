@@ -177,8 +177,9 @@ fn build_states(
     (parse_state, highlight_state)
 }
 
-/// Same as `ranges_to_escaped` but skips a trailing `\n` if the styled
-/// content ends with one. Used by `LineStreamHighlighter` because syntect
+/// Walk syntect's styled `LineRanges` into an escape-coded string,
+/// skipping a trailing `\n` if the styled content ends with one. Used
+/// by `LineStreamHighlighter` because syntect
 /// is fed `line + "\n"` for correct end-of-line state transitions. If
 /// trimming leaves the final range empty (the common case — the trailing
 /// newline often arrives as its own range), drop it so we don't emit a

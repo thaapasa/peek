@@ -276,8 +276,9 @@ RGB → wire-format conversion. Callers always paint truecolor RGB; the mode dec
 interactively with `c` — cycling invalidates every mode's line cache so the UI repaints in the new
 encoding.
 
-Shared escape walker for syntect's `LineRanges`: `viewer::ranges_to_escaped` — replaces syntect's
-hardcoded-24-bit `as_24_bit_terminal_escaped`, routed through `StyleMode::fg_seq`.
+Shared escape walker for syntect's `LineRanges`: `viewer::ranges_to_escaped_trim_newline` —
+replaces syntect's hardcoded-24-bit `as_24_bit_terminal_escaped`, routed through
+`StyleMode::fg_seq`.
 
 ## Image rendering pipeline
 
@@ -409,27 +410,30 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 
 ## Adding a new file type
 
-1. Add a `FileType` variant in `input/detect.rs` and wire detection.
-2. Build one or more `Mode` impls in `viewer/modes/`. Add a `ModeId` variant if the mode needs to be
-   toggleable by id. Override `render_to_pipe` if the default (materialize-then-write) wastes memory
-   or violates byte-fidelity for that mode.
-3. Wire the modes into `Registry::compose_modes` for that file type. Hex / Info / About / Help are
-   appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).
+1. Add a `FileType` variant in `input/detect.rs` and wire detection. Per-type format and detection
+   helpers live alongside the type under `types/<x>/{format,detect}.rs`.
+2. Create the `types/<x>/` module and build the type's `Mode` impls there. Generic, reusable modes
+   — `ContentMode`, `RenderedTextMode`, `PagedImageMode`, `ListingMode` — already live in `viewer/`;
+   prefer wrapping one over a bespoke `Mode`. Add a `ModeId` variant if a mode must be toggleable by
+   id. Override `render_to_pipe` if the default (materialize-then-write) wastes memory or violates
+   byte-fidelity for that mode.
+3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then a `compose_modes`
+   arm delegating to it. Hex / Info / About / Help are appended automatically; pipe mode picks the
+   first non-aux mode (or first, if all are aux).
 4. Add info gathering in `info/gather/` if the type has interesting metadata (and themed display in
-   `info/render.rs` for novel field types).
+   `info/render/` for novel field types).
 
-Example — PDF (`src/types/pdf/`):
+Example — PDF (`src/types/pdf/compose.rs`):
 
 ```rust
-// in compose_modes
-FileType::Pdf => {
-    let doc = pdf::package::open_doc(source)?;            // Pdfium-backed Doc, Arc-cloneable
-    modes.push(Box::new(PagedImageMode::new(PdfPageRenderer::new(doc.clone()), image_config))); // page render
-    modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(doc.clone())))); // text extract
-    let embeds = doc.list_embeds();                       // /EmbeddedFiles attachments
-    if !embeds.is_empty() {
-        modes.push(Box::new(ListingMode::new("PDF", "Embeds", from_flat_paths(embeds), vec![])));
-    }
+// fn compose(source, detected, args, ctx, modes) — invoked from the
+// FileType::Pdf arm of Registry::compose_modes
+let doc = pdf::package::open_doc(source)?;            // Pdfium-backed Doc, Arc-cloneable
+modes.push(Box::new(PagedImageMode::new(PdfPageRenderer::new(doc.clone()), image_config))); // page render
+modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(doc.clone())))); // text extract
+let embeds = doc.list_embeds();                       // /EmbeddedFiles attachments
+if !embeds.is_empty() {
+    modes.push(Box::new(ListingMode::new("PDF", "Embeds", from_flat_paths(embeds), vec![])));
 }
 ```
 

@@ -260,6 +260,7 @@ src/
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), free `image_config`, syntax_token_for, highlight_lines, LineStreamHighlighter
+    cell_size.rs       — Terminal cell aspect-ratio detection: cell_aspect_h_over_w reads cell pixel dims from TIOCGWINSZ (cached on first call), falls back to 1:2 when the terminal can't report; set_override for an explicit user override. Used by the image pipeline to preserve source aspect across fonts
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + the LineProvider seam. ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineProvider (raw LineSource vs pretty cache)

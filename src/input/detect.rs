@@ -70,7 +70,8 @@ pub enum FileType {
     /// — the user sees the inner content rendered as its real type,
     /// and the info section surfaces a Compression row.
     Compressed(CompressionFormat),
-    /// Disk image (ISO / DMG / etc). Drives a metadata-only info view —
+    /// Disk image (ISO / DMG / etc). ISO drives a directory-tree
+    /// listing view; DMG / raw images drive a metadata-only info view —
     /// volume descriptor / trailer parsing, no filesystem walk.
     DiskImage(DiskImageFormat),
     /// Object file — ELF / Mach-O / PE / COFF executable, shared
