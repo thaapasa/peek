@@ -177,7 +177,7 @@ impl Mode for TableMode {
 
         let mut lines: Vec<String> = Vec::with_capacity(rows);
         lines.push(clip(&paint_header(&self.table.columns, theme), h, cols));
-        lines.push(clip(&paint_rule(&self.table.columns, theme), h, cols));
+        lines.push(clip(&paint_rule(self.content_width, theme), h, cols));
 
         let end = (self.top + self.body_rows()).min(self.body_plain.len());
         for idx in self.top..end {
@@ -192,7 +192,7 @@ impl Mode for TableMode {
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let theme = ctx.peek_theme;
         out.write_line(&paint_header(&self.table.columns, theme))?;
-        out.write_line(&paint_rule(&self.table.columns, theme))?;
+        out.write_line(&paint_rule(self.content_width, theme))?;
         for idx in 0..self.body_plain.len() {
             out.write_line(&self.body_line(idx, theme))?;
         }
@@ -377,9 +377,11 @@ fn paint_header(columns: &[Column], theme: &PeekTheme) -> String {
         .join("  ")
 }
 
-/// Sticky rule under the header, spanning the header's visible width.
-fn paint_rule(columns: &[Column], theme: &PeekTheme) -> String {
-    theme.paint(&"\u{2500}".repeat(header_width(columns)), theme.muted)
+/// Sticky rule under the header, spanning the table's full content width
+/// (widest of header and body) so it never cuts short of a wide body cell
+/// in the flexible last column.
+fn paint_rule(width: usize, theme: &PeekTheme) -> String {
+    theme.paint(&"\u{2500}".repeat(width), theme.muted)
 }
 
 /// Visible width of the header row (sum of column widths + separators).
