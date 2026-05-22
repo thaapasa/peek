@@ -24,14 +24,13 @@
 
 use std::borrow::Cow;
 use std::ops::Range;
-use std::rc::Rc;
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, PeekThemeName};
+use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry, take_cols};
@@ -85,10 +84,6 @@ pub(crate) struct CsvTableMode {
     h_col: usize,
     cached_cols: usize,
     cached_rows: usize,
-    #[allow(dead_code)]
-    theme_name: PeekThemeName,
-    #[allow(dead_code)]
-    theme_manager: Rc<crate::theme::ThemeManager>,
     label: &'static str,
     /// Active cell-scoped search, or `None`. Cleared by raw/pretty-style
     /// state changes (none yet here) and by `Back` / empty query.
@@ -130,11 +125,7 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
 ];
 
 impl CsvTableMode {
-    pub(crate) fn new(
-        data: CsvData,
-        theme_manager: Rc<crate::theme::ThemeManager>,
-        theme_name: PeekThemeName,
-    ) -> Self {
+    pub(crate) fn new(data: CsvData) -> Self {
         let widths = seed_widths(&data);
         let has_header = data.header_heuristic;
         let body_start = if has_header { 1 } else { 0 };
@@ -149,8 +140,6 @@ impl CsvTableMode {
             h_col: 0,
             cached_cols: 0,
             cached_rows: 0,
-            theme_name,
-            theme_manager,
             label: "Table",
             search: None,
         }
@@ -962,9 +951,11 @@ const _: () = {
 
 #[cfg(test)]
 mod tests {
+    use std::rc::Rc;
+
     use super::*;
     use crate::input::InputSource;
-    use crate::theme::{StyleMode, ThemeManager};
+    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
     use crate::types::csv::format::CsvFormat;
     use bytes::Bytes;
 
@@ -972,6 +963,8 @@ mod tests {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
+    /// Build a `PeekTheme` for the render-function tests. CsvTableMode
+    /// itself takes no theme — it paints from the live `RenderCtx`.
     fn theme_manager() -> Rc<ThemeManager> {
         Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain))
     }
@@ -980,7 +973,7 @@ mod tests {
     fn seed_widths_grow_with_widest_seed_cell() {
         let src = stdin("name,age\nalice,30\nelizabeth,99\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mode = CsvTableMode::new(data);
         // Column 0: max("name"=4, "alice"=5, "elizabeth"=9) = 9
         // Column 1: max("age"=3, "30"=2, "99"=2) = 3
         assert_eq!(mode.widths, vec![9, 3]);
@@ -990,7 +983,7 @@ mod tests {
     fn scrolldown_advances_top_record_clamped_to_max() {
         let src = stdin("h\na\nb\nc\nd\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         mode.cached_cols = 80;
         mode.cached_rows = 5; // 2 reserved for header+sep → 3 body rows
 
@@ -1008,7 +1001,7 @@ mod tests {
     fn shift_h_toggles_header() {
         let src = stdin("name,age\nalice,30\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         assert!(mode.has_header);
         assert_eq!(mode.handle(Action::ToggleHeader), Handled::Yes);
         assert!(!mode.has_header);
@@ -1021,7 +1014,7 @@ mod tests {
         // the visible window to reclaim space.
         let src = stdin("a,b\nshort,x\nmuchlongercell,y\nshort,z\nshort,w\nshort,v\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         mode.cached_cols = 80;
         mode.cached_rows = 4; // 2 reserved → 2 body rows visible
         assert!(
@@ -1045,7 +1038,7 @@ mod tests {
     fn scroll_right_steps_by_column_clamped_at_last() {
         let src = stdin("a,b,c\n1,2,3\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         mode.cached_cols = 80;
         mode.cached_rows = 5;
         assert_eq!(mode.h_col, 0);
@@ -1064,7 +1057,7 @@ mod tests {
     fn status_segments_show_record_position_and_column_count() {
         let src = stdin("a,b\n1,2\n3,4\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mode = CsvTableMode::new(data);
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         let segs = mode.status_segments(&theme);
@@ -1078,7 +1071,7 @@ mod tests {
         // `active` are not. Right-align matches the numeric columns only.
         let src = stdin("id,name,age\n1,Alice,30\n2,Bob,25\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mode = CsvTableMode::new(data);
         assert_eq!(
             mode.align,
             vec![Alignment::Right, Alignment::Left, Alignment::Right]
@@ -1206,7 +1199,7 @@ mod tests {
         assert_eq!(data.delimiter, b',');
         assert!(data.header_heuristic, "header row detected");
         assert_eq!(data.column_count(), 6);
-        let mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mode = CsvTableMode::new(data);
         // id (int), name (text), department (text), salary (float),
         // start_date (date), active (bool).
         assert_eq!(mode.align[0], Alignment::Right, "id column");
@@ -1250,7 +1243,7 @@ mod tests {
     fn make_mode_from_str(text: &str) -> CsvTableMode {
         let src = stdin(text);
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         mode.cached_cols = 80;
         mode.cached_rows = 10;
         mode
@@ -1371,7 +1364,7 @@ mod tests {
         // `↵` glyph — must still locate the match.
         let src = fixture("test-data/books.csv");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data, theme_manager(), PeekThemeName::IdeaDark);
+        let mut mode = CsvTableMode::new(data);
         mode.cached_cols = 200;
         mode.cached_rows = 30;
         // "Includes worked examples" lives on the second physical line

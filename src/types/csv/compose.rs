@@ -24,11 +24,7 @@ pub fn compose(
     fmt: CsvFormat,
 ) -> Result<()> {
     let data = CsvData::open(source, fmt)?;
-    modes.push(Box::new(CsvTableMode::new(
-        data,
-        Rc::clone(&ctx.theme_manager),
-        ctx.theme_name,
-    )));
+    modes.push(Box::new(CsvTableMode::new(data)));
     // Paired Source view: raw CSV bytes, no syntax token (no robust CSV
     // syntax shipped with two-face).
     let line_source = source.open_line_source()?;
