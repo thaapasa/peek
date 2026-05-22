@@ -424,7 +424,7 @@ Example — PDF (`src/types/pdf/`):
 // in compose_modes
 FileType::Pdf => {
     let doc = pdf::package::open_doc(source)?;            // Pdfium-backed Doc, Arc-cloneable
-    modes.push(Box::new(PdfPageMode::new(doc.clone(), image_config)));    // page render
+    modes.push(Box::new(PagedImageMode::new(PdfPageRenderer::new(doc.clone()), image_config))); // page render
     modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(doc.clone())))); // text extract
     let embeds = doc.list_embeds();                       // /EmbeddedFiles attachments
     if !embeds.is_empty() {

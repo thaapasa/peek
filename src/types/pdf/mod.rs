@@ -3,8 +3,9 @@
 //! from a `libpdfium.*` shipped alongside the peek binary).
 //!
 //! The three modes mirror existing patterns:
-//!   * [`PdfPageMode`] — paged rasterizer, one page at a time
-//!     ([`crate::types::comic::cbz::CbzReadMode`] analog)
+//!   * [`PdfPageRenderer`] — paged rasterizer, one page at a time,
+//!     wrapped in the generic [`crate::viewer::paged::PagedImageMode`]
+//!     ([`crate::types::comic::cbz::CbzPageRenderer`] analog)
 //!   * [`PdfTextRenderer`] — width-cached text render, wrapped in the
 //!     generic [`crate::viewer::modes::RenderedTextMode`]
 //!   * [`crate::viewer::listing::ListingMode`] of `/EmbeddedFiles`
@@ -16,9 +17,9 @@ pub mod info;
 pub mod info_gather;
 pub mod info_render;
 pub mod package;
-pub mod page_mode;
+pub mod page_renderer;
 pub mod text_renderer;
 
 pub use info::PdfStats;
-pub(crate) use page_mode::PdfPageMode;
+pub(crate) use page_renderer::PdfPageRenderer;
 pub(crate) use text_renderer::PdfTextRenderer;

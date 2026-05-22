@@ -6,16 +6,21 @@
 //! cycle handlers are identical across the three; this module is the
 //! single source for those pieces.
 //!
-//! Per-format render bodies and any mode-specific extras (e.g. EPUB
-//! search) stay in each mode's own file — only the truly shared
-//! mechanism lives here.
+//! For paged *image* documents (PDF pages, CBZ pages) the whole `Mode`
+//! impl is shared too: [`PagedImageMode<R>`] is generic over a small
+//! [`PageRenderer`] trait, mirroring [`crate::viewer::modes::RenderedTextMode`]
+//! for text documents. Only the per-page render body — Pdfium raster
+//! vs ZIP-entry decode — lives in each format's `page_renderer.rs`.
+//! EPUB stays separate: it adds chapter search and cover rendering.
 
 use anyhow::Result;
+use syntect::highlighting::Color;
 
-use crate::theme::StyleMode;
+use crate::output::PrintOutput;
+use crate::theme::{PeekTheme, StyleMode};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
-use crate::viewer::modes::Handled;
-use crate::viewer::ui::Action;
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::viewer::ui::{Action, HelpEntry};
 
 /// Inputs that affect a single page's rendered output. Stored
 /// alongside the cached lines so the cache invalidates automatically
@@ -142,6 +147,187 @@ pub(crate) fn cycle_image_config(action: Action, cfg: &mut ImageConfig) -> Optio
             Some(Handled::Yes)
         }
         _ => None,
+    }
+}
+
+/// Mode-local help entries shared by every paged-image mode: page
+/// navigation plus the image-config cycle keys.
+const EXTRA_ACTIONS: &[HelpEntry] = &[
+    (
+        &[Action::NextChapter, Action::PrevChapter],
+        "Next / previous page",
+    ),
+    (
+        &[Action::CycleBackground, Action::CycleBackgroundBack],
+        "Cycle background",
+    ),
+    (
+        &[Action::CycleImageMode, Action::CycleImageModeBack],
+        "Cycle render mode",
+    ),
+    (
+        &[Action::CycleFitMode],
+        "Cycle fit (contain / width / height)",
+    ),
+];
+
+/// Renders one page of a paged-image document to ASCII-art lines.
+///
+/// Implementors own the page source — a Pdfium handle, a CBZ ZIP path
+/// list — and turn page `idx` into rendered lines. `render_page` takes
+/// `&self`: the page source is immutable, and per-render warnings flow
+/// out through the `warnings` sink instead of mutating the renderer.
+/// [`PagedImageMode<R>`] supplies everything else: the page cache,
+/// navigation, image-config cycling, and the whole `Mode` impl.
+pub(crate) trait PageRenderer {
+    /// Total page count.
+    fn page_count(&self) -> usize;
+
+    /// Render page `idx` at the viewport / image-config encoded in
+    /// `key`, given the live `config`. Render failures should degrade
+    /// to a placeholder line plus a pushed warning, not an `Err`.
+    fn render_page(
+        &self,
+        idx: usize,
+        config: ImageConfig,
+        key: &PageCacheKey,
+        warnings: &mut Vec<String>,
+    ) -> Result<Vec<String>>;
+}
+
+/// Paged-image read mode generic over its [`PageRenderer`].
+///
+/// Shows one page at a time through the image pipeline; `n` / `p` step
+/// pages, `b` / `m` / `f` cycle image config. Per-page render cache is
+/// keyed by viewport size + image config. Mirrors
+/// [`crate::viewer::modes::RenderedTextMode`] for text documents.
+pub(crate) struct PagedImageMode<R: PageRenderer> {
+    renderer: R,
+    image_config: ImageConfig,
+    current: usize,
+    cache: Vec<Option<CachedRender>>,
+    warnings: Vec<String>,
+}
+
+impl<R: PageRenderer> PagedImageMode<R> {
+    pub(crate) fn new(renderer: R, image_config: ImageConfig) -> Self {
+        let count = renderer.page_count();
+        let mut cache = Vec::with_capacity(count);
+        cache.resize_with(count, || None);
+        Self {
+            renderer,
+            image_config,
+            current: 0,
+            cache,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn ensure_rendered(
+        &mut self,
+        width: usize,
+        rows: usize,
+        style_mode: StyleMode,
+    ) -> Result<&[String]> {
+        if self.renderer.page_count() == 0 {
+            return Ok(&[]);
+        }
+        let idx = self.current;
+        let key = PageCacheKey::build(&self.image_config, width, rows, style_mode);
+        // Disjoint-borrow split: the render closure captures
+        // `&self.renderer` and `&mut self.warnings` while `render_cached`
+        // holds `&mut self.cache` — all distinct fields.
+        let renderer = &self.renderer;
+        let config = self.image_config;
+        let warnings = &mut self.warnings;
+        render_cached(&mut self.cache, idx, key, |k| {
+            renderer.render_page(idx, config, k, warnings)
+        })
+    }
+}
+
+impl<R: PageRenderer> Mode for PagedImageMode<R> {
+    fn id(&self) -> ModeId {
+        ModeId::Rendered
+    }
+
+    fn label(&self) -> &str {
+        "Read"
+    }
+
+    fn rerender_on_resize(&self) -> bool {
+        true
+    }
+
+    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
+        let lines =
+            self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
+        let total = lines.len();
+        let win = slice_window(lines, scroll, rows);
+        Ok(Window { lines: win, total })
+    }
+
+    fn total_lines(&self) -> Option<usize> {
+        self.cache
+            .get(self.current)
+            .and_then(|c| c.as_ref())
+            .map(|c| c.lines.len())
+    }
+
+    /// Print mode walks every page in order, separated by a blank line.
+    /// Honors the cache so already-rendered pages reuse their output;
+    /// the interactive view stays single-page.
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
+        let total = self.renderer.page_count();
+        let saved = self.current;
+        for i in 0..total {
+            self.current = i;
+            let lines =
+                self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
+            for line in lines {
+                out.write_line(line)?;
+            }
+            if i + 1 < total {
+                out.write_line("")?;
+            }
+        }
+        self.current = saved;
+        Ok(())
+    }
+
+    fn extra_actions(&self) -> &'static [HelpEntry] {
+        EXTRA_ACTIONS
+    }
+
+    fn handle(&mut self, action: Action) -> Handled {
+        if let Some(h) = cycle_image_config(action, &mut self.image_config) {
+            return h;
+        }
+        let count = self.renderer.page_count();
+        match action {
+            Action::NextChapter => step_paged(&mut self.current, count, 1),
+            Action::PrevChapter => step_paged(&mut self.current, count, -1),
+            _ => Handled::No,
+        }
+    }
+
+    fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
+        let count = self.renderer.page_count();
+        if count == 0 {
+            return Vec::new();
+        }
+        vec![(format!("page {}/{}", self.current + 1, count), theme.muted)]
+    }
+
+    fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> {
+        if self.renderer.page_count() <= 1 {
+            return Vec::new();
+        }
+        vec!["n/p:page"]
+    }
+
+    fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.warnings)
     }
 }
 

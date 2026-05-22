@@ -6,9 +6,11 @@ use anyhow::Result;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::types::pdf::{self, PdfPageMode, PdfTextRenderer};
+use crate::types::image::pipeline::FitMode;
+use crate::types::pdf::{self, PdfPageRenderer, PdfTextRenderer};
 use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
@@ -24,7 +26,17 @@ pub fn compose(
     // Info with the reason instead of a silent fall-through.
     if let Ok(doc) = pdf::package::open_doc(source) {
         if doc.page_count() > 0 {
-            modes.push(Box::new(PdfPageMode::new(doc.clone(), image_config(args))));
+            // PDF pages are usually portrait + dense — fitting both
+            // axes into the viewport (Contain) crushes a full A4 page
+            // into ~30 illegible rows. FitWidth fills the terminal
+            // width at correct aspect ratio; vertical scroll covers the
+            // overflow. The user can cycle back to Contain via `f`.
+            let mut cfg = image_config(args);
+            cfg.fit = FitMode::FitWidth;
+            modes.push(Box::new(PagedImageMode::new(
+                PdfPageRenderer::new(doc.clone()),
+                cfg,
+            )));
         }
         modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(
             doc.clone(),

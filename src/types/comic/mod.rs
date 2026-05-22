@@ -9,5 +9,5 @@ pub mod detect;
 pub mod format;
 pub mod info;
 
-pub(crate) use cbz::CbzReadMode;
+pub(crate) use cbz::CbzPageRenderer;
 pub use info::ComicStats;

@@ -6,9 +6,10 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected};
 use crate::types::archive;
-use crate::types::comic::{CbzReadMode, cbz};
+use crate::types::comic::{CbzPageRenderer, cbz};
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
+use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
@@ -21,10 +22,9 @@ pub fn compose(
     let mut warnings = Vec::new();
     match cbz::package::list_pages(source) {
         Ok(pages) if !pages.is_empty() => {
-            modes.push(Box::new(CbzReadMode::new(
-                source.clone(),
+            modes.push(Box::new(PagedImageMode::new(
+                CbzPageRenderer::new(source.clone(), pages),
                 image_config(args),
-                pages,
             )));
         }
         Ok(_) => warnings.push("CBZ contains no image pages".to_string()),

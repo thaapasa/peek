@@ -170,25 +170,25 @@ src/
         renderer.rs    — RtfRenderer: TextRenderer impl over the parsed RTF stream via render::render; no listing or extract (RTF is single-file)
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
-      mod.rs           — Module wiring; re-exports PdfStats, PdfPageMode, PdfTextRenderer
-      compose.rs       — compose(): PdfPageMode + RenderedTextMode<PdfTextRenderer> + /EmbeddedFiles ListingMode
+      mod.rs           — Module wiring; re-exports PdfStats, PdfPageRenderer, PdfTextRenderer
+      compose.rs       — compose(): PagedImageMode<PdfPageRenderer> (fit forced to FitWidth) + RenderedTextMode<PdfTextRenderer> + /EmbeddedFiles ListingMode
       package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
-      page_mode.rs     — PdfPageMode: paged image render via `pipeline::render::{prepare_decoded, render_prepared}`. Per-page cache keyed by (cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, labeled "page"). Mirrors CbzReadMode shape
+      page_renderer.rs — PdfPageRenderer: PageRenderer impl — rasterizes a page via Pdfium (~16 px/col) and ASCII-renders it through `pipeline::render::{prepare_decoded, render_prepared}`. Wrapped in the generic `viewer::paged::PagedImageMode`
       text_renderer.rs — PdfTextRenderer: TextRenderer impl over `Doc::page_text`; pages joined with muted `--- Page N ---` separator; greedy word-wrap with hard-break for over-width tokens. Per-page extract failures degrade to a placeholder line + warning
       extract.rs       — Extract `/EmbeddedFiles` attachment by name → InputSource::Memory; reuses `extract::sanitize_entry_path`
       info.rs          — PdfStats { metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
       info_gather.rs   — Populate PdfStats via package::open_doc; failures land as `error` field rendered as warning row
       info_render.rs   — Render PDF info section (Version / Title / Author / Subject / Keywords / Created / Modified / Pages / Attachments). On error, render only `Error: ...` and stop
     comic/
-      mod.rs           — Module wiring; re-exports ComicStats / CbzReadMode
-      compose.rs       — compose(): CbzReadMode (paged images) + ZIP TOC ListingMode
+      mod.rs           — Module wiring; re-exports ComicStats / CbzPageRenderer
+      compose.rs       — compose(): PagedImageMode<CbzPageRenderer> (paged images) + ZIP TOC ListingMode
       detect.rs        — format_from_ext: `.cbz` → ComicFormat::Cbz
       format.rs        — ComicFormat enum + label
       info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }
       cbz/
-        mod.rs         — Module wiring; re-exports CbzReadMode
+        mod.rs         — Module wiring; re-exports CbzPageRenderer
         package.rs     — list_pages: walk ZIP central directory, filter image entries by extension (png/jpg/jpeg/webp/gif/bmp/tif/tiff), skip __MACOSX/, sort by name; open_zip + read_page for body fetch
-        read_mode.rs   — CbzReadMode: one page at a time via image pipeline. Per-page render cache keyed by (idx, cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, relabeled "page"). render_to_pipe walks every page separated by blank line
+        page_renderer.rs — CbzPageRenderer: PageRenderer impl — decodes one ZIP image entry and ASCII-renders it via the image pipeline. Wrapped in the generic `viewer::paged::PagedImageMode`
         info_gather.rs — Populate ComicStats (page count + uncompressed image bytes) from package::list_pages
         info_render.rs — Render comic info section from ComicStats
     svg/
@@ -263,6 +263,7 @@ src/
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + the LineProvider seam. ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineProvider (raw LineSource vs pretty cache)
+    paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / cycle_image_config / pipe_rows. Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); PDF / CBZ each supply a small PageRenderer impl. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
