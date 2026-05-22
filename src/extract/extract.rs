@@ -115,6 +115,7 @@ pub fn extract(
         | FileType::Compressed(_)
         | FileType::Csv(_)
         | FileType::ObjectFile
+        | FileType::Classfile
         | FileType::Binary => Err(ExtractError::Unsupported(
             "this file type has no inner items",
         )),

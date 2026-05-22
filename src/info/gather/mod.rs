@@ -268,6 +268,7 @@ fn gather_extras_in_memory(
         FileType::Audio(fmt) => audio_gather(source, *fmt),
         FileType::Csv(fmt) => csv_gather(source, *fmt),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
+        FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
         // Directory only ever appears via a real `File` source; the
         // virtual-source path can't construct one.
         FileType::Directory => crate::types::binary::info::gather_extras(magic_mime),
@@ -367,6 +368,9 @@ fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) ->
         FileType::Audio(fmt) => audio_gather(&InputSource::File(path.to_path_buf()), *fmt),
         FileType::Csv(fmt) => csv_gather(&InputSource::File(path.to_path_buf()), *fmt),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(
+            &InputSource::File(path.to_path_buf()),
+        ),
+        FileType::Classfile => crate::types::classfile::info_gather::gather_extras(
             &InputSource::File(path.to_path_buf()),
         ),
         FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),

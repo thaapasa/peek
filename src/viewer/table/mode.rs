@@ -1,4 +1,6 @@
-//! Object-file table view — Sections and Symbols.
+//! Aligned table view — a sticky-header table over fully-materialised
+//! rows. Shared by object files (Sections / Symbols) and classfiles
+//! (Fields / Methods).
 //!
 //! A dedicated mode rather than a `ContentMode` because it needs two
 //! things `ContentMode` can't give plain text:
@@ -9,14 +11,14 @@
 //! * **live re-theming** — every cell is repainted from the frame's
 //!   theme, so a runtime theme cycle recolours the whole table.
 //!
-//! Display-only: vertical scroll, Left/Right column pan, `/` search.
-//! No extract. Rows wider than the terminal are panned, never wrapped.
+//! Display-only: vertical scroll, Left/Right pan, `/` search. Rows
+//! wider than the terminal are panned, never wrapped.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
-use super::tables::{Align, Cell, CellRole, Column, ObjectTable};
+use super::{Align, Cell, CellRole, Column, Table};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
@@ -29,9 +31,9 @@ const STICKY_ROWS: usize = 2;
 /// Columns moved per Left/Right keypress.
 const H_STEP: usize = 8;
 
-pub(crate) struct ObjectTableMode {
+pub(crate) struct TableMode {
     label: &'static str,
-    table: ObjectTable,
+    table: Table,
     /// Plain (unpainted) text of every body line — the notice (when
     /// present) followed by one line per row. Search scans this; the
     /// index lines up 1:1 with the painted body lines.
@@ -54,15 +56,15 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Pan left / right",
     ),
-    (&[Action::OpenSearch], "Search names"),
+    (&[Action::OpenSearch], "Search"),
     (
         &[Action::NextMatch, Action::PrevMatch],
         "Next / previous match",
     ),
 ];
 
-impl ObjectTableMode {
-    pub(crate) fn new(label: &'static str, table: ObjectTable) -> Self {
+impl TableMode {
+    pub(crate) fn new(label: &'static str, table: Table) -> Self {
         let mut body_plain = Vec::with_capacity(table.rows.len() + 1);
         if let Some(notice) = &table.notice {
             body_plain.push(notice.clone());
@@ -154,7 +156,7 @@ impl ObjectTableMode {
     }
 }
 
-impl Mode for ObjectTableMode {
+impl Mode for TableMode {
     fn id(&self) -> ModeId {
         // Same id CsvTableMode uses — a tabular primary view. Nothing
         // keys on Content being unique (Tab cycles by index).

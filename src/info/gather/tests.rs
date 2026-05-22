@@ -280,3 +280,24 @@ fn tsconfig_json5_routed_as_structured() {
     };
     assert_eq!(info.format_name, "JSON5");
 }
+
+#[test]
+fn java_classfile_sample_metadata() {
+    let info = gather_fixture("test-data/Sample.class");
+    let FileExtras::Classfile(cf) = &info.extras else {
+        panic!("expected Classfile extras");
+    };
+    let meta = cf.meta.as_ref().expect("classfile parsed");
+    assert_eq!(meta.class_name, "Sample");
+    assert_eq!(meta.super_class.as_deref(), Some("java.lang.Object"));
+    assert!(
+        meta.interfaces.iter().any(|i| i == "java.lang.Comparable"),
+        "expected Comparable interface, got {:?}",
+        meta.interfaces,
+    );
+    assert_eq!(meta.major_version, 61, "fixture compiled with JDK 17");
+    assert_eq!(meta.source_file.as_deref(), Some("Sample.java"));
+    assert_eq!(meta.field_count, 4);
+    // 6 declared methods + the synthetic compareTo(Object) bridge.
+    assert!(meta.method_count >= 6);
+}

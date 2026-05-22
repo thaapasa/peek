@@ -3,7 +3,8 @@
 For files peek doesn't have a specialized viewer for — fonts, firmware, unknown formats —
 the baseline is the hex dump viewer plus a file info screen reachable via `i` / Tab.
 
-(Executables — ELF, Mach-O, PE — have their own viewer; see [Object files](./object-files.md).)
+(Executables — ELF, Mach-O, PE — and Java `.class` files have dedicated viewers; see
+[Object files](./object-files.md) and [Java classfiles](./classfiles.md).)
 
 ## Hex dump
 

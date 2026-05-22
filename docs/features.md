@@ -450,6 +450,38 @@ through `ObjectMeta` and mapped to display labels only in `info_render`. Bare CO
 without a magic signature aren't auto-detected yet; deeper inspection (linked libraries, build
 notes, per-slice switching) is tracked in [planned.md](planned.md).
 
+### Java Classfiles ✅
+
+`.class` files (JVM bytecode containers) get a dedicated viewer via the `cafebabe` crate.
+Detection is magic-byte based — and the magic, `CA FE BA BE`, is shared byte-for-byte with the
+Mach-O fat / universal-binary magic. `head_magic_mime` disambiguates on the field at offset 6:
+a classfile's `major_version` is ≥ 45 (JDK 1.0); a fat Mach-O's `nfat_arch` slice count there is
+small (< 45 in any real binary), so the field cleanly separates them.
+
+Three views, Tab-cycled:
+
+- **Info** (landing) — class name, superclass, interfaces, JDK version (classfile `major − 44`
+  for major ≥ 49: 52 = Java 8, 61 = Java 17), kind (`public final class` / `interface` /
+  `enum`), the `SourceFile` attribute, field and method counts.
+- **Fields** — table: modifiers, type, name.
+- **Methods** — table: modifiers, name, signature. Descriptors are decoded to source form —
+  `(Ljava/lang/String;I)V` renders as `(String, int) -> void`.
+
+Both tables use the shared `TableMode` (sticky header, content-fitted columns, horizontal pan,
+`/` search) — the same mode object files use.
+
+Two deliberate departures from a naive `javap` port:
+
+- **No constant-pool count.** `cafebabe`'s constant-pool iterator skips `Utf8` entries, so a
+  `count()` reports only a fraction of the true pool size. A wrong number is worse than none, so
+  the field is omitted rather than shown misleadingly.
+- **`descriptor` is a formatter, not a parser.** `cafebabe` already parses descriptors into
+  typed values, but its `Display` re-emits the raw JVM form (`(I)V`). The `descriptor` module
+  turns those typed values into readable text; it never re-parses raw descriptor strings.
+
+No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
+is not implemented; the Methods view shows signatures only.
+
 ### Binary and Archive Files ◐
 
 For files peek doesn't have a specialized viewer for — fonts, firmware images — the baseline shows

@@ -239,17 +239,24 @@ src/
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
     objfile/
       mod.rs           — Module wiring
-      compose.rs       — compose(): InfoMode landing view + Sections / Symbols ObjectTableMode (no extract path)
+      compose.rs       — compose(): InfoMode landing view + Sections / Symbols TableMode (no extract path)
       load.rs          — Fat-aware load: object::FileKind probe → universal Mach-O slice select (host arch, else first) → object::File::parse; FatSummary lists every slice
       info.rs          — ObjectInfo { meta: Option<ObjectMeta>, error } + ObjectMeta (semantic `object` enums: BinaryFormat / Architecture / ObjectKind / Endianness — not pre-formatted)
       info_gather.rs   — gather_extras: load + capture header counts into ObjectMeta
       info_render.rs   — render_section (Object File section) + enum→label maps (format / kind / arch / endianness — the one place metadata becomes text)
-      tables.rs        — build(): structured Sections / Symbols ObjectTable (typed Cell + CellRole, content-fitted column widths) via the `object` crate
-      table_mode.rs    — ObjectTableMode: sticky-header table, live-theme cell repaint, vertical scroll + Left/Right pan + `/` name search (minimal reveal pan)
+      tables.rs        — build(): Sections / Symbols as shared `viewer::table::Table` data (typed Cell + CellRole) via the `object` crate
+    classfile/
+      mod.rs           — Module wiring
+      compose.rs       — compose(): InfoMode landing view + Fields / Methods TableMode (no extract path)
+      info.rs          — ClassfileInfo { meta: Option<ClassfileMeta>, error } + ClassfileMeta (keeps cafebabe's ClassAccessFlags semantic; render maps it)
+      info_gather.rs   — gather_extras: cafebabe parse_class_with_options (bytecode parsing off) → ClassfileMeta
+      info_render.rs   — render_section (Class File section) + version / access-flag → label maps
+      descriptor.rs    — Render cafebabe descriptor types human-readably (`(Ljava/lang/String;I)V` → `(String, int) -> void`)
+      tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
-    search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode) + overlay_window
+    search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
@@ -264,6 +271,9 @@ src/
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips
+    table/
+      mod.rs           — Generic aligned-table view shared by objfile + classfile: Table / Column / Cell / CellRole / Align data + cell / fit_columns (content-fitted widths). CsvTableMode does NOT use this — streaming backing, cell-scoped search
+      mode.rs          — TableMode: sticky-header table over materialised rows, live-theme cell repaint, vertical scroll + Left/Right pan + `/` search (minimal reveal_h_scroll pan)
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
       state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache, extract dispatch + prompt overlay slot + status flash
@@ -286,7 +296,6 @@ docs/                  — Builder / agent reference (architecture, conventions,
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
   svg-anim-perf.md     — SVG animation memory profile + optimization options
   css-info-plan.md     — Plan for rich CSS info view + lightningcss adoption
-  csv-table-plan.md    — Plan for CSV / TSV aligned table view (sticky header, auto-widen)
   refactor-types-colocation-plan.md — Plan for tightening input / display / type-support split
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
   book.toml            — mdbook config

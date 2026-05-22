@@ -1,13 +1,11 @@
 # CSV / TSV Table View — Implementation Plan
 
-Status: **shipped**. Adds `.csv` / `.tsv` as a first-class file type with an aligned table view,
-replacing the prior fallback (CSV rendered as plain highlighted text — unaligned, hard to
-read). Implementation lives under [`src/types/csv/`](../src/types/csv/) and is summarised in
-[features.md](features.md#structured-data--config-files); this document is preserved as the
-design rationale.
+> **Status: Completed 2026-05-15.** Archived for reference.
 
-Slots into the Structured Data table in [features.md](features.md) and the pending entry in
-[planned.md](planned.md#structured-data-additions-).
+Adds `.csv` / `.tsv` as a first-class file type with an aligned table view, replacing the prior
+fallback (CSV rendered as plain highlighted text — unaligned, hard to read). Implementation
+lives under [`src/types/csv/`](../../src/types/csv/); kept here as the design rationale — the
+column-width strategy and the Resolved decisions section below are the `why` behind the code.
 
 ## Goals
 

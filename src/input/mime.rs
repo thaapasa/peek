@@ -111,6 +111,7 @@ pub fn mimes_for_path(
             | FileType::Archive(_)
             | FileType::Compressed(_)
             | FileType::ObjectFile
+            | FileType::Classfile
             | FileType::DiskImage(_) => "application/octet-stream",
             _ => "text/plain",
         }));
@@ -209,6 +210,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         | FileType::Archive(_)
         | FileType::Compressed(_)
         | FileType::ObjectFile
+        | FileType::Classfile
         | FileType::Binary => {
             return None;
         }

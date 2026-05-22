@@ -105,6 +105,10 @@ symphonia = { version = "0.5", features = ["all-codecs", "all-formats", "opt-sim
 # parser. `write` feature dropped — peek never emits object files.
 object = { version = "0.36", default-features = false, features = ["read", "std"] }
 
+# Java classfile parsing (.class — JVM bytecode container). Pure Rust,
+# parse-only: constant pool, fields, methods, attributes, version.
+cafebabe = "0.9"
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

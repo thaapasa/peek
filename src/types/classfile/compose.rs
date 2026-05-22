@@ -1,7 +1,6 @@
-//! Per-type compose: object files. InfoMode is the landing view (the
-//! header summary — mirrors `file` / `readelf -h`); two table views,
-//! Sections and Symbols, follow as `ObjectTableMode`s the Tab cycle
-//! steps through. No extract path.
+//! Per-type compose: Java classfiles. InfoMode is the landing view (the
+//! header summary); Fields and Methods follow as table views the Tab
+//! cycle steps through. No extract path.
 
 use anyhow::Result;
 
@@ -19,7 +18,7 @@ pub fn compose(
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    // Info first — the most useful single view for an object file. The
+    // Info first — the header summary is the natural landing view. The
     // universal tail dedupes by ModeId, so the later Info append is a
     // no-op.
     modes.push(Box::new(InfoMode::new()));
@@ -27,8 +26,8 @@ pub fn compose(
     // Two table views. A parse failure leaves the stack Info-only; the
     // Info section surfaces the same error.
     if let Ok(tables) = super::tables::build(source) {
-        modes.push(Box::new(TableMode::new("Sections", tables.sections)));
-        modes.push(Box::new(TableMode::new("Symbols", tables.symbols)));
+        modes.push(Box::new(TableMode::new("Fields", tables.fields)));
+        modes.push(Box::new(TableMode::new("Methods", tables.methods)));
     }
     Ok(())
 }

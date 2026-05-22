@@ -28,6 +28,7 @@
   - [Disk images](./file-types/disk-images.md)
   - [Directories](./file-types/directories.md)
   - [Object files](./file-types/object-files.md)
+  - [Java classfiles](./file-types/classfiles.md)
   - [Binary](./file-types/binary.md)
 
 # Viewer

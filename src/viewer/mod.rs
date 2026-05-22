@@ -19,6 +19,7 @@ pub(crate) mod listing;
 pub(crate) mod modes;
 pub(crate) mod paged;
 pub(crate) mod search;
+pub(crate) mod table;
 pub(crate) mod ui;
 
 /// Highlight text content as colored terminal lines.
@@ -266,6 +267,7 @@ impl Registry {
                     | FileType::Compressed(_)
                     | FileType::DiskImage(_)
                     | FileType::ObjectFile
+                    | FileType::Classfile
                     | FileType::Audio(_)
             ) {
                 modes.push(ctx.text_content_mode(source, file_type, args)?);
@@ -316,6 +318,11 @@ impl Registry {
                 }
                 FileType::ObjectFile => {
                     crate::types::objfile::compose::compose(
+                        source, detected, args, &ctx, &mut modes,
+                    )?;
+                }
+                FileType::Classfile => {
+                    crate::types::classfile::compose::compose(
                         source, detected, args, &ctx, &mut modes,
                     )?;
                 }

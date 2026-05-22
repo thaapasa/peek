@@ -11,5 +11,4 @@ pub mod info;
 pub mod info_gather;
 pub mod info_render;
 pub mod load;
-pub mod table_mode;
 pub mod tables;

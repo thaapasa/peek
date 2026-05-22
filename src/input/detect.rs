@@ -77,6 +77,9 @@ pub enum FileType {
     /// library, or relocatable object. Drives a metadata Info view plus
     /// streamed Sections / Symbols tables (no extract).
     ObjectFile,
+    /// Java classfile (`.class` — JVM bytecode container). Drives a
+    /// metadata Info view plus Fields / Methods tables (no extract).
+    Classfile,
     /// Filesystem directory. One-level listing view. Selecting a child
     /// file descends into peek; selecting a child directory re-targets
     /// the current frame (no stack of directories).
@@ -325,6 +328,14 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.len() >= 4 && &head[..4] == LZ4_FRAME_MAGIC {
         return Some("application/x-lz4".to_string());
     }
+    // Java class vs Mach-O fat binary — same `CA FE BA BE` magic. A
+    // classfile's major_version (big-endian u16 at offset 6) is >= 45
+    // (JDK 1.0); a fat Mach-O's nfat_arch slice count there is small
+    // (< 45 in any real binary), so the field cleanly separates them.
+    if head.len() >= 8 && &head[..4] == CLASS_MAGIC && u16::from_be_bytes([head[6], head[7]]) >= 45
+    {
+        return Some("application/java-vm".to_string());
+    }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
 
@@ -336,6 +347,9 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
 fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if mime == "application/x-archive" {
         return Some(FileType::Archive(ArchiveFormat::Ar));
+    }
+    if mime == "application/java-vm" {
+        return Some(FileType::Classfile);
     }
     if let Some(fmt) = document_detect::format_from_mime(mime) {
         return Some(FileType::Document(fmt));
@@ -501,6 +515,11 @@ const CPIO_ODC_MAGIC: &[u8; 6] = b"070707";
 /// `.lz4` reliable across infer versions.
 const LZ4_FRAME_MAGIC: &[u8; 4] = &[0x04, 0x22, 0x4D, 0x18];
 
+/// Java class file magic — `CA FE BA BE`. Shared byte-for-byte with the
+/// Mach-O fat/universal-binary magic; [`head_magic_mime`] disambiguates
+/// on the major-version field.
+const CLASS_MAGIC: &[u8; 4] = &[0xCA, 0xFE, 0xBA, 0xBE];
+
 /// Inspect a UTF-8 text buffer for a recognisable structured /
 /// markup format. Returns the detected `FileType` plus a canonical
 /// MIME so the caller can populate `Detected.magic_mime` when
@@ -643,6 +662,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "svg" => FileType::Svg,
         "html" | "htm" | "xhtml" => FileType::Html,
         "pdf" => FileType::Pdf,
+        "class" => FileType::Classfile,
         _ => return None,
     })
 }
