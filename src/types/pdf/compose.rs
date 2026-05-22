@@ -7,15 +7,15 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::pdf::{self, PdfPageMode, PdfTextRenderer};
-use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
     args: &Args,
-    ctx: &ComposeCtx,
+    _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     // Page-render + text-extraction + /EmbeddedFiles listing. If
@@ -24,10 +24,7 @@ pub fn compose(
     // Info with the reason instead of a silent fall-through.
     if let Ok(doc) = pdf::package::open_doc(source) {
         if doc.page_count() > 0 {
-            modes.push(Box::new(PdfPageMode::new(
-                doc.clone(),
-                ctx.image_config(args),
-            )));
+            modes.push(Box::new(PdfPageMode::new(doc.clone(), image_config(args))));
         }
         modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(
             doc.clone(),

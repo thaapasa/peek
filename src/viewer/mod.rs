@@ -463,18 +463,21 @@ impl ComposeCtx {
             },
         )))
     }
+}
 
-    pub fn image_config(&self, args: &Args) -> crate::types::image::ImageConfig {
-        use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
-        ImageConfig {
-            mode: ImageMode::from_str(&args.image_mode),
-            width: args.width,
-            background: Background::from_str(&args.background),
-            margin: args.margin,
-            style_mode: args.color,
-            edge_density: args.edge_density,
-            fit: FitMode::Contain,
-        }
+/// Build the image-render configuration from CLI args. A free function,
+/// not a `ComposeCtx` method — it reads only `args`, nothing the
+/// `ComposeCtx` bundle carries.
+pub fn image_config(args: &Args) -> crate::types::image::ImageConfig {
+    use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
+    ImageConfig {
+        mode: ImageMode::from_str(&args.image_mode),
+        width: args.width,
+        background: Background::from_str(&args.background),
+        margin: args.margin,
+        style_mode: args.color,
+        edge_density: args.edge_density,
+        fit: FitMode::Contain,
     }
 }
 

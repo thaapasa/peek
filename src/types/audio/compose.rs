@@ -9,9 +9,9 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{AudioFormat, Detected};
 use crate::types::image::{ImageKind, ImageRenderMode};
-use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{ContentMode, ContentModeConfig, InfoMode, Mode};
+use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
@@ -32,7 +32,7 @@ pub fn compose(
             let cover_source = InputSource::memory(visual.data.clone(), name);
             modes.push(Box::new(ImageRenderMode::with_label(
                 cover_source,
-                ctx.image_config(args),
+                image_config(args),
                 ImageKind::Raster,
                 "Cover",
             )));

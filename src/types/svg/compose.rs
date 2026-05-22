@@ -8,8 +8,8 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::image::{ImageKind, ImageRenderMode};
 use crate::types::svg::SvgAnimationMode;
-use crate::viewer::ComposeCtx;
 use crate::viewer::modes::Mode;
+use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
@@ -22,7 +22,7 @@ pub fn compose(
     // XML source, consistent with `--plain` meaning "no transformation"
     // for every other text type.
     if !ctx.plain_mode {
-        let cfg = ctx.image_config(args);
+        let cfg = image_config(args);
         let anim = if args.no_svg_anim {
             None
         } else {

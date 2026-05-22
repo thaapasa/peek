@@ -203,7 +203,7 @@ impl ViewerState {
         self.frames.last_mut().expect("non-empty stack")
     }
 
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub(crate) fn stack_depth(&self) -> usize {
         self.frames.len()
     }

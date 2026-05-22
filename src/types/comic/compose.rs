@@ -7,15 +7,15 @@ use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected};
 use crate::types::archive;
 use crate::types::comic::{CbzReadMode, cbz};
-use crate::viewer::ComposeCtx;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
+use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
     args: &Args,
-    ctx: &ComposeCtx,
+    _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     let mut warnings = Vec::new();
@@ -23,7 +23,7 @@ pub fn compose(
         Ok(pages) if !pages.is_empty() => {
             modes.push(Box::new(CbzReadMode::new(
                 source.clone(),
-                ctx.image_config(args),
+                image_config(args),
                 pages,
             )));
         }

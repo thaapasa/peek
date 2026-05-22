@@ -7,22 +7,22 @@ use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected};
 use crate::types::archive;
 use crate::types::ebook::epub::{self, EpubReadMode};
-use crate::viewer::ComposeCtx;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
+use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
     args: &Args,
-    ctx: &ComposeCtx,
+    _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     let mut warnings = Vec::new();
     match epub::package::open(source) {
         Ok(pkg) => modes.push(Box::new(EpubReadMode::new(
             source.clone(),
-            ctx.image_config(args),
+            image_config(args),
             pkg,
         ))),
         Err(e) => warnings.push(format!("EPUB metadata unreadable: {e:#}")),
