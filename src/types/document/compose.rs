@@ -7,10 +7,10 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected, DocumentFormat};
 use crate::types::archive;
-use crate::types::document::{self, DocReadMode, rtf::RtfReadMode};
+use crate::types::document::{self, DocRenderer, rtf::RtfRenderer};
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::ListingMode;
-use crate::viewer::modes::Mode;
+use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,
@@ -38,7 +38,7 @@ fn compose_zip(
         DocumentFormat::Rtf => unreachable!("RTF handled by compose_rtf"),
     };
     match parsed {
-        Ok(doc) => modes.push(Box::new(DocReadMode::new(source.clone(), doc))),
+        Ok(doc) => modes.push(Box::new(RenderedTextMode::new(DocRenderer::new(doc)))),
         Err(e) => warnings.push(format!("{} unreadable: {e:#}", fmt.label())),
     }
     let (entries, mut listing_warnings) =
@@ -67,7 +67,7 @@ fn compose_rtf(source: &InputSource, modes: &mut Vec<Box<dyn Mode>>) -> Result<(
     if let Ok(parsed) = document::rtf::parse::open_source(source) {
         let entries = document::rtf::parse::embeds_to_entries(&parsed.embeds);
         let has_embeds = !entries.is_empty();
-        modes.push(Box::new(RtfReadMode::new(source.clone(), parsed)));
+        modes.push(Box::new(RenderedTextMode::new(RtfRenderer::new(parsed))));
         if has_embeds {
             modes.push(Box::new(ListingMode::new(
                 DocumentFormat::Rtf.label(),

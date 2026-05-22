@@ -400,11 +400,10 @@ impl Registry {
         Ok(modes)
     }
 
-    fn compose_ctx(&self) -> ComposeCtx<'_> {
+    fn compose_ctx(&self) -> ComposeCtx {
         ComposeCtx {
             theme_manager: Rc::clone(&self.theme_manager),
             theme_name: self.theme_name,
-            peek_theme: &self.peek_theme,
             plain_mode: self.plain_mode,
         }
     }
@@ -414,14 +413,13 @@ impl Registry {
 /// call. Holds the theme/style state plus the two helpers (image config,
 /// generic text content mode) that per-type compose bodies need to build
 /// their mode stacks.
-pub struct ComposeCtx<'a> {
+pub struct ComposeCtx {
     pub theme_manager: Rc<ThemeManager>,
     pub theme_name: PeekThemeName,
-    pub peek_theme: &'a PeekTheme,
     pub plain_mode: bool,
 }
 
-impl<'a> ComposeCtx<'a> {
+impl ComposeCtx {
     /// Build a `ContentMode` for text-based file types: source code,
     /// structured (lazy pretty-print), plain text, or SVG XML.
     ///

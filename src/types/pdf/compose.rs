@@ -6,10 +6,10 @@ use anyhow::Result;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::types::pdf::{self, PdfPageMode, PdfTextMode};
+use crate::types::pdf::{self, PdfPageMode, PdfTextRenderer};
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{ListingMode, from_flat_paths};
-use crate::viewer::modes::Mode;
+use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,
@@ -29,7 +29,9 @@ pub fn compose(
                 ctx.image_config(args),
             )));
         }
-        modes.push(Box::new(PdfTextMode::new(doc.clone())));
+        modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(
+            doc.clone(),
+        ))));
         let embeds = doc.list_embeds();
         if !embeds.is_empty() {
             let entries = from_flat_paths(embeds);

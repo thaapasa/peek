@@ -5,8 +5,8 @@
 //! The three modes mirror existing patterns:
 //!   * [`PdfPageMode`] — paged rasterizer, one page at a time
 //!     ([`crate::types::comic::cbz::CbzReadMode`] analog)
-//!   * [`PdfTextMode`] — width-cached text render
-//!     ([`crate::types::document::DocReadMode`] analog)
+//!   * [`PdfTextRenderer`] — width-cached text render, wrapped in the
+//!     generic [`crate::viewer::modes::RenderedTextMode`]
 //!   * [`crate::viewer::listing::ListingMode`] of `/EmbeddedFiles`
 //!     attachments — extract path lives in [`extract`]
 
@@ -17,8 +17,8 @@ pub mod info_gather;
 pub mod info_render;
 pub mod package;
 pub mod page_mode;
-pub mod text_mode;
+pub mod text_renderer;
 
 pub use info::PdfStats;
 pub(crate) use page_mode::PdfPageMode;
-pub(crate) use text_mode::PdfTextMode;
+pub(crate) use text_renderer::PdfTextRenderer;

@@ -1,18 +1,24 @@
-//! RTF read mode. Renders the parsed AST per (width, style_mode) and
-//! caches the result. Cache invalidates on resize / color cycle.
+//! Generic whole-document read mode.
+//!
+//! Several file types — DOCX/ODT, RTF, HTML, PDF text — present the
+//! same flat view: render the whole parsed document into width-wrapped,
+//! ANSI-styled lines, cache the result per `(width, style_mode)`, and
+//! offer text search over the wrapped lines. The cache invalidates on
+//! resize and color cycle.
+//!
+//! The only thing that varies between them is *how the parsed document
+//! becomes `Vec<String>`* — that one function is the [`TextRenderer`]
+//! trait. `RenderedTextMode<R>` supplies everything else: caching,
+//! windowing, search, and the whole `Mode` impl.
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
-
-use super::parse::Parsed;
-use super::render;
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (&[Action::OpenSearch], "Search"),
@@ -22,6 +28,34 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
     ),
 ];
 
+/// Turns a parsed document into width-wrapped, ANSI-styled lines.
+///
+/// Implementors own the parsed document (the AST, the PDF handle, the
+/// raw HTML bytes). `render` takes `&mut self` so a renderer can record
+/// per-render warnings — PDF text extraction degrades page-by-page.
+pub(crate) trait TextRenderer {
+    /// Status-line label for the wrapping mode.
+    fn label(&self) -> &'static str;
+
+    /// `ModeId` the wrapping mode reports. Usually `ModeId::Rendered`;
+    /// PDF text uses `ModeId::Content`.
+    fn mode_id(&self) -> ModeId;
+
+    /// Render the whole document, wrapped at `width`.
+    fn render(
+        &mut self,
+        width: usize,
+        theme: &PeekTheme,
+        style_mode: StyleMode,
+    ) -> Result<Vec<String>>;
+
+    /// Drain warnings accumulated during recent renders. Default: none.
+    fn take_warnings(&mut self) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// The render is invalidated whenever either input to the wrap changes.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct CacheKey {
     width: usize,
@@ -33,21 +67,19 @@ struct Cached {
     lines: Vec<String>,
 }
 
-pub(crate) struct RtfReadMode {
-    #[allow(dead_code)]
-    source: InputSource,
-    parsed: Parsed,
+/// Whole-document read mode generic over its [`TextRenderer`].
+pub(crate) struct RenderedTextMode<R: TextRenderer> {
+    renderer: R,
     cache: Option<Cached>,
     /// Active text search over the rendered lines. Indices are the
     /// wrapped-line domain, so a resize clears it.
     search: Option<SearchState>,
 }
 
-impl RtfReadMode {
-    pub(crate) fn new(source: InputSource, parsed: Parsed) -> Self {
+impl<R: TextRenderer> RenderedTextMode<R> {
+    pub(crate) fn new(renderer: R) -> Self {
         Self {
-            source,
-            parsed,
+            renderer,
             cache: None,
             search: None,
         }
@@ -62,20 +94,20 @@ impl RtfReadMode {
         let key = CacheKey { width, style_mode };
         let needs = self.cache.as_ref().map(|c| c.key != key).unwrap_or(true);
         if needs {
-            let lines = render::render(&self.parsed, width, theme, style_mode)?;
+            let lines = self.renderer.render(width, theme, style_mode)?;
             self.cache = Some(Cached { key, lines });
         }
         Ok(&self.cache.as_ref().expect("cache populated").lines)
     }
 }
 
-impl Mode for RtfReadMode {
+impl<R: TextRenderer> Mode for RenderedTextMode<R> {
     fn id(&self) -> ModeId {
-        ModeId::Rendered
+        self.renderer.mode_id()
     }
 
     fn label(&self) -> &str {
-        "Read"
+        self.renderer.label()
     }
 
     fn rerender_on_resize(&self) -> bool {
@@ -151,5 +183,9 @@ impl Mode for RtfReadMode {
             .as_ref()
             .map(|s| vec![s.status_segment(theme)])
             .unwrap_or_default()
+    }
+
+    fn take_warnings(&mut self) -> Vec<String> {
+        self.renderer.take_warnings()
     }
 }

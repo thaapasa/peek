@@ -129,9 +129,9 @@ src/
           marker.rs    — __PEEK_ANIM_*__ marker injection + per-frame substitution
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
     html/
-      mod.rs           — Module wiring; re-exports RenderedMode
-      compose.rs       — compose(): push RenderedMode + paired HTML source ContentMode
-      mode.rs          — RenderedMode: width-keyed cache wrapper around `render::render`; rerender on resize
+      mod.rs           — Module wiring; re-exports HtmlRenderer
+      compose.rs       — compose(): push RenderedTextMode<HtmlRenderer> + paired HTML source ContentMode
+      renderer.rs      — HtmlRenderer: TextRenderer impl reading source bytes through `render::render`; the generic RenderedTextMode owns caching / search / windowing
       render.rs        — Shared html2text driver: bytes → ANSI lines via StyleMode (also used by EPUB chapters). CSS via html2text `use_doc_css`; near-grayscale colours filtered to avoid fighting terminal foreground
     ebook/
       mod.rs           — Module wiring; re-exports EbookStats / Metadata
@@ -146,13 +146,13 @@ src/
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
     document/
-      mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocReadMode
-      compose.rs       — compose(): DOCX/ODT → DocReadMode + ZIP TOC ListingMode; RTF → RtfReadMode + inline-embed listing when any \pict groups parsed
+      mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocRenderer
+      compose.rs       — compose(): DOCX/ODT → RenderedTextMode<DocRenderer> + ZIP TOC ListingMode; RTF → RenderedTextMode<RtfRenderer> + inline-embed listing when any \pict groups parsed
       detect.rs        — format_from_ext + format_from_mime (RTF magic-byte route)
       format.rs        — DocumentFormat enum (Docx/Odt/Rtf) + label
       ast.rs           — Shared word-processing AST (Doc / Block::{Paragraph,Table} / Paragraph / Run + count_words + merge_paragraphs). Populated by both docx::package and odt::package; RTF stays separate because its on-the-wire shape is a flat painter-tagged text stream
       render.rs        — Shared render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | ". Used by both DOCX and ODT
-      read_mode.rs     — Shared DocReadMode: per-(width, style_mode) line cache over render::render. Format-agnostic; the per-format wiring only supplies the parsed Doc
+      renderer.rs      — DocRenderer: TextRenderer impl over the shared AST via render::render. Format-agnostic; per-format wiring only supplies the parsed Doc
       info.rs          — Shared document info shape (DOCX / ODT / RTF): DocumentStats { format, metadata, paragraph_count, word_count, image_count } + DocumentMetadata { title / creator / subject / description / keywords / created / modified }
       info_render.rs   — Render shared Document info section keyed off `format` label
       docx/
@@ -164,17 +164,17 @@ src/
         package.rs     — Hand-rolled `quick_xml` walk over `content.xml`: pre-scans `<office:automatic-styles>` (and `<office:styles>`) into a style-name → run-attrs table, then resolves `<text:span text:style-name=…>` references during the body walk. Heading level from `<text:h text:outline-level=N>`; falls back to deriving from "Heading_20_N" style names when authoring tools encode headings as styled `<text:p>`. `<draw:image xlink:href="Pictures/…">` → `[Image: <basename>]` placeholder run. `<text:list>` nesting depth drives indent. `meta.xml` Dublin Core + meta:* metadata; multi-valued `<meta:keyword>` entries comma-joined. Produces shared `ast::Doc`. styles.xml inheritance is intentionally not consulted in v1
         info_gather.rs — Populate DocumentStats via package::open
       rtf/
-        mod.rs         — Module wiring; re-exports RtfReadMode. RTF stays outside the shared AST because its on-the-wire shape is a flat painter-tagged text stream, not a paragraph/run tree
+        mod.rs         — Module wiring; re-exports RtfRenderer. RTF stays outside the shared AST because its on-the-wire shape is a flat painter-tagged text stream, not a paragraph/run tree
         parse.rs       — Pre-process RTF (strip `{\info ...}` group, inject `\\\n` after each `\par` so rtf-parser's lexer emits CRLF) → RtfDocument::try_from → owned Vec<Block { painter, paragraph, text }> with painter resolved against \colortbl. Hand-scans `\info` group bytes for title / author / subject / keywords / creatim / revtim
         render.rs      — render(&Parsed, width, theme, style_mode) -> Vec<String>: wraps StyleBlock.text by width, emits SGR for painter bold/italic/underline/strike + colortbl color
-        read_mode.rs   — RtfReadMode: per-(width, style_mode) line cache; no listing or extract (RTF is single-file)
+        renderer.rs    — RtfRenderer: TextRenderer impl over the parsed RTF stream via render::render; no listing or extract (RTF is single-file)
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
-      mod.rs           — Module wiring; re-exports PdfStats, PdfPageMode, PdfTextMode
-      compose.rs       — compose(): PdfPageMode + PdfTextMode + /EmbeddedFiles ListingMode
+      mod.rs           — Module wiring; re-exports PdfStats, PdfPageMode, PdfTextRenderer
+      compose.rs       — compose(): PdfPageMode + RenderedTextMode<PdfTextRenderer> + /EmbeddedFiles ListingMode
       package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
       page_mode.rs     — PdfPageMode: paged image render via `pipeline::render::{prepare_decoded, render_prepared}`. Per-page cache keyed by (cols, rows, style, image config); n / N step page (Action::NextChapter / PrevChapter, labeled "page"). Mirrors CbzReadMode shape
-      text_mode.rs     — PdfTextMode: width-cached text via `Doc::page_text`; pages joined with muted `--- Page N ---` separator. Mirrors DocxReadMode shape; greedy word-wrap with hard-break for over-width tokens
+      text_renderer.rs — PdfTextRenderer: TextRenderer impl over `Doc::page_text`; pages joined with muted `--- Page N ---` separator; greedy word-wrap with hard-break for over-width tokens. Per-page extract failures degrade to a placeholder line + warning
       extract.rs       — Extract `/EmbeddedFiles` attachment by name → InputSource::Memory; reuses `extract::sanitize_entry_path`
       info.rs          — PdfStats { metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
       info_gather.rs   — Populate PdfStats via package::open_doc; failures land as `error` field rendered as warning row
@@ -259,7 +259,7 @@ src/
       descriptor.rs    — Render cafebabe descriptor types as syntax-highlighted spans (`(Ljava/lang/String;I)V` → coloured `(String, int) -> void`: primitives / class names / `[]` / punctuation each a CellRole)
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
-    mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
+    mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     listing/
@@ -276,6 +276,7 @@ src/
       info.rs          — InfoMode: file metadata view
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips
+      rendered_text.rs — RenderedTextMode<R>: generic whole-document read mode (caching per (width, style_mode), search, windowing) over a TextRenderer R. Used by DOCX/ODT, RTF, HTML, PDF text — each supplies a small TextRenderer impl
     table/
       mod.rs           — Generic aligned-table view shared by objfile + classfile: Table / Column / Cell / CellRole / Align data + cell / cell_spans (multi-colour token cell) / fit_columns (content-fitted widths). CsvTableMode does NOT use this — streaming backing, cell-scoped search
       mode.rs          — TableMode: sticky-header table over materialised rows, live-theme cell repaint, vertical scroll + Left/Right pan + `/` search (minimal reveal_h_scroll pan)

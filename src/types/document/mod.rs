@@ -1,8 +1,8 @@
 //! Word-style documents: DOCX (Office Open XML), ODT (OpenDocument
 //! Text), and RTF (Rich Text Format).
 //!
-//! DOCX and ODT share an AST + renderer + read mode ([`ast`], [`render`],
-//! [`read_mode`]). Each per-format submodule owns only its parser +
+//! DOCX and ODT share an AST + renderer ([`ast`], [`render`],
+//! [`renderer`]). Each per-format submodule owns only its parser +
 //! per-format info gather; both feed the same shared pipeline so the
 //! viewer stays format-agnostic from the read view down.
 //!
@@ -23,9 +23,9 @@ pub mod format;
 pub mod info;
 pub mod info_render;
 pub mod odt;
-pub mod read_mode;
 pub mod render;
+pub mod renderer;
 pub mod rtf;
 
 pub use info::{DocumentMetadata, DocumentStats};
-pub(crate) use read_mode::DocReadMode;
+pub(crate) use renderer::DocRenderer;
