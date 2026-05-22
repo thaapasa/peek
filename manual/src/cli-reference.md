@@ -30,12 +30,13 @@
 ## Notes
 
 - `--plain` is the single "sterile output" knob: implies `--color plain` and additionally
-  disables syntax highlighting, structured pretty-printing, and rich renders (HTML / EPUB /
-  DOCX / image / PDF fall back to raw text or hex). Use it when piping into tools that
+  disables syntax highlighting and structured pretty-printing. HTML and SVG drop their
+  rendered / rasterized view and fall back to raw source; other rich views (image, PDF,
+  DOCX, EPUB) still compose but render without color. Use it when piping into tools that
   expect bytes-as-typed.
 - `--raw` is narrower: it skips pretty-printing of structured / SVG sources but keeps colors,
   font styles, and rich renders. Pair `--raw --color plain` if you want raw structure
-  without colors but still want HTML / DOCX rendered.
+  without colors but still want HTML / SVG rendered.
 - `--print` / `-p` forces print mode regardless of TTY.
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 

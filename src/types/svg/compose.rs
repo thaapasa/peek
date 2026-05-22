@@ -18,22 +18,27 @@ pub fn compose(
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let cfg = ctx.image_config(args);
-    let anim = if args.no_svg_anim {
-        None
-    } else {
-        crate::types::image::pipeline::svg_anim::try_parse(source)?
-    };
-    if let Some(model) = anim {
-        modes.push(Box::new(SvgAnimationMode::new(model, cfg)));
-    } else {
-        modes.push(Box::new(ImageRenderMode::new(
-            source.clone(),
-            cfg,
-            ImageKind::Svg,
-        )));
+    // `--plain` drops the rasterized preview — SVG falls back to raw
+    // XML source, consistent with `--plain` meaning "no transformation"
+    // for every other text type.
+    if !ctx.plain_mode {
+        let cfg = ctx.image_config(args);
+        let anim = if args.no_svg_anim {
+            None
+        } else {
+            crate::types::image::pipeline::svg_anim::try_parse(source)?
+        };
+        if let Some(model) = anim {
+            modes.push(Box::new(SvgAnimationMode::new(model, cfg)));
+        } else {
+            modes.push(Box::new(ImageRenderMode::new(
+                source.clone(),
+                cfg,
+                ImageKind::Svg,
+            )));
+        }
     }
-    // Pair the SVG view with its XML source.
+    // Pair the SVG view with its XML source (the only view in `--plain`).
     modes.push(ctx.text_content_mode(source, &crate::input::detect::FileType::Svg, args)?);
     Ok(())
 }

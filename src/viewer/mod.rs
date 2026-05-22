@@ -251,109 +251,84 @@ impl Registry {
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
         let ctx = self.compose_ctx();
 
-        if self.plain_mode {
-            // Binary/Archive/DiskImage/Audio in --plain still goes to
-            // Hex (the universal tail); ContentMode requires UTF-8
-            // input. Directory in --plain still gets the listing —
-            // there's no "raw" view of a directory.
-            if matches!(file_type, FileType::Directory) {
+        // `--plain` is not a separate dispatch: every type composes its
+        // normal mode stack. The flag only suppresses syntax highlight
+        // / pretty-print inside `ContentMode` (via `ComposeCtx`), and a
+        // couple of dual-view types (HTML, SVG) drop their rendered view
+        // in favour of raw source. Non-text views (image, PDF page) keep
+        // composing — they degrade through `StyleMode::Plain` on their own.
+        match file_type {
+            FileType::SourceCode { .. } | FileType::Structured(_) => {
+                modes.push(ctx.text_content_mode(source, file_type, args)?);
+            }
+            FileType::Html => {
+                crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Image => {
+                crate::types::image::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Svg => {
+                crate::types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Ebook(EbookFormat::Epub) => {
+                crate::types::ebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Document(fmt) => {
+                crate::types::document::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
+            FileType::Pdf => {
+                crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Comic(ComicFormat::Cbz) => {
+                crate::types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Archive(fmt) => {
+                crate::types::archive::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
+            FileType::DiskImage(fmt) => {
+                crate::types::disk_image::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
+            FileType::ObjectFile => {
+                crate::types::objfile::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
+            FileType::Classfile => {
+                crate::types::classfile::compose::compose(
+                    source, detected, args, &ctx, &mut modes,
+                )?;
+            }
+            FileType::Audio(fmt) => {
+                crate::types::audio::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
+            FileType::Csv(fmt) => {
+                crate::types::csv::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
+            FileType::Directory => {
                 crate::types::directory::compose::compose(
                     source, detected, args, &ctx, &mut modes,
                 )?;
-            } else if !matches!(
-                file_type,
-                FileType::Binary
-                    | FileType::Archive(_)
-                    | FileType::Compressed(_)
-                    | FileType::DiskImage(_)
-                    | FileType::ObjectFile
-                    | FileType::Classfile
-                    | FileType::Audio(_)
-            ) {
-                modes.push(ctx.text_content_mode(source, file_type, args)?);
             }
-        } else {
-            match file_type {
-                FileType::SourceCode { .. } | FileType::Structured(_) => {
-                    modes.push(ctx.text_content_mode(source, file_type, args)?);
-                }
-                FileType::Html => {
-                    crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
-                }
-                FileType::Image => {
-                    crate::types::image::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Svg => {
-                    crate::types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
-                }
-                FileType::Ebook(EbookFormat::Epub) => {
-                    crate::types::ebook::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Document(fmt) => {
-                    crate::types::document::compose::compose(
-                        source, detected, args, &ctx, &mut modes, *fmt,
-                    )?;
-                }
-                FileType::Pdf => {
-                    crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
-                }
-                FileType::Comic(ComicFormat::Cbz) => {
-                    crate::types::comic::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Archive(fmt) => {
-                    crate::types::archive::compose::compose(
-                        source, detected, args, &ctx, &mut modes, *fmt,
-                    )?;
-                }
-                FileType::DiskImage(fmt) => {
-                    crate::types::disk_image::compose::compose(
-                        source, detected, args, &ctx, &mut modes, *fmt,
-                    )?;
-                }
-                FileType::ObjectFile => {
-                    crate::types::objfile::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Classfile => {
-                    crate::types::classfile::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Audio(fmt) => {
-                    crate::types::audio::compose::compose(
-                        source, detected, args, &ctx, &mut modes, *fmt,
-                    )?;
-                }
-                FileType::Csv(fmt) => {
-                    crate::types::csv::compose::compose(
-                        source, detected, args, &ctx, &mut modes, *fmt,
-                    )?;
-                }
-                FileType::Directory => {
-                    crate::types::directory::compose::compose(
-                        source, detected, args, &ctx, &mut modes,
-                    )?;
-                }
-                FileType::Compressed(_) => {
-                    // Bare-codec streams resolve to their inner content
-                    // upstream via `compression::resolve_transparent`,
-                    // so reaching this arm means decompression failed.
-                    // Push nothing file-type-specific — the universal
-                    // Hex + Info tail below renders the raw compressed
-                    // bytes, and the FileInfo warning row surfaces the
-                    // decompression error.
-                }
-                FileType::Binary => {
-                    // Default view for binary IS hex; HexMode is appended
-                    // below in the always-present block.
-                }
+            FileType::Compressed(_) => {
+                // Bare-codec streams resolve to their inner content
+                // upstream via `compression::resolve_transparent`,
+                // so reaching this arm means decompression failed.
+                // Push nothing file-type-specific — the universal
+                // Hex + Info tail below renders the raw compressed
+                // bytes, and the FileInfo warning row surfaces the
+                // decompression error.
+            }
+            FileType::Binary => {
+                // Default view for binary IS hex; HexMode is appended
+                // below in the always-present block.
             }
         }
 

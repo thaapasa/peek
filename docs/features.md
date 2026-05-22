@@ -967,10 +967,11 @@ syntax-highlighted code is downgraded along with everything else.
 | `--sizing`       |       | Image sizing mode                                             | ☐      |
 
 `--plain` is the single "sterile output" knob: it implies `--color plain` and additionally
-disables syntax highlighting, structured pretty-printing, and rich renders (HTML / EPUB / DOCX
-/ image / PDF fall back to raw text or hex). `--raw` is narrower: it skips pretty-printing of
-structured / SVG sources but keeps colors, font styles, and rich renders. Use `--raw --color
-plain` for raw structure without colors while still letting HTML / DOCX render.
+disables syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered
+/ rasterized view and fall back to raw source; other rich views (image, PDF, DOCX, EPUB) still
+compose but render without color. `--raw` is narrower: it skips pretty-printing of structured
+/ SVG sources but keeps colors, font styles, and rich renders. Use `--raw --color plain` for
+raw structure without colors while still letting HTML / SVG render.
 
 `--print` / `-p` forces print mode regardless of TTY.
 
