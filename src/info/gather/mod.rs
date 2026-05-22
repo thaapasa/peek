@@ -47,6 +47,12 @@ fn is_sql_syntax(syntax: Option<&str>) -> bool {
     matches!(syntax, Some("sql" | "ddl" | "dml" | "psql" | "pgsql"))
 }
 
+fn is_css_syntax(syntax: Option<&str>) -> bool {
+    // Plain CSS only — `.scss` / `.less` are different grammars and keep
+    // the generic text-stats fallback.
+    matches!(syntax, Some("css"))
+}
+
 fn syntax_of(file_type: &FileType) -> Option<&str> {
     match file_type {
         FileType::SourceCode { syntax } => syntax.as_deref(),
@@ -61,7 +67,8 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
     let syntax = syntax_of(file_type)?;
     let is_md = is_markdown_syntax(Some(syntax));
     let is_sql = is_sql_syntax(Some(syntax));
-    if !is_md && !is_sql {
+    let is_css = is_css_syntax(Some(syntax));
+    if !is_md && !is_sql && !is_css {
         return None;
     }
 
@@ -81,9 +88,15 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
                 stats,
             },
         ))
-    } else {
+    } else if is_sql {
         let stats = crate::types::sql::info_gather::gather(&text);
         Some(FileExtras::Sql(crate::types::sql::info::SqlInfo {
+            text: text_stats,
+            stats,
+        }))
+    } else {
+        let stats = crate::types::css::info_gather::gather(&text);
+        Some(FileExtras::Css(crate::types::css::info::CssInfo {
             text: text_stats,
             stats,
         }))

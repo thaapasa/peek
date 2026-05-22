@@ -78,6 +78,11 @@ src/
       info.rs          — SqlInfo { text: TextStats, stats: SqlStats } + SqlStats + SqlDialect
       info_gather.rs   — Statement scanner with string/comment/dollar-quote state; classifies DDL/DML/DQL/TCL, records created objects, guesses dialect
       info_render.rs   — Render SQL info section (Content + SQL blocks)
+    css/
+      mod.rs           — Module wiring
+      info.rs          — CssInfo { text: TextStats, stats: CssStats } + CssStats + SelectorKindCounts / CssImport / ColorSwatch
+      info_gather.rs   — cssparser rule/declaration-trait scanner: CssScanner drives StyleSheetParser + RuleBodyParser → rule/selector/at-rule counts, @import URLs, deduped colour palette. Colours scanned only inside declaration values (cssparser-color) so selectors / strings / comments never false-match; CSS nesting counted
+      info_render.rs   — Render CSS info section (Content + CSS blocks + Colors swatch grid)
     structured/
       mod.rs           — Module wiring
       format.rs        — StructuredFormat enum (JSON/JSONC/JSON5/JSONL/YAML/TOML/XML)

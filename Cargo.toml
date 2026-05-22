@@ -108,6 +108,8 @@ object = { version = "0.36", default-features = false, features = ["read", "std"
 # Java classfile parsing (.class — JVM bytecode container). Pure Rust,
 # parse-only: constant pool, fields, methods, attributes, version.
 cafebabe = "0.9"
+cssparser = "0.37"
+cssparser-color = "0.5"
 
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]

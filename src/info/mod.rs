@@ -20,6 +20,7 @@ pub use crate::types::audio::AudioStats;
 pub use crate::types::binary::info::BinaryInfo;
 pub use crate::types::classfile::info::ClassfileInfo;
 pub use crate::types::comic::ComicStats;
+pub use crate::types::css::info::CssInfo;
 pub use crate::types::csv::CsvStats;
 pub use crate::types::directory::info::DirectoryStats;
 pub use crate::types::disk_image::info::DiskImageInfo;
@@ -82,6 +83,7 @@ pub enum FileExtras {
     Structured(StructuredInfo),
     Markdown(MarkdownInfo),
     Sql(SqlInfo),
+    Css(CssInfo),
     Binary(BinaryInfo),
     ObjectFile(ObjectInfo),
     Classfile(ClassfileInfo),

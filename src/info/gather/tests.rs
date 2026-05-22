@@ -282,6 +282,34 @@ fn tsconfig_json5_routed_as_structured() {
 }
 
 #[test]
+fn css_styles_sidecar_stats() {
+    let info = gather_fixture("test-data/styles.css");
+    let FileExtras::Css(css) = &info.extras else {
+        panic!("expected Css extras");
+    };
+    let stats = &css.stats;
+    // Three `@media` blocks, three `@keyframes`; the two `@container`
+    // rules must not be miscounted as media queries.
+    assert_eq!(stats.media_query_count, 3);
+    assert_eq!(stats.keyframes_count, 3);
+    // Single `@import`, a relative path — not flagged external.
+    assert_eq!(stats.imports.len(), 1);
+    assert!(!stats.imports[0].external);
+    assert_eq!(stats.imports[0].url, "./reset.css");
+    // Rule count includes CSS-nested rules.
+    assert_eq!(stats.rule_count, 69);
+    assert_eq!(stats.selector_count, 86);
+    assert!(stats.selector_kinds.class > 0);
+    assert!(stats.selector_kinds.element > 0);
+    assert!(stats.selector_kinds.pseudo > 0);
+    assert!(stats.custom_property_count > 0);
+    // `--color-accent: #ff6b9d` is in the palette; the `red` inside the
+    // `content:` string and comments must not appear as a colour.
+    assert!(stats.palette.iter().any(|c| c.hex == "#ff6b9d"));
+    assert_eq!(stats.palette.len(), stats.total_colors);
+}
+
+#[test]
 fn java_classfile_sample_metadata() {
     let info = gather_fixture("test-data/Sample.class");
     let FileExtras::Classfile(cf) = &info.extras else {

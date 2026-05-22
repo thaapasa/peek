@@ -27,3 +27,12 @@ adds an SQL section: dialect guess (PostgreSQL / MySQL / SQLite / T-SQL / generi
 count broken down by category (DDL / DML / DQL / TCL), inventories of created objects (tables,
 views, indexes, functions, triggers), comment-line count, and a flag when an inline `$$ … $$`
 PL/pgSQL block is present.
+
+## CSS
+
+`.css` files render as highlighted source. The Info view adds a CSS section: style-rule count
+(CSS nesting included), selector count with a per-kind histogram (class / id / element / pseudo /
+attribute / universal), custom-property count, `@media` and `@keyframes` counts, and an `@import`
+list — external URLs flagged. A Colors section shows the stylesheet's colour palette as block
+swatches, most-frequent first. Colour words inside selectors, strings, or comments are not
+mistaken for colours.

@@ -236,6 +236,19 @@ flag when an inline `$$ … $$` PL/pgSQL block is present. The scanner tracks st
 dollar-quoted state so semicolons inside strings or procedural bodies don't false-split. Real
 formatter / outline mode still planned.
 
+#### CSS ◐
+
+`.css` files render as syntax-highlighted source. The Info view adds a CSS section: style-rule
+count (CSS nesting included), total selector count with a per-kind occurrence histogram
+(class / id / element / pseudo / attribute / universal), distinct custom-property count,
+`@media` and `@keyframes` counts, and an `@import` list — absolute / protocol-relative URLs
+flagged in the warning style. A Colors section renders the deduped colour palette as block-glyph
+swatches, most-frequent first. Parsing is `cssparser` + `cssparser-color`: colours are scanned
+only inside declaration values, so a colour word in a selector (`.gold`), a string
+(`content: "red"`), or a comment never false-matches. Hex / `rgb()` / `hsl()` / `hwb()` / named
+colours resolve to swatches; CIE / Oklab spaces are counted but not swatched. Per-rule
+specificity annotation in the source view is still planned.
+
 ### Structured Data / Config Files
 
 | Format     | Extensions          | Status |
@@ -663,6 +676,8 @@ colors, per-character permission coloring).
   word count, reading-time estimate
 - **SQL** — dialect guess, statement count by category (DDL/DML/DQL/TCL), created-object inventory
   (tables, views, indexes, functions, triggers), comment-line count, PL/pgSQL block flag
+- **CSS** — rule count, selector count + per-kind histogram, custom-property count, `@media` /
+  `@keyframes` counts, `@import` list (external URLs flagged), colour-palette swatch grid
 - **Structured data** — top-level kind, key/element count, max nesting depth, total node count, XML
   root + namespaces
 - **SVG** — viewBox, declared dimensions, element counts (paths, groups, rects, circles, text),

@@ -53,6 +53,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Sql(info) => {
             crate::types::sql::info_render::render_section(lines, info, theme);
         }
+        FileExtras::Css(info) => {
+            crate::types::css::info_render::render_section(lines, info, theme);
+        }
         FileExtras::Binary(info) => {
             crate::types::binary::info::render_section(lines, info, theme);
         }
