@@ -237,6 +237,15 @@ src/
       extract.rs       — ISO entry extract: lookup_file_range → zero-copy FileRange (or Bytes::slice for stdin-piped); DMG returns Unsupported
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
+    objfile/
+      mod.rs           — Module wiring
+      compose.rs       — compose(): InfoMode landing view + Sections / Symbols ObjectTableMode (no extract path)
+      load.rs          — Fat-aware load: object::FileKind probe → universal Mach-O slice select (host arch, else first) → object::File::parse; FatSummary lists every slice
+      info.rs          — ObjectInfo { meta: Option<ObjectMeta>, error } + ObjectMeta (semantic `object` enums: BinaryFormat / Architecture / ObjectKind / Endianness — not pre-formatted)
+      info_gather.rs   — gather_extras: load + capture header counts into ObjectMeta
+      info_render.rs   — render_section (Object File section) + enum→label maps (format / kind / arch / endianness — the one place metadata becomes text)
+      tables.rs        — build(): structured Sections / Symbols ObjectTable (typed Cell + CellRole, content-fitted column widths) via the `object` crate
+      table_mode.rs    — ObjectTableMode: sticky-header table, live-theme cell repaint, vertical scroll + Left/Right pan + `/` name search (minimal reveal pan)
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (shared services: theme manager, theme name, peek theme, plain mode, image_config, text_content_mode), syntax_token_for, highlight_lines, LineStreamHighlighter
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open

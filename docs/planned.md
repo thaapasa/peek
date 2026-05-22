@@ -345,28 +345,18 @@ that's readable without the password.
 
 Crates: `x509-parser`, `pkcs8`, `ssh-key`.
 
-### Executables and Object Files ☐
+### Object Files — deeper inspection ☐
 
-| Format      | Extensions                              |
-|-------------|-----------------------------------------|
-| ELF         | `.elf`, `.so`, often no extension       |
-| Mach-O      | `.dylib`, `.bundle`, often no extension |
-| PE / COFF   | `.exe`, `.dll`, `.sys`                  |
-| WebAssembly | `.wasm`                                 |
-| Static libs | `.a`, `.lib`                            |
+The base object-file viewer ships — ELF / Mach-O / PE/COFF detection, header Info, Sections and
+Symbols tables, universal-binary unwrapping (see [features.md](features.md)). Still open:
 
-Default view is a structured metadata report:
-
-- **Header** — format, architecture(s), endianness, file type (executable/library/object), entry
-  point, machine flags.
-- **Sections / segments** — name, address, size, flags.
-- **Symbols** — exported, imported (truncated with a count for huge tables; full list opt-in).
 - **Linked libraries** — `DT_NEEDED` (ELF), load commands (Mach-O), import table (PE).
-- **Notes / build metadata** — build ID, compiler/toolchain hints, code signature presence.
-- **Mach-O fat binaries** — list each slice.
-
-`goblin` covers ELF / Mach-O / PE / archive (`.a`) under one API. `wasmparser` for `.wasm` (module
-imports/exports/memory/table summary).
+- **Notes / build metadata** — build ID, compiler / toolchain hints, code-signature presence.
+- **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
+  auto-picked and the rest only listed in the Info view.
+- **WebAssembly `.wasm`** and **static libraries `.a` / `.lib`** — `object` parses both; neither
+  detection routing nor a tailored view is wired.
+- **Bare COFF `.obj`** — no magic signature, so not auto-detected.
 
 ## Image Features
 

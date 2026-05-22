@@ -1,7 +1,9 @@
 # Binary
 
-For files peek doesn't have a specialized viewer for — executables, fonts, unknown formats —
+For files peek doesn't have a specialized viewer for — fonts, firmware, unknown formats —
 the baseline is the hex dump viewer plus a file info screen reachable via `i` / Tab.
+
+(Executables — ELF, Mach-O, PE — have their own viewer; see [Object files](./object-files.md).)
 
 ## Hex dump
 
@@ -28,4 +30,4 @@ For binary files without a dedicated viewer, the Info view shows:
   [infer](https://crates.io/crates/infer) crate)
 - Size (exact bytes + human-readable)
 - Filesystem metadata (permissions, timestamps)
-- Detected binary format from magic (Mach-O, ELF, PE, ZIP, SQLite, …)
+- Detected binary format from magic (SQLite, fonts, video, …)

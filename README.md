@@ -16,6 +16,7 @@ Modern terminal file viewer — preview any file, any format.
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — PDF, DOCX, ODT, RTF, EPUB, CBZ
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
+- **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
 - **Hex dump** fallback for binary, reachable from any view with `x`
 - **Interactive viewer** with live theme cycling, info screen, extraction, text search
 
@@ -43,6 +44,7 @@ peek photo.jpg          # image (glyph-matched ASCII art)
 peek config.json        # structured data (pretty-printed + highlighted)
 peek book.epub          # paged read with TOC + metadata views
 peek archive.tar.gz     # listing view + per-entry extract
+peek /bin/ls            # executable — header / sections / symbols
 peek -                  # explicit stdin
 echo '{"a":1}' | peek   # piped stdin auto-detected
 ```

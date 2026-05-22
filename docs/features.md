@@ -414,17 +414,53 @@ Auto-plays at native frame rate. `Space` toggles play/pause; `n`/`p` and Left/Ri
 cycles background. Status line shows frame counter and play/pause. Print mode renders the first
 frame. Frame count appears in the file info screen. Transparency handling applies.
 
+### Object Files ✅
+
+ELF, Mach-O, and PE/COFF binaries — executables, shared libraries, relocatable objects — get a
+dedicated viewer instead of the binary hex fallback. Backed by the `object` crate: one read-only
+API across all four container formats. Detection is magic-byte based (`infer` MIME →
+`FileType::ObjectFile`), so an extensionless `/bin/ls` routes correctly.
+
+Three views, Tab-cycled:
+
+- **Info** (landing) — format, architecture, file kind (executable / relocatable object / dynamic
+  library / core dump), 32- vs 64-bit, endianness, entry point, section and symbol counts,
+  debug-info presence. Mirrors `file` + `readelf -h`.
+- **Sections** — `readelf -S`-style table: index, name, address, size, kind.
+- **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
+  falls back to the dynamic symbol table when the file is stripped.
+
+The two tables are an `ObjectTableMode`: the column header stays pinned through vertical scroll,
+each column is repainted live on a theme cycle, `Left`/`Right` pan columns, and `/` searches names
+(`n`/`p` step matches, panning horizontally only as far as needed to reveal an off-screen hit).
+Column widths fit their content.
+
+Universal (fat) Mach-O containers are unwrapped transparently — the host architecture's slice is
+parsed and the Info view lists every slice. No extract path: sections and symbols are not
+standalone files.
+
+| Format    | Coverage                                                       |
+|-----------|----------------------------------------------------------------|
+| ELF       | executables, shared objects (`.so`), relocatable objects (`.o`) |
+| Mach-O    | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
+| PE / COFF | Windows executables and DLLs                                   |
+
+`object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
+through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files
+without a magic signature aren't auto-detected yet; deeper inspection (linked libraries, build
+notes, per-slice switching) is tracked in [planned.md](planned.md).
+
 ### Binary and Archive Files ◐
 
-For files peek doesn't have a specialized viewer for — executables, fonts — the baseline shows
+For files peek doesn't have a specialized viewer for — fonts, firmware images — the baseline shows
 the **file info screen**:
 
 - File type / MIME (detected via magic bytes through the `infer` crate)
 - Size (exact + human-readable)
 - Filesystem metadata (permissions, timestamps)
 
-`infer` provides MIME only — no deeper metadata. Format-specific details (executable
-architecture, font tables) could be added later with dedicated parsers.
+`infer` provides MIME only — no deeper metadata. Format-specific details (font tables, for
+instance) could be added later with dedicated parsers.
 
 Binary files open in the hex-dump viewer by default (`hexdump -C`-style, terminal-width aware,
 streaming via `ByteSource`). File info reachable via Tab / `i` from within hex, and via `--info`.
