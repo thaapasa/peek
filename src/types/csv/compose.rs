@@ -13,7 +13,7 @@ use crate::types::csv::format::CsvFormat;
 use crate::types::csv::parse::CsvData;
 use crate::types::csv::table_mode::CsvTableMode;
 use crate::viewer::ComposeCtx;
-use crate::viewer::modes::{ContentMode, Mode};
+use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 
 pub fn compose(
     source: &InputSource,
@@ -31,14 +31,13 @@ pub fn compose(
     modes.push(Box::new(ContentMode::new(
         source.clone(),
         line_source,
-        None,
-        None,
         Rc::clone(&ctx.theme_manager),
         ctx.theme_name,
-        false,
-        false,
-        args.line_numbers,
-        "Source",
+        ContentModeConfig {
+            label: "Source",
+            line_numbers: args.line_numbers,
+            ..Default::default()
+        },
     )));
     Ok(())
 }

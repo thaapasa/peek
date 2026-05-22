@@ -11,7 +11,7 @@ use crate::input::detect::{AudioFormat, Detected};
 use crate::types::image::{ImageKind, ImageRenderMode};
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{ListingMode, from_flat_paths};
-use crate::viewer::modes::{ContentMode, InfoMode, Mode};
+use crate::viewer::modes::{ContentMode, ContentModeConfig, InfoMode, Mode};
 
 pub fn compose(
     source: &InputSource,
@@ -43,14 +43,13 @@ pub fn compose(
                 modes.push(Box::new(ContentMode::new(
                     lyrics_source,
                     line_source,
-                    None,
-                    None,
                     Rc::clone(&ctx.theme_manager),
                     ctx.theme_name,
-                    false,
-                    false,
-                    args.line_numbers,
-                    "Lyrics",
+                    ContentModeConfig {
+                        label: "Lyrics",
+                        line_numbers: args.line_numbers,
+                        ..Default::default()
+                    },
                 )));
             }
         }

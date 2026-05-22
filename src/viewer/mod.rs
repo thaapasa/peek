@@ -8,7 +8,9 @@ use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
-use crate::viewer::modes::{AboutMode, ContentMode, HelpMode, HexMode, InfoMode, Mode};
+use crate::viewer::modes::{
+    AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode,
+};
 use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 
@@ -449,14 +451,16 @@ impl ComposeCtx {
         Ok(Box::new(ContentMode::new(
             source.clone(),
             line_source,
-            pretty_target,
-            syntax_token,
             Rc::clone(&self.theme_manager),
             self.theme_name,
-            initial_use_pretty,
-            allow_pretty_toggle,
-            args.line_numbers,
-            label,
+            ContentModeConfig {
+                label,
+                syntax_token,
+                pretty_target,
+                allow_pretty_toggle,
+                start_pretty: initial_use_pretty,
+                line_numbers: args.line_numbers,
+            },
         )))
     }
 

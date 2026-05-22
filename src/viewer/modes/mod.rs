@@ -29,7 +29,7 @@ mod info;
 mod rendered_text;
 
 pub(crate) use about::AboutMode;
-pub(crate) use content::ContentMode;
+pub(crate) use content::{ContentMode, ContentModeConfig};
 pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;
 pub(crate) use info::InfoMode;

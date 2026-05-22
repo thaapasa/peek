@@ -94,6 +94,39 @@ pub(crate) struct ContentMode {
     search: Option<SearchState>,
 }
 
+/// Per-view configuration for a [`ContentMode`] — the knobs that vary
+/// between a source-code view, a structured-data view, and a plain
+/// paired-source view. Built in the compose path and consumed once by
+/// [`ContentMode::new`]; it isn't stored. `Default` is the plain-text
+/// shape, so a caller spells out only what differs from it.
+pub(crate) struct ContentModeConfig {
+    /// Status-line label.
+    pub label: &'static str,
+    /// syntect token for raw-mode highlighting. `None` → no highlighting.
+    pub syntax_token: Option<String>,
+    /// Structured format to pretty-print as. `None` → no pretty form.
+    pub pretty_target: Option<StructuredFormat>,
+    /// Whether `r` toggles pretty / raw — structured + SVG only.
+    pub allow_pretty_toggle: bool,
+    /// Start in pretty view. Ignored when `pretty_target` is `None`.
+    pub start_pretty: bool,
+    /// Start with the line-number gutter visible.
+    pub line_numbers: bool,
+}
+
+impl Default for ContentModeConfig {
+    fn default() -> Self {
+        Self {
+            label: "Content",
+            syntax_token: None,
+            pretty_target: None,
+            allow_pretty_toggle: false,
+            start_pretty: false,
+            line_numbers: false,
+        }
+    }
+}
+
 const RAW_TOGGLE_ACTIONS: &[HelpEntry] = &[
     (&[Action::ToggleRawSource], "Toggle raw / pretty"),
     (&[Action::ToggleLineNumbers], "Toggle line numbers"),
@@ -181,37 +214,31 @@ impl LineProvider for ContentLines<'_> {
 }
 
 impl ContentMode {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         source: InputSource,
         line_source: LineSource,
-        pretty_target: Option<StructuredFormat>,
-        syntax_token: Option<String>,
         theme_manager: Rc<ThemeManager>,
         initial_theme: PeekThemeName,
-        initial_use_pretty: bool,
-        allow_pretty_toggle: bool,
-        show_line_numbers: bool,
-        label: &'static str,
+        cfg: ContentModeConfig,
     ) -> Self {
-        let highlighter = syntax_token.as_ref().map(|t| {
+        let highlighter = cfg.syntax_token.as_ref().map(|t| {
             LineStreamHighlighter::new(t.clone(), Rc::clone(&theme_manager), initial_theme)
         });
         Self {
             source,
             line_source,
             highlighter,
-            pretty_target,
+            pretty_target: cfg.pretty_target,
             pretty: None,
             pretty_highlighted: None,
             pretty_raw_lines: None,
             pending_warnings: Vec::new(),
-            syntax_token,
+            syntax_token: cfg.syntax_token,
             theme_manager,
-            use_pretty: initial_use_pretty && pretty_target.is_some(),
-            allow_pretty_toggle,
-            show_line_numbers,
-            label,
+            use_pretty: cfg.start_pretty && cfg.pretty_target.is_some(),
+            allow_pretty_toggle: cfg.allow_pretty_toggle,
+            show_line_numbers: cfg.line_numbers,
+            label: cfg.label,
             wrap: WrapScroll::new(true),
             cached_cols: 0,
             cached_rows: 0,
@@ -1069,14 +1096,13 @@ mod tests {
         let mut mode = ContentMode::new(
             source.clone(),
             line_source,
-            None,
-            Some("rs".to_string()),
             Rc::clone(&tm),
             PeekThemeName::IdeaDark,
-            false,
-            false,
-            false,
-            "Source",
+            ContentModeConfig {
+                label: "Source",
+                syntax_token: Some("rs".to_string()),
+                ..Default::default()
+            },
         );
 
         let ctx = make_ctx(&file_info, &peek_theme);
@@ -1138,14 +1164,15 @@ mod tests {
         let mut mode = ContentMode::new(
             source,
             line_source,
-            Some(StructuredFormat::Json),
-            Some("JSON".to_string()),
             tm,
             PeekThemeName::IdeaDark,
-            true,  // initial_use_pretty
-            true,  // allow_pretty_toggle
-            false, // show_line_numbers
-            "Content",
+            ContentModeConfig {
+                syntax_token: Some("JSON".to_string()),
+                pretty_target: Some(StructuredFormat::Json),
+                allow_pretty_toggle: true,
+                start_pretty: true,
+                ..Default::default()
+            },
         );
 
         // Trigger the cap check via ensure_pretty directly.
@@ -1170,14 +1197,12 @@ mod tests {
         ContentMode::new(
             source,
             line_source,
-            None, // no pretty target
-            None, // no syntax token
             tm,
             PeekThemeName::IdeaDark,
-            false, // initial_use_pretty
-            false, // allow_pretty_toggle
-            false, // show_line_numbers
-            "Source",
+            ContentModeConfig {
+                label: "Source",
+                ..Default::default()
+            },
         )
     }
 
@@ -1366,14 +1391,15 @@ mod tests {
         let mut mode = ContentMode::new(
             source,
             line_source,
-            Some(StructuredFormat::Json),
-            Some("JSON".to_string()),
             tm,
             PeekThemeName::IdeaDark,
-            false, // start raw
-            true,  // allow_pretty_toggle
-            false,
-            "Content",
+            ContentModeConfig {
+                syntax_token: Some("JSON".to_string()),
+                pretty_target: Some(StructuredFormat::Json),
+                allow_pretty_toggle: true,
+                start_pretty: false, // start raw
+                ..Default::default()
+            },
         );
         mode.set_search(Some("1"));
         assert!(mode.search.is_some());
