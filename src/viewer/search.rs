@@ -303,11 +303,52 @@ pub(crate) fn overlay_window(
     }
 }
 
+/// Minimal horizontal-scroll offset to bring the visible-column span
+/// `[start, end)` into a `cols`-wide viewport currently scrolled to
+/// `h_scroll`. Returns `h_scroll` unchanged when the span already sits
+/// fully on screen — a match jump pans only when, and only as far as,
+/// needed, never disturbing an already-visible hit. A span wider than
+/// the viewport anchors its start.
+///
+/// The shared rule for any view pairing search with character-offset
+/// horizontal scroll (`ObjectTableMode`, wrap-off `ContentMode`).
+pub(crate) fn reveal_h_scroll(h_scroll: usize, cols: usize, start: usize, end: usize) -> usize {
+    if cols == 0 {
+        return h_scroll; // no viewport geometry recorded yet
+    }
+    let wider_than_viewport = end.saturating_sub(start) >= cols;
+    if wider_than_viewport || start < h_scroll {
+        // Off the left edge, or a match too wide to ever fit — anchor
+        // the start at the left.
+        start
+    } else if end > h_scroll + cols {
+        // Off the right edge — pan right just enough.
+        end - cols
+    } else {
+        h_scroll // already fully visible
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::theme::{PeekThemeName, StyleMode};
     use crate::viewer::ui::make_peek_theme;
+
+    #[test]
+    fn reveal_h_scroll_pans_only_when_needed() {
+        // Already fully visible — no move.
+        assert_eq!(reveal_h_scroll(0, 80, 10, 15), 0);
+        assert_eq!(reveal_h_scroll(20, 80, 30, 40), 20);
+        // Off the right edge — end lands at the right edge.
+        assert_eq!(reveal_h_scroll(0, 80, 100, 105), 25);
+        // Off the left edge — start lands at the left edge.
+        assert_eq!(reveal_h_scroll(50, 80, 10, 15), 10);
+        // Match wider than the viewport — anchor its start.
+        assert_eq!(reveal_h_scroll(0, 20, 5, 40), 5);
+        // No geometry — unchanged.
+        assert_eq!(reveal_h_scroll(7, 0, 10, 15), 7);
+    }
 
     #[test]
     fn smart_case_detects_uppercase() {

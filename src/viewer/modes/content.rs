@@ -674,9 +674,35 @@ impl ContentMode {
         if let Some(line) = line {
             self.top_logical = line;
             self.top_sub_row = 0;
-            self.h_scroll = 0;
+            self.reveal_match_h(line);
             self.clamp_top();
         }
+    }
+
+    /// After a search jump to `line`, position `h_scroll` so the match
+    /// is on screen. With soft-wrap on, `h_scroll` is inert and resets
+    /// to 0; with wrap off, pan minimally via `search::reveal_h_scroll`
+    /// so an already-visible hit isn't disturbed.
+    fn reveal_match_h(&mut self, line: usize) {
+        if self.soft_wrap {
+            self.h_scroll = 0;
+            return;
+        }
+        let total = self.current_total();
+        let gutter = self.gutter_visible_width(total);
+        let usable = self.cached_cols.saturating_sub(gutter).max(1);
+        let span = self
+            .search
+            .as_ref()
+            .and_then(|s| s.line_overlay(line))
+            .and_then(|(ranges, current)| {
+                let r = ranges.get(current?)?;
+                Some((r.start, r.end))
+            });
+        self.h_scroll = match span {
+            Some((start, end)) => search::reveal_h_scroll(self.h_scroll, usable, start, end),
+            None => 0,
+        };
     }
 }
 
@@ -1064,12 +1090,12 @@ impl Mode for ContentMode {
             )
         };
         let first = search.first_line();
+        self.search = Some(search);
         if let Some(line) = first {
             self.top_logical = line;
             self.top_sub_row = 0;
-            self.h_scroll = 0;
+            self.reveal_match_h(line);
         }
-        self.search = Some(search);
         self.clamp_top();
         first
     }

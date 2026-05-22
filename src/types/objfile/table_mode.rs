@@ -14,13 +14,14 @@
 
 use anyhow::Result;
 use syntect::highlighting::Color;
+use unicode_width::UnicodeWidthStr;
 
 use super::tables::{Align, Cell, CellRole, Column, ObjectTable};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::search::{SearchState, overlay_matches};
-use crate::viewer::ui::{Action, HelpEntry, slice_styled_h};
+use crate::viewer::search::{SearchState, overlay_matches, reveal_h_scroll};
+use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
 
 /// Sticky rows at the top of the viewport — the header and its rule.
 const STICKY_ROWS: usize = 2;
@@ -127,31 +128,15 @@ impl ObjectTableMode {
         }
     }
 
-    /// Scroll body line `line` into view, and pan horizontally only as
-    /// far as needed to bring the active search match on screen — no
-    /// horizontal move at all when the match is already fully visible.
+    /// Scroll body line `line` into view and pan horizontally to reveal
+    /// the active search match — minimally, via `reveal_h_scroll`.
     fn reveal_match(&mut self, line: usize) {
         self.top = line;
         self.clamp_top();
-        let Some((start, end)) = self.match_span(line) else {
-            return;
-        };
-        let cols = self.cached_cols;
-        if cols == 0 {
-            return; // no viewport geometry recorded yet
+        if let Some((start, end)) = self.match_span(line) {
+            self.h_scroll = reveal_h_scroll(self.h_scroll, self.cached_cols, start, end);
+            self.clamp_h_scroll();
         }
-        if end.saturating_sub(start) >= cols {
-            // Match wider than the viewport — anchor its start.
-            self.h_scroll = start;
-        } else if start < self.h_scroll {
-            // Off the left edge — pan left just enough.
-            self.h_scroll = start;
-        } else if end > self.h_scroll + cols {
-            // Off the right edge — pan right just enough.
-            self.h_scroll = end - cols;
-        }
-        // Otherwise the match already sits fully on screen — don't move.
-        self.clamp_h_scroll();
     }
 
     /// Column span `[start, end)` of the active search match on `line`.
@@ -414,9 +399,8 @@ fn header_width(columns: &[Column]) -> usize {
 
 /// Clamp a name to `max` display columns, ending with `…` when cut.
 fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
+    if UnicodeWidthStr::width(s) <= max {
         return s.to_string();
     }
-    let keep: String = s.chars().take(max.saturating_sub(1)).collect();
-    format!("{keep}\u{2026}")
+    format!("{}\u{2026}", take_cols(s, max.saturating_sub(1)))
 }

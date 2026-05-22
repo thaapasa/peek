@@ -184,6 +184,24 @@ pub(crate) fn count_wrap_segments(s: &str, width: usize) -> usize {
     count
 }
 
+/// Take at most `max_cols` visible columns from a plain (unstyled)
+/// string. Wide characters straddling the cut are dropped rather than
+/// split. The caller appends its own truncation marker when needed —
+/// this is the bare column-clamp primitive shared by the table views.
+pub(crate) fn take_cols(s: &str, max_cols: usize) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut taken = 0usize;
+    for c in s.chars() {
+        let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+        if taken + cw > max_cols {
+            break;
+        }
+        out.push(c);
+        taken += cw;
+    }
+    out
+}
+
 /// Slice a string containing SGR escape sequences to a horizontal window:
 /// skip the first `start_col` visible cells, return up to `max_cols`
 /// cells. Style continuity preserved — the foreground + background SGRs

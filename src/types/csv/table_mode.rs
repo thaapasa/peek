@@ -34,7 +34,7 @@ use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
-use crate::viewer::ui::{Action, HelpEntry};
+use crate::viewer::ui::{Action, HelpEntry, take_cols};
 
 use super::parse::{CellKind, CsvData, classify_cell};
 
@@ -600,22 +600,6 @@ fn display_cell(s: &str) -> Cow<'_, str> {
         }
     }
     Cow::Owned(out)
-}
-
-/// Take at most `max_cols` visible columns from `s`. Wide characters
-/// straddling the cut are dropped rather than split.
-fn take_cols(s: &str, max_cols: usize) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut taken = 0usize;
-    for c in s.chars() {
-        let cw = unicode_width::UnicodeWidthChar::width(c).unwrap_or(0);
-        if taken + cw > max_cols {
-            break;
-        }
-        out.push(c);
-        taken += cw;
-    }
-    out
 }
 
 /// Build the initial per-column widths from the seed scan. Header cells
