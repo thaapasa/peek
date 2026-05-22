@@ -26,6 +26,7 @@ mod content;
 mod help;
 mod hex;
 mod info;
+mod pretty_view;
 mod rendered_text;
 
 pub(crate) use about::AboutMode;
