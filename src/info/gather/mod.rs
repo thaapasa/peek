@@ -20,8 +20,7 @@ use anyhow::Result;
 use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
-    AudioFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
-    EbookFormat, FileType,
+    ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
 };
 use crate::input::mime;
 
@@ -133,7 +132,8 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
     let warnings = collect_warnings(&file_name, detected);
 
     let permissions = format_permissions_from_meta(&meta);
-    let extras = gather_extras(path, &detected.file_type, detected.magic_mime.as_deref());
+    let source = InputSource::File(path.to_path_buf());
+    let extras = gather_extras(&source, &detected.file_type, detected.magic_mime.as_deref());
     let compression = build_compression_info(detected, meta.len());
 
     Ok(FileInfo {
@@ -153,8 +153,7 @@ fn gather_file(path: &Path, detected: &Detected) -> Result<FileInfo> {
 fn gather_virtual(source: &InputSource, detected: &Detected) -> FileInfo {
     let mimes = mime::mimes_for_path(&detected.file_type, None, detected.magic_mime.as_deref());
     let warnings = collect_warnings(source.name(), detected);
-    let extras =
-        gather_extras_in_memory(source, &detected.file_type, detected.magic_mime.as_deref());
+    let extras = gather_extras(source, &detected.file_type, detected.magic_mime.as_deref());
     let size = source.open_byte_source().map(|bs| bs.len()).unwrap_or(0);
     let compression = build_compression_info(detected, size);
 
@@ -218,7 +217,13 @@ fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
     warnings
 }
 
-fn gather_extras_in_memory(
+/// Gather the per-type `FileExtras` payload for an already-detected file.
+///
+/// Every file type goes through `&InputSource` — `InputSource::File` reads
+/// on demand, so a real file and a virtual (Memory / FileRange) source share
+/// the same arms with no duplicated dispatch table. `Directory` is the lone
+/// arm needing a real path, and it only ever arrives via a `File` source.
+fn gather_extras(
     source: &InputSource,
     file_type: &FileType,
     magic_mime: Option<&str>,
@@ -278,116 +283,23 @@ fn gather_extras_in_memory(
         FileType::DiskImage(fmt) => {
             crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
-        FileType::Audio(fmt) => audio_gather(source, *fmt),
+        FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
         FileType::Csv(fmt) => csv_gather(source, *fmt),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
         FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
-        // Directory only ever appears via a real `File` source; the
-        // virtual-source path can't construct one.
-        FileType::Directory => crate::types::binary::info::gather_extras(magic_mime),
+        FileType::Directory => match source {
+            InputSource::File(path) => crate::types::directory::info::gather_extras(path),
+            // A directory only ever reaches here via a real `File` source;
+            // a virtual source can't name one.
+            _ => crate::types::binary::info::gather_extras(magic_mime),
+        },
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
-}
-
-fn audio_gather(source: &InputSource, fmt: AudioFormat) -> FileExtras {
-    crate::types::audio::info_gather::gather_extras(source, fmt)
 }
 
 fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
     match crate::types::csv::parse::CsvData::open(source, fmt) {
         Ok(data) => FileExtras::Csv(crate::types::csv::info_gather::gather(&data, fmt)),
         Err(_) => crate::types::binary::info::gather_extras(None),
-    }
-}
-
-fn gather_extras(path: &Path, file_type: &FileType, magic_mime: Option<&str>) -> FileExtras {
-    match file_type {
-        FileType::Image => crate::types::image::info_gather::gather_extras(
-            &InputSource::File(path.to_path_buf()),
-            magic_mime,
-        ),
-        FileType::SourceCode { .. } => {
-            let source = InputSource::File(path.to_path_buf());
-            if let Some(extras) = gather_code_extras(&source, file_type) {
-                return extras;
-            }
-            match gather_text_stats(&source) {
-                Some(stats) => FileExtras::Text(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            }
-        }
-        FileType::Svg => {
-            let source = InputSource::File(path.to_path_buf());
-            match (gather_text_stats(&source), source.read_bytes()) {
-                (Some(stats), Ok(bytes)) => {
-                    crate::types::svg::info_gather::gather_extras(stats, &bytes)
-                }
-                _ => crate::types::binary::info::gather_extras(magic_mime),
-            }
-        }
-        FileType::Structured(fmt) => match fs::read(path) {
-            Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
-                format_name: crate::types::structured::info::format_name(*fmt),
-                stats: None,
-            }),
-        },
-        FileType::Html => match fs::read(path) {
-            Ok(bytes) => crate::types::structured::info::gather_extras(
-                crate::input::detect::StructuredFormat::Xml,
-                &bytes,
-            ),
-            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
-                format_name: "HTML",
-                stats: None,
-            }),
-        },
-        FileType::Archive(fmt) => {
-            crate::types::archive::info::gather_extras(&InputSource::File(path.to_path_buf()), *fmt)
-        }
-        FileType::Ebook(EbookFormat::Epub) => {
-            crate::types::ebook::epub::info_gather::gather_extras(&InputSource::File(
-                path.to_path_buf(),
-            ))
-        }
-        FileType::Comic(fmt @ ComicFormat::Cbz) => {
-            crate::types::comic::cbz::info_gather::gather_extras(
-                &InputSource::File(path.to_path_buf()),
-                *fmt,
-            )
-        }
-        FileType::Document(DocumentFormat::Docx) => {
-            crate::types::document::docx::info_gather::gather_extras(&InputSource::File(
-                path.to_path_buf(),
-            ))
-        }
-        FileType::Document(DocumentFormat::Odt) => {
-            crate::types::document::odt::info_gather::gather_extras(&InputSource::File(
-                path.to_path_buf(),
-            ))
-        }
-        FileType::Document(DocumentFormat::Rtf) => {
-            crate::types::document::rtf::info_gather::gather_extras(&InputSource::File(
-                path.to_path_buf(),
-            ))
-        }
-        FileType::Pdf => {
-            crate::types::pdf::info_gather::gather_extras(&InputSource::File(path.to_path_buf()))
-        }
-        FileType::DiskImage(fmt) => crate::types::disk_image::info_gather::gather_extras(
-            &InputSource::File(path.to_path_buf()),
-            *fmt,
-        ),
-        FileType::Audio(fmt) => audio_gather(&InputSource::File(path.to_path_buf()), *fmt),
-        FileType::Csv(fmt) => csv_gather(&InputSource::File(path.to_path_buf()), *fmt),
-        FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(
-            &InputSource::File(path.to_path_buf()),
-        ),
-        FileType::Classfile => crate::types::classfile::info_gather::gather_extras(
-            &InputSource::File(path.to_path_buf()),
-        ),
-        FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),
-        FileType::Directory => crate::types::directory::info::gather_extras(path),
-        FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
 }
