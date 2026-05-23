@@ -435,13 +435,8 @@ impl ComposeCtx {
         // back to the raw source. JSONC and JSON5 have lossy pretty paths
         // (comments dropped, JSON5 syntax collapsed) so they default to raw —
         // `r` still toggles for users who want the strict-JSON view.
-        let initial_use_pretty =
+        let start_pretty =
             pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
-
-        // Structured formats and SVG (which is XML) both expose `r` as a
-        // pretty/raw toggle on the Source view. Source code / plain text
-        // have no pretty form, so `r` is inert there.
-        let allow_pretty_toggle = matches!(file_type, FileType::Structured(_) | FileType::Svg);
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
@@ -458,8 +453,7 @@ impl ComposeCtx {
                 label,
                 syntax_token,
                 pretty_target,
-                allow_pretty_toggle,
-                start_pretty: initial_use_pretty,
+                start_pretty,
                 line_numbers: args.line_numbers,
             },
         )))

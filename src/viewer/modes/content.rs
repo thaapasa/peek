@@ -15,6 +15,100 @@ use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, wrap_styled};
 use crate::viewer::wrap_scroll::{LineView, WrapScroll};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
+/// Which output a [`ContentMode`] is showing, plus (when a pretty form
+/// exists) the lazy-parse machinery for it.
+///
+/// `RawOnly` is the trivial case — source code, plain text, anything
+/// without a structured pretty form. `r` is inert.
+///
+/// `Either` carries the [`PrettyView`] (lazy whole-doc parse + rendered
+/// cache) alongside a `showing` tag for which output the user is
+/// looking at right now. `r` flips `showing`. A cap-exceeded or
+/// parse-failed `PrettyView` locks the user back to `Showing::Raw`;
+/// the variant stays `Either` so the status line can surface the
+/// "Raw (forced)" label.
+///
+/// One field on `ContentMode` (`self.rendering`) replaces three:
+/// the old `pretty: Option<PrettyView>`, `use_pretty: bool`, and
+/// `allow_pretty_toggle: bool` — none of which encoded the
+/// "pretty-form-exists-when-showing-pretty" invariant in the type.
+pub(crate) enum RenderingMode {
+    RawOnly,
+    Either {
+        showing: Showing,
+        pretty: PrettyView,
+    },
+}
+
+/// Which side of an `Either` rendering is currently visible.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Showing {
+    Raw,
+    Pretty,
+}
+
+impl RenderingMode {
+    /// `r` is live (a pretty form exists).
+    pub(crate) fn allow_toggle(&self) -> bool {
+        matches!(self, Self::Either { .. })
+    }
+
+    /// `Showing::Pretty` and the pretty branch hasn't permanently
+    /// failed. Drives the active-branch dispatch in `prepare_window`
+    /// and the line-domain check in `tracks_position`.
+    pub(crate) fn showing_pretty(&self) -> bool {
+        matches!(
+            self,
+            Self::Either {
+                showing: Showing::Pretty,
+                ..
+            }
+        )
+    }
+
+    pub(crate) fn pretty(&self) -> Option<&PrettyView> {
+        match self {
+            Self::Either { pretty, .. } => Some(pretty),
+            Self::RawOnly => None,
+        }
+    }
+
+    pub(crate) fn pretty_mut(&mut self) -> Option<&mut PrettyView> {
+        match self {
+            Self::Either { pretty, .. } => Some(pretty),
+            Self::RawOnly => None,
+        }
+    }
+
+    /// Force-flip back to raw — used when the lazy pretty parse fails
+    /// (size cap or parse error) and the user must be locked to raw.
+    /// `Either` is retained so the status line can render
+    /// "Raw (forced)".
+    pub(crate) fn force_raw(&mut self) {
+        if let Self::Either { showing, .. } = self {
+            *showing = Showing::Raw;
+        }
+    }
+
+    /// Flip raw ↔ pretty if togglable and the pretty branch hasn't
+    /// permanently failed. Returns `true` when the flip happened; the
+    /// caller resets scroll / search on `true` because the line-index
+    /// domain changes.
+    pub(crate) fn toggle(&mut self) -> bool {
+        if let Self::Either { showing, pretty } = self
+            && !pretty.failed()
+        {
+            *showing = match showing {
+                Showing::Raw => Showing::Pretty,
+                Showing::Pretty => Showing::Raw,
+            };
+            true
+        } else {
+            false
+        }
+    }
+}
+
 /// Content view: text, syntax-highlighted source, pretty-printed structured
 /// data, or SVG XML source.
 ///
@@ -26,14 +120,13 @@ use crate::viewer::{LineStreamHighlighter, highlight_lines};
 ///
 /// Pretty mode lives in [`PrettyView`] — a whole-document parse plus a
 /// rendered-line cache, size-capped so a multi-GB JSON-shaped log can't
-/// OOM. `use_pretty` is the *view state* (which branch the user sees);
-/// `PrettyView` holds the branch's data.
+/// OOM — owned inside [`RenderingMode::Either`].
 ///
-/// `r` flips `use_pretty` when `allow_pretty_toggle` is set — used for
-/// structured files (JSON/YAML/TOML/XML) and SVG XML, where raw vs
-/// pretty is a meaningful user choice. Source code / plain text have no
-/// pretty form, so `r` is inert. The active sub-state (Pretty / Raw)
-/// shows up as a status-line segment.
+/// `r` flips the active output via [`RenderingMode::toggle`] when the
+/// rendering is `Either` — structured files (JSON/YAML/TOML/XML) and SVG
+/// XML, where raw vs pretty is a meaningful user choice. Source code /
+/// plain text are `RawOnly`, so `r` is inert. The active sub-state
+/// (Pretty / Raw) shows up as a status-line segment.
 pub(crate) struct ContentMode {
     source: InputSource,
     line_source: LineSource,
@@ -41,18 +134,15 @@ pub(crate) struct ContentMode {
     /// the view has no associated syntax (plain text, --plain mode).
     highlighter: Option<LineStreamHighlighter>,
 
-    /// The pretty-print branch — `None` when the file has no pretty form
-    /// (source code, plain text). Owns the lazy parse + rendered-line
-    /// cache; `use_pretty` below is the live view state (raw vs pretty).
-    pretty: Option<PrettyView>,
+    /// Which output is showing (Raw / Pretty) plus the lazy pretty-parse
+    /// machinery when a pretty form exists. See [`RenderingMode`].
+    rendering: RenderingMode,
 
     /// Warnings produced during render that haven't been collected by
     /// `ViewerState` yet — drained on every `take_warnings` call.
     pending_warnings: Vec<String>,
     syntax_token: Option<String>,
     theme_manager: Rc<ThemeManager>,
-    use_pretty: bool,
-    allow_pretty_toggle: bool,
     /// Line-number gutter — its on/off state plus the painting logic.
     gutter: Gutter,
     label: &'static str,
@@ -71,7 +161,7 @@ pub(crate) struct ContentMode {
     cached_rows: usize,
 
     /// Active text search, or `None`. Match positions are in the active
-    /// branch's line domain (raw or pretty); cleared when that domain
+    /// output's line domain (raw or pretty); cleared when that domain
     /// changes (the raw/pretty toggle).
     search: Option<SearchState>,
 }
@@ -86,10 +176,9 @@ pub(crate) struct ContentModeConfig {
     pub label: &'static str,
     /// syntect token for raw-mode highlighting. `None` → no highlighting.
     pub syntax_token: Option<String>,
-    /// Structured format to pretty-print as. `None` → no pretty form.
+    /// Structured format to pretty-print as. `None` → no pretty form,
+    /// and `r` (raw/pretty toggle) is inert.
     pub pretty_target: Option<StructuredFormat>,
-    /// Whether `r` toggles pretty / raw — structured + SVG only.
-    pub allow_pretty_toggle: bool,
     /// Start in pretty view. Ignored when `pretty_target` is `None`.
     pub start_pretty: bool,
     /// Start with the line-number gutter visible.
@@ -102,7 +191,6 @@ impl Default for ContentModeConfig {
             label: "Content",
             syntax_token: None,
             pretty_target: None,
-            allow_pretty_toggle: false,
             start_pretty: false,
             line_numbers: false,
         }
@@ -132,23 +220,21 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
     NEXT_PREV_MATCH_HELP,
 ];
 
-/// Pick the active branch into a [`LineView`] borrow. Pretty only when
-/// pretty mode is on *and* `PrettyView`'s rendered cache is built —
-/// `Pretty(&[])` before the first pretty render keeps the geometry
-/// seeing an empty view.
+/// Pick the active output into a [`LineView`] borrow. Pretty only when
+/// the rendering is `Either { showing: Pretty }` *and* `PrettyView`'s
+/// rendered cache is built — `Pretty(&[])` before the first pretty
+/// render keeps the geometry seeing an empty view.
 ///
 /// A free function, not a `&self` method on `ContentMode`: it borrows
 /// only the line-data fields, leaving `self.wrap` free for the `&mut`
 /// borrow the geometry methods take alongside.
-fn active_view<'a>(
-    use_pretty: bool,
-    line_source: &'a LineSource,
-    pretty: Option<&'a PrettyView>,
-) -> LineView<'a> {
-    if use_pretty && let Some(pv) = pretty {
-        LineView::Pretty(pv.rendered_lines().unwrap_or(&[]))
-    } else {
-        LineView::Raw(line_source)
+fn active_view<'a>(rendering: &'a RenderingMode, line_source: &'a LineSource) -> LineView<'a> {
+    match rendering {
+        RenderingMode::Either {
+            showing: Showing::Pretty,
+            pretty,
+        } => LineView::Pretty(pretty.rendered_lines().unwrap_or(&[])),
+        _ => LineView::Raw(line_source),
     }
 }
 
@@ -163,16 +249,25 @@ impl ContentMode {
         let highlighter = cfg.syntax_token.as_ref().map(|t| {
             LineStreamHighlighter::new(t.clone(), Rc::clone(&theme_manager), initial_theme)
         });
+        let rendering = match cfg.pretty_target {
+            Some(target) => RenderingMode::Either {
+                showing: if cfg.start_pretty {
+                    Showing::Pretty
+                } else {
+                    Showing::Raw
+                },
+                pretty: PrettyView::new(target),
+            },
+            None => RenderingMode::RawOnly,
+        };
         Self {
             source,
             line_source,
             highlighter,
-            pretty: cfg.pretty_target.map(PrettyView::new),
+            rendering,
             pending_warnings: Vec::new(),
             syntax_token: cfg.syntax_token,
             theme_manager,
-            use_pretty: cfg.start_pretty && cfg.pretty_target.is_some(),
-            allow_pretty_toggle: cfg.allow_pretty_toggle,
             gutter: Gutter::new(cfg.line_numbers),
             label: cfg.label,
             wrap: WrapScroll::new(true),
@@ -245,39 +340,36 @@ impl ContentMode {
         false
     }
 
-    /// Total logical line count of the currently-active branch.
+    /// Total logical line count of the currently-active output.
     fn current_total(&self) -> usize {
-        active_view(self.use_pretty, &self.line_source, self.pretty.as_ref()).total()
+        active_view(&self.rendering, &self.line_source).total()
     }
 
-    /// Re-clamp the wrap position against the active branch so it never
+    /// Re-clamp the wrap position against the active output so it never
     /// sits past the effective bottom. Called after every scroll
     /// mutation and at the end of each render — a resize or theme cycle
     /// can change wrap segment counts and strand the viewport.
     fn clamp_top(&mut self) {
-        let cl = active_view(self.use_pretty, &self.line_source, self.pretty.as_ref());
+        let cl = active_view(&self.rendering, &self.line_source);
         let usable = self.usable_width(cl.total());
         let rows = self.cached_rows.max(1);
         self.wrap.clamp(&cl, usable, rows);
     }
 
     /// Parse the pretty branch if pretty mode is active and untried. On
-    /// a size-cap refusal, drop `use_pretty` so position tracking and
-    /// the status line reflect the now-permanent raw fallback.
+    /// a size-cap refusal, force the rendering back to raw so position
+    /// tracking and the status line reflect the now-permanent fallback.
     fn ensure_pretty_parsed(&mut self) {
-        if !self.use_pretty {
+        if !self.rendering.showing_pretty() {
             return;
         }
-        let Some(pv) = self.pretty.as_mut() else {
+        let total_bytes = self.line_source.total_bytes();
+        let Some(pv) = self.rendering.pretty_mut() else {
             return;
         };
-        pv.ensure_parsed(
-            &self.source,
-            self.line_source.total_bytes(),
-            &mut self.pending_warnings,
-        );
+        pv.ensure_parsed(&self.source, total_bytes, &mut self.pending_warnings);
         if pv.cap_exceeded() {
-            self.use_pretty = false;
+            self.rendering.force_raw();
         }
     }
 
@@ -300,12 +392,12 @@ impl ContentMode {
                     token,
                     theme_manager: &self.theme_manager,
                 });
-                let pv = self.pretty.as_mut().expect("pretty branch present");
+                let pv = self.rendering.pretty_mut().expect("pretty branch present");
                 pv.ensure_rendered(ctx.theme_name, ctx.peek_theme.style_mode, syntax)?;
             }
             let lines: &[String] = self
-                .pretty
-                .as_ref()
+                .rendering
+                .pretty()
                 .and_then(PrettyView::rendered_lines)
                 .expect("pretty cache populated");
             let total = lines.len();
@@ -454,18 +546,19 @@ impl Mode for ContentMode {
         self.cached_cols = ctx.term_cols;
         self.cached_rows = rows;
         self.ensure_pretty_parsed();
-        // `ensure_pretty_parsed` may have forced `use_pretty` off on a
+        // `ensure_pretty_parsed` may have force-flipped to Raw on a
         // size-cap refusal; re-check readiness before branching.
-        let pretty_ready =
-            self.use_pretty && self.pretty.as_ref().is_some_and(PrettyView::is_ready);
+        let pretty_ready = self.rendering.showing_pretty()
+            && self.rendering.pretty().is_some_and(PrettyView::is_ready);
         let prepared = self.prepare_window(ctx, rows, pretty_ready)?;
         let window = match prepared {
             None => {
-                // Empty branch or rows == 0 — surface the active branch's
-                // total so the status line still tracks document size.
+                // Empty output or rows == 0 — surface the active
+                // output's total so the status line still tracks
+                // document size.
                 let total = if pretty_ready {
-                    self.pretty
-                        .as_ref()
+                    self.rendering
+                        .pretty()
                         .and_then(PrettyView::rendered_lines)
                         .map(<[String]>::len)
                         .unwrap_or(0)
@@ -492,8 +585,8 @@ impl Mode for ContentMode {
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         self.ensure_pretty_parsed();
-        let pretty_text = if self.use_pretty {
-            self.pretty.as_ref().and_then(PrettyView::text)
+        let pretty_text = if self.rendering.showing_pretty() {
+            self.rendering.pretty().and_then(PrettyView::text)
         } else {
             None
         };
@@ -510,7 +603,7 @@ impl Mode for ContentMode {
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
-        if self.allow_pretty_toggle {
+        if self.rendering.allow_toggle() {
             RAW_TOGGLE_ACTIONS
         } else {
             LINE_NUMBER_ACTIONS
@@ -519,13 +612,13 @@ impl Mode for ContentMode {
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
         let mut segs: Vec<(String, Color)> = Vec::new();
-        if self.allow_pretty_toggle {
+        if self.rendering.allow_toggle() {
             // A failed pretty branch (size cap or parse error) locks the
             // user in raw — surface that so the inert `r` key isn't a
             // mystery.
-            let label = if self.pretty.as_ref().is_some_and(PrettyView::failed) {
+            let label = if self.rendering.pretty().is_some_and(PrettyView::failed) {
                 "Raw (forced)"
-            } else if self.use_pretty {
+            } else if self.rendering.showing_pretty() {
                 "Pretty"
             } else {
                 "Raw"
@@ -571,16 +664,7 @@ impl Mode for ContentMode {
             self.wrap.toggle_wrap();
             return Handled::Yes;
         }
-        if action == Action::ToggleRawSource
-            && self.allow_pretty_toggle
-            // A pretty branch exists and hasn't permanently failed. A
-            // size-cap / parse failure is permanent for the session:
-            // flipping `use_pretty` would be invisible (next render
-            // falls through to raw anyway) and the scroll-reset would
-            // just surprise the user.
-            && self.pretty.as_ref().is_some_and(|pv| !pv.failed())
-        {
-            self.use_pretty = !self.use_pretty;
+        if action == Action::ToggleRawSource && self.rendering.toggle() {
             // Pretty line N and raw line N are unrelated content — the
             // user's previous scroll offset would put them somewhere
             // arbitrary in the new view. Reset to the top. The
@@ -588,11 +672,11 @@ impl Mode for ContentMode {
             // `at()` is preserved across the toggle, and the next
             // raw-mode `render_window` will detect `at() > 0` (the new
             // scroll) and reset itself before catching up.
-            if let Some(pv) = self.pretty.as_mut() {
+            if let Some(pv) = self.rendering.pretty_mut() {
                 pv.invalidate_render();
             }
-            // Match positions are in the old branch's line domain — they
-            // mean nothing in the new branch. Drop the search.
+            // Match positions are in the old output's line domain —
+            // they mean nothing in the new one. Drop the search.
             self.search = None;
             self.wrap.jump_to_top();
             self.wrap.clear_h_scroll();
@@ -607,7 +691,7 @@ impl Mode for ContentMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        let cl = active_view(self.use_pretty, &self.line_source, self.pretty.as_ref());
+        let cl = active_view(&self.rendering, &self.line_source);
         if cl.total() == 0 {
             // No content yet — nothing to navigate. Still consume the
             // action so it doesn't fall through to a nonsensical global.
@@ -673,7 +757,7 @@ impl Mode for ContentMode {
         // raw line count when known (cheap via LineSource); skip in
         // pretty since the count needs the materialized cache that
         // appears only after the first render.
-        if self.use_pretty {
+        if self.rendering.showing_pretty() {
             None
         } else {
             Some(self.line_source.total_lines())
@@ -690,11 +774,11 @@ impl Mode for ContentMode {
     /// from pretty Content to Hex preserves whatever position Hex
     /// previously had instead of synthesizing a wrong one.
     fn tracks_position(&self) -> bool {
-        !self.use_pretty
+        !self.rendering.showing_pretty()
     }
 
     fn position(&self) -> Position {
-        if self.use_pretty {
+        if self.rendering.showing_pretty() {
             Position::Unknown
         } else {
             Position::Line(self.wrap.top_logical())
@@ -731,8 +815,8 @@ impl Mode for ContentMode {
                 return None;
             }
         };
-        let pretty_text = if self.use_pretty {
-            self.pretty.as_ref().and_then(PrettyView::text)
+        let pretty_text = if self.rendering.showing_pretty() {
+            self.rendering.pretty().and_then(PrettyView::text)
         } else {
             None
         };
@@ -951,8 +1035,8 @@ mod tests {
     }
 
     /// Above the size cap, `ensure_pretty_parsed` should refuse to load,
-    /// push a warning, and clear `use_pretty` so the user sees the
-    /// streamed raw view instead.
+    /// push a warning, and force the rendering back to raw so the user
+    /// sees the streamed raw view instead.
     #[test]
     fn pretty_cap_falls_back_to_raw_with_warning() {
         // Pad past PRETTY_MAX_BYTES (16 MB) with valid JSON.
@@ -982,7 +1066,6 @@ mod tests {
             ContentModeConfig {
                 syntax_token: Some("JSON".to_string()),
                 pretty_target: Some(StructuredFormat::Json),
-                allow_pretty_toggle: true,
                 start_pretty: true,
                 ..Default::default()
             },
@@ -990,7 +1073,10 @@ mod tests {
 
         // Trigger the cap check via ensure_pretty_parsed directly.
         mode.ensure_pretty_parsed();
-        assert!(!mode.use_pretty, "size cap must clear use_pretty");
+        assert!(
+            !mode.rendering.showing_pretty(),
+            "size cap must force back to raw"
+        );
         let warnings = mode.take_warnings();
         assert!(
             warnings
@@ -1209,7 +1295,6 @@ mod tests {
             ContentModeConfig {
                 syntax_token: Some("JSON".to_string()),
                 pretty_target: Some(StructuredFormat::Json),
-                allow_pretty_toggle: true,
                 start_pretty: false, // start raw
                 ..Default::default()
             },
