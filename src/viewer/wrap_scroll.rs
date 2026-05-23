@@ -12,13 +12,16 @@
 //!
 //! [`WrapScroll`] keeps the position valid across scrolling, paging,
 //! resize, and wrap toggles. The geometry — how a logical line splits
-//! into visual rows — is read through [`LineProvider`], so this module
-//! never needs to know whether the lines come from a streaming
-//! `LineSource` or a materialised pretty-print cache. `ContentMode` is
-//! the only caller today.
+//! into visual rows — reads logical lines through [`LineView`], an
+//! enum that names the two concrete shapes a `ContentMode` can hold
+//! (streaming raw `LineSource` vs materialised pretty-print cache).
+//! `ContentMode` is the only caller today; the enum keeps the geometry
+//! methods free of the field-level borrow on `ContentMode` that holds
+//! both the line source and the wrap state.
 
 use std::borrow::Cow;
 
+use crate::input::LineSource;
 use crate::viewer::ui::count_wrap_segments;
 
 /// Horizontal-scroll step (columns) per Left/Right press when wrap is
@@ -26,14 +29,33 @@ use crate::viewer::ui::count_wrap_segments;
 /// code, big enough that panning a wide log line isn't 20 keypresses.
 pub(crate) const H_SCROLL_STEP: usize = 8;
 
-/// Read access to the logical lines a [`WrapScroll`] positions over.
-/// The wrap geometry only ever needs the total count and a line's text
-/// (to count its wrap segments).
-pub(crate) trait LineProvider {
-    /// Total logical line count of the active view.
-    fn total(&self) -> usize;
-    /// Styled text of logical line `idx`, or `None` past the end.
-    fn line(&self, idx: usize) -> Option<Cow<'_, str>>;
+/// The logical-line view a [`WrapScroll`] positions over. Two shapes:
+/// the streaming raw `LineSource` or a materialised pretty-print
+/// cache. The geometry only ever needs the total count and a line's
+/// text (to count its wrap segments).
+pub(crate) enum LineView<'a> {
+    Raw(&'a LineSource),
+    Pretty(&'a [String]),
+}
+
+impl LineView<'_> {
+    pub(crate) fn total(&self) -> usize {
+        match self {
+            LineView::Raw(ls) => ls.total_lines(),
+            LineView::Pretty(lines) => lines.len(),
+        }
+    }
+
+    pub(crate) fn line(&self, idx: usize) -> Option<Cow<'_, str>> {
+        match self {
+            LineView::Raw(ls) => ls
+                .window(idx..idx + 1)
+                .ok()
+                .and_then(|mut v| v.drain(..).next())
+                .map(Cow::Owned),
+            LineView::Pretty(lines) => lines.get(idx).map(|s| Cow::Borrowed(s.as_str())),
+        }
+    }
 }
 
 /// Wrap-aware scroll position. See the module docs for the three axes.
@@ -119,7 +141,7 @@ impl WrapScroll {
     /// Step one visual row down. Wrap-on walks segments within the
     /// current line then rolls to the next; wrap-off bumps the logical
     /// line. Overshoot past EOF is cleaned up by [`clamp`](Self::clamp).
-    pub(crate) fn step_down(&mut self, lines: &dyn LineProvider, usable: usize) {
+    pub(crate) fn step_down(&mut self, lines: &LineView, usable: usize) {
         if lines.total() == 0 {
             return;
         }
@@ -138,7 +160,7 @@ impl WrapScroll {
 
     /// Step one visual row up. Wrap-on lands on the *last* segment of
     /// the previous logical line.
-    pub(crate) fn step_up(&mut self, lines: &dyn LineProvider, usable: usize) {
+    pub(crate) fn step_up(&mut self, lines: &LineView, usable: usize) {
         if lines.total() == 0 {
             return;
         }
@@ -159,7 +181,7 @@ impl WrapScroll {
     }
 
     /// Jump so the document end sits at the viewport bottom.
-    pub(crate) fn jump_to_bottom(&mut self, lines: &dyn LineProvider, usable: usize, rows: usize) {
+    pub(crate) fn jump_to_bottom(&mut self, lines: &LineView, usable: usize, rows: usize) {
         let (l, s) = self.bottom(lines, usable, rows);
         self.top_logical = l;
         self.top_sub_row = s;
@@ -168,7 +190,7 @@ impl WrapScroll {
     /// Re-clamp the position so it never sits past the effective
     /// bottom. Call after every mutation — a resize or theme cycle can
     /// change wrap segment counts and strand the viewport.
-    pub(crate) fn clamp(&mut self, lines: &dyn LineProvider, usable: usize, rows: usize) {
+    pub(crate) fn clamp(&mut self, lines: &LineView, usable: usize, rows: usize) {
         let total = lines.total();
         if total == 0 {
             self.top_logical = 0;
@@ -190,7 +212,7 @@ impl WrapScroll {
     /// `(top_logical, top_sub_row)` placing EOF exactly at the viewport
     /// bottom — or the document start when it's shorter than the
     /// viewport. Walks segment counts backward from EOF.
-    fn bottom(&self, lines: &dyn LineProvider, usable: usize, rows: usize) -> (usize, usize) {
+    fn bottom(&self, lines: &LineView, usable: usize, rows: usize) -> (usize, usize) {
         let total = lines.total();
         if total == 0 || rows == 0 {
             return (0, 0);
@@ -212,7 +234,7 @@ impl WrapScroll {
 
     /// Wrap-segment count of logical line `idx`. 1 when wrap is off or
     /// the line text isn't reachable.
-    fn segment_count(&self, lines: &dyn LineProvider, idx: usize, usable: usize) -> usize {
+    fn segment_count(&self, lines: &LineView, idx: usize, usable: usize) -> usize {
         if !self.soft_wrap || usable == 0 {
             return 1;
         }
@@ -249,50 +271,43 @@ impl WrapScroll {
 mod tests {
     use super::*;
 
-    /// Fake provider — each entry is one logical line's text.
-    struct Lines(Vec<String>);
-
-    impl LineProvider for Lines {
-        fn total(&self) -> usize {
-            self.0.len()
-        }
-        fn line(&self, idx: usize) -> Option<Cow<'_, str>> {
-            self.0.get(idx).map(|s| Cow::Borrowed(s.as_str()))
-        }
-    }
-
-    fn lines(specs: &[&str]) -> Lines {
-        Lines(specs.iter().map(|s| s.to_string()).collect())
+    /// Owned-string fixture; `view()` borrows it into a `LineView` for
+    /// the test calls.
+    fn lines(specs: &[&str]) -> Vec<String> {
+        specs.iter().map(|s| s.to_string()).collect()
     }
 
     #[test]
     fn step_down_walks_segments_then_rolls_to_next_line() {
         // Line 0 is 20 cols wide → 2 segments at usable width 10.
-        let provider = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let view = LineView::Pretty(&buf);
         let mut w = WrapScroll::new(true);
 
-        w.step_down(&provider, 10);
+        w.step_down(&view, 10);
         assert_eq!((w.top_logical(), w.top_sub_row()), (0, 1));
-        w.step_down(&provider, 10);
+        w.step_down(&view, 10);
         assert_eq!((w.top_logical(), w.top_sub_row()), (1, 0));
     }
 
     #[test]
     fn step_up_lands_on_last_segment_of_previous_line() {
-        let provider = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let view = LineView::Pretty(&buf);
         let mut w = WrapScroll::for_test(true, 1, 0, 0);
 
-        w.step_up(&provider, 10);
+        w.step_up(&view, 10);
         // Line 0 wraps to 2 segments → last index is 1.
         assert_eq!((w.top_logical(), w.top_sub_row()), (0, 1));
     }
 
     #[test]
     fn clamp_pins_overshoot_to_bottom() {
-        let provider = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
+        let view = LineView::Pretty(&buf);
         // Viewport of 1 visual row: bottom is line 1, segment 0.
         let mut w = WrapScroll::for_test(true, 9, 0, 0);
-        w.clamp(&provider, 10, 1);
+        w.clamp(&view, 10, 1);
         assert_eq!((w.top_logical(), w.top_sub_row()), (1, 0));
     }
 

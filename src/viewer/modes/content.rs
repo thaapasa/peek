@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -13,7 +12,7 @@ use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, wrap_styled};
-use crate::viewer::wrap_scroll::{LineProvider, WrapScroll};
+use crate::viewer::wrap_scroll::{LineView, WrapScroll};
 use crate::viewer::{LineStreamHighlighter, highlight_lines};
 
 /// Content view: text, syntax-highlighted source, pretty-printed structured
@@ -133,49 +132,23 @@ const LINE_NUMBER_ACTIONS: &[HelpEntry] = &[
     NEXT_PREV_MATCH_HELP,
 ];
 
-/// The logical-line view of the active branch — the streaming raw
-/// `LineSource`, or the materialised pretty-print cache. `WrapScroll`'s
-/// geometry reads lines through this `LineProvider` so it stays
-/// branch-agnostic.
-enum ContentLines<'a> {
-    Raw(&'a LineSource),
-    Pretty(&'a [String]),
-}
-
-impl<'a> ContentLines<'a> {
-    /// Pick the active branch. Pretty only when pretty mode is on *and*
-    /// `PrettyView`'s rendered cache is built — `Pretty(&[])` before
-    /// the first pretty render keeps the geometry seeing an empty view.
-    ///
-    /// A free constructor, not a `&self` method on `ContentMode`: it
-    /// borrows the individual line-data fields, leaving `self.wrap`
-    /// free for the `&mut` borrow the geometry methods take alongside.
-    fn new(use_pretty: bool, line_source: &'a LineSource, pretty: Option<&'a PrettyView>) -> Self {
-        if use_pretty && let Some(pv) = pretty {
-            ContentLines::Pretty(pv.rendered_lines().unwrap_or(&[]))
-        } else {
-            ContentLines::Raw(line_source)
-        }
-    }
-}
-
-impl LineProvider for ContentLines<'_> {
-    fn total(&self) -> usize {
-        match self {
-            ContentLines::Raw(ls) => ls.total_lines(),
-            ContentLines::Pretty(lines) => lines.len(),
-        }
-    }
-
-    fn line(&self, idx: usize) -> Option<Cow<'_, str>> {
-        match self {
-            ContentLines::Raw(ls) => ls
-                .window(idx..idx + 1)
-                .ok()
-                .and_then(|mut v| v.drain(..).next())
-                .map(Cow::Owned),
-            ContentLines::Pretty(lines) => lines.get(idx).map(|s| Cow::Borrowed(s.as_str())),
-        }
+/// Pick the active branch into a [`LineView`] borrow. Pretty only when
+/// pretty mode is on *and* `PrettyView`'s rendered cache is built —
+/// `Pretty(&[])` before the first pretty render keeps the geometry
+/// seeing an empty view.
+///
+/// A free function, not a `&self` method on `ContentMode`: it borrows
+/// only the line-data fields, leaving `self.wrap` free for the `&mut`
+/// borrow the geometry methods take alongside.
+fn active_view<'a>(
+    use_pretty: bool,
+    line_source: &'a LineSource,
+    pretty: Option<&'a PrettyView>,
+) -> LineView<'a> {
+    if use_pretty && let Some(pv) = pretty {
+        LineView::Pretty(pv.rendered_lines().unwrap_or(&[]))
+    } else {
+        LineView::Raw(line_source)
     }
 }
 
@@ -274,7 +247,7 @@ impl ContentMode {
 
     /// Total logical line count of the currently-active branch.
     fn current_total(&self) -> usize {
-        ContentLines::new(self.use_pretty, &self.line_source, self.pretty.as_ref()).total()
+        active_view(self.use_pretty, &self.line_source, self.pretty.as_ref()).total()
     }
 
     /// Re-clamp the wrap position against the active branch so it never
@@ -282,7 +255,7 @@ impl ContentMode {
     /// mutation and at the end of each render — a resize or theme cycle
     /// can change wrap segment counts and strand the viewport.
     fn clamp_top(&mut self) {
-        let cl = ContentLines::new(self.use_pretty, &self.line_source, self.pretty.as_ref());
+        let cl = active_view(self.use_pretty, &self.line_source, self.pretty.as_ref());
         let usable = self.usable_width(cl.total());
         let rows = self.cached_rows.max(1);
         self.wrap.clamp(&cl, usable, rows);
@@ -702,7 +675,7 @@ impl Mode for ContentMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
-        let cl = ContentLines::new(self.use_pretty, &self.line_source, self.pretty.as_ref());
+        let cl = active_view(self.use_pretty, &self.line_source, self.pretty.as_ref());
         if cl.total() == 0 {
             // No content yet — nothing to navigate. Still consume the
             // action so it doesn't fall through to a nonsensical global.
