@@ -159,14 +159,7 @@ fn run_view(
         let mut output = output::PrintOutput::stdout();
         let file_info = info::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
-        let ctx = viewer::modes::RenderCtx {
-            file_info: &file_info,
-            theme_name: viewers.theme_name(),
-            peek_theme: viewers.peek_theme(),
-            render_opts,
-            term_cols: pipe_term_cols(args),
-            term_rows: usize::MAX,
-        };
+        let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         modes[listing_idx]
             .render_flat_to_pipe(&ctx, &mut output)
             .with_context(|| format!("failed to render listing for {}", source.name()))?;
@@ -203,14 +196,7 @@ fn run_view(
         let mut output = output::PrintOutput::stdout();
         let file_info = info::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
-        let ctx = viewer::modes::RenderCtx {
-            file_info: &file_info,
-            theme_name: viewers.theme_name(),
-            peek_theme: viewers.peek_theme(),
-            render_opts,
-            term_cols: pipe_term_cols(args),
-            term_rows: usize::MAX,
-        };
+        let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);
         modes[primary_idx]
             .render_to_pipe(&ctx, &mut output)
@@ -235,6 +221,25 @@ fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
 /// Terminal width for non-interactive (pipe) rendering. `--width N`
 /// wins (user explicitly asked for that output width); otherwise
 /// `$COLUMNS` if set and ≥ 24; else 80.
+/// Build a `RenderCtx` for the non-interactive paths (`--list`, pipe).
+/// `term_rows` is `usize::MAX` — pipes are vertically unbounded —
+/// and `term_cols` comes from `--width` or the detected terminal.
+fn pipe_render_ctx<'a>(
+    file_info: &'a info::FileInfo,
+    viewers: &'a viewer::Registry,
+    render_opts: info::RenderOptions,
+    args: &Args,
+) -> viewer::modes::RenderCtx<'a> {
+    viewer::modes::RenderCtx {
+        file_info,
+        theme_name: viewers.theme_name(),
+        peek_theme: viewers.peek_theme(),
+        render_opts,
+        term_cols: pipe_term_cols(args),
+        term_rows: usize::MAX,
+    }
+}
+
 fn pipe_term_cols(args: &Args) -> usize {
     if args.width > 0 {
         return args.width as usize;
