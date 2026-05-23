@@ -510,7 +510,7 @@ pub(crate) fn syntax_token_for(
             .or_else(|| syntax.clone())
             .or_else(|| {
                 source
-                    .path()
+                    .disk_path()
                     .and_then(|p| p.file_name())
                     .and_then(|n| n.to_str())
                     .map(String::from)

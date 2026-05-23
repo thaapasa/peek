@@ -10,7 +10,7 @@ use crate::input::InputSource;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parent = source
-        .path()
+        .disk_path()
         .ok_or(ExtractError::Unsupported(
             "directory listing requires a filesystem path",
         ))?

@@ -135,12 +135,16 @@ impl InputSource {
         }
     }
 
-    /// Filesystem path, when one is meaningful for the user-visible
-    /// source. `None` for in-memory and for ranged views (the backing
-    /// file path of a range is an internal handle, not the path of the
-    /// inner item the user is viewing). `TempFile` also returns `None`
-    /// — the temp path is internal scratch, not the user's path.
-    pub fn path(&self) -> Option<&Path> {
+    /// On-disk filesystem path of the source — `Some` only when the
+    /// source is a literal `File` the user named. `None` for in-memory,
+    /// for ranged views (the backing file path of a range is an
+    /// internal handle, not the inner item the user is viewing), and
+    /// for `TempFile` (the temp path is internal scratch).
+    ///
+    /// Named `disk_path`, not `path`, to keep call sites honest:
+    /// callers that want the user-visible filename go through
+    /// [`Self::name`].
+    pub fn disk_path(&self) -> Option<&Path> {
         match self {
             Self::File(path) => Some(path.as_path()),
             Self::Memory { .. } => None,
@@ -544,7 +548,7 @@ mod tests {
         assert_eq!(src.read_bytes().unwrap().as_ref(), b"hello");
         assert_eq!(src.read_text().unwrap(), "hello");
         assert_eq!(src.name(), "hello");
-        assert!(src.path().is_none());
+        assert!(src.disk_path().is_none());
         let bs = src.open_byte_source().unwrap();
         assert_eq!(bs.len(), 5);
         assert_eq!(bs.read_range(1, 3).unwrap().as_ref(), b"ell");

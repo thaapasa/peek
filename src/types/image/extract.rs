@@ -71,7 +71,7 @@ fn suggest_frame_name(source: &InputSource, frame_one_based: usize, total: usize
 }
 
 fn source_stem(source: &InputSource) -> String {
-    if let Some(path) = source.path()
+    if let Some(path) = source.disk_path()
         && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
     {
         return stem.to_string();

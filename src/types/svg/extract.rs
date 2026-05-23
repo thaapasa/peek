@@ -115,7 +115,7 @@ fn scale_to_longest_axis(w: u32, h: u32, target_longest: u32) -> (u32, u32) {
 
 fn suggest_name(source: &InputSource, frame_one_based: usize, total: usize) -> String {
     let stem = source
-        .path()
+        .disk_path()
         .and_then(|p| p.file_stem())
         .and_then(|s| s.to_str())
         .map(|s| s.to_string())

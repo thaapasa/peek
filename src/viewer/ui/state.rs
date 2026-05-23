@@ -1240,7 +1240,7 @@ mod tests {
         let new_path = state
             .frame()
             .source
-            .path()
+            .disk_path()
             .expect("dir source has a path")
             .to_path_buf();
         // `peek <MANIFEST>/src` → `..` → `<MANIFEST>` (the project root).

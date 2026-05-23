@@ -16,7 +16,9 @@ pub fn compose(
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let path = source.path().expect("Directory FileType implies a path");
+    let path = source
+        .disk_path()
+        .expect("Directory FileType implies a path");
     let (entries, warnings) = match read::read_dir_entries(path) {
         Ok(e) => (e, Vec::new()),
         Err(e) => (Vec::new(), vec![format!("Failed to read directory: {e:#}")]),
