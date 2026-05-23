@@ -7,8 +7,9 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::theme::{Attr, PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, StyleMode};
 use crate::types::document::ast::{Block, Doc, Paragraph, Run};
+use crate::types::document::wrap::{SgrStyle, emit_styled, split_words, visible_width};
 
 /// Render an in-memory document AST to ANSI-styled lines.
 pub fn render(
@@ -75,7 +76,7 @@ fn render_paragraph(
         } else {
             line.push_str(&continuation);
         }
-        emit_styled(
+        emit_runs(
             line_runs,
             p.heading_level.is_some(),
             theme,
@@ -95,7 +96,7 @@ fn flatten_runs(runs: &[Run], theme: &PeekTheme, style_mode: StyleMode) -> Strin
         if segment.is_empty() {
             continue;
         }
-        emit_run(run, &segment, false, theme, style_mode, &mut out);
+        emit_styled(&segment, run_style(run, false, theme), style_mode, &mut out);
     }
     out
 }
@@ -156,25 +157,7 @@ fn wrap_runs(runs: &[Run], width: usize) -> Vec<Vec<Run>> {
     lines
 }
 
-fn split_words(s: &str) -> Vec<String> {
-    let mut out = Vec::new();
-    let mut buf = String::new();
-    let mut in_ws = false;
-    for ch in s.chars() {
-        let is_ws = ch.is_whitespace();
-        if is_ws != in_ws && !buf.is_empty() {
-            out.push(std::mem::take(&mut buf));
-        }
-        buf.push(ch);
-        in_ws = is_ws;
-    }
-    if !buf.is_empty() {
-        out.push(buf);
-    }
-    out
-}
-
-fn emit_styled(
+fn emit_runs(
     runs: &[Run],
     heading: bool,
     theme: &PeekTheme,
@@ -182,62 +165,20 @@ fn emit_styled(
     out: &mut String,
 ) {
     for run in runs {
-        emit_run(run, &run.text, heading, theme, style_mode, out);
+        emit_styled(&run.text, run_style(run, heading, theme), style_mode, out);
     }
 }
 
-fn emit_run(
-    run: &Run,
-    text: &str,
-    heading: bool,
-    theme: &PeekTheme,
-    style_mode: StyleMode,
-    out: &mut String,
-) {
-    if text.is_empty() {
-        return;
-    }
-    let bold = run.bold || heading;
-    if bold {
-        out.push_str(style_mode.attr_open(Attr::Bold));
-    }
-    if run.italic {
-        out.push_str(style_mode.attr_open(Attr::Italic));
-    }
-    if run.underline {
-        out.push_str(style_mode.attr_open(Attr::Underline));
-    }
-    if run.strike {
-        out.push_str(style_mode.attr_open(Attr::Strikeout));
-    }
+fn run_style(run: &Run, heading: bool, theme: &PeekTheme) -> SgrStyle {
     let color = run
         .color
         .map(|[r, g, b]| Color { r, g, b, a: 255 })
         .or(if heading { Some(theme.heading) } else { None });
-    if let Some(c) = color {
-        style_mode.write_fg_seq(out, c);
+    SgrStyle {
+        bold: run.bold || heading,
+        italic: run.italic,
+        underline: run.underline,
+        strike: run.strike,
+        color,
     }
-    out.push_str(text);
-    if color.is_some() {
-        out.push_str(style_mode.reset_fg());
-    }
-    if run.strike {
-        out.push_str(style_mode.attr_close(Attr::Strikeout));
-    }
-    if run.underline {
-        out.push_str(style_mode.attr_close(Attr::Underline));
-    }
-    if run.italic {
-        out.push_str(style_mode.attr_close(Attr::Italic));
-    }
-    if bold {
-        out.push_str(style_mode.attr_close(Attr::Bold));
-    }
-}
-
-/// Approximate display width — `unicode-width` already in deps; ASCII
-/// good enough for a v1 wrap.
-fn visible_width(s: &str) -> usize {
-    use unicode_width::UnicodeWidthStr;
-    UnicodeWidthStr::width(s)
 }

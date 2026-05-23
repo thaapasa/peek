@@ -155,6 +155,7 @@ src/
       ast.rs           — Shared word-processing AST (Doc / Block::{Paragraph,Table} / Paragraph / Run + count_words + merge_paragraphs). Populated by both docx::package and odt::package; RTF stays separate because its on-the-wire shape is a flat painter-tagged text stream
       render.rs        — Shared render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | ". Used by both DOCX and ODT
       renderer.rs      — DocRenderer: TextRenderer impl over the shared AST via render::render. Format-agnostic; per-format wiring only supplies the parsed Doc
+      wrap.rs          — Shared word-wrap primitives used by both `render` (DOCX/ODT) and `rtf::render`: `split_words` (whitespace tokeniser), `visible_width` (unicode-width), `SgrStyle` (bold/italic/underline/strike + Option<Color>), `emit_styled` (open/close SGR bracketing). Wrap engines themselves stay branched — DOCX builds Vec<Vec<Run>> over a paragraph/run tree, RTF emits inline over a flat painter-tagged stream
       info.rs          — Shared document info shape (DOCX / ODT / RTF): DocumentStats { format, metadata, paragraph_count, word_count, image_count } + DocumentMetadata { title / creator / subject / description / keywords / created / modified }
       info_render.rs   — Render shared Document info section keyed off `format` label
       docx/

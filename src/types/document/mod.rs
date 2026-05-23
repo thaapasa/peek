@@ -26,6 +26,7 @@ pub mod odt;
 pub mod render;
 pub mod renderer;
 pub mod rtf;
+pub(crate) mod wrap;
 
 pub use info::{DocumentMetadata, DocumentStats};
 pub(crate) use renderer::DocRenderer;
