@@ -25,7 +25,7 @@ use crate::theme::PeekTheme;
 use crate::viewer::modes::{
     ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
 };
-use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
+use crate::viewer::search::{SearchState, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry};
 
 pub struct ListingMode {
@@ -36,25 +36,12 @@ pub struct ListingMode {
     rows: Vec<TreeRow>,
     pending_warnings: Vec<String>,
     viewport: ListingViewport,
-    /// Active leaf-name search, if any. Matches every row (files +
-    /// directories); navigation moves the file selection when the
-    /// current match is on a file row, and just scrolls the row into
-    /// view when it's on a directory.
-    search: Option<ListingSearch>,
-}
-
-/// One leaf-name match: the row it sits on plus the byte ranges inside
-/// that row's leaf string. Multi-hit leaves carry several ranges.
-#[derive(Clone)]
-struct LeafMatch {
-    row_idx: usize,
-    ranges: Vec<Range<usize>>,
-}
-
-struct ListingSearch {
-    matches: Vec<LeafMatch>,
-    /// Active-match index. Unused when `matches` is empty.
-    cursor: usize,
+    /// Active leaf-name search, if any. Scans every row's leaf string
+    /// (files + directories); navigation moves the file selection when
+    /// the current match is on a file row, and just scrolls the row
+    /// into view when it's on a directory. The `line` field on each
+    /// match is the row index in `self.rows`.
+    search: Option<SearchState>,
 }
 
 /// One rendered row in the TOC. Holds enough metadata to render
@@ -144,55 +131,17 @@ impl ListingMode {
     /// active cursor, for `paint_row`. Empty when no search is active
     /// or the row carries no hits.
     fn leaf_match_ranges(&self, row_idx: usize) -> (Vec<Range<usize>>, Option<usize>) {
-        let Some(s) = &self.search else {
-            return (Vec::new(), None);
-        };
-        if s.matches.is_empty() {
-            return (Vec::new(), None);
-        }
-        let cursor_row = s.matches.get(s.cursor).map(|m| m.row_idx);
-        let current_is_here = cursor_row == Some(row_idx);
-        for m in &s.matches {
-            if m.row_idx == row_idx {
-                let current = if current_is_here {
-                    // The cursor is on this row; pick the first range as
-                    // the current (we don't sub-index inside a leaf).
-                    Some(0)
-                } else {
-                    None
-                };
-                return (m.ranges.clone(), current);
-            }
-        }
-        (Vec::new(), None)
+        self.search
+            .as_ref()
+            .and_then(|s| s.line_overlay(row_idx))
+            .unwrap_or_default()
     }
 
-    fn build_search(&self, query: &str) -> ListingSearch {
-        let sensitive = smart_case_sensitive(query);
-        let mut matches: Vec<LeafMatch> = Vec::new();
-        for (i, row) in self.rows.iter().enumerate() {
-            let ranges = find_matches(&row.leaf, query, sensitive);
-            if !ranges.is_empty() {
-                matches.push(LeafMatch { row_idx: i, ranges });
-            }
-            if matches.len() >= MAX_MATCHES {
-                break;
-            }
-        }
-        ListingSearch { matches, cursor: 0 }
-    }
-
-    /// Bring the current match's row into view. When the match is a
-    /// file, update the file selection so Extract / Descend target it;
-    /// when it's a directory, only scroll.
-    fn scroll_to_current_match(&mut self) {
-        let Some(s) = &self.search else { return };
-        let Some(m) = s.matches.get(s.cursor) else {
-            return;
-        };
-        let row_idx = m.row_idx;
-        let is_file = self.rows[row_idx].inner_path.is_some();
-        if is_file {
+    /// Bring `row_idx` into view. When it's a file row, update the file
+    /// selection so Extract / Descend target it; when it's a directory,
+    /// only scroll.
+    fn reveal_match(&mut self, row_idx: usize) {
+        if self.rows[row_idx].inner_path.is_some() {
             self.viewport.select_row(&self.rows, row_idx);
         } else {
             self.viewport.scroll_to_row(&self.rows, row_idx);
@@ -200,17 +149,10 @@ impl ListingMode {
     }
 
     fn step_match(&mut self, delta: isize) {
-        let Some(s) = self.search.as_mut() else {
+        let Some(row_idx) = self.search.as_mut().and_then(|s| s.step(delta)) else {
             return;
         };
-        let n = s.matches.len();
-        if n == 0 {
-            return;
-        }
-        let cur = s.cursor as isize;
-        let next = ((cur + delta).rem_euclid(n as isize)) as usize;
-        s.cursor = next;
-        self.scroll_to_current_match();
+        self.reveal_match(row_idx);
     }
 
     /// Mtime column is padded to the widest stringified mtime in the
@@ -399,12 +341,7 @@ impl Mode for ListingMode {
             segs.push(("sticky off".to_string(), theme.muted));
         }
         if let Some(search) = &self.search {
-            let label = if search.matches.is_empty() {
-                "no match".to_string()
-            } else {
-                format!("match {}/{}", search.cursor + 1, search.matches.len())
-            };
-            segs.push((label, theme.label));
+            segs.push(search.status_segment(theme));
         }
         segs
     }
@@ -449,9 +386,12 @@ impl Mode for ListingMode {
                 return None;
             }
         };
-        let search = self.build_search(query);
+        let search = SearchState::scan(self.rows.iter().map(|r| r.leaf.as_str()), query);
+        let first = search.first_line();
         self.search = Some(search);
-        self.scroll_to_current_match();
+        if let Some(row_idx) = first {
+            self.reveal_match(row_idx);
+        }
         // ListingMode owns scroll, so no line index to return.
         None
     }
@@ -778,10 +718,8 @@ mod tests {
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         // "inner" matches one file leaf.
         lm.set_search(Some("inner"));
-        let s = lm.search.as_ref().unwrap();
-        assert_eq!(s.matches.len(), 1);
-        assert_eq!(s.matches[0].row_idx, 3, "inner.txt is row 3");
-        // Selection moved to the file match.
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
+        // Selection moved to the file match (row 3 = inner.txt).
         assert_eq!(lm.viewport.selected(), Some(3));
     }
 
@@ -790,11 +728,9 @@ mod tests {
         let mut lm = sample();
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         lm.set_search(Some("deeper"));
-        let s = lm.search.as_ref().unwrap();
-        assert_eq!(s.matches.len(), 1);
-        assert_eq!(s.matches[0].row_idx, 1, "deeper/ is row 1");
-        // Match is a directory — file selection must stay on the
-        // original file (deep.txt = row 2).
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
+        // Match is a directory (row 1) — file selection must stay on
+        // the original first file (deep.txt = row 2).
         assert_eq!(lm.viewport.selected(), Some(2));
     }
 
@@ -804,9 +740,8 @@ mod tests {
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         // "sub/" appears in the joined path but not in any single leaf.
         lm.set_search(Some("sub/"));
-        let s = lm.search.as_ref().unwrap();
         assert_eq!(
-            s.matches.len(),
+            lm.search.as_ref().unwrap().match_count(),
             0,
             "search is leaf-scoped — slashes never match"
         );
@@ -818,22 +753,18 @@ mod tests {
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         // ".txt" appears on every file leaf (3 files).
         lm.set_search(Some(".txt"));
-        let s = lm.search.as_ref().unwrap();
-        assert_eq!(s.matches.len(), 3);
-        assert_eq!(s.cursor, 0);
-        let row0 = s.matches[0].row_idx;
-        assert_eq!(lm.viewport.selected(), Some(row0));
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 3);
+        let first = lm.viewport.selected();
+        assert!(first.is_some(), "first match should select a row");
 
         lm.handle(Action::NextMatch);
-        let s = lm.search.as_ref().unwrap();
-        assert_eq!(s.cursor, 1);
-        assert_eq!(lm.viewport.selected(), Some(s.matches[1].row_idx));
+        let second = lm.viewport.selected();
+        assert_ne!(first, second, "next moves selection to a new match row");
 
         lm.handle(Action::NextMatch);
         lm.handle(Action::NextMatch);
-        // Wrapped around.
-        let s = lm.search.as_ref().unwrap();
-        assert_eq!(s.cursor, 0);
+        // Wrapped around to the first match.
+        assert_eq!(lm.viewport.selected(), first);
     }
 
     #[test]
@@ -842,12 +773,12 @@ mod tests {
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         // All-lowercase → case-insensitive: matches README.txt.
         lm.set_search(Some("readme"));
-        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 1);
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
         // Mixed-case → case-sensitive: original casing must match.
         lm.set_search(Some("README"));
-        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 1);
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
         lm.set_search(Some("Readme"));
-        assert_eq!(lm.search.as_ref().unwrap().matches.len(), 0);
+        assert_eq!(lm.search.as_ref().unwrap().match_count(), 0);
     }
 
     #[test]
@@ -884,13 +815,13 @@ mod tests {
         let theme = tm.peek_theme();
         lm.set_search(Some(".txt"));
         let segs = lm.status_segments(theme);
-        assert!(segs.iter().any(|(s, _)| s == "match 1/3"));
+        assert!(segs.iter().any(|(s, _)| s == "1/3"));
         lm.set_search(Some("zzz"));
         let segs = lm.status_segments(theme);
         assert!(segs.iter().any(|(s, _)| s == "no match"));
         lm.set_search(None);
         let segs = lm.status_segments(theme);
-        assert!(!segs.iter().any(|(s, _)| s.starts_with("match ")));
+        assert!(!segs.iter().any(|(s, _)| s == "1/3"));
         assert!(!segs.iter().any(|(s, _)| s == "no match"));
     }
 }
