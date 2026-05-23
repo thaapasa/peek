@@ -131,16 +131,13 @@ impl ListingMode {
             &ranges,
             current,
         );
-        match mtime_text {
-            Some((text, width)) => {
-                let padded = format!("{text:<width$}");
-                let painted_mtime = theme.paint(&padded, theme.muted);
-                format!("{painted_perms}  {painted_size}  {painted_mtime}  {painted_path}")
-            }
-            None => {
-                format!("{painted_perms}  {painted_size}  {painted_path}")
-            }
-        }
+        let painted_mtime = mtime_text.map(|(text, width)| row::paint_mtime(text, width, theme));
+        row::compose_row(
+            &painted_perms,
+            &painted_size,
+            painted_mtime.as_deref(),
+            &painted_path,
+        )
     }
 
     /// Match ranges (in the row's leaf bytes) and which one is the
@@ -236,7 +233,7 @@ impl ListingMode {
         } else {
             Vec::new()
         };
-        let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
+        let width = row::mtime_column_width(&mtimes);
         let selected_idx = self.viewport.selected();
         slice
             .iter()
@@ -249,11 +246,7 @@ impl ListingMode {
                 };
                 let selected = Some(*row_idx) == selected_idx;
                 let line = self.paint_row(*row_idx, row, theme, mtime_text, selected);
-                if selected {
-                    row::paint_selected_marker(&line, theme)
-                } else {
-                    format!("{}{line}", row::ROW_GUTTER)
-                }
+                row::with_marker(&line, selected, theme)
             })
             .collect()
     }
@@ -305,7 +298,7 @@ impl Mode for ListingMode {
         } else {
             Vec::new()
         };
-        let width = mtimes.iter().map(|s| s.len()).max().unwrap_or(0);
+        let width = row::mtime_column_width(&mtimes);
         for (i, row) in self.rows.iter().enumerate() {
             let mtime_text = if show_mtime {
                 Some((mtimes[i].as_str(), width))
@@ -340,7 +333,12 @@ impl Mode for ListingMode {
             let painted_perms = row::paint_perms(&perms, theme);
             let painted_size = row::paint_size(&size, tree_row.size, tree_row.is_dir, theme);
             let painted_path = theme.paint(path, theme.foreground);
-            out.write_line(&format!("{painted_perms}  {painted_size}  {painted_path}"))?;
+            out.write_line(&row::compose_row(
+                &painted_perms,
+                &painted_size,
+                None,
+                &painted_path,
+            ))?;
         }
         Ok(())
     }

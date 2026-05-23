@@ -227,7 +227,7 @@ src/
       mod.rs           — Module wiring; re-exports DirectoryMode
       compose.rs       — compose(): DirectoryMode rooted at the source path; suppress `..` row at filesystem root
       read.rs          — One-level fs::read_dir → Vec<DirEntry>; sorts dirs-first then case-insensitive name; follows symlinks for kind/size/mtime, broken links surface as `?`
-      mode.rs          — DirectoryMode: flat one-level listing. Selects every entry (files + dirs); prepends synthetic `..` row when canonical parent exists. Enter (Action::Descend) targets selected entry. Uses ModeId::Listing so Tab cycle / --list pickup keep working. ViewerState::push_extracted collapses dir→dir descent onto the current frame so there's no stack of directories
+      mode.rs          — DirectoryMode: flat one-level listing. Selects every entry (files + dirs); prepends synthetic `..` row when canonical parent exists. Enter (Action::Descend) targets selected entry. Uses ModeId::Listing so Tab cycle / --list pickup keep working. ViewerState::push_extracted collapses dir→dir descent onto the current frame so there's no stack of directories. Row painting delegated to `viewer::listing::row` (perms/size/mtime/marker) so it stays visually identical to ListingMode by construction
       info.rs          — DirectoryStats + gather_extras + render_section
       extract.rs       — Resolve key (single-segment filename) against parent path → InputSource::File(child_path). `..` walks up via Path::canonicalize → parent. Rejects `/` and `.`
     disk_image/
@@ -270,7 +270,8 @@ src/
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
       stats.rs         — Stats: aggregate counts / sizes computed by tree walk
       build.rs         — FlatEntry + from_flat_paths(): build hierarchical tree from path-keyed entries (synthesizes implicit dirs)
-      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive / comic / ebook / document / pdf / audio / disk_image / directory). Leaf-name `/` search: scans every row's last path segment, n/p navigates with wrap; file matches update selection, directory matches only scroll into view via viewport.scroll_to_row
+      row.rs           — Shared row-painting primitives for every listing-style view (ListingMode + DirectoryMode): SIZE_COL_WIDTH / PERMS_COL_WIDTH / MTIME_HIDE_BELOW_COLS constants, format_perms / paint_perms, SizeCell + format_size + paint_size + size_color, format_mtime_epoch, paint_selected_marker + ROW_GUTTER + with_marker, compose_row (single source of truth for column layout), paint_mtime + mtime_column_width
+      mode.rs          — ListingMode: generic tree-style TOC view (perms, size, mtime, path) + file-selection cursor (used by archive / comic / ebook / document / pdf / audio / disk_image). Leaf-name `/` search: scans every row's last path segment, n/p navigates with wrap; file matches update selection, directory matches only scroll into view via viewport.scroll_to_row
       viewport.rs      — ListingViewport: scroll + selection state + sticky-chain math. `select_row` pins a file selection; `scroll_to_row` brings any row (file or dir) into the content slot without moving the selection cursor
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)

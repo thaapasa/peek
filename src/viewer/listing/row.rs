@@ -128,3 +128,53 @@ pub fn paint_selected_marker(line: &str, theme: &PeekTheme) -> String {
 /// Two-space gutter for non-selected rows, matching the width of
 /// [`paint_selected_marker`]'s caret prefix.
 pub const ROW_GUTTER: &str = "  ";
+
+/// Assemble the row layout: `perms  size  [mtime  ]name`. Painters
+/// must be applied before calling this — args are pre-painted strings.
+/// `mtime` carries `(left-padded-text, _column_width_hint)`; when
+/// `None`, the mtime column is omitted entirely (narrow terminals).
+///
+/// The 2-space column gutter is the single source of truth — keeps
+/// ListingMode and DirectoryMode visually aligned by construction.
+pub fn compose_row(
+    painted_perms: &str,
+    painted_size: &str,
+    painted_mtime: Option<&str>,
+    painted_name: &str,
+) -> String {
+    match painted_mtime {
+        Some(mtime) => format!("{painted_perms}  {painted_size}  {mtime}  {painted_name}"),
+        None => format!("{painted_perms}  {painted_size}  {painted_name}"),
+    }
+}
+
+/// Apply selection marker or its gutter to a composed row. Picks
+/// between [`paint_selected_marker`] and [`ROW_GUTTER`] so callers
+/// don't have to.
+pub fn with_marker(row: &str, selected: bool, theme: &PeekTheme) -> String {
+    if selected {
+        paint_selected_marker(row, theme)
+    } else {
+        format!("{ROW_GUTTER}{row}")
+    }
+}
+
+/// Widest stringified mtime in the iterator, or 0 when empty. Padding
+/// to this width keeps the path column flush against the mtime column
+/// across a slice with varying mtime lengths.
+pub fn mtime_column_width<I, S>(iter: I) -> usize
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    iter.into_iter()
+        .map(|s| s.as_ref().len())
+        .max()
+        .unwrap_or(0)
+}
+
+/// Paint an mtime cell, left-padded to `width`.
+pub fn paint_mtime(text: &str, width: usize, theme: &PeekTheme) -> String {
+    let padded = format!("{text:<width$}");
+    theme.paint(&padded, theme.muted)
+}

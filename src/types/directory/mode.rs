@@ -118,20 +118,15 @@ impl DirectoryMode {
         let painted_size =
             row::paint_size(&size, entry.size, entry.kind == DirEntryKind::Dir, theme);
         let painted_name = paint_name(entry, theme, selected);
-        let core = match mtime_width {
-            Some(width) => {
-                let text = format_mtime(entry.mtime, opts.utc);
-                let padded = format!("{text:<width$}");
-                let painted_mtime = theme.paint(&padded, theme.muted);
-                format!("{painted_perms}  {painted_size}  {painted_mtime}  {painted_name}")
-            }
-            None => format!("{painted_perms}  {painted_size}  {painted_name}"),
-        };
-        if selected {
-            row::paint_selected_marker(&core, theme)
-        } else {
-            format!("{}{core}", row::ROW_GUTTER)
-        }
+        let painted_mtime = mtime_width
+            .map(|width| row::paint_mtime(&format_mtime(entry.mtime, opts.utc), width, theme));
+        let core = row::compose_row(
+            &painted_perms,
+            &painted_size,
+            painted_mtime.as_deref(),
+            &painted_name,
+        );
+        row::with_marker(&core, selected, theme)
     }
 }
 
@@ -151,17 +146,7 @@ impl Mode for DirectoryMode {
         let view = self.viewport_rows.max(1);
         let end = (self.top + view).min(self.entries.len());
         let slice = &self.entries[self.top..end];
-        let mtime_width = if show_mtime {
-            Some(
-                slice
-                    .iter()
-                    .map(|e| format_mtime(e.mtime, ctx.render_opts.utc).len())
-                    .max()
-                    .unwrap_or(0),
-            )
-        } else {
-            None
-        };
+        let mtime_width = mtime_width_for(slice, show_mtime, ctx.render_opts.utc);
         let lines: Vec<String> = slice
             .iter()
             .enumerate()
@@ -179,17 +164,7 @@ impl Mode for DirectoryMode {
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        let mtime_width = if show_mtime {
-            Some(
-                self.entries
-                    .iter()
-                    .map(|e| format_mtime(e.mtime, ctx.render_opts.utc).len())
-                    .max()
-                    .unwrap_or(0),
-            )
-        } else {
-            None
-        };
+        let mtime_width = mtime_width_for(&self.entries, show_mtime, ctx.render_opts.utc);
         for entry in &self.entries {
             let line = self.paint_row(entry, ctx.peek_theme, ctx.render_opts, mtime_width, false);
             out.write_line(&line)?;
@@ -213,7 +188,12 @@ impl Mode for DirectoryMode {
                 ""
             };
             let painted_name = theme.paint(&format!("{}{}", entry.name, suffix), theme.foreground);
-            out.write_line(&format!("{painted_perms}  {painted_size}  {painted_name}"))?;
+            out.write_line(&row::compose_row(
+                &painted_perms,
+                &painted_size,
+                None,
+                &painted_name,
+            ))?;
         }
         Ok(())
     }
@@ -329,6 +309,16 @@ fn format_mtime(mtime: Option<SystemTime>, utc: bool) -> String {
         Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
         Err(_) => "-".to_string(),
     }
+}
+
+/// Widest mtime cell across `entries`, or `None` when mtime is hidden.
+fn mtime_width_for(entries: &[DirEntry], show_mtime: bool, utc: bool) -> Option<usize> {
+    if !show_mtime {
+        return None;
+    }
+    Some(row::mtime_column_width(
+        entries.iter().map(|e| format_mtime(e.mtime, utc)),
+    ))
 }
 
 fn paint_name(entry: &DirEntry, theme: &PeekTheme, selected: bool) -> String {
