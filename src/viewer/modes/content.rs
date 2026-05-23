@@ -281,93 +281,52 @@ impl ContentMode {
         }
     }
 
-    /// Pretty branch: refresh `PrettyView`'s rendered-line cache for the
-    /// active theme, then walk visible logical lines through
-    /// `emit_visual_rows`. Caller has confirmed the pretty branch is
-    /// ready (`use_pretty` set and `PrettyView::is_ready`).
-    fn render_pretty_window(&mut self, ctx: &RenderCtx, rows: usize) -> Result<Window> {
-        // Refresh the cache first — a `&mut` borrow that must end before
-        // the shared `&self` reads in the emit loop below.
-        {
-            let syntax = self.syntax_token.as_deref().map(|token| SyntaxRef {
-                token,
-                theme_manager: &self.theme_manager,
-            });
-            let pv = self.pretty.as_mut().expect("pretty branch present");
-            pv.ensure_rendered(ctx.theme_name, ctx.peek_theme.style_mode, syntax)?;
-        }
-        let lines: &[String] = self
-            .pretty
-            .as_ref()
-            .and_then(PrettyView::rendered_lines)
-            .expect("pretty cache populated");
-        let total = lines.len();
-        if total == 0 || rows == 0 {
-            return Ok(Window {
-                lines: Vec::new(),
-                total,
-            });
-        }
-
-        let usable = self.usable_width(total);
-        let top_logical = self.wrap.top_logical().min(total - 1);
-        let mut first_skip = self.wrap.first_skip();
-
-        let lookahead = if self.wrap.soft_wrap() {
-            rows.saturating_add(8)
-        } else {
-            rows
-        };
-        let end = top_logical.saturating_add(lookahead).min(total);
-
-        let mut emitted: Vec<String> = Vec::with_capacity(rows);
-        for (line_idx, styled) in lines.iter().enumerate().take(end).skip(top_logical) {
-            let stop = self.emit_visual_rows(
-                &mut emitted,
-                rows,
-                line_idx,
-                styled,
-                total,
-                ctx.peek_theme,
-                usable,
-                first_skip,
-            );
-            first_skip = 0;
-            if stop {
-                break;
+    /// Materialise styled lines covering the visible window of the
+    /// active branch — `(styled[top_logical..end], top_logical, total)`.
+    /// `None` when the branch is empty or `rows == 0`. Branch-specific
+    /// sequencing (highlighter catch-up for raw, cache refresh for
+    /// pretty) lives here; the shared geometry walker
+    /// [`emit_window`](Self::emit_window) consumes the result.
+    fn prepare_window(
+        &mut self,
+        ctx: &RenderCtx,
+        rows: usize,
+        pretty_ready: bool,
+    ) -> Result<Option<(Vec<String>, usize, usize)>> {
+        if pretty_ready {
+            // Refresh the rendered-line cache for the active theme.
+            {
+                let syntax = self.syntax_token.as_deref().map(|token| SyntaxRef {
+                    token,
+                    theme_manager: &self.theme_manager,
+                });
+                let pv = self.pretty.as_mut().expect("pretty branch present");
+                pv.ensure_rendered(ctx.theme_name, ctx.peek_theme.style_mode, syntax)?;
             }
+            let lines: &[String] = self
+                .pretty
+                .as_ref()
+                .and_then(PrettyView::rendered_lines)
+                .expect("pretty cache populated");
+            let total = lines.len();
+            if total == 0 || rows == 0 {
+                return Ok(None);
+            }
+            let top_logical = self.wrap.top_logical().min(total - 1);
+            let lookahead = if self.wrap.soft_wrap() {
+                rows.saturating_add(8)
+            } else {
+                rows
+            };
+            let end = top_logical.saturating_add(lookahead).min(total);
+            return Ok(Some((lines[top_logical..end].to_vec(), top_logical, total)));
         }
-        Ok(Window {
-            lines: emitted,
-            total,
-        })
-    }
 
-    /// Raw streaming branch: catch the highlighter up to `top_logical`
-    /// (re-feeding throwaway lines) then feed visible logical lines and
-    /// produce visual rows via `emit_visual_rows`. Backward scroll past
-    /// the highlighter's cursor triggers a reset+replay.
-    fn render_raw_window(&mut self, ctx: &RenderCtx, rows: usize) -> Result<Window> {
         let total = self.line_source.total_lines();
         if total == 0 || rows == 0 {
-            return Ok(Window {
-                lines: Vec::new(),
-                total,
-            });
+            return Ok(None);
         }
-
-        let usable = self.usable_width(total);
         let top_logical = self.wrap.top_logical().min(total - 1);
-        let mut first_skip = self.wrap.first_skip();
-
-        if let Some(hl) = self.highlighter.as_mut() {
-            let theme_changed = hl.active_theme() != ctx.theme_name;
-            if theme_changed || hl.at() > top_logical {
-                hl.reset(ctx.theme_name);
-            }
-        }
-
-        let start_at = self.highlighter.as_ref().map_or(top_logical, |h| h.at());
         // Lookahead buffer: each visible logical line yields ≥ 1 visual
         // row so `rows` lines is enough; the small margin absorbs cases
         // where `first_skip` swallows leading segments of the top line.
@@ -376,30 +335,57 @@ impl ContentMode {
         } else {
             rows
         };
-        let end_at = top_logical.saturating_add(lookahead).min(total);
-        if start_at >= end_at {
-            return Ok(Window {
-                lines: Vec::new(),
-                total,
-            });
+        let end = top_logical.saturating_add(lookahead).min(total);
+
+        if let Some(hl) = self.highlighter.as_mut() {
+            let theme_changed = hl.active_theme() != ctx.theme_name;
+            if theme_changed || hl.at() > top_logical {
+                hl.reset(ctx.theme_name);
+            }
         }
-        let raw_lines = self.line_source.window(start_at..end_at)?;
-        let mut emitted: Vec<String> = Vec::with_capacity(rows);
+        let start_at = self.highlighter.as_ref().map_or(top_logical, |h| h.at());
+        if start_at >= end {
+            return Ok(Some((Vec::new(), top_logical, total)));
+        }
+        let raw_lines = self.line_source.window(start_at..end)?;
+        let style_mode = ctx.peek_theme.style_mode;
+        let catchup = top_logical.saturating_sub(start_at);
+        let mut styled: Vec<String> = Vec::with_capacity(raw_lines.len().saturating_sub(catchup));
         for (offset, raw) in raw_lines.iter().enumerate() {
-            let line_idx = start_at + offset;
-            let styled = if let Some(hl) = self.highlighter.as_mut() {
-                hl.feed(raw, ctx.peek_theme.style_mode)?
+            // Pre-`top_logical` lines feed the highlighter for state
+            // continuity but their styled output is thrown away.
+            let out = if let Some(hl) = self.highlighter.as_mut() {
+                hl.feed(raw, style_mode)?
             } else {
                 raw.clone()
             };
-            if line_idx < top_logical {
-                continue;
+            if offset >= catchup {
+                styled.push(out);
             }
+        }
+        Ok(Some((styled, top_logical, total)))
+    }
+
+    /// Walk pre-styled visible lines through [`emit_visual_rows`]. The
+    /// styled slice covers `[top_logical .. top_logical + styled.len())`.
+    fn emit_window(
+        &self,
+        ctx: &RenderCtx,
+        rows: usize,
+        styled: &[String],
+        top_logical: usize,
+        total: usize,
+    ) -> Vec<String> {
+        let usable = self.usable_width(total);
+        let mut first_skip = self.wrap.first_skip();
+        let mut emitted: Vec<String> = Vec::with_capacity(rows);
+        for (offset, line) in styled.iter().enumerate() {
+            let line_idx = top_logical + offset;
             let stop = self.emit_visual_rows(
                 &mut emitted,
                 rows,
                 line_idx,
-                &styled,
+                line,
                 total,
                 ctx.peek_theme,
                 usable,
@@ -410,10 +396,7 @@ impl ContentMode {
                 break;
             }
         }
-        Ok(Window {
-            lines: emitted,
-            total,
-        })
+        emitted
     }
 
     /// Move the current-match cursor by `delta` (wrapping at the ends)
@@ -475,23 +458,38 @@ impl Mode for ContentMode {
         // size-cap refusal; re-check readiness before branching.
         let pretty_ready =
             self.use_pretty && self.pretty.as_ref().is_some_and(PrettyView::is_ready);
-        let result = if pretty_ready {
-            self.render_pretty_window(ctx, rows)
-        } else {
-            self.render_raw_window(ctx, rows)
+        let prepared = self.prepare_window(ctx, rows, pretty_ready)?;
+        let window = match prepared {
+            None => {
+                // Empty branch or rows == 0 — surface the active branch's
+                // total so the status line still tracks document size.
+                let total = if pretty_ready {
+                    self.pretty
+                        .as_ref()
+                        .and_then(PrettyView::rendered_lines)
+                        .map(<[String]>::len)
+                        .unwrap_or(0)
+                } else {
+                    self.line_source.total_lines()
+                };
+                Window {
+                    lines: Vec::new(),
+                    total,
+                }
+            }
+            Some((styled, top_logical, total)) => {
+                let lines = self.emit_window(ctx, rows, &styled, top_logical, total);
+                Window { lines, total }
+            }
         };
         // After the active branch is materialized (raw line count is
         // always known; pretty count becomes known on first render),
         // re-clamp top so a window resize / theme cycle that changed
         // wrap segment counts doesn't leave us scrolled past the bottom.
         self.clamp_top();
-        result
+        Ok(window)
     }
 
-    /// Pipe-mode render. Raw streams line-by-line through the highlighter
-    /// (or unstyled `line_source.iter_all()`); pretty writes the full
-    /// pretty string in one shot — same byte-fidelity as before A1 for
-    /// un-highlighted text (no synthetic trailing newline added).
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         self.ensure_pretty_parsed();
         let pretty_text = if self.use_pretty {
@@ -499,82 +497,16 @@ impl Mode for ContentMode {
         } else {
             None
         };
-        if let Some(pretty) = pretty_text {
-            if let Some(ref token) = self.syntax_token {
-                let mut lines = highlight_lines(
-                    pretty,
-                    token,
-                    &self.theme_manager,
-                    ctx.theme_name,
-                    ctx.peek_theme.style_mode,
-                )?;
-                let total = lines.len();
-                self.gutter.apply(&mut lines, 0, total, ctx.peek_theme);
-                for line in &lines {
-                    out.write_line(line)?;
-                }
-            } else if self.gutter.enabled() {
-                let mut lines: Vec<String> = pretty.lines().map(String::from).collect();
-                let total = lines.len();
-                self.gutter.apply(&mut lines, 0, total, ctx.peek_theme);
-                for line in &lines {
-                    out.write_line(line)?;
-                }
-            } else {
-                out.write_str(pretty)?;
-            }
-            return Ok(());
-        }
-        // Pretty unavailable — fall through to raw stream.
-
-        // Raw stream. With a syntax token, every line (including the
-        // last) is `\n`-terminated — pre-A1 contract: escape sequences
-        // are line-scoped and the natural shape is per-line writes.
-        // Without a token, preserve the source's trailing-newline status
-        // for byte-for-byte fidelity (matches `cat` and the pre-A1
-        // un-highlighted path).
-        let total = self.line_source.total_lines();
-        let gutter_width = if self.gutter.enabled() && total > 0 {
-            Some(Gutter::digit_width(total))
-        } else {
-            None
-        };
-        let style_mode = ctx.peek_theme.style_mode;
-        let gutter_fg = style_mode.fg_seq(ctx.peek_theme.gutter);
-        let gutter_reset = style_mode.reset();
-        let prefix = |n: usize| -> Option<String> {
-            gutter_width.map(|w| format!("{gutter_fg}{n:>w$} │ {gutter_reset}"))
-        };
-
-        if let Some(hl) = self.highlighter.as_mut() {
-            hl.reset(ctx.theme_name);
-            for (idx, line) in self.line_source.iter_all().enumerate() {
-                let line = line?;
-                let escaped = hl.feed(&line, style_mode)?;
-                if let Some(p) = prefix(idx + 1) {
-                    out.write_line(&format!("{p}{escaped}"))?;
-                } else {
-                    out.write_line(&escaped)?;
-                }
-            }
-        } else {
-            let trailing_nl = self.line_source.ends_with_newline();
-            for (idx, line) in self.line_source.iter_all().enumerate() {
-                let line = line?;
-                let is_last = idx + 1 == total;
-                let body = if let Some(p) = prefix(idx + 1) {
-                    format!("{p}{line}")
-                } else {
-                    line
-                };
-                if is_last && !trailing_nl {
-                    out.write_str(&body)?;
-                } else {
-                    out.write_line(&body)?;
-                }
-            }
-        }
-        Ok(())
+        pipe_render(
+            ctx,
+            out,
+            pretty_text,
+            &self.line_source,
+            self.highlighter.as_mut(),
+            self.syntax_token.as_deref(),
+            &self.theme_manager,
+            &self.gutter,
+        )
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
@@ -823,6 +755,93 @@ impl Mode for ContentMode {
         self.clamp_top();
         first
     }
+}
+
+/// Pipe-mode body for [`ContentMode`]. Three independent branches —
+/// pretty whole-text write, raw stream with highlighter, raw stream
+/// without highlighter — and a small gutter prefix builder shared by
+/// the two raw paths. Trait impl is a thin caller over this.
+///
+/// With a syntax token, every raw line (including the last) is
+/// `\n`-terminated — pre-A1 contract: escape sequences are line-scoped
+/// and the natural shape is per-line writes. Without a token, preserve
+/// the source's trailing-newline status for byte-for-byte fidelity
+/// (matches `cat`).
+#[allow(clippy::too_many_arguments)]
+fn pipe_render(
+    ctx: &RenderCtx,
+    out: &mut PrintOutput,
+    pretty_text: Option<&str>,
+    line_source: &LineSource,
+    highlighter: Option<&mut LineStreamHighlighter>,
+    syntax_token: Option<&str>,
+    theme_manager: &Rc<ThemeManager>,
+    gutter: &Gutter,
+) -> Result<()> {
+    let style_mode = ctx.peek_theme.style_mode;
+    if let Some(pretty) = pretty_text {
+        if let Some(token) = syntax_token {
+            let mut lines =
+                highlight_lines(pretty, token, theme_manager, ctx.theme_name, style_mode)?;
+            let total = lines.len();
+            gutter.apply(&mut lines, 0, total, ctx.peek_theme);
+            for line in &lines {
+                out.write_line(line)?;
+            }
+        } else if gutter.enabled() {
+            let mut lines: Vec<String> = pretty.lines().map(String::from).collect();
+            let total = lines.len();
+            gutter.apply(&mut lines, 0, total, ctx.peek_theme);
+            for line in &lines {
+                out.write_line(line)?;
+            }
+        } else {
+            out.write_str(pretty)?;
+        }
+        return Ok(());
+    }
+
+    let total = line_source.total_lines();
+    let gutter_width = if gutter.enabled() && total > 0 {
+        Some(Gutter::digit_width(total))
+    } else {
+        None
+    };
+    let gutter_fg = style_mode.fg_seq(ctx.peek_theme.gutter);
+    let gutter_reset = style_mode.reset();
+    let prefix = |n: usize| -> Option<String> {
+        gutter_width.map(|w| format!("{gutter_fg}{n:>w$} │ {gutter_reset}"))
+    };
+
+    if let Some(hl) = highlighter {
+        hl.reset(ctx.theme_name);
+        for (idx, line) in line_source.iter_all().enumerate() {
+            let line = line?;
+            let escaped = hl.feed(&line, style_mode)?;
+            if let Some(p) = prefix(idx + 1) {
+                out.write_line(&format!("{p}{escaped}"))?;
+            } else {
+                out.write_line(&escaped)?;
+            }
+        }
+    } else {
+        let trailing_nl = line_source.ends_with_newline();
+        for (idx, line) in line_source.iter_all().enumerate() {
+            let line = line?;
+            let is_last = idx + 1 == total;
+            let body = if let Some(p) = prefix(idx + 1) {
+                format!("{p}{line}")
+            } else {
+                line
+            };
+            if is_last && !trailing_nl {
+                out.write_str(&body)?;
+            } else {
+                out.write_line(&body)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
