@@ -8,14 +8,22 @@
 //! files that embed multi-MB cover art. Caching across modes would
 //! require an [`std::sync::Arc<Probed>`] threaded through
 //! `compose_modes` — defer until profiling shows a hot path.
+//!
+//! On-disk sources (`InputSource::File` / `TempFile`) feed a seeking
+//! `std::fs::File` straight into the probe, so a multi-GB FLAC isn't
+//! materialised just to read its tag block. `Memory` is already a
+//! refcount clone. `FileRange` (audio embedded in an archive entry)
+//! still slurps the entry — rare, bounded by entry size, awaits a
+//! range-limited `MediaSource` adapter if it ever matters.
 
+use std::fs::File;
 use std::io::Cursor;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bytes::Bytes;
 use symphonia::core::codecs::CodecType;
 use symphonia::core::formats::FormatOptions;
-use symphonia::core::io::MediaSourceStream;
+use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::{
     MetadataOptions, MetadataRevision, StandardTagKey, StandardVisualKey, Tag, Value,
     Visual as SymVisual,
@@ -64,11 +72,44 @@ enum EmbedKind {
     Lyrics,
 }
 
+/// Build a `MediaSource` over `source` plus its total byte length
+/// (needed for the bitrate fallback when the container omits it). On-
+/// disk sources stream through a seeking `File`; `Memory` is the
+/// existing zero-copy `Bytes` cursor; `FileRange` falls back to
+/// materialised bytes (see module doc).
+fn open_audio_stream(source: &InputSource) -> Result<(Box<dyn MediaSource>, u64)> {
+    Ok(match source {
+        InputSource::File(path) => {
+            let file =
+                File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+            let len = file
+                .metadata()
+                .with_context(|| format!("failed to stat {}", path.display()))?
+                .len();
+            (Box::new(file), len)
+        }
+        InputSource::TempFile { file, .. } => {
+            let path = file.path();
+            let f =
+                File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+            let len = f.metadata()?.len();
+            (Box::new(f), len)
+        }
+        InputSource::Memory { bytes, .. } => {
+            let len = bytes.len() as u64;
+            (Box::new(Cursor::new(bytes.clone())), len)
+        }
+        InputSource::FileRange { .. } => {
+            let bytes = source.read_bytes()?;
+            let len = bytes.len() as u64;
+            (Box::new(Cursor::new(bytes)), len)
+        }
+    })
+}
+
 pub fn probe(source: &InputSource, format: AudioFormat) -> Result<Probed> {
-    let bytes = source.read_bytes()?;
-    let file_size = bytes.len() as u64;
-    let cursor = Cursor::new(bytes);
-    let mss = MediaSourceStream::new(Box::new(cursor), Default::default());
+    let (stream, file_size) = open_audio_stream(source)?;
+    let mss = MediaSourceStream::new(stream, Default::default());
 
     let mut hint = Hint::new();
     if let Some(ext) = extension_hint(format) {
