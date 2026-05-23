@@ -1,39 +1,32 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
+use super::anim_frame::AnimFrameState;
+use super::pipeline::ImageConfig;
 use super::pipeline::animate::AnimFrame;
-use super::pipeline::render::{self, GridWindow, TermSize};
-use super::pipeline::{FitMode, ImageConfig};
-use super::scroll::{self, ScrollBounds};
+use super::pipeline::render;
+use super::scroll::ScrollBounds;
+use super::view::ImageView;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::paged::{
-    CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP, cycle_image_config,
-};
+use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
 
-/// Animated image view (GIF/WebP). Owns the decoded frame list, current
-/// frame index, play/pause state, and image config (background + fit
-/// mode + scroll). Drives frame advancement via the `next_tick` / `tick`
-/// hooks on `Mode`.
+/// Animated image view (GIF / WebP). Owns the decoded frame list plus
+/// shared frame-position / play state. Image-grid scroll, cycleable
+/// config, and the render core live on the embedded [`ImageView`];
+/// frame stepping + tick clock live on [`AnimFrameState`].
 ///
-/// Fit handling mirrors `ImageRenderMode`: under `FitWidth` / `FitHeight`
-/// the prepared frame grid may exceed the terminal viewport on one axis;
-/// `scroll_x` / `scroll_y` track the offset. Scroll persists across
-/// frame ticks (panning a long banner GIF stays put while frames cycle).
-/// Toggling fit resets scroll. Each frame is independently
-/// prepare→composite→rendered; we don't cache between frames because the
-/// underlying `DynamicImage` changes every tick.
+/// Each frame is independently prepare→composite→rendered — no
+/// per-frame cache because the underlying `DynamicImage` changes every
+/// tick. `ImageView`'s pan offsets persist across ticks (panning a long
+/// banner GIF stays put while frames cycle).
 pub(crate) struct AnimationMode {
     frames: Vec<AnimFrame>,
-    current: usize,
-    playing: bool,
-    config: ImageConfig,
-    last_advance: Instant,
-    scroll_x: u32,
-    scroll_y: u32,
+    anim: AnimFrameState,
+    view: ImageView,
 }
 
 const ANIM_ACTIONS: &[HelpEntry] = &[
@@ -57,12 +50,8 @@ impl AnimationMode {
         assert!(!frames.is_empty(), "AnimationMode requires \u{2265}1 frame");
         Self {
             frames,
-            current: 0,
-            playing: true,
-            config,
-            last_advance: Instant::now(),
-            scroll_x: 0,
-            scroll_y: 0,
+            anim: AnimFrameState::new(),
+            view: ImageView::new(config),
         }
     }
 }
@@ -77,57 +66,25 @@ impl Mode for AnimationMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
-        // StyleMode can change between renders (interactive cycle).
-        self.config.style_mode = ctx.peek_theme.style_mode;
-        let term = TermSize {
-            cols: ctx.term_cols.min(u32::MAX as usize) as u32,
-            rows: ctx.term_rows.min(u32::MAX as usize) as u32,
-            cell_h_over_w: crate::viewer::cell_size::cell_aspect_h_over_w(),
-        };
-        let frame = &self.frames[self.current];
-        let prep = render::prepare_decoded(frame.image.clone(), &self.config, term);
-
-        let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
-        self.scroll_x = self.scroll_x.min(max_x);
-        self.scroll_y = self.scroll_y.min(max_y);
-        let visible_cols = prep.cols.min(term.cols);
-        let visible_rows = prep.rows.min(term.rows);
-        let window = GridWindow {
-            col_start: self.scroll_x,
-            col_end: self.scroll_x + visible_cols,
-            row_start: self.scroll_y,
-            row_end: self.scroll_y + visible_rows,
-        };
-
-        let lines = render::render_prepared(&prep, &self.config, window);
-        let total = prep.rows as usize;
-        Ok(Window { lines, total })
+        let term = self.view.prepare_term(ctx);
+        let frame = &self.frames[self.anim.current];
+        let prep = render::prepare_decoded(frame.image.clone(), &self.view.config, term);
+        Ok(self.view.render_prepared(&prep, term))
     }
 
     fn rerender_on_resize(&self) -> bool {
         true
     }
 
-    /// Pipe / `--print` always renders the current frame at `Contain`. The
-    /// pipe path renders one frame (no animation in stdout), and unbounded
-    /// rows make `FitHeight` meaningless / `FitWidth` redundant.
     fn render_to_pipe(
         &mut self,
         ctx: &RenderCtx,
         out: &mut crate::output::PrintOutput,
     ) -> Result<()> {
-        let saved_fit = self.config.fit;
-        let (saved_x, saved_y) = (self.scroll_x, self.scroll_y);
-        self.config.fit = FitMode::Contain;
-        self.scroll_x = 0;
-        self.scroll_y = 0;
+        let snap = self.view.pipe_snapshot();
         let window = self.render_window(ctx, 0, ctx.term_rows)?;
-        for line in window.lines {
-            out.write_line(&line)?;
-        }
-        self.config.fit = saved_fit;
-        self.scroll_x = saved_x;
-        self.scroll_y = saved_y;
+        ImageView::write_lines(out, window)?;
+        self.view.restore(snap);
         Ok(())
     }
 
@@ -137,16 +94,11 @@ impl Mode for AnimationMode {
 
     fn scroll(&mut self, action: Action) -> bool {
         // We don't keep the prepared grid bounds between calls (frames
-        // change on every tick), so this handler just nudges the offsets
-        // optimistically. The real clamp lives in `render_window`, which
-        // computes max_scroll against the live frame and pulls the
-        // saturated value back to the actual bound.
-        scroll::apply(
-            &mut self.scroll_x,
-            &mut self.scroll_y,
-            action,
-            ScrollBounds::unbounded(),
-        )
+        // change on every tick), so this handler just nudges the
+        // offsets optimistically. The real clamp lives in
+        // `render_window`, which computes max_scroll against the live
+        // frame and pulls the saturated value back to the actual bound.
+        self.view.scroll(action, ScrollBounds::unbounded())
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
@@ -154,68 +106,32 @@ impl Mode for AnimationMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
-        if let Some(h) = cycle_image_config(action, &mut self.config) {
-            // A fit change re-anchors the frame; the old pan is stale.
-            if action == Action::CycleFitMode {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-            }
+        if let Some(h) = self.view.handle_config_cycle(action) {
             return h;
         }
         match action {
-            Action::PlayPause => {
-                self.playing = !self.playing;
-                if self.playing {
-                    self.last_advance = Instant::now();
-                }
-                Handled::Yes
-            }
-            Action::NextFrame => {
-                self.current = (self.current + 1) % self.frames.len();
-                self.last_advance = Instant::now();
-                Handled::Yes
-            }
-            Action::PrevFrame => {
-                let n = self.frames.len();
-                self.current = (self.current + n - 1) % n;
-                self.last_advance = Instant::now();
-                Handled::Yes
-            }
+            Action::PlayPause => self.anim.play_pause(),
+            Action::NextFrame => self.anim.step(self.frames.len(), true),
+            Action::PrevFrame => self.anim.step(self.frames.len(), false),
             _ => Handled::No,
         }
     }
 
     fn next_tick(&self) -> Option<Duration> {
-        if !self.playing {
-            return None;
-        }
-        let elapsed = self.last_advance.elapsed();
-        Some(self.frames[self.current].delay.saturating_sub(elapsed))
+        self.anim.next_tick(self.frames[self.anim.current].delay)
     }
 
     fn tick(&mut self) -> bool {
-        self.current = (self.current + 1) % self.frames.len();
-        self.last_advance = Instant::now();
-        true
+        self.anim.tick(self.frames.len())
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        // 1-based to match the visible "Frame N/M" counter.
-        Some(ExtractTarget::FrameIndex(self.current + 1))
+        Some(self.anim.extract_target())
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        let play_icon = if self.playing { "\u{25b6}" } else { "\u{23f8}" };
-        let frame_info = format!(
-            "Frame {}/{} {}",
-            self.current + 1,
-            self.frames.len(),
-            play_icon
-        );
-        vec![
-            (self.config.mode.label().to_string(), theme.label),
-            (self.config.fit.label().to_string(), theme.label),
-            (frame_info, theme.label),
-        ]
+        let mut segs = self.view.status_segments(theme);
+        segs.push((self.anim.status_segment(self.frames.len()), theme.label));
+        segs
     }
 }

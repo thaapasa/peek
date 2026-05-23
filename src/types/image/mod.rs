@@ -14,6 +14,7 @@
 //! - `exif` / `xmp` / `animation_stats` — gather subhelpers used from
 //!   `info_gather`.
 
+pub(crate) mod anim_frame;
 pub mod animation_mode;
 pub mod animation_stats;
 pub mod compose;
@@ -25,6 +26,7 @@ pub mod info_render;
 pub mod mode;
 pub mod pipeline;
 pub(crate) mod scroll;
+pub(crate) mod view;
 pub mod xmp;
 
 pub(crate) use animation_mode::AnimationMode;

@@ -109,8 +109,10 @@ src/
       exif.rs          — EXIF field extraction
       xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
       animation_stats.rs — GIF/WebP animation stats (frames, duration, loop)
-      mode.rs          — ImageRenderMode: static raster + rasterized SVG view
-      animation_mode.rs — AnimationMode: GIF/WebP playback (next_tick / tick driven)
+      view.rs          — ImageView: shared image-grid scroll + cycleable config for every Mode that scrolls through a PreparedImage (ImageRenderMode + AnimationMode + SvgAnimationMode). Holds (config, scroll_x, scroll_y); exposes prepare_term (TermSize + style_mode sync), render_prepared (clamp pan + GridWindow + render), pipe_snapshot/restore (force-Contain wrapper for `--print`), scroll, handle_config_cycle (b/m/f keys + pan reset on fit change), status_segments
+      anim_frame.rs    — AnimFrameState: shared frame-playback state (current / playing / last_advance) for animated image Modes (AnimationMode + SvgAnimationMode). play_pause / step / tick / next_tick / status_segment / extract_target
+      mode.rs          — ImageRenderMode: static raster + rasterized SVG view; embeds ImageView, owns InputSource + single-slot CachedFrame
+      animation_mode.rs — AnimationMode: GIF/WebP playback (next_tick / tick driven); embeds ImageView + AnimFrameState, owns decoded frame list (no per-frame cache — frames change every tick)
       pipeline/        — Rasterization → ASCII-art rendering core
         mod.rs         — Module wiring + Background / FitMode / ImageConfig
         image_mode.rs  — ImageMode enum (full/block/geo/ascii/contour palette selection)
@@ -198,7 +200,7 @@ src/
       info_gather.rs   — gather_extras (viewBox, element counts, security flags, animation summary)
       info_render.rs   — render_section (SVG + Source sections)
       extract.rs       — SVG anim frame extract: render_frame → resvg rasterize at intrinsic size (sub-512px upscaled to 512 floor) → PNG
-      animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + LRU cache)
+      animation_mode.rs — SvgAnimationMode: CSS `@keyframes` SVG playback (per-frame rasterize + bounded LRU cache); embeds ImageView + AnimFrameState, owns AnimatedSvg model + last_term for scroll clamp
     audio/
       mod.rs           — Module wiring; re-exports AudioStats
       compose.rs       — compose(): Info → optional Cover (ImageRenderMode) → optional Lyrics (ContentMode) → optional Embeds ListingMode

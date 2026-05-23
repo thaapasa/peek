@@ -1,15 +1,14 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::pipeline::render::GridWindow;
-use super::pipeline::{Background, FitMode, ImageConfig, ImageMode, render};
-use super::scroll::{self, ScrollBounds};
+use super::pipeline::render::{self, TermSize};
+use super::pipeline::{ImageConfig, ImageMode};
+use super::scroll::ScrollBounds;
+use super::view::ImageView;
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
-use crate::viewer::paged::{
-    CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP, cycle_image_config,
-};
+use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
 
 #[derive(Copy, Clone)]
@@ -23,15 +22,29 @@ pub(crate) enum ImageKind {
 /// resolution, so the `ascii` flag is part of the key. The `fit` field
 /// keeps the cache valid across `Contain` ↔ `FitWidth` ↔ `FitHeight`
 /// toggles — each fit mode produces a different target grid and its own
-/// composited intermediate.
+/// composited intermediate. `cell_h_over_w` is omitted intentionally:
+/// it's cached per-process on first read and never changes mid-session.
 #[derive(Copy, Clone, PartialEq, Eq)]
 struct CacheKey {
     term_cols: u32,
     term_rows: u32,
     margin: u32,
-    bg: Background,
+    bg: super::pipeline::Background,
     ascii: bool,
-    fit: FitMode,
+    fit: super::pipeline::FitMode,
+}
+
+impl CacheKey {
+    fn build(config: &ImageConfig, term: TermSize) -> Self {
+        Self {
+            term_cols: term.cols,
+            term_rows: term.rows,
+            margin: config.margin,
+            bg: config.background,
+            ascii: matches!(config.mode, ImageMode::Ascii),
+            fit: config.fit,
+        }
+    }
 }
 
 struct CachedFrame {
@@ -40,28 +53,18 @@ struct CachedFrame {
 }
 
 /// Image content view: ASCII glyph rendering of a raster or rasterized
-/// SVG. Owns the background mode (`b` cycles it) and the fit mode (`f`
-/// cycles it). Re-renders on terminal resize because the rendered glyph
-/// grid depends on terminal dimensions.
-///
-/// Holds a single-slot cache of the decoded → resized → composited image.
-/// Mode/color-mode cycling reuses the slot; terminal resize / margin /
-/// background / fit-mode change miss and recompute, dropping the old
-/// slot. Memory is bounded to one image at the current console setup.
-///
-/// In `FitWidth` / `FitHeight` the prepared grid may exceed the terminal
-/// viewport on one axis; `scroll_x` / `scroll_y` track the offset into
-/// the prepared grid. `Mode::owns_scroll() = true` so the global line
-/// scroller doesn't fight us. Scroll is reset on fit-mode toggle (the
-/// old offset has no meaning in the new grid).
+/// SVG. Image-grid scroll + cycleable config live on the embedded
+/// [`ImageView`]; this Mode owns the source plus a single-slot cache of
+/// the decoded → resized → composited intermediate. Mode/color-mode
+/// cycling reuses the slot; terminal resize / margin / background /
+/// fit-mode change miss and recompute, dropping the old slot. Memory is
+/// bounded to one image at the current console setup.
 pub(crate) struct ImageRenderMode {
     source: InputSource,
-    config: ImageConfig,
     kind: ImageKind,
     label: &'static str,
+    view: ImageView,
     cache: Option<CachedFrame>,
-    scroll_x: u32,
-    scroll_y: u32,
 }
 
 const IMAGE_ACTIONS: &[HelpEntry] = &[
@@ -94,13 +97,25 @@ impl ImageRenderMode {
     ) -> Self {
         Self {
             source,
-            config,
             kind,
             label,
+            view: ImageView::new(config),
             cache: None,
-            scroll_x: 0,
-            scroll_y: 0,
         }
+    }
+
+    /// Repopulate `cache` if stale for the given key. After this the
+    /// cached `prep` is always live for `key`.
+    fn ensure_prepared(&mut self, key: CacheKey, term: TermSize) -> Result<()> {
+        let stale = self.cache.as_ref().map(|c| c.key != key).unwrap_or(true);
+        if stale {
+            let prep = match self.kind {
+                ImageKind::Raster => render::prepare_raster(&self.source, &self.view.config, term)?,
+                ImageKind::Svg => render::prepare_svg(&self.source, &self.view.config, term)?,
+            };
+            self.cache = Some(CachedFrame { key, prep });
+        }
+        Ok(())
     }
 }
 
@@ -114,87 +129,29 @@ impl Mode for ImageRenderMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
-        let term = render::TermSize {
-            cols: ctx.term_cols.min(u32::MAX as usize) as u32,
-            rows: ctx.term_rows.min(u32::MAX as usize) as u32,
-            cell_h_over_w: crate::viewer::cell_size::cell_aspect_h_over_w(),
-        };
-        // StyleMode is interactive-cyclable, so read it from the live ctx
-        // rather than the stale copy captured at construction time.
-        self.config.style_mode = ctx.peek_theme.style_mode;
-
-        let key = CacheKey {
-            term_cols: term.cols,
-            term_rows: term.rows,
-            margin: self.config.margin,
-            bg: self.config.background,
-            ascii: matches!(self.config.mode, ImageMode::Ascii),
-            fit: self.config.fit,
-        };
-        let needs_recompute = self.cache.as_ref().map(|c| c.key != key).unwrap_or(true);
-        if needs_recompute {
-            let prep = match self.kind {
-                ImageKind::Raster => render::prepare_raster(&self.source, &self.config, term)?,
-                ImageKind::Svg => render::prepare_svg(&self.source, &self.config, term)?,
-            };
-            self.cache = Some(CachedFrame { key, prep });
-        }
-        let prep = &self
-            .cache
-            .as_ref()
-            .expect("cache populated by the recompute branch above")
-            .prep;
-
-        // Clamp scroll to the current grid + viewport, then carve a window.
-        // Visible viewport is min(term, prep) per axis — nothing past the
-        // image edge is meaningful to render.
-        let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
-        self.scroll_x = self.scroll_x.min(max_x);
-        self.scroll_y = self.scroll_y.min(max_y);
-        let visible_cols = prep.cols.min(term.cols);
-        let visible_rows = prep.rows.min(term.rows);
-        let window = GridWindow {
-            col_start: self.scroll_x,
-            col_end: self.scroll_x + visible_cols,
-            row_start: self.scroll_y,
-            row_end: self.scroll_y + visible_rows,
-        };
-
-        let lines = render::render_prepared(prep, &self.config, window);
-        // `total` drives status-line position math elsewhere. Report the
-        // full prepared row count so a scroll indicator (future) has the
-        // right denominator; `Window.lines.len()` is the visible slice.
-        let total = prep.rows as usize;
-        Ok(Window { lines, total })
+        let term = self.view.prepare_term(ctx);
+        let key = CacheKey::build(&self.view.config, term);
+        self.ensure_prepared(key, term)?;
+        let prep = &self.cache.as_ref().expect("populated above").prep;
+        Ok(self.view.render_prepared(prep, term))
     }
 
     fn rerender_on_resize(&self) -> bool {
         true
     }
 
-    /// Pipe / `--print` path: row count is unbounded (`usize::MAX`), so
-    /// `FitHeight` is meaningless and `FitWidth` reduces to `Contain`
-    /// anyway. Force `Contain` regardless of the live config so that any
-    /// future CLI flag for fit doesn't accidentally produce gigantic
-    /// non-interactive output.
     fn render_to_pipe(
         &mut self,
         ctx: &RenderCtx,
         out: &mut crate::output::PrintOutput,
     ) -> Result<()> {
-        let saved_fit = self.config.fit;
-        let (saved_x, saved_y) = (self.scroll_x, self.scroll_y);
-        self.config.fit = FitMode::Contain;
-        self.scroll_x = 0;
-        self.scroll_y = 0;
+        let snap = self.view.pipe_snapshot();
+        // Drop the cached intermediate — the forced Contain + scroll=0
+        // produces a different grid than the interactive cache slot.
         self.cache = None;
         let window = self.render_window(ctx, 0, ctx.term_rows)?;
-        for line in window.lines {
-            out.write_line(&line)?;
-        }
-        self.config.fit = saved_fit;
-        self.scroll_x = saved_x;
-        self.scroll_y = saved_y;
+        ImageView::write_lines(out, window)?;
+        self.view.restore(snap);
         Ok(())
     }
 
@@ -214,12 +171,8 @@ impl Mode for ImageRenderMode {
             cache.key.term_rows,
         );
         let page_y = cache.key.term_rows.saturating_sub(1);
-        scroll::apply(
-            &mut self.scroll_x,
-            &mut self.scroll_y,
-            action,
-            ScrollBounds::clamped(max_x, max_y, page_y),
-        )
+        self.view
+            .scroll(action, ScrollBounds::clamped(max_x, max_y, page_y))
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
@@ -227,22 +180,10 @@ impl Mode for ImageRenderMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
-        if let Some(h) = cycle_image_config(action, &mut self.config) {
-            // A fit change re-anchors the image; the old pan offset is
-            // meaningless against the new geometry.
-            if action == Action::CycleFitMode {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-            }
-            return h;
-        }
-        Handled::No
+        self.view.handle_config_cycle(action).unwrap_or(Handled::No)
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        vec![
-            (self.config.mode.label().to_string(), theme.label),
-            (self.config.fit.label().to_string(), theme.label),
-        ]
+        self.view.status_segments(theme)
     }
 }
