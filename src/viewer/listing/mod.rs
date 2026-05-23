@@ -11,6 +11,7 @@
 pub mod build;
 pub mod entry;
 pub mod mode;
+pub mod row;
 pub mod stats;
 mod viewport;
 

@@ -10,10 +10,11 @@ use std::time::SystemTime;
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::info::{RenderOptions, format_archive_mtime_zoned, thousands_sep};
+use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, lerp_color};
+use crate::theme::PeekTheme;
+use crate::viewer::listing::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
 use crate::viewer::modes::{ExtractTarget, Mode, ModeId, Position, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -23,12 +24,6 @@ use super::read::{DirEntry, DirEntryKind};
 /// to `Path::canonicalize(parent).parent()`, so the user can walk back
 /// up the tree without a stack of frames.
 pub const PARENT_LINK_NAME: &str = "..";
-
-/// Width of the size column. Matches `ListingMode` for visual parity.
-const SIZE_COL_WIDTH: usize = 12;
-/// Below this terminal width the mtime column is dropped to leave room
-/// for the path. Same threshold as the listing TOC.
-const MTIME_HIDE_BELOW_COLS: usize = 80;
 
 pub struct DirectoryMode {
     entries: Vec<DirEntry>,
@@ -119,8 +114,9 @@ impl DirectoryMode {
     ) -> String {
         let perms = format_perms(entry);
         let size = format_size(entry);
-        let painted_perms = paint_perms(&perms, theme);
-        let painted_size = paint_size(&size, entry, theme);
+        let painted_perms = row::paint_perms(&perms, theme);
+        let painted_size =
+            row::paint_size(&size, entry.size, entry.kind == DirEntryKind::Dir, theme);
         let painted_name = paint_name(entry, theme, selected);
         let core = match mtime_width {
             Some(width) => {
@@ -132,10 +128,9 @@ impl DirectoryMode {
             None => format!("{painted_perms}  {painted_size}  {painted_name}"),
         };
         if selected {
-            let marker = theme.paint("\u{25b8} ", theme.accent);
-            format!("{marker}{core}")
+            row::paint_selected_marker(&core, theme)
         } else {
-            format!("  {core}")
+            format!("{}{core}", row::ROW_GUTTER)
         }
     }
 }
@@ -209,8 +204,9 @@ impl Mode for DirectoryMode {
         for entry in &self.entries {
             let perms = format_perms(entry);
             let size = format_size(entry);
-            let painted_perms = paint_perms(&perms, theme);
-            let painted_size = paint_size(&size, entry, theme);
+            let painted_perms = row::paint_perms(&perms, theme);
+            let painted_size =
+                row::paint_size(&size, entry.size, entry.kind == DirEntryKind::Dir, theme);
             let suffix = if entry.kind == DirEntryKind::Dir {
                 "/"
             } else {
@@ -299,33 +295,18 @@ fn format_perms(entry: &DirEntry) -> String {
         (false, DirEntryKind::File) => '-',
         (false, DirEntryKind::Other) => '?',
     };
-    let mode = entry.mode.unwrap_or(match entry.kind {
-        DirEntryKind::Dir => 0o755,
-        _ => 0o644,
-    });
-    let mut s = String::with_capacity(10);
-    s.push(type_ch);
-    for (r, w, x) in [
-        (0o400, 0o200, 0o100),
-        (0o040, 0o020, 0o010),
-        (0o004, 0o002, 0o001),
-    ] {
-        s.push(if mode & r != 0 { 'r' } else { '-' });
-        s.push(if mode & w != 0 { 'w' } else { '-' });
-        s.push(if mode & x != 0 { 'x' } else { '-' });
-    }
-    s
+    row::format_perms(type_ch, entry.mode, entry.kind == DirEntryKind::Dir)
 }
 
 fn format_size(entry: &DirEntry) -> String {
-    let raw = if entry.kind == DirEntryKind::Dir {
-        "-".to_string()
+    let cell = if entry.kind == DirEntryKind::Dir {
+        SizeCell::Dir
     } else if entry.stat_error {
-        "?".to_string()
+        SizeCell::Unknown
     } else {
-        thousands_sep(entry.size)
+        SizeCell::Bytes(entry.size)
     };
-    format!("{raw:>w$}", w = SIZE_COL_WIDTH)
+    row::format_size(cell)
 }
 
 fn parent_link_entry() -> DirEntry {
@@ -345,47 +326,8 @@ fn format_mtime(mtime: Option<SystemTime>, utc: bool) -> String {
         return "-".to_string();
     };
     match t.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(d) => format_archive_mtime_zoned(d.as_secs(), utc),
+        Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
         Err(_) => "-".to_string(),
-    }
-}
-
-fn paint_perms(perms: &str, theme: &PeekTheme) -> String {
-    let mut out = String::new();
-    for (i, ch) in perms.chars().enumerate() {
-        let color = match ch {
-            'r' => theme.value,
-            'w' => theme.accent,
-            'x' => theme.heading,
-            'd' | 'l' => theme.heading,
-            '-' => lerp_color(theme.muted, theme.background, 0.3),
-            _ => theme.foreground,
-        };
-        out.push_str(&theme.paint(&ch.to_string(), color));
-        if (i == 3 || i == 6) && i + 1 < 10 {
-            out.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
-        }
-    }
-    out
-}
-
-fn paint_size(text: &str, entry: &DirEntry, theme: &PeekTheme) -> String {
-    if entry.kind == DirEntryKind::Dir || entry.size == 0 {
-        theme.paint(text, theme.muted)
-    } else {
-        theme.paint(text, size_color(entry.size, theme))
-    }
-}
-
-fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
-    let kb = bytes as f64 / 1024.0;
-    if kb < 1.0 {
-        lerp_color(theme.muted, theme.value, (kb as f32).max(0.2))
-    } else if kb < 1024.0 {
-        theme.value
-    } else {
-        let t = ((kb / 1024.0).ln() / 100_f64.ln()) as f32;
-        lerp_color(theme.value, theme.accent, t.clamp(0.0, 1.0))
     }
 }
 

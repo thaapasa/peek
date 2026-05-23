@@ -16,25 +16,17 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use super::entry::{Entry, EntryKind, EntryMtime};
+use super::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
 use super::viewport::ListingViewport;
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, lerp_color};
+use crate::theme::PeekTheme;
 use crate::viewer::modes::{
     ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
 };
 use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
 use crate::viewer::ui::{Action, HelpEntry};
-
-/// Width (chars) of the size column, including thousands separators.
-const SIZE_COL_WIDTH: usize = 12;
-/// Width (chars) of the permissions column. 10-char `drwxr-xr-x` form.
-const PERMS_COL_WIDTH: usize = 10;
-/// Below this terminal width the mtime column is dropped to leave room
-/// for the path. The cutoff matches `perms + size + path-headroom +
-/// gutters` ≈ what fits comfortably without mtime.
-const MTIME_HIDE_BELOW_COLS: usize = 80;
 
 pub struct ListingMode {
     format_name: String,
@@ -121,10 +113,14 @@ impl ListingMode {
         mtime_text: Option<(&str, usize)>,
         selected: bool,
     ) -> String {
-        let perms = format_perms(row.mode, row.is_dir);
-        let size = format_size(row.size, row.is_dir);
-        let painted_perms = paint_perms(&perms, theme);
-        let painted_size = paint_size(&size, row.size, row.is_dir, theme);
+        let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
+        let size = row::format_size(if row.is_dir {
+            SizeCell::Dir
+        } else {
+            SizeCell::Bytes(row.size)
+        });
+        let painted_perms = row::paint_perms(&perms, theme);
+        let painted_size = row::paint_size(&size, row.size, row.is_dir, theme);
         let (ranges, current) = self.leaf_match_ranges(row_idx);
         let painted_path = paint_tree_path(
             &row.prefix,
@@ -254,20 +250,13 @@ impl ListingMode {
                 let selected = Some(*row_idx) == selected_idx;
                 let line = self.paint_row(*row_idx, row, theme, mtime_text, selected);
                 if selected {
-                    paint_selected_marker(&line, theme)
+                    row::paint_selected_marker(&line, theme)
                 } else {
-                    format!("  {line}")
+                    format!("{}{line}", row::ROW_GUTTER)
                 }
             })
             .collect()
     }
-}
-
-/// Two-cell caret prefix — paired with a 2-space gutter on
-/// non-selected rows so columns stay aligned.
-fn paint_selected_marker(line: &str, theme: &PeekTheme) -> String {
-    let marker = theme.paint("\u{25b8} ", theme.accent);
-    format!("{marker}{line}")
 }
 
 impl Mode for ListingMode {
@@ -334,14 +323,22 @@ impl Mode for ListingMode {
     /// editing.
     fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let theme = ctx.peek_theme;
-        for row in &self.rows {
-            let Some(path) = &row.inner_path else {
+        for tree_row in &self.rows {
+            let Some(path) = &tree_row.inner_path else {
                 continue;
             };
-            let perms = format_perms(row.mode, row.is_dir);
-            let size = format_size(row.size, row.is_dir);
-            let painted_perms = paint_perms(&perms, theme);
-            let painted_size = paint_size(&size, row.size, row.is_dir, theme);
+            let perms = row::format_perms(
+                if tree_row.is_dir { 'd' } else { '-' },
+                tree_row.mode,
+                tree_row.is_dir,
+            );
+            let size = row::format_size(if tree_row.is_dir {
+                SizeCell::Dir
+            } else {
+                SizeCell::Bytes(tree_row.size)
+            });
+            let painted_perms = row::paint_perms(&perms, theme);
+            let painted_size = row::paint_size(&size, tree_row.size, tree_row.is_dir, theme);
             let painted_path = theme.paint(path, theme.foreground);
             out.write_line(&format!("{painted_perms}  {painted_size}  {painted_path}"))?;
         }
@@ -545,38 +542,6 @@ fn walk(
     }
 }
 
-/// Render the 10-char `drwxr-xr-x`-style permission string. When mode
-/// is unset (implicit tree parents that don't appear in the source's
-/// own entry list, or sources that don't carry mode bits at all), fall
-/// back to typical defaults — `rwxr-xr-x` for dirs, `rw-r--r--` for
-/// files — so the column stays informative instead of dissolving into
-/// a wall of `?`s.
-fn format_perms(mode: Option<u32>, is_dir: bool) -> String {
-    let type_ch = if is_dir { 'd' } else { '-' };
-    let mode = mode.unwrap_or(if is_dir { 0o755 } else { 0o644 });
-    let mut s = String::with_capacity(10);
-    s.push(type_ch);
-    for (r, w, x) in [
-        (0o400, 0o200, 0o100),
-        (0o040, 0o020, 0o010),
-        (0o004, 0o002, 0o001),
-    ] {
-        s.push(if mode & r != 0 { 'r' } else { '-' });
-        s.push(if mode & w != 0 { 'w' } else { '-' });
-        s.push(if mode & x != 0 { 'x' } else { '-' });
-    }
-    s
-}
-
-fn format_size(size: u64, is_dir: bool) -> String {
-    let raw = if is_dir {
-        "-".to_string()
-    } else {
-        crate::info::thousands_sep(size)
-    };
-    format!("{raw:>w$}", w = SIZE_COL_WIDTH)
-}
-
 fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
     use std::time::SystemTime;
     let Some(mtime) = mtime else {
@@ -584,7 +549,7 @@ fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
     };
     match mtime {
         EntryMtime::Utc(t) => match t.duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(d) => crate::info::format_archive_mtime_zoned(d.as_secs(), utc),
+            Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
             Err(_) => "-".to_string(),
         },
         EntryMtime::LocalNaive {
@@ -594,45 +559,6 @@ fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
             hour,
             minute,
         } => format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}"),
-    }
-}
-
-fn paint_perms(perms: &str, theme: &PeekTheme) -> String {
-    let mut out = String::new();
-    for (i, ch) in perms.chars().enumerate() {
-        let color = match ch {
-            'r' => theme.value,
-            'w' => theme.accent,
-            'x' => theme.heading,
-            'd' | 'l' => theme.heading,
-            '-' => lerp_color(theme.muted, theme.background, 0.3),
-            _ => theme.foreground,
-        };
-        out.push_str(&theme.paint(&ch.to_string(), color));
-        if (i == 3 || i == 6) && i + 1 < PERMS_COL_WIDTH {
-            out.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
-        }
-    }
-    out
-}
-
-fn paint_size(text: &str, size: u64, is_dir: bool, theme: &PeekTheme) -> String {
-    if is_dir || size == 0 {
-        theme.paint(text, theme.muted)
-    } else {
-        theme.paint(text, size_color(size, theme))
-    }
-}
-
-fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
-    let kb = bytes as f64 / 1024.0;
-    if kb < 1.0 {
-        lerp_color(theme.muted, theme.value, (kb as f32).max(0.2))
-    } else if kb < 1024.0 {
-        theme.value
-    } else {
-        let t = ((kb / 1024.0).ln() / 100_f64.ln()) as f32;
-        lerp_color(theme.value, theme.accent, t.clamp(0.0, 1.0))
     }
 }
 
