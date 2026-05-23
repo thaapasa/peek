@@ -20,8 +20,6 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: DocumentFormat,
 ) -> Result<()> {
-    // Per-format dispatch lives here, the one match — `compose_zip`
-    // takes the already-parsed doc so it never re-matches `fmt`.
     match fmt {
         DocumentFormat::Docx => compose_zip(
             source,

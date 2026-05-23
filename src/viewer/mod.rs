@@ -543,13 +543,10 @@ fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
 /// available syntax name.
 fn fallback_syntax_token(ext: &str) -> Option<&'static str> {
     match ext {
-        "ts" | "tsx" | "mts" | "cts" => Some("JavaScript"),
-        "jsx" | "mjs" | "cjs" => Some("JavaScript"),
+        "ts" | "tsx" | "mts" | "cts" | "jsx" | "mjs" | "cjs" => Some("JavaScript"),
         "jsonc" | "json5" => Some("JSON"),
         "zsh" | "bash" | "fish" => Some("Bourne Again Shell (bash)"),
-        "h" => Some("C++"),
-        "hpp" | "hxx" => Some("C++"),
-        "cxx" | "cc" => Some("C++"),
+        "h" | "hpp" | "hxx" | "cxx" | "cc" => Some("C++"),
         _ => None,
     }
 }

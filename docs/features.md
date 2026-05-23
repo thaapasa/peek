@@ -7,6 +7,24 @@ status markers — update both when a feature changes. For planned and open idea
 
 Status legend: ✅ implemented · ◐ partial
 
+## Contents
+
+- [Operating Modes](#operating-modes)
+- [Supported File Types](#supported-file-types)
+  - [Source Code](#source-code-)
+  - [Structured Data / Config Files](#structured-data--config-files)
+  - [Image Files](#image-files-)
+  - [Audio Files](#audio-files-)
+  - [Animated Images (GIF, WebP)](#animated-images-gif-webp-)
+  - [Object Files](#object-files-)
+  - [Java Classfiles](#java-classfiles-)
+  - [Binary and Archive Files](#binary-and-archive-files-)
+- [Viewer Features](#viewer-features)
+- [Keyboard Shortcuts](#keyboard-shortcuts)
+- [Color and Rendering](#color-and-rendering)
+- [CLI Options](#cli-options)
+- [Distribution](#distribution-)
+
 ## Operating Modes
 
 ### Viewer Mode ◐

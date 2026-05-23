@@ -88,7 +88,7 @@ impl PrettyView {
             Ok(s) => s,
             Err(e) => {
                 warnings.push(format!(
-                    "read failed for pretty-print ({e}); showing raw source"
+                    "couldn't load source for pretty-print ({e}); showing raw source"
                 ));
                 self.parsed = Some(Parsed::Failed {
                     cap_exceeded: false,
