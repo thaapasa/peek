@@ -207,13 +207,11 @@ impl<'a> Walker<'a> {
                 // Reuse the existing inline accumulator (`pending`) by
                 // opening a transient leaf; End(TableCell) drains it
                 // into the row instead of out.
-                if self.table.is_some() {
+                if let Some(t) = &mut self.table {
                     self.leaf = Some(Leaf::Paragraph);
                     self.leaf_implicit = false;
                     self.pending.clear();
-                    if let Some(t) = &mut self.table {
-                        t.in_cell = true;
-                    }
+                    t.in_cell = true;
                 }
             }
             Event::End(TagEnd::TableCell) => {
@@ -301,10 +299,8 @@ impl<'a> Walker<'a> {
                     self.pending.push_str(self.style_mode.attr_close(Attr::Dim));
                 }
             }
-            Event::SoftBreak | Event::HardBreak => {
-                if self.leaf.is_some() {
-                    self.pending.push(' ');
-                }
+            Event::SoftBreak | Event::HardBreak if self.leaf.is_some() => {
+                self.pending.push(' ');
             }
             _ => {}
         }
