@@ -85,6 +85,12 @@ csv = "1"
 # Dev workflow: `.pdfium/lib/libpdfium.*` is searched as a fallback.
 pdfium-render = "0.9"
 
+# Markdown parsing for the rendered view. Pure-Rust event-stream parser
+# (no AST allocation per node); same one mdbook uses. GFM tables,
+# task-lists, strikethrough, footnotes ship as `Options` flags off the
+# base CommonMark grammar — no extra crate features needed.
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
+
 # DOCX is parsed via a hand-rolled `quick_xml` walker (existing dep) over
 # `word/document.xml` — full WordprocessingML deserializers (`docx-rust`,
 # `docx-rs`) reject real-world Word documents because numeric attributes

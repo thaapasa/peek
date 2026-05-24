@@ -35,13 +35,6 @@ use crate::types::text::info_gather::gather_text_stats;
 /// that would just be noise anyway.
 const LANG_STATS_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
 
-fn is_markdown_syntax(syntax: Option<&str>) -> bool {
-    matches!(
-        syntax,
-        Some("md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn")
-    )
-}
-
 fn is_sql_syntax(syntax: Option<&str>) -> bool {
     matches!(syntax, Some("sql" | "ddl" | "dml" | "psql" | "pgsql"))
 }
@@ -64,10 +57,9 @@ fn syntax_of(file_type: &FileType) -> Option<&str> {
 /// or the read fails.
 fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<FileExtras> {
     let syntax = syntax_of(file_type)?;
-    let is_md = is_markdown_syntax(Some(syntax));
     let is_sql = is_sql_syntax(Some(syntax));
     let is_css = is_css_syntax(Some(syntax));
-    if !is_md && !is_sql && !is_css {
+    if !is_sql && !is_css {
         return None;
     }
 
@@ -79,15 +71,7 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
     let text_stats = gather_text_stats(source)?;
     let text = source.read_text().ok()?;
 
-    if is_md {
-        let stats = crate::types::markdown::info_gather::gather(&text);
-        Some(FileExtras::Markdown(
-            crate::types::markdown::info::MarkdownInfo {
-                text: text_stats,
-                stats,
-            },
-        ))
-    } else if is_sql {
+    if is_sql {
         let stats = crate::types::sql::info_gather::gather(&text);
         Some(FileExtras::Sql(crate::types::sql::info::SqlInfo {
             text: text_stats,
@@ -100,6 +84,25 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
             stats,
         }))
     }
+}
+
+/// Markdown sidecar parse. Reads the file once, runs both the generic
+/// text stats and the markdown-specific scanner. Capped at
+/// `LANG_STATS_BYTE_LIMIT` — over the cap the binary fallback applies.
+fn gather_markdown_extras(source: &InputSource) -> Option<FileExtras> {
+    let bs = source.open_byte_source().ok()?;
+    if bs.len() > LANG_STATS_BYTE_LIMIT {
+        return None;
+    }
+    let text_stats = gather_text_stats(source)?;
+    let text = source.read_text().ok()?;
+    let stats = crate::types::markdown::info_gather::gather(&text);
+    Some(FileExtras::Markdown(
+        crate::types::markdown::info::MarkdownInfo {
+            text: text_stats,
+            stats,
+        },
+    ))
 }
 
 /// Gather metadata for the given input source and detection result.
@@ -238,6 +241,13 @@ fn gather_extras(
                 None => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
+        FileType::Markdown => match gather_markdown_extras(source) {
+            Some(extras) => extras,
+            None => match gather_text_stats(source) {
+                Some(stats) => FileExtras::Text(stats),
+                None => crate::types::binary::info::gather_extras(magic_mime),
+            },
+        },
         FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
             (Some(stats), Ok(bytes)) => {
                 crate::types::svg::info_gather::gather_extras(stats, &bytes)

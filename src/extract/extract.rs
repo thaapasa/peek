@@ -112,6 +112,7 @@ pub fn extract(
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html
+        | FileType::Markdown
         | FileType::Compressed(_)
         | FileType::Csv(_)
         | FileType::ObjectFile

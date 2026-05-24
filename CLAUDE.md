@@ -56,7 +56,7 @@ src/
                          primitives + ListingViewport (scroll / selection / sticky chain)
     modes/             — Shared modes: content (streamed text/syntax/structured/SVG),
                          pretty_view, gutter, hex, info, help, about, rendered_text<R> (generic
-                         whole-document read mode for DOCX/ODT/RTF/HTML/PDF text)
+                         whole-document read mode for DOCX/ODT/RTF/HTML/Markdown/PDF text)
     table/             — Generic aligned-table view (objfile + classfile) + TableMode (sticky
                          header, search, pan). CsvTableMode is separate — streams differently
     ui/                — alternate-screen / status line / term-size; ViewerState (mode stack +
