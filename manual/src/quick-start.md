@@ -4,6 +4,9 @@
 # Source code — syntax highlighted, interactive viewer
 peek src/main.rs
 
+# Markdown — rendered (headings, tables, code, task lists); Tab for source
+peek README.md
+
 # Structured data — pretty-printed
 peek config.json
 peek data.yaml
@@ -13,6 +16,9 @@ peek photo.jpg
 
 # PDF — paged ASCII render, n/p step pages
 peek report.pdf
+
+# Certificate or key — subject, validity, SANs, fingerprints
+peek server.pem
 
 # Pipe — auto-detects JSON / YAML / XML
 echo '{"a":1}' | peek

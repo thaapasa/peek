@@ -5,12 +5,14 @@
 Features at a glance:
 
 - Syntax-highlighted source code (100+ languages)
+- Markdown rendered with CommonMark + GFM (tables, task lists, footnotes, frontmatter)
 - Pretty-printed structured data (JSON, YAML, TOML, XML)
 - ASCII-art image rendering with 24-bit color
 - Animated GIF / WebP / animated SVG playback
 - Office documents (DOCX, ODT, RTF), PDF, EPUB
 - Audio metadata + embedded cover art
 - Archive browsing (ZIP, tar, 7-Zip, cpio) and disk images (ISO, DMG)
+- PEM certificates and keys — subject, validity, SANs, fingerprints
 - Hex dump for unknown binary
 - Interactive viewer with live theme cycling, file info, extraction
 
