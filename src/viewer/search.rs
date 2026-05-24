@@ -12,6 +12,44 @@
 //! Match positions are byte offsets into *raw* (un-styled) line text;
 //! `overlay_matches` is the one place that bridges raw offsets to the
 //! escape-interleaved styled string.
+//!
+//! ## Standard per-mode caller pattern
+//!
+//! Searchable modes carry their own `search: Option<SearchState>` and
+//! repeat three small shapes inside `Mode::handle` / `status_segments`:
+//!
+//! ```ignore
+//! // handle:
+//! Action::NextMatch => { self.step_match(1);  Handled::Yes }
+//! Action::PrevMatch => { self.step_match(-1); Handled::Yes }
+//! Action::Back if self.search.is_some() => { self.search = None; Handled::Yes }
+//!
+//! // status_segments:
+//! if let Some(s) = &self.search { segs.push(s.status_segment(theme)); }
+//! ```
+//!
+//! Not lifted into a shared helper on purpose. Two reasons:
+//!
+//! - **Borrow conflict.** A `search_handle(action, &mut self.search, |d| self.step_match(d))`
+//!   helper needs `&mut self.search` *and* `&mut self` (via the closure
+//!   that calls `step_match`) at the same time. The compiler rejects
+//!   it, and reshaping `step_match` to take the search-state by
+//!   parameter pushes the reveal logic (jump_to_line, horizontal pan,
+//!   viewport clamp) up to the call site — every mode reveals
+//!   differently, so the per-mode method is the right home.
+//!
+//! - **Indirection cost.** A `classify(action) -> SearchOp` enum would
+//!   collapse the three arms into one match against a wrapper enum.
+//!   Saves ~5 lines per mode (~20 total) at the cost of an enum hop
+//!   that readers have to chase to know which arms fire. Per-arm
+//!   bodies are already self-documenting at the call site; the
+//!   indirection trade is net-negative for readability.
+//!
+//! `step_match` itself stays per-mode (reveal logic differs). The
+//! shared pieces — [`SearchState`], `step`, `first_line`,
+//! [`overlay_matches`], [`reveal_h_scroll`], [`status_segment`] — cover
+//! everything that *can* be deduplicated without a helper that's worse
+//! than the duplication.
 
 use std::ops::Range;
 

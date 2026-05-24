@@ -4,31 +4,6 @@ IDs are stable. Resolved items are deleted but remaining IDs keep their numbers
 so commit / PR references stay valid. Add new IDs at the end of each section
 (don't renumber).
 
-## High
-
-### H2. Search `handle` arm bodies still duplicated across 6 modes
-
-Data-layer dedup is done (`SearchState`, `step_search`, `overlay_matches`,
-`reveal_h_scroll` all shared). What's left is per-mode `Mode::handle`
-ceremony — same three arms in:
-
-- `ContentMode` (content.rs:552-598)
-- `ListingMode` (listing/mode.rs:359-397)
-- `TableMode` (table/mode.rs:247-296)
-- `CsvTableMode` (csv/table_mode.rs:807-887)
-- `EpubReadMode` (epub/read_mode.rs:237-271)
-- `RenderedTextMode` (rendered_text.rs:145-155)
-
-Pattern is byte-identical: `Back if self.search.is_some() => clear`,
-`NextMatch => step`, `PrevMatch => step`. Same for the
-`status_segments` search-segment push. `set_search` itself stays
-per-mode (scan source differs: `LineSource` / `Vec<String>` / row vec /
-record stream).
-
-Direction: `search_handle(action, &mut self.search) -> Option<Handled>`
-+ `search_status_segment(&self.search, theme)` helpers. Each mode's
-trait body loses ~10 lines and the pattern is documented once.
-
 ## Medium
 
 ### M2. `ComposeCtx` paid for by every per-type compose even though most don't use it
