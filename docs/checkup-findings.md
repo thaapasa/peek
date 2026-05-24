@@ -29,19 +29,6 @@ Direction: `search_handle(action, &mut self.search) -> Option<Handled>`
 + `search_status_segment(&self.search, theme)` helpers. Each mode's
 trait body loses ~10 lines and the pattern is documented once.
 
-### H4. `content.rs` brittle ordering: `ensure_pretty_parsed` then `expect("pretty branch present")`
-
-`prepare_window` (content.rs:298-313) calls into the `pretty_ready` branch
-and immediately `.expect`s on `pretty_mut()` and `rendered_lines()`. The
-new `RenderingMode::Either { showing, pretty }` was supposed to make
-"pretty exists when showing pretty" type-true, but `pretty()` /
-`pretty_mut()` still return `Option`, putting callers back to "I know
-better, trust me".
-
-Direction: split into `prepare_pretty(&mut self) -> Option<&mut PrettyView>`
-returning the borrow only when valid for the showing state. Removes the
-two `expect`s and the comment paragraph defending them.
-
 ## Medium
 
 ### M2. `ComposeCtx` paid for by every per-type compose even though most don't use it

@@ -271,11 +271,8 @@ impl ContentMode {
     /// a size-cap refusal, force the rendering back to raw so position
     /// tracking and the status line reflect the now-permanent fallback.
     fn ensure_pretty_parsed(&mut self) {
-        if !self.rendering.showing_pretty() {
-            return;
-        }
         let total_bytes = self.line_source.total_bytes();
-        let Some(pv) = self.rendering.pretty_mut() else {
+        let Some(pv) = self.rendering.active_pretty_mut() else {
             return;
         };
         pv.ensure_parsed(&self.source, total_bytes, &mut self.pending_warnings);
@@ -294,23 +291,26 @@ impl ContentMode {
         &mut self,
         ctx: &RenderCtx,
         rows: usize,
-        pretty_ready: bool,
     ) -> Result<Option<(Vec<String>, usize, usize)>> {
-        if pretty_ready {
-            // Refresh the rendered-line cache for the active theme.
-            {
-                let syntax = self.syntax_token.as_deref().map(|token| SyntaxRef {
-                    token,
-                    theme_manager: &self.theme_manager,
-                });
-                let pv = self.rendering.pretty_mut().expect("pretty branch present");
+        // Active pretty branch (Some only when Showing::Pretty + parsed):
+        // refresh its rendered-line cache for the current theme, then
+        // slice the window. The two-step ensure_rendered then
+        // rendered_lines pattern stays — the borrow on `pretty_mut` for
+        // ensure_rendered conflicts with the syntax_token / theme_manager
+        // borrows alongside it, so we split the access.
+        if self.rendering.is_pretty_ready() {
+            let syntax = self.syntax_token.as_deref().map(|token| SyntaxRef {
+                token,
+                theme_manager: &self.theme_manager,
+            });
+            if let Some(pv) = self.rendering.active_pretty_mut() {
                 pv.ensure_rendered(ctx.theme_name, ctx.peek_theme.style_mode, syntax)?;
             }
             let lines: &[String] = self
                 .rendering
-                .pretty()
+                .active_pretty()
                 .and_then(PrettyView::rendered_lines)
-                .expect("pretty cache populated");
+                .unwrap_or(&[]);
             let total = lines.len();
             if total == 0 || rows == 0 {
                 return Ok(None);
@@ -458,18 +458,17 @@ impl Mode for ContentMode {
         self.cached_rows = rows;
         self.ensure_pretty_parsed();
         // `ensure_pretty_parsed` may have force-flipped to Raw on a
-        // size-cap refusal; re-check readiness before branching.
-        let pretty_ready = self.rendering.showing_pretty()
-            && self.rendering.pretty().is_some_and(PrettyView::is_ready);
-        let prepared = self.prepare_window(ctx, rows, pretty_ready)?;
+        // size-cap refusal; `is_pretty_ready` re-checks against the
+        // post-flip state.
+        let prepared = self.prepare_window(ctx, rows)?;
         let window = match prepared {
             None => {
                 // Empty output or rows == 0 — surface the active
                 // output's total so the status line still tracks
                 // document size.
-                let total = if pretty_ready {
+                let total = if self.rendering.is_pretty_ready() {
                     self.rendering
-                        .pretty()
+                        .active_pretty()
                         .and_then(PrettyView::rendered_lines)
                         .map(<[String]>::len)
                         .unwrap_or(0)
@@ -496,11 +495,7 @@ impl Mode for ContentMode {
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         self.ensure_pretty_parsed();
-        let pretty_text = if self.rendering.showing_pretty() {
-            self.rendering.pretty().and_then(PrettyView::text)
-        } else {
-            None
-        };
+        let pretty_text = self.rendering.active_pretty().and_then(PrettyView::text);
         super::content_pipe::render(
             ctx,
             out,
@@ -726,11 +721,7 @@ impl Mode for ContentMode {
                 return None;
             }
         };
-        let pretty_text = if self.rendering.showing_pretty() {
-            self.rendering.pretty().and_then(PrettyView::text)
-        } else {
-            None
-        };
+        let pretty_text = self.rendering.active_pretty().and_then(PrettyView::text);
         let search = if let Some(text) = pretty_text {
             SearchState::scan(text.lines(), query)
         } else {

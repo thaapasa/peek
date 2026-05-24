@@ -73,6 +73,38 @@ impl RenderingMode {
         }
     }
 
+    /// Borrow the pretty branch only when it is the *active* output —
+    /// i.e. `Showing::Pretty`. Drives the prepare/render path so
+    /// "showing pretty" and "have the pretty handle" become a single
+    /// pattern match instead of two separate guards (`showing_pretty()`
+    /// then `pretty_mut().expect(…)`).
+    pub(super) fn active_pretty(&self) -> Option<&PrettyView> {
+        match self {
+            Self::Either {
+                showing: Showing::Pretty,
+                pretty,
+            } => Some(pretty),
+            _ => None,
+        }
+    }
+
+    pub(super) fn active_pretty_mut(&mut self) -> Option<&mut PrettyView> {
+        match self {
+            Self::Either {
+                showing: Showing::Pretty,
+                pretty,
+            } => Some(pretty),
+            _ => None,
+        }
+    }
+
+    /// `Showing::Pretty` *and* the pretty branch is materialised. Used
+    /// to fork prepare_window between the pretty and raw paths in one
+    /// check instead of `showing_pretty() && pretty().is_some_and(is_ready)`.
+    pub(super) fn is_pretty_ready(&self) -> bool {
+        self.active_pretty().is_some_and(PrettyView::is_ready)
+    }
+
     /// Force-flip back to raw — used when the lazy pretty parse fails
     /// (size cap or parse error) and the user must be locked to raw.
     /// `Either` is retained so the status line can render
