@@ -1,15 +1,20 @@
-//! Per-type compose: Markdown.
+//! Per-type compose: Markdown — rendered text view + syntax-highlighted
+//! source.
 //!
-//! Pushes the syntax-highlighted source view. The rendered view lands in
-//! a follow-up commit once the markdown renderer is wired in.
+//! Default order is rendered-first (matches Html / EPUB / Pdf / DOCX —
+//! the rich-document UX). `--raw` swaps the order so the syntax-
+//! highlighted source becomes the entry view; rendered is still
+//! reachable via Tab. `--plain` drops the rendered view entirely
+//! (consistent with `--plain` meaning "no transformation").
 
 use anyhow::Result;
 
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
+use crate::types::markdown::MarkdownRenderer;
 use crate::viewer::ComposeCtx;
-use crate::viewer::modes::Mode;
+use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,
@@ -18,6 +23,23 @@ pub fn compose(
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    modes.push(ctx.text_content_mode(source, &FileType::Markdown, args)?);
+    let rendered = (!ctx.plain_mode).then(|| -> Box<dyn Mode> {
+        Box::new(RenderedTextMode::new(MarkdownRenderer::new(source.clone())))
+    });
+    let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args)?;
+
+    match (rendered, args.raw) {
+        (Some(r), false) => {
+            modes.push(r);
+            modes.push(source_mode);
+        }
+        (Some(r), true) => {
+            modes.push(source_mode);
+            modes.push(r);
+        }
+        (None, _) => {
+            modes.push(source_mode);
+        }
+    }
     Ok(())
 }
