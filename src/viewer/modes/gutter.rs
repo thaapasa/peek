@@ -75,6 +75,31 @@ impl Gutter {
         }
     }
 
+    /// Streaming prefix builder for the pipe path. Returns a closure
+    /// that takes a 1-based line number and yields the gutter prefix —
+    /// `None` when the gutter is disabled or the source is empty, so
+    /// callers can skip the concat entirely. Width and paint sequences
+    /// are hoisted out of the loop once, matching [`apply`]'s perf
+    /// shape but compatible with streamed line iteration where the
+    /// line set isn't materialised up front.
+    pub(crate) fn stream_prefixer(
+        &self,
+        total: usize,
+        theme: &PeekTheme,
+    ) -> impl Fn(usize) -> Option<String> + use<> {
+        let enabled = self.enabled && total > 0;
+        let width = Self::digit_width(total);
+        let style_mode = theme.style_mode;
+        let fg = style_mode.fg_seq(theme.gutter);
+        let reset = style_mode.reset();
+        move |n: usize| -> Option<String> {
+            if !enabled {
+                return None;
+            }
+            Some(format!("{fg}{n:>width$} │ {reset}"))
+        }
+    }
+
     /// Prepend the gutter to each already-rendered line in place — the
     /// print/pipe path, where every line is its own logical line.
     /// `start` is the 0-based source index of `lines[0]`. No-op when

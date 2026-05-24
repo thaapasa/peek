@@ -58,16 +58,7 @@ pub(super) fn render(
     }
 
     let total = line_source.total_lines();
-    let gutter_width = if gutter.enabled() && total > 0 {
-        Some(Gutter::digit_width(total))
-    } else {
-        None
-    };
-    let gutter_fg = style_mode.fg_seq(ctx.peek_theme.gutter);
-    let gutter_reset = style_mode.reset();
-    let prefix = |n: usize| -> Option<String> {
-        gutter_width.map(|w| format!("{gutter_fg}{n:>w$} │ {gutter_reset}"))
-    };
+    let prefix = gutter.stream_prefixer(total, ctx.peek_theme);
 
     if let Some(hl) = highlighter {
         hl.reset(ctx.theme_name);

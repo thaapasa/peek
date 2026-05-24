@@ -42,18 +42,6 @@ Direction: split into `prepare_pretty(&mut self) -> Option<&mut PrettyView>`
 returning the borrow only when valid for the showing state. Removes the
 two `expect`s and the comment paragraph defending them.
 
-### H6. `content_pipe.rs` rebuilds the gutter prefix instead of calling `Gutter`
-
-`content_pipe.rs:60-70` inlines
-`format!("{gutter_fg}{n:>w$} │ {gutter_reset}")`. `Gutter::prefix` and
-`Gutter::apply` (gutter.rs:59-105) already do the same paint + separator +
-right-align. Three copies of one painted glyph layout — they will drift
-the next time gutter formatting changes.
-
-Fix: call `gutter.prefix(Some(idx+1), total, ctx.peek_theme)`, or move the
-streaming-prefix closure into `Gutter` itself so the highlighter loop has
-a no-allocation path.
-
 ## Medium
 
 ### M2. `ComposeCtx` paid for by every per-type compose even though most don't use it
