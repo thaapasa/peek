@@ -7,7 +7,7 @@
 
 ## CLI
 
-- All args on a single clap-derive `Args` struct in `main.rs`.
+- All args on a single clap-derive `Args` struct in `cli.rs`.
 - TTY stdout → interactive viewer. Pipe → direct output.
 
 ## Color

@@ -90,7 +90,7 @@ no background colors. Fastest mode; works on terminals without bg colors or Unic
 
 ## Glyph atlas
 
-Stored in `src/viewer/image/glyph_atlas.rs`, two parts.
+Stored in `src/types/image/pipeline/glyph_atlas.rs`, two parts.
 
 ### Block elements (hardcoded)
 
@@ -105,7 +105,7 @@ Mathematically exact geometry → bitmaps computed at compile time via `const fn
 Other glyphs come from the `gen_glyphs` example tool:
 
 ```sh
-cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs
+cargo run --example gen_glyphs > src/types/image/pipeline/glyph_atlas_data.rs
 ```
 
 Pipeline:
@@ -127,8 +127,8 @@ Glyph categories:
 ### Regenerating
 
 ```sh
-cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs                      # system default font
-PEEK_FONT=/path/to/MyFont.ttf cargo run --example gen_glyphs > src/viewer/image/glyph_atlas_data.rs   # specific font
+cargo run --example gen_glyphs > src/types/image/pipeline/glyph_atlas_data.rs                      # system default font
+PEEK_FONT=/path/to/MyFont.ttf cargo run --example gen_glyphs > src/types/image/pipeline/glyph_atlas_data.rs   # specific font
 ```
 
 The generator uses `fontdue` (in `[dev-dependencies]`); not a runtime dep.

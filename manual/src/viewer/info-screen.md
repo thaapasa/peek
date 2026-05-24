@@ -20,7 +20,9 @@ Every file type has an Info view, reachable via:
 | Text / source    | Line / word / char counts, blank lines, longest line, line endings, indent style, encoding, shebang |
 | Markdown         | Heading counts, fenced code + langs, links, images, tables, list items, task progress, reading time |
 | SQL              | Dialect, statement counts by category, created-object inventory, comment count, PL/pgSQL flag       |
+| CSS              | Rule count, selector count + per-kind histogram, `@media` / `@keyframes` / custom-property counts, `@import` list, colour swatch grid |
 | Structured data  | Top-level kind, key/element count, max nesting depth, total node count                              |
+| CSV / TSV        | Format, delimiter, encoding, header detection, per-column type inference, record count, malformed-row counter |
 | XML / SVG        | Root element, namespaces, element counts                                                            |
 | Image            | Dimensions, megapixels, color mode, bit depth, ICC profile, HDR, EXIF, XMP                          |
 | Animation        | Frame count, total duration, average FPS, loop count                                                |

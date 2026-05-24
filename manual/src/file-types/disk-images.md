@@ -1,9 +1,10 @@
 # Disk images
 
-| Format | Extension | Spec |
-|--------|-----------|------|
-| ISO    | `.iso`    | [ISO 9660](https://en.wikipedia.org/wiki/ISO_9660) (+ Joliet, El Torito) |
-| DMG    | `.dmg`    | [Apple Disk Image — UDIF](https://en.wikipedia.org/wiki/Apple_Disk_Image) |
+| Format | Extension              | Spec |
+|--------|------------------------|------|
+| ISO    | `.iso`                 | [ISO 9660](https://en.wikipedia.org/wiki/ISO_9660) (+ Joliet, El Torito) |
+| DMG    | `.dmg`                 | [Apple Disk Image — UDIF](https://en.wikipedia.org/wiki/Apple_Disk_Image) |
+| Raw    | `.img`, `.bin`, `.dd`  | MBR partition table walk; no recognised filesystem header |
 
 Both parsers are hand-rolled — no extra crate. Hex view (`x`) still works on the raw image
 bytes.
@@ -37,3 +38,11 @@ and the documented trailer flag bits (flattened, internet-enabled). The XML part
 itself isn't parsed yet; it shows up as a presence + size row.
 
 DMG extract is intentionally unsupported — UDIF block decompression is a separate effort.
+
+## Raw
+
+Generic raw disk images (`.img` / `.bin` / `.dd`) that don't match a recognised filesystem
+header. The Info view parses the MBR partition table when one is present (partition type,
+boot flag, LBA offset, sector count) and otherwise falls back to a `raw image` label.
+Listing isn't supported — opening the inner filesystem would need a per-FS walker. Hex view
+(`x`) works on the raw bytes.

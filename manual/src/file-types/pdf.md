@@ -13,10 +13,11 @@ Cycled with Tab:
   only the visible page.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers.
-- **Embeds** — when the PDF carries `/EmbeddedFiles` attachments, a listing of those. `Enter` /
-  `e` extracts the selected attachment as a memory-backed source that re-enters peek (an
-  attached CSV opens in a CSV view, an image in the image viewer, …). Hidden when the PDF has
-  no attachments.
+- **Embeds** — listing of every extractable inner item. Covers `/EmbeddedFiles` attachments
+  (`attachments/<name>`) and per-page inline image XObjects (`pages/page{N}/image{M}.{ext}`).
+  `Enter` / `e` extracts the selected entry as a memory-backed source that re-enters peek (an
+  attached CSV opens in a CSV view, an inline image renders as ASCII art, …). Hidden when the
+  PDF has neither attachments nor inline images.
 - **Info** — PDF version, title, author, subject, keywords, creation / modification dates, page
   count, attachment count.
 

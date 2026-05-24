@@ -97,16 +97,6 @@ Every other Mode ignores it. Move the bool method-side:
 `ViewerState::has_return_target_for(mode_id)` and let HexMode call it,
 dropping the parameter from the trait. Minor surface-area reduction.
 
-### L5. `docs/features.md` missing whole file-type sections
-
-Not just a stale TOC — the body is also missing top-level sections for
-shipped types. Section list (grep `^### ` between *Supported File
-Types* and *Viewer Features*): Source Code, Structured Data, Image,
-Audio, Animated Images, Object Files, Java Classfiles, Binary /
-Archive. No section for PDF, EPUB, CSV, Document (DOCX/ODT/RTF), HTML,
-Markdown, CSS, SQL, Disk Image, Comic (CBZ). Either the doc's scope
-shrank without an explicit decision, or sections need adding.
-
 ### L6. `directory/mode.rs` opts out of HexMode at the dispatcher
 
 `viewer/mod.rs:348` wraps `HexMode::new` push in

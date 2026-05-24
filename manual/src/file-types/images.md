@@ -44,7 +44,6 @@ Cycle with `b` (or `--background <mode>`):
 | Background     | Description                                       |
 |----------------|---------------------------------------------------|
 | `auto`         | Pick black/white based on image content (default) |
-| `none`         | No compositing                                    |
 | `black`        | Solid black                                       |
 | `white`        | Solid white                                       |
 | `checkerboard` | 8×8 gray Photoshop-style pattern                  |

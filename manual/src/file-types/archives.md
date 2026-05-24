@@ -15,6 +15,7 @@ instantly.
 | Tar + lz4     | `.tar.lz4`, `.tlz4`            |      |
 | 7-Zip         | `.7z`                          | [7-Zip format](https://www.7-zip.org/7z.html) |
 | cpio          | `.cpio` (+ `.cpio.gz`)         | newc / ODC headers; old-binary not supported   |
+| ar / Debian   | `.ar`, `.deb`, `.a`            | Unix `ar(1)` archive (also Debian binary packages) |
 
 ## Navigation
 

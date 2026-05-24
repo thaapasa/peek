@@ -5,7 +5,6 @@
 | `--help`         | `-h`  | Show help (short form; `--help` prints the long form)         |
 | `--version`      | `-V`  | Show version info and exit                                    |
 | `--print`        | `-p`  | Force print mode (direct stdout)                              |
-| `--viewer`       | `-v`  | Force viewer mode                                             |
 | `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      |
 | `--theme`        | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)  |
@@ -13,7 +12,7 @@
 | `--language`     | `-L`  | Force syntax language                                         |
 | `--width`        | `-w`  | Image rendering width in characters                           |
 | `--image-mode`   | `-m`  | Image render mode (full / block / geo / ascii / contour)      |
-| `--background`   |       | Image transparency background (auto / none / black / white / checkerboard) |
+| `--background`   |       | Image transparency background (auto / black / white / checkerboard) |
 | `--margin`       |       | Image margin in transparent pixels                            |
 | `--edge-density` |       | Tune contour line count (image-mode contour)                  |
 | `--no-svg-anim` |       | Force static render for animated SVG                          |

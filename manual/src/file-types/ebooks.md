@@ -9,7 +9,7 @@
 Three views, cycled with Tab:
 
 - **Read** (default) — one chapter at a time via the shared HTML rendering pipeline (same
-  `html2text` driver as the standalone [HTML viewer](./html.md)). `n` / `N` step forward /
+  `html2text` driver as the standalone [HTML viewer](./html.md)). `n` / `p` step forward /
   back through the spine; the status line shows `ch X/Y`. Each rendered chapter is cached at
   the current width so stepping back is instant; a terminal resize re-renders only the visible
   chapter. `<img>` tags with empty / missing `alt` get a fallback `image: <basename>` label.

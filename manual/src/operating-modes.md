@@ -9,8 +9,7 @@ peek runs in one of three output modes:
 | Info-only | `--info`                         | Print metadata and exit                   |
 | List-only | `--list`                         | Print container TOC and exit              |
 
-`--viewer` / `-v` forces viewer mode regardless of TTY. Binary files default to the hex-dump
-viewer when interactive; piped binary streams a hex dump.
+Binary files default to the hex-dump viewer when interactive; piped binary streams a hex dump.
 
 ## Input
 

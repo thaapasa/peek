@@ -217,27 +217,29 @@ Pipe path: highlighted output is `\n`-terminated per line (escape sequences are 
 un-highlighted preserves the source's trailing-newline status (`LineSource.ends_with_newline()`)
 for byte-for-byte fidelity with `cat`.
 
-### Animation (`viewer/modes/animation.rs` + `viewer/image/animate.rs`)
+### Animation (`types/image/animation_mode.rs` + `types/image/pipeline/animate.rs`)
 
-`viewer/image/animate.rs` decodes GIF/WebP frames up front (`decode_anim_frames`) and exports
-`render_frame` for the mode. The composition decision — `AnimationMode` for animated images,
-`ImageRenderMode` for static — lives in `Registry::compose_modes`, so `main.rs` has one uniform
-interactive path across file types.
+`types/image/pipeline/animate.rs` decodes GIF/WebP frames up front (`decode_anim_frames`) and
+exports `render_frame` for the mode. The composition decision — `AnimationMode` for animated
+images, `ImageRenderMode` for static — lives in `types::image::compose::compose`, so `main.rs`
+has one uniform interactive path across file types.
 
 `AnimationMode` owns the frame list, `current` index, `playing` flag, `last_advance` instant, and an
 `ImageConfig`. It drives the unified event loop's timeout via `next_tick()` (remaining duration to
 next frame, or `None` when paused / on detour to Info / Help / Hex). When `event::poll` times out,
 `tick()` advances `current` and signals a redraw.
 
-### SVG animation (`viewer/modes/svg_animation.rs` + `viewer/image/svg_anim.rs`)
+### SVG animation (`types/svg/animation_mode.rs` + `types/image/pipeline/svg_anim/`)
 
-resvg/usvg do not evaluate CSS animations. To play an animated SVG, `viewer/image/svg_anim.rs`
-extracts the animation timeline from the SVG itself: `<style>` blocks are scanned for `@keyframes`
-rules, and elements with inline `style="...animation-name:..."` references are matched to those
-rules. The parser builds an `AnimatedSvg` value: a marked SVG string with `__PEEK_ANIM_<i>__`
-placeholders inserted at each animated element's opening tag, plus a merged frame timeline (one
-entry per visible transition with its hold delay). `render_frame(model, idx)` substitutes each
-placeholder with `transform="..."` to produce a complete frame-N SVG that resvg can rasterize.
+resvg/usvg do not evaluate CSS animations. To play an animated SVG, the parser in
+`types/image/pipeline/svg_anim/` (split into `mod.rs`, `scan.rs`, `spec.rs`, `keyframes.rs`,
+`timeline.rs`, `marker.rs`, `util.rs`) extracts the animation timeline from the SVG itself:
+`<style>` blocks are scanned for `@keyframes` rules, and elements with inline
+`style="...animation-name:..."` references are matched to those rules. The parser builds an
+`AnimatedSvg` value: a marked SVG string with `__PEEK_ANIM_<i>__` placeholders inserted at each
+animated element's opening tag, plus a merged frame timeline (one entry per visible transition
+with its hold delay). `render_frame(model, idx)` substitutes each placeholder with
+`transform="..."` to produce a complete frame-N SVG that resvg can rasterize.
 
 `SvgAnimationMode` mirrors `AnimationMode`'s controls (play/pause, frame nav, fit, scroll) but
 rasterizes lazily per frame via `render::prepare_svg_bytes`. A bounded `VecDeque<(CacheKey,
@@ -245,7 +247,7 @@ PreparedImage)>` of size 64 holds recently composited frames, keyed by `(frame_i
 margin, ascii, fit)`; full-loop replay after a steady state is free. Cache is cleared on
 mode/background/fit toggles since the prepared grid no longer matches.
 
-The composition decision lives in `Registry::compose_modes`: `FileType::Svg` first tries
+The composition decision lives in `types::svg::compose::compose`: SVG first tries
 `svg_anim::try_parse` and pushes `SvgAnimationMode` if a model is found, falling back to
 `ImageRenderMode` (static) otherwise. `--no-svg-anim` bypasses parsing.
 
@@ -253,7 +255,7 @@ Memory profile and first-loop latency analysis (plus optimization options that h
 implemented yet) live in [svg-anim-perf.md](svg-anim-perf.md). Phase 1 is the working baseline; the
 perf doc is the queue.
 
-### ImageConfig (`viewer/image/mod.rs`)
+### ImageConfig (`types/image/pipeline/mod.rs`)
 
 Bundles image rendering parameters (mode, width, background, margin, color mode) into one struct
 passed through the image pipeline.

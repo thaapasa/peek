@@ -9,10 +9,12 @@ src/
   cli.rs               — Args struct (clap derive)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/
-    mod.rs             — re-exports InputSource, ByteSource, LineSource
+    mod.rs             — re-exports InputSource, ByteSource, LineSource, ByteStream
     source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len} / TempFile{Arc<NamedTempFile>}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource / TempFileByteSource (holds the Arc so reads outlive the source). read_bytes() returns bytes::Bytes; Memory arm is a refcount clone
     lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
     detect.rs          — File-type detection orchestrator (magic-byte / extension / content-sniff priority + Detected / FileType / CompressionFormat); per-type format enums + detection helpers live alongside their types under `types/<x>/{format,detect}.rs` and are re-exported here
+    mime.rs            — MimeCategory + MimeInfo: RFC 6838 classification (Registered / Vendor / x-prefix / unknown) used by the Info screen MIME row
+    stream.rs          — ByteStream: io::Read / io::BufRead wrapper over any ByteSource so callers can use io::copy / read_until / lines (tar / cpio / etc. go through this seam)
     compression.rs     — decompress_bytes (5 codecs: gz/bz2/xz/zst/lz4) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   extract/
@@ -92,6 +94,7 @@ src/
       animation_stats.rs — GIF/WebP animation stats (frames, duration, loop)
       view.rs          — ImageView: shared image-grid scroll + cycleable config for every Mode that scrolls through a PreparedImage (ImageRenderMode + AnimationMode + SvgAnimationMode). Holds (config, scroll_x, scroll_y); exposes prepare_term (TermSize + style_mode sync), render_prepared (clamp pan + GridWindow + render), pipe_snapshot/restore (force-Contain wrapper for `--print`), scroll, handle_config_cycle (b/m/f keys + pan reset on fit change), status_segments
       anim_frame.rs    — AnimFrameState: shared frame-playback state (current / playing / last_advance) for animated image Modes (AnimationMode + SvgAnimationMode). play_pause / step / tick / next_tick / status_segment / extract_target
+      scroll.rs        — Shared scroll-action handler for image-grid modes (ImageRenderMode + AnimationMode + SvgAnimationMode): arrows / PgUp / PgDn / Home / End → (scroll_x, scroll_y) deltas with Bounds clamping
       mode.rs          — ImageRenderMode: static raster + rasterized SVG view; embeds ImageView, owns InputSource + single-slot CachedFrame
       animation_mode.rs — AnimationMode: GIF/WebP playback (next_tick / tick driven); embeds ImageView + AnimFrameState, owns decoded frame list (no per-frame cache — frames change every tick)
       pipeline/        — Rasterization → ASCII-art rendering core
@@ -299,6 +302,7 @@ manual/                — User-facing manual (mdbook). `mdbook serve manual` to
   book.toml            — mdbook config
   src/                 — Chapter sources (SUMMARY.md + per-topic .md files)
 .github/workflows/
+  ci.yml               — Build + test on push to main / PRs (cross-platform matrix); fails on warnings
   release.yml          — Manual-dispatch release workflow (5-target build matrix)
   manual.yml           — Build + deploy mdbook manual to GitHub Pages on manual/** changes
 install.sh             — POSIX installer for curl | sh on macOS/Linux

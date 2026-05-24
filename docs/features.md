@@ -58,11 +58,10 @@ Active when `--print` / `-p` is set or stdout isn't a TTY.
 
 ### Mode Selection ◐
 
-- `--viewer` / `-v` forces viewer.
 - `--print` / `-p` forces print.
-- **Default:** if output exceeds the console size, viewer; else print.
-- **Binary / unknown** files default to printing file info and exiting; `--viewer` forces the
-  interactive viewer.
+- **Default:** if stdout is a TTY, viewer; else print.
+- **Binary / unknown** files open in the hex-dump viewer when interactive; piped binary streams
+  a hex dump.
 - All data types should support both modes where it makes sense.
 
 TTY detection and `--print` / `-p` work. Binary files default to the hex-dump viewer (interactive in
@@ -135,7 +134,7 @@ The Info view shows the structured XML stats (root element, element counts).
 `.epub` files (a ZIP container with HTML chapters + OPF metadata) get a three-mode view:
 
 - **Read** (default) — one chapter at a time via the shared HTML rendering pipeline (same
-  `html2text` driver as the standalone HTML viewer). `n` / `N` step forward / back through the
+  `html2text` driver as the standalone HTML viewer). `n` / `p` step forward / back through the
   spine; the status line shows `ch X/Y`. Each rendered chapter is cached at the current width so
   stepping back is instant; a terminal resize re-renders only the visible chapter. `<img>` tags
   with empty / missing `alt` get a fallback `image: <basename>` label so chapter image
@@ -359,7 +358,7 @@ Re-renders on terminal resize.
 
 ##### SVG Animation ◐
 
-CSS `@keyframes` animation is supported (`viewer/image/svg_anim.rs`). The parser collects each
+CSS `@keyframes` animation is supported (`types/image/pipeline/svg_anim/`). The parser collects each
 `@keyframes` rule plus inline-style `animation-*` references on elements, builds a merged frame
 timeline (one frame per stop for `steps()` timing, ~30 fps interpolated for `linear`), and
 `SvgAnimationMode` rasterizes each frame on demand from a per-frame patched SVG. A bounded LRU (64
@@ -564,6 +563,7 @@ directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 | 7-Zip       | `.7z`                          | ✅      |
 | cpio        | `.cpio`                        | ✅      |
 | cpio + gzip | `.cpio.gz`                     | ✅      |
+| ar / Debian | `.ar`, `.deb`, `.a`            | ✅      |
 | RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
@@ -597,10 +597,11 @@ shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
 
 #### Disk Images ✅
 
-| Format | Extensions | Status                                                  |
-|--------|------------|---------------------------------------------------------|
-| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet)   |
-| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk yet)        |
+| Format | Extensions             | Status                                                  |
+|--------|------------------------|---------------------------------------------------------|
+| ISO    | `.iso`                 | ✅ PVD metadata + recursive directory listing (Joliet)   |
+| DMG    | `.dmg`                 | ✅ UDIF trailer-only (no partition map walk yet)        |
+| Raw    | `.img`, `.bin`, `.dd`  | ✅ MBR partition table walk in info (no listing)        |
 
 **ISO 9660** opens to a **TOC view** (the same tree-style listing archive containers use): one row
 per file/directory with size, mtime, and 8.3 / Joliet name; depth tracked by indented tree glyphs.
@@ -821,13 +822,15 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 | Key                   | Action       |
 |-----------------------|--------------|
-| `q` / `Esc`           | Quit         |
+| `q`                   | Quit         |
+| `Esc`                 | Pop the session stack (exit at depth 1, return to parent otherwise) |
 | `Up` / `k`            | Scroll up    |
 | `Down` / `j`          | Scroll down  |
 | `Page Up`             | Page up      |
 | `Page Down` / `Space` | Page down    |
 | `Home`                | Go to top    |
 | `End`                 | Go to bottom |
+| `Enter`               | Descend into selection (recursive peek) |
 | `e`                   | Extract selected entry / current frame |
 
 ### Views and Modes
@@ -866,15 +869,13 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `b`              | Cycle background (auto/black/white/checkerboard)    |
 | `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)     |
 | `Left` / `Right` | Pan horizontally (FitHeight)                        |
-| `+` / `=`        | Zoom in (planned)                                   |
-| `-`              | Zoom out (planned)                                  |
 
 ### Animated Image Views *(context: GIF, WebP)*
 
 | Key              | Action                                          |
 |------------------|-------------------------------------------------|
-| `p`              | Play / pause animation                          |
-| `n` / `N`        | Next / previous frame                           |
+| `Space`          | Play / pause animation                          |
+| `n` / `p`        | Next / previous frame                           |
 | `f`              | Cycle fit mode (Contain / FitWidth / FitHeight) |
 | `Left` / `Right` | Pan horizontally under `FitHeight`              |
 | `b`              | Cycle background                                |
@@ -956,8 +957,8 @@ Character compatibility is partial: `--image-mode ascii` falls back to a luminan
 terminals without block/quadrant glyphs, but the rest of the UI (status line, info screen) still
 uses Unicode box-drawing and dashes.
 
-For library-produced output (syntect), `viewer::ranges_to_escaped` replaces syntect's hardcoded
-24-bit `as_24_bit_terminal_escaped` with one routed through `StyleMode::fg_seq`, so
+For library-produced output (syntect), `viewer::ranges_to_escaped_trim_newline` replaces syntect's
+hardcoded 24-bit `as_24_bit_terminal_escaped` with one routed through `StyleMode::fg_seq`, so
 syntax-highlighted code is downgraded along with everything else.
 
 ## CLI Options
@@ -966,7 +967,6 @@ syntax-highlighted code is downgraded along with everything else.
 |------------------|-------|---------------------------------------------------------------|--------|
 | `--help`         | `-h`  | Show help screen and exit (short / long forms)                | ✅      |
 | `--version`      | `-V`  | Show version info and exit                                    | ✅      |
-| `--viewer`       | `-v`  | Force viewer mode                                             | ☐      |
 | `--print`        | `-p`  | Force print mode (direct stdout)                              | ✅      |
 | `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   | ✅      |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      | ✅      |
@@ -975,14 +975,20 @@ syntax-highlighted code is downgraded along with everything else.
 | `--language`     | `-L`  | Force syntax language                                         | ✅      |
 | `--width`        | `-w`  | Image rendering width in characters                           | ✅      |
 | `--image-mode`   | `-m`  | Image rendering mode                                          | ✅      |
+| `--edge-density` |       | Edge density target for `--image-mode contour`                | ✅      |
 | `--info`         | `-i`  | Show file info instead of contents                            | ✅      |
-| `--list`         | `-l`  | Print container TOC to stdout (archives / disks / PDF embeds) | ✅      |
+| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                            | ✅      |
+| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)          | ✅      |
+| `--no-svg-anim`  |       | Force static render for animated SVG                          | ✅      |
 | `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           | ✅      |
-| `--wrap`         |       | Soft-wrap long lines (`--no-wrap` to force off)               | ☐      |
-| `--sizing`       |       | Image sizing mode                                             | ☐      |
+| `--extract`      | `-x`  | Extract a single inner item from a container by key           | ✅      |
+| `--output`       | `-o`  | Output path for `--extract` (or `-` for stdout)               | ✅      |
+| `--extract-size` |       | Output pixel size for animation / SVG frame extract           | ✅      |
+| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  | ✅      |
+| `--update`       |       | Check for newer release and re-run `install.sh`               | ✅      |
 
 `--plain` is the single "sterile output" knob: it implies `--color plain` and additionally
 disables syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered

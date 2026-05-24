@@ -1,7 +1,7 @@
 # SVG animation: performance findings + optimization options
 
-Phase-1 status notes for `viewer/image/svg_anim.rs` +
-`viewer/modes/svg_animation.rs`. Numbers measured against
+Phase-1 status notes for `types/image/pipeline/svg_anim/` +
+`types/svg/animation_mode.rs`. Numbers measured against
 `~/Downloads/demo.svg` (termsvg recording, 1550×928.4 viewport, 55
 keyframe stops over 14.586s, `steps(1, end)` timing) on a 131×40
 terminal. Release build.
@@ -19,7 +19,7 @@ terminal. Release build.
 `fontdb::load_system_fonts()` is unavoidable — without it `<text>`
 glyphs drop to nothing. Cost is one-time at first SVG parse and shared
 across all rasterizations via `OnceLock<Arc<fontdb::Database>>` in
-`viewer/image/svg.rs`.
+`types/image/pipeline/svg.rs`.
 
 ### Cache size formula
 

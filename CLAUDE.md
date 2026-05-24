@@ -32,7 +32,8 @@ src/
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/               — InputSource (File / Memory / FileRange / TempFile) + ByteSource +
                          LineSource (streaming, anchor-indexed); detect (magic-byte / extension /
-                         sniff); compression (gz/bz2/xz/zst/lz4); stdin reopen
+                         sniff); mime (RFC 6838 classification); stream (ByteSource → io::Read /
+                         io::BufRead); compression (gz/bz2/xz/zst/lz4); stdin reopen
   extract/             — FileType → per-type extractor dispatch; Extracted / Options / Error;
                          path sanitiser; stdout-stream or file write
   output/              — PrintOutput (write-once stdout for --print / pipes / --info);
@@ -64,7 +65,8 @@ src/
 themes/                — Embedded .tmTheme files (idea-dark default + vscode variants)
 docs/                  — Builder / agent reference (see architecture-map.md for the index)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
-.github/workflows/     — release.yml (5-target build matrix) + manual.yml (mdbook → Pages)
+.github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +
+                         manual.yml (mdbook → Pages)
 install.sh             — POSIX installer for curl | sh on macOS/Linux
 ```
 
