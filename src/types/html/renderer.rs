@@ -9,7 +9,7 @@
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
 
 use super::render;
@@ -37,6 +37,7 @@ impl TextRenderer for HtmlRenderer {
         &mut self,
         width: usize,
         _theme: &PeekTheme,
+        _theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let bytes = self.source.read_bytes()?;

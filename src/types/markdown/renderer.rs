@@ -3,8 +3,9 @@
 //!
 //! Whole-document render: pulldown-cmark has no streaming public API
 //! that would help here, and the typical markdown file is well under
-//! 1 MB. The generic `RenderedTextMode` caches per `(width, style_mode)`,
-//! so resize and color-cycle are the only re-render triggers.
+//! 1 MB. The generic `RenderedTextMode` caches per
+//! `(width, style_mode, theme_name)`, so resize, color cycle, and
+//! theme cycle are the re-render triggers.
 
 use std::rc::Rc;
 
@@ -19,19 +20,13 @@ use super::render;
 pub(crate) struct MarkdownRenderer {
     source: InputSource,
     theme_manager: Rc<ThemeManager>,
-    theme_name: PeekThemeName,
 }
 
 impl MarkdownRenderer {
-    pub(crate) fn new(
-        source: InputSource,
-        theme_manager: Rc<ThemeManager>,
-        theme_name: PeekThemeName,
-    ) -> Self {
+    pub(crate) fn new(source: InputSource, theme_manager: Rc<ThemeManager>) -> Self {
         Self {
             source,
             theme_manager,
-            theme_name,
         }
     }
 }
@@ -49,6 +44,7 @@ impl TextRenderer for MarkdownRenderer {
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let text = self.source.read_text()?;
@@ -58,7 +54,7 @@ impl TextRenderer for MarkdownRenderer {
             theme,
             style_mode,
             &self.theme_manager,
-            self.theme_name,
+            theme_name,
         )
     }
 }

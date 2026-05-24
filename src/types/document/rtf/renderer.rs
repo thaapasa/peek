@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
 
 use super::parse::Parsed;
@@ -36,6 +36,7 @@ impl TextRenderer for RtfRenderer {
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        _theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         render::render(&self.parsed, width, theme, style_mode)

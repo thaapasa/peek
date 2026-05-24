@@ -54,7 +54,7 @@ src/
     markdown/
       mod.rs           — Module wiring + MarkdownRenderer re-export
       compose.rs       — Compose: RenderedTextMode (default, --raw inverts) + ContentMode source view
-      renderer.rs      — MarkdownRenderer: TextRenderer impl that reads source and dispatches to render::render
+      renderer.rs      — MarkdownRenderer: TextRenderer impl that reads source and dispatches to render::render; theme_name comes via the render() arg so cached lines invalidate on theme cycle
       info.rs          — MarkdownInfo { text: TextStats, stats: MarkdownStats } + MarkdownStats + FrontmatterKind
       info_gather.rs   — Single-pass MD stats: headings by level, fenced blocks + langs, links/images/tables/lists, task progress, frontmatter, prose word count, reading time
       info_render.rs   — Render Markdown info section (Content + Markdown blocks)

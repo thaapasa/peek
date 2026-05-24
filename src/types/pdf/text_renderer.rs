@@ -9,7 +9,7 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
 
 use super::package::Doc;
@@ -44,6 +44,7 @@ impl TextRenderer for PdfTextRenderer {
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        _theme_name: PeekThemeName,
         _style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         self.warnings.clear();

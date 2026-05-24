@@ -8,7 +8,7 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::types::document::ast::Doc;
 use crate::types::document::render;
 use crate::viewer::modes::{ModeId, TextRenderer};
@@ -36,6 +36,7 @@ impl TextRenderer for DocRenderer {
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        _theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         render::render(&self.doc, width, theme, style_mode)

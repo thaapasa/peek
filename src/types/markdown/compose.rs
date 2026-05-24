@@ -29,7 +29,6 @@ pub fn compose(
         Box::new(RenderedTextMode::new(MarkdownRenderer::new(
             source.clone(),
             Rc::clone(&ctx.theme_manager),
-            ctx.theme_name,
         )))
     });
     let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args)?;

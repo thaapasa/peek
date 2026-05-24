@@ -15,7 +15,7 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{
     Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
 };
@@ -37,11 +37,15 @@ pub(crate) trait TextRenderer {
     /// PDF text uses `ModeId::Content`.
     fn mode_id(&self) -> ModeId;
 
-    /// Render the whole document, wrapped at `width`.
+    /// Render the whole document, wrapped at `width`. `theme_name` is
+    /// supplied fresh on every call so renderers that reach into the
+    /// syntect theme registry (Markdown fenced code) pick up theme
+    /// cycles instead of capturing the name at construction time.
     fn render(
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>>;
 
@@ -51,11 +55,16 @@ pub(crate) trait TextRenderer {
     }
 }
 
-/// The render is invalidated whenever either input to the wrap changes.
+/// The render is invalidated whenever any input to the wrap changes.
+/// `theme_name` is on the key so a theme cycle drops the cache and
+/// re-renders with the new palette — without it, cached lines would
+/// stay painted in the previous theme until a resize or color cycle
+/// happened to change another key field.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct CacheKey {
     width: usize,
     style_mode: StyleMode,
+    theme_name: PeekThemeName,
 }
 
 struct Cached {
@@ -85,12 +94,17 @@ impl<R: TextRenderer> RenderedTextMode<R> {
         &mut self,
         width: usize,
         theme: &PeekTheme,
+        theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<&[String]> {
-        let key = CacheKey { width, style_mode };
+        let key = CacheKey {
+            width,
+            style_mode,
+            theme_name,
+        };
         let needs = self.cache.as_ref().map(|c| c.key != key).unwrap_or(true);
         if needs {
-            let lines = self.renderer.render(width, theme, style_mode)?;
+            let lines = self.renderer.render(width, theme, theme_name, style_mode)?;
             self.cache = Some(Cached { key, lines });
         }
         Ok(&self.cache.as_ref().expect("cache populated").lines)
@@ -112,7 +126,12 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
 
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
         let lines =
-            self.ensure_rendered(ctx.term_cols, ctx.peek_theme, ctx.peek_theme.style_mode)?;
+            self.ensure_rendered(
+                ctx.term_cols,
+                ctx.peek_theme,
+                ctx.theme_name,
+                ctx.peek_theme.style_mode,
+            )?;
         let total = lines.len();
         let mut win = slice_window(lines, scroll, rows);
         search::overlay_window(&mut win, scroll, self.search.as_ref(), ctx.peek_theme);
@@ -125,7 +144,12 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let lines =
-            self.ensure_rendered(ctx.term_cols, ctx.peek_theme, ctx.peek_theme.style_mode)?;
+            self.ensure_rendered(
+                ctx.term_cols,
+                ctx.peek_theme,
+                ctx.theme_name,
+                ctx.peek_theme.style_mode,
+            )?;
         for line in lines {
             out.write_line(line)?;
         }
