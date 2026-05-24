@@ -89,6 +89,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Csv(stats) => {
             crate::types::csv::info_render::render_section(lines, stats, theme);
         }
+        FileExtras::Cert(info) => {
+            crate::types::cert::info_render::render_section(lines, info, theme);
+        }
         FileExtras::Directory(stats) => {
             crate::types::directory::info::render_section(lines, stats, theme);
         }

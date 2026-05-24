@@ -335,29 +335,20 @@ File info: SQLite version, page size/count, encoding, user_version, application_
 
 Crate: `rusqlite` (opens read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`).
 
-### Certificates and Keys ☐
+### Certificates and Keys — DER / PKCS#12 / JWK ☐
 
-| Format         | Extensions                          |
-|----------------|-------------------------------------|
-| X.509 PEM      | `.pem`, `.crt`, `.cer`              |
-| X.509 DER      | `.der`                              |
-| CSR            | `.csr`                              |
-| PKCS#12        | `.p12`, `.pfx`                      |
-| SSH public key | `.pub` (and lines starting `ssh-…`) |
+PEM ships (see [features.md](features.md#certificates-and-keys-) — X.509 cert / CSR / CRL /
+private + public keys / SSH pubkey, fingerprints, SANs, key usage, validity, days remaining).
+Still open:
 
-Decode and pretty-print:
+| Format        | Extensions       | Notes                                                                                                                                                                                                  |
+|---------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| X.509 DER     | `.der`           | Today `.crt` / `.cer` carrying raw DER fall through to the hex viewer. Wire a magic-byte / leading `0x30 0x82` sniff and decode through the same `x509-parser` path the PEM viewer uses                |
+| PKCS#12 / PFX | `.p12`, `.pfx`   | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
+| JWK / JWKS    | `.jwk`, `.jwks`  | JSON form — the structured viewer already pretty-prints these. A cert sidecar would add key thumbprint (RFC 7638) and a normalised key-type / bits / curve row                                          |
 
-- **Certificates** — subject, issuer, serial, validity (NotBefore/NotAfter, days remaining), SAN
-  list, key type/size, signature algorithm, fingerprints (SHA-1, SHA-256), key usage, extended key
-  usage, basic constraints.
-- **CSR** — subject, requested SAN, key type, signature algorithm.
-- **PKCS#12** — bag types, embedded cert/key summaries.
-- **SSH public keys** — type, bits, fingerprint, comment.
-
-Raw view (`r`) shows the PEM/text source. Encrypted PKCS#12 prompts skipped — show structural info
-that's readable without the password.
-
-Crates: `x509-parser`, `pkcs8`, `ssh-key`.
+Crates: `der` / `cms` (DER + PKCS#7), `pkcs12` (encrypted bags). JWK can ride the existing
+`serde_json` dependency.
 
 ### Object Files — deeper inspection ☐
 

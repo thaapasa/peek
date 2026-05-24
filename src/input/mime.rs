@@ -204,6 +204,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         },
         FileType::Csv(crate::input::detect::CsvFormat::Csv) => "text/csv",
         FileType::Csv(crate::input::detect::CsvFormat::Tsv) => "text/tab-separated-values",
+        FileType::Cert(_) => "application/x-pem-file",
         // For Image, Archive, Compressed, ObjectFile, and Binary, the
         // magic-byte MIME is more specific than any generic registered
         // fallback would be.
@@ -275,6 +276,9 @@ pub fn extension_mismatch(
 fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
     match file_type {
         FileType::Markdown => &["md", "markdown", "mdown", "mkd", "mkdn", "mdwn"],
+        FileType::Cert(_) => &[
+            "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub",
+        ],
         FileType::Comic(ComicFormat::Cbz) => &["cbz"],
         FileType::Ebook(EbookFormat::Epub) => &["epub"],
         FileType::Document(DocumentFormat::Docx) => &["docx"],

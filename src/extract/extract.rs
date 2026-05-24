@@ -115,6 +115,7 @@ pub fn extract(
         | FileType::Markdown
         | FileType::Compressed(_)
         | FileType::Csv(_)
+        | FileType::Cert(_)
         | FileType::ObjectFile
         | FileType::Classfile
         | FileType::Binary => Err(ExtractError::Unsupported(

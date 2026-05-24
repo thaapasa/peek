@@ -29,6 +29,7 @@
   - [Directories](./file-types/directories.md)
   - [Object files](./file-types/object-files.md)
   - [Java classfiles](./file-types/classfiles.md)
+  - [Certificates and keys](./file-types/certificates.md)
   - [Binary](./file-types/binary.md)
 
 # Viewer

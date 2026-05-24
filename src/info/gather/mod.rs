@@ -20,7 +20,8 @@ use anyhow::Result;
 use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
-    ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
+    CertFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
+    EbookFormat, FileType,
 };
 use crate::input::mime;
 
@@ -295,6 +296,7 @@ fn gather_extras(
         }
         FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
         FileType::Csv(fmt) => csv_gather(source, *fmt),
+        FileType::Cert(fmt) => cert_gather(source, *fmt, magic_mime),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
         FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
         FileType::Directory => match source {
@@ -312,4 +314,17 @@ fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
         Ok(data) => FileExtras::Csv(crate::types::csv::info_gather::gather(&data, fmt)),
         Err(_) => crate::types::binary::info::gather_extras(None),
     }
+}
+
+/// Parse the source text as a PEM container (or SSH public-key file).
+/// Falls back to plain text stats / binary if it isn't valid UTF-8 —
+/// that handles a `.pem` extension misapplied to a DER blob.
+fn cert_gather(source: &InputSource, _fmt: CertFormat, magic_mime: Option<&str>) -> FileExtras {
+    let Some(text_stats) = gather_text_stats(source) else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    let Ok(text) = source.read_text() else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    FileExtras::Cert(crate::types::cert::info_gather::gather(&text, text_stats))
 }

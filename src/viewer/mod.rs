@@ -319,6 +319,9 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
+            FileType::Cert(_) => {
+                crate::types::cert::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
             FileType::Directory => {
                 crate::types::directory::compose::compose(
                     source, detected, args, &ctx, &mut modes,

@@ -18,6 +18,7 @@ Status legend: ✅ implemented · ◐ partial
   - [Animated Images (GIF, WebP)](#animated-images-gif-webp-)
   - [Object Files](#object-files-)
   - [Java Classfiles](#java-classfiles-)
+  - [Certificates and Keys](#certificates-and-keys-)
   - [Binary and Archive Files](#binary-and-archive-files-)
 - [Viewer Features](#viewer-features)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -528,6 +529,40 @@ Two deliberate departures from a naive `javap` port:
 
 No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
 is not implemented; the Methods view shows signatures only.
+
+### Certificates and Keys ◐
+
+PEM-encoded cryptographic material gets a per-entry Info section paired with the raw PEM source
+view. Detection runs both ways: extension routing covers `.pem` / `.csr` / `.crl` / `.key` /
+`.p7b` / `.p7c` / `.pub`; content sniff catches anything starting with `-----BEGIN ` or an
+OpenSSH algorithm prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`, including the FIDO/U2F
+`sk-*` variants). `.crt` / `.cer` deliberately fall through to content sniff because they
+routinely carry raw DER too — DER files end up in the hex viewer, where bytes are more useful
+than mojibake.
+
+Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports), and
+each renders as its own block under the **PEM** info section:
+
+| Entry             | Surface fields                                                                                                                                                                                                                            |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| X.509 certificate | label, version, subject, issuer, serial (hex), NotBefore / NotAfter (UTC ISO 8601), days remaining (warning-coloured ≤ 30 days; negative for expired), public key algorithm + bits, signature algorithm, SANs (DNS / IP / email / URI), CA flag, self-signed flag, key usage, extended key usage, SHA-1 fingerprint, SHA-256 fingerprint |
+| CSR (PKCS#10)     | label, subject, requested SANs (DNS / IP / email / URI), public key algorithm + bits, signature algorithm                                                                                                                                  |
+| CRL               | label, issuer, This Update / Next Update, revoked entry count, signature algorithm                                                                                                                                                         |
+| Private key       | label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size (best-effort from PKCS#1 / SEC1 / PKCS#8). Encrypted / opaque keys (`ENCRYPTED PRIVATE KEY`, `OPENSSH PRIVATE KEY`) show structural info only — no password prompt    |
+| Public key        | label, key type, bit size (parsed from SPKI envelope)                                                                                                                                                                                      |
+| SSH public key    | algorithm, bits, comment, SHA-256 fingerprint (matches `ssh-keygen -l -E sha256` output)                                                                                                                                                   |
+
+Decode failures don't suppress the rest of the section — a malformed block lands in a per-entry
+**Parse error** row so a single bad PEM in a chain doesn't hide the others. Unrecognised PEM
+labels surface as an `Unknown` entry that still records the label + DER body size.
+
+Crates: `pem` (block parsing), `x509-parser` (cert / CSR / CRL), `ssh-key` (OpenSSH public-key
+text), `sha1` + `sha2` (fingerprints). Private-key bit-size inference uses a hand-rolled ASN.1
+TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes — small enough to inline without pulling
+in `pkcs8` / `sec1` / `pkcs1` separately.
+
+Not yet wired: DER-encoded `.crt` / `.cer` / `.der`, PKCS#12 / PFX, encrypted PKCS#8 password
+prompt, JWK. Tracked in [planned.md](planned.md).
 
 ### Binary and Archive Files ◐
 

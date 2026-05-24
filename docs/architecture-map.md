@@ -73,6 +73,14 @@ src/
       info.rs          — CssInfo { text: TextStats, stats: CssStats } + CssStats + SelectorKindCounts / CssImport / ColorSwatch
       info_gather.rs   — cssparser rule/declaration-trait scanner: CssScanner drives StyleSheetParser + RuleBodyParser → rule/selector/at-rule counts, @import URLs, deduped colour palette. Colours scanned only inside declaration values (cssparser-color) so selectors / strings / comments never false-match; CSS nesting counted
       info_render.rs   — Render CSS info section (Content + CSS blocks + Colors swatch grid)
+    cert/
+      mod.rs           — Module wiring
+      format.rs        — CertFormat enum (Pem only; DER / PKCS#12 planned)
+      detect.rs        — format_from_ext (`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub`) + sniff_pem (`-----BEGIN ` header / `ssh-rsa…` etc. content sniff). `.crt` / `.cer` left to content sniff because they routinely carry DER too
+      compose.rs       — compose(): paired Source ContentMode for PEM text (no syntax token); Info aux mode renders the cert sidecar
+      info.rs          — CertInfo { text: TextStats, entries: Vec<CertEntry>, parse_errors: Vec<String> } + CertEntry variants (Certificate / CSR / CRL / PrivateKey / PublicKey / SshPublicKey / Unknown — heavy variants boxed) + per-entry shapes + KeyType (Rsa / Ec(curve) / Ed25519 / Dsa / Other)
+      info_gather.rs   — pem::parse_many → per-block dispatch by PEM label. X.509 cert / CSR / CRL decoded via x509-parser; SSH public-key lines (outside any PEM fence) decoded via ssh-key. Private/public keys: hand-rolled ASN.1 TLV walker reads PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes to recover key type + bit size without pulling in a fourth crypto crate. SHA-1 + SHA-256 fingerprints over the cert DER (sha1 / sha2)
+      info_render.rs   — Render PEM info section (Content + per-entry blocks: Subject / Issuer / Serial / NotBefore / NotAfter / Days Left / Public Key / Signature / SANs / Key Usage / fingerprints). Days-Left ≤ 30 painted as warning; expired painted as warning with negative day count
     structured/
       mod.rs           — Module wiring
       format.rs        — StructuredFormat enum (JSON/JSONC/JSON5/JSONL/YAML/TOML/XML)

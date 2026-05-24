@@ -18,6 +18,7 @@ pub use time::format_archive_mtime_zoned;
 pub use crate::types::archive::info::ArchiveStats;
 pub use crate::types::audio::AudioStats;
 pub use crate::types::binary::info::BinaryInfo;
+pub use crate::types::cert::info::CertInfo;
 pub use crate::types::classfile::info::ClassfileInfo;
 pub use crate::types::comic::ComicStats;
 pub use crate::types::css::info::CssInfo;
@@ -96,6 +97,7 @@ pub enum FileExtras {
     Pdf(PdfStats),
     Audio(AudioStats),
     Csv(CsvStats),
+    Cert(CertInfo),
 }
 
 #[cfg(unix)]

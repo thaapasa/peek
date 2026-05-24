@@ -12,6 +12,7 @@ use crate::input::mime;
 // path that's been stable across the codebase.
 pub use crate::types::archive::format::ArchiveFormat;
 pub use crate::types::audio::format::AudioFormat;
+pub use crate::types::cert::format::CertFormat;
 pub use crate::types::comic::format::ComicFormat;
 pub use crate::types::csv::format::CsvFormat;
 pub use crate::types::disk_image::format::DiskImageFormat;
@@ -21,6 +22,7 @@ pub use crate::types::structured::format::StructuredFormat;
 
 use crate::types::archive::detect as archive_detect;
 use crate::types::audio::detect as audio_detect;
+use crate::types::cert::detect as cert_detect;
 use crate::types::comic::detect as comic_detect;
 use crate::types::csv::detect as csv_detect;
 use crate::types::disk_image::detect as disk_image_detect;
@@ -97,6 +99,11 @@ pub enum FileType {
     /// Tabular data (`.csv` / `.tsv`). Drives an aligned table view
     /// over a streaming record reader, paired with a raw Source view.
     Csv(CsvFormat),
+    /// PEM-encoded certificate / key file (X.509 cert, CSR, CRL,
+    /// RSA / EC / Ed25519 private or public key, OpenSSH public
+    /// key). Source view shows the PEM text; Info decodes per-block
+    /// fields (subject, validity, fingerprints, key usage, …).
+    Cert(CertFormat),
     /// Binary / unknown
     Binary,
 }
@@ -570,6 +577,9 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
             "application/yaml",
         ));
     }
+    if cert_detect::sniff_pem(text) {
+        return Some((FileType::Cert(CertFormat::Pem), "application/x-pem-file"));
+    }
     None
 }
 
@@ -654,6 +664,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = csv_detect::format_from_ext(&ext) {
         return Some(FileType::Csv(fmt));
+    }
+    if let Some(fmt) = cert_detect::format_from_ext(&ext) {
+        return Some(FileType::Cert(fmt));
     }
     if let Some(fmt) = structured_detect::format_from_ext(&ext) {
         return Some(FileType::Structured(fmt));
