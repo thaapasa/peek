@@ -8,9 +8,9 @@
 //! the bullet / number; continuation lines fall back to whitespace of
 //! matching width so wrapped text and nested blocks line up.
 
-use pulldown_cmark::{Event, HeadingLevel, Tag, TagEnd};
+use pulldown_cmark::{Event, HeadingLevel, LinkType, Tag, TagEnd};
 
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{Attr, PeekTheme, StyleMode};
 
 use super::wrap::{display_width, wrap_with_prefix};
 
@@ -22,6 +22,10 @@ pub(super) struct Walker<'a> {
     #[allow(dead_code)]
     style_mode: StyleMode,
     leaf: Option<Leaf>,
+    /// Inline-span stack: each entry is the URL destination of an open
+    /// link or image. End(Link/Image) pops the entry and appends a
+    /// ` (url)` suffix in muted style when the URL is informative.
+    inline_targets: Vec<InlineTarget>,
     /// `true` when the current leaf was opened implicitly (a tight
     /// list item's bare Text triggered it), `false` for an explicit
     /// Paragraph / Heading event. Used to decide whether a nested
@@ -41,6 +45,14 @@ pub(super) struct Walker<'a> {
 enum Leaf {
     Paragraph,
     Heading(HeadingLevel),
+}
+
+/// Active link / image — the URL string is held so we can append it
+/// after the inline text closes. Autolinks (`<http://x>`) and
+/// reference-style links share the same shape.
+enum InlineTarget {
+    Link { url: String },
+    Image { url: String },
 }
 
 /// An open container — list, list item, or blockquote. Stacked so
@@ -69,6 +81,7 @@ impl<'a> Walker<'a> {
             theme,
             style_mode,
             leaf: None,
+            inline_targets: Vec::new(),
             leaf_implicit: false,
             containers: Vec::new(),
             suppress_next_blank: false,
@@ -113,6 +126,25 @@ impl<'a> Walker<'a> {
 
             Event::Rule => self.emit_rule(),
 
+            Event::Start(Tag::Emphasis) => self.push_inline_attr(Attr::Italic),
+            Event::End(TagEnd::Emphasis) => self.pop_inline_attr(Attr::Italic),
+            Event::Start(Tag::Strong) => self.push_inline_attr(Attr::Bold),
+            Event::End(TagEnd::Strong) => self.pop_inline_attr(Attr::Bold),
+            Event::Start(Tag::Strikethrough) => self.push_inline_attr(Attr::Strikeout),
+            Event::End(TagEnd::Strikethrough) => self.pop_inline_attr(Attr::Strikeout),
+
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                ..
+            }) => self.start_link(link_type, dest_url.into_string()),
+            Event::End(TagEnd::Link) => self.end_link(),
+
+            Event::Start(Tag::Image { dest_url, .. }) => {
+                self.start_image(dest_url.into_string());
+            }
+            Event::End(TagEnd::Image) => self.end_image(),
+
             Event::Text(text) => {
                 self.ensure_leaf_for_inline();
                 if self.leaf.is_some() {
@@ -122,7 +154,9 @@ impl<'a> Walker<'a> {
             Event::Code(code) => {
                 self.ensure_leaf_for_inline();
                 if self.leaf.is_some() {
+                    self.pending.push_str(self.style_mode.attr_open(Attr::Dim));
                     self.pending.push_str(&code);
+                    self.pending.push_str(self.style_mode.attr_close(Attr::Dim));
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
@@ -212,6 +246,76 @@ impl<'a> Walker<'a> {
             self.containers.pop();
         }
         self.suppress_next_blank = true;
+    }
+
+    fn push_inline_attr(&mut self, attr: Attr) {
+        self.ensure_leaf_for_inline();
+        if self.leaf.is_some() {
+            self.pending.push_str(self.style_mode.attr_open(attr));
+        }
+    }
+
+    fn pop_inline_attr(&mut self, attr: Attr) {
+        if self.leaf.is_some() {
+            self.pending.push_str(self.style_mode.attr_close(attr));
+        }
+    }
+
+    fn start_link(&mut self, link_type: LinkType, url: String) {
+        self.ensure_leaf_for_inline();
+        if self.leaf.is_none() {
+            return;
+        }
+        // Autolinks (`<http://x>`) print the URL twice if we underline
+        // the text *and* append it after — collapse to underline only.
+        let suppress_suffix =
+            matches!(link_type, LinkType::Autolink | LinkType::Email) || url.is_empty();
+        let url = if suppress_suffix { String::new() } else { url };
+        self.pending
+            .push_str(self.style_mode.attr_open(Attr::Underline));
+        self.inline_targets.push(InlineTarget::Link { url });
+    }
+
+    fn end_link(&mut self) {
+        if self.leaf.is_some() {
+            self.pending
+                .push_str(self.style_mode.attr_close(Attr::Underline));
+        }
+        if let Some(InlineTarget::Link { url }) = self.inline_targets.pop()
+            && !url.is_empty()
+            && self.leaf.is_some()
+        {
+            self.append_target_suffix(&url);
+        }
+    }
+
+    fn start_image(&mut self, url: String) {
+        self.ensure_leaf_for_inline();
+        if self.leaf.is_none() {
+            return;
+        }
+        // The alt-text events flow inside Start/End image as Text.
+        // Mark the alt with `[image: ` … `]` so it's recognisable in a
+        // terminal-only render.
+        self.pending.push_str(&self.theme.paint_muted("[image: "));
+        self.inline_targets.push(InlineTarget::Image { url });
+    }
+
+    fn end_image(&mut self) {
+        if self.leaf.is_some() {
+            self.pending.push_str(&self.theme.paint_muted("]"));
+        }
+        if let Some(InlineTarget::Image { url }) = self.inline_targets.pop()
+            && !url.is_empty()
+            && self.leaf.is_some()
+        {
+            self.append_target_suffix(&url);
+        }
+    }
+
+    fn append_target_suffix(&mut self, url: &str) {
+        let suffix = format!(" ({url})");
+        self.pending.push_str(&self.theme.paint_muted(&suffix));
     }
 
     /// Flush an open leaf — emits its accumulated body so a new

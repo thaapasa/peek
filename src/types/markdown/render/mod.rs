@@ -116,4 +116,49 @@ mod tests {
             "expected nested item indent, got {inner:?}"
         );
     }
+
+    fn render_styled(md: &str) -> String {
+        let tm = ThemeManager::new(PeekThemeName::default(), StyleMode::TrueColor);
+        let theme = tm.peek_theme().clone();
+        render(md, 200, &theme, StyleMode::TrueColor)
+            .unwrap()
+            .join("\n")
+    }
+
+    #[test]
+    fn link_url_appended_in_dim() {
+        let out = render_styled("[label](https://example.com)\n");
+        assert!(out.contains("label"));
+        assert!(
+            out.contains("(https://example.com)"),
+            "expected URL suffix, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn autolink_collapses_to_underlined_url_only() {
+        let out = render_styled("<https://example.com>\n");
+        // Underline open should appear; suffix should NOT duplicate the URL.
+        let count = out.matches("https://example.com").count();
+        assert_eq!(
+            count, 1,
+            "expected URL exactly once for autolink, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn image_marked_with_alt_and_url() {
+        let out = render_styled("![alt text](pic.png)\n");
+        assert!(out.contains("[image:"));
+        assert!(out.contains("alt text"));
+        assert!(out.contains("(pic.png)"));
+    }
+
+    #[test]
+    fn emphasis_and_strong_emit_sgr() {
+        let out = render_styled("Plain *em* **st** done.\n");
+        // Italic = SGR 3; Bold = SGR 1.
+        assert!(out.contains("\x1b[3m"), "expected italic open in {out:?}");
+        assert!(out.contains("\x1b[1m"), "expected bold open in {out:?}");
+    }
 }
