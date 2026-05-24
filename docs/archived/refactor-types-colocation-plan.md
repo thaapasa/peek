@@ -1,8 +1,10 @@
-# Types colocation refactor (landed)
+# Types colocation refactor
 
-**Status:** executed across four PR-sized commits on `refactor/types-colocation`.
-The four steps below (Stats colocation → Listing move → Format + detection move →
-Compose dispatch move) are all in `main`.
+> **Status: Completed 2026-05-24.** Archived for reference. The four steps
+> (Stats colocation → Listing move → Format + detection move → Compose dispatch move)
+> landed across four PR-sized commits on `refactor/types-colocation` and are all in
+> `main`. For the live "how to add a new file type" reference, see
+> [architecture.md → Adding a new file type](../architecture.md#adding-a-new-file-type).
 
 Plan for tightening the three-layer split (input / display / type-support) so that
 adding a new file type is a localized change: code goes into `types/xxx/`, with a

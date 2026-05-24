@@ -414,6 +414,26 @@ For large files: viewer mode defaults to the file info screen instead of loading
 Display a size warning. Keyboard shortcut to opt in to loading. File info (size, type) obtainable
 without reading the whole file.
 
+## Memory / Streaming ☐
+
+North star #2 from CLAUDE.md: *stream, don't load*. Sites where view-mode caches grow
+unboundedly with scroll, or whole-file slurps lack a cap. Audit snapshot (2026-05-17) in
+[archived/memory-audit-2026-05.md](archived/memory-audit-2026-05.md) — file paths in that
+snapshot have drifted; treat its categorization as the source-of-truth shape, the specific
+file:line citations as starting points to re-find.
+
+| Priority | Site                                 | Fix                                                                                                                                        |
+|----------|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
+| High     | CSV `records` Vec                    | Sliding window / ring around viewport; drop records far from current scroll. Alternative: hard ceiling + "showing first N records" notice. |
+| High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".                                           |
+| Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                                                                |
+| Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                                                     |
+| Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                                                           |
+| Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path).                                   |
+
+The tar/cpio re-buffer on `TempFile` sources is already tracked under
+[Archive Files → Extract enhancements](#extract-enhancements).
+
 ## Future / Optional Features
 
 ### Block Collapsing / Folding ❓
@@ -437,8 +457,8 @@ point — pretty-printed output has reliable indentation levels.
 ### Type-support plugin trait ❓
 
 Follow-up to the types-colocation refactor — see
-[refactor-types-colocation-plan.md](refactor-types-colocation-plan.md) for the underlying
-restructuring.
+[archived/refactor-types-colocation-plan.md](archived/refactor-types-colocation-plan.md) for the
+underlying restructuring and the rejected-trait-dispatch rationale.
 
 Once every file type owns its `format.rs`, `detect.rs`, `info.rs`, and `compose.rs`, the central
 dispatch sites (`Registry::compose_modes` match, `input/detect.rs::DETECTORS` list, `info::render`

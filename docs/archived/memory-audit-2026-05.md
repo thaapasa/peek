@@ -1,4 +1,10 @@
-# Memory retention audit
+# Memory retention audit (2026-05-17 snapshot)
+
+> **Status: Archived 2026-05-24.** Frozen snapshot — file paths and line numbers below have
+> drifted since (notably the `content.rs` split and the document / pdf / cbz renderer renames).
+> Treat the categorization (Streaming / Bounded / Unbounded) as the durable shape; re-locate
+> specific sites against current code. The actionable "Suggested fixes" table that lived here
+> has been promoted to [planned.md → Memory / Streaming](../planned.md#memory--streaming-).
 
 Snapshot of where peek holds bytes in memory vs streams them. Captured
 2026-05-16, refreshed 2026-05-17 to reflect the `Bytes`-everywhere
@@ -111,17 +117,9 @@ disk-only across recursion. Documented as a planned improvement in
 - Theme/style cycling rebuilds keyed caches but the prior `Vec` is only freed
   when the slot is overwritten with the new key.
 
-## Suggested fixes by priority
+## Suggested fixes
 
-| Priority | Site                                 | Fix                                                                                                                                        |
-|----------|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| High     | CSV `records` Vec                    | Sliding window / ring around viewport; drop records far from current scroll. Alternative: hard ceiling + "showing first N records" notice. |
-| High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".                                           |
-| Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                                                                |
-| Medium   | tar / cpio re-buffer on TempFile     | Switch the outer walk to `open_byte_source()` so nested big-on-big stays disk-only.                                                        |
-| Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                                                     |
-| Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                                                           |
-| Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path).                                   |
+Promoted to [planned.md → Memory / Streaming](../planned.md#memory--streaming-).
 
 ## Done since the previous snapshot
 

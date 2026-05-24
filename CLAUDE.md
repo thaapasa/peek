@@ -126,3 +126,20 @@ Keep these in sync with code changes:
 - **docs/conventions.md** — coding conventions
 - **docs/release.md** — release pipeline and recovery
 - **CLAUDE.md** — top-level architecture overview (update when top-level structure changes)
+
+### Docs hygiene
+
+- `docs/` holds **live reference only** — features, planned, conventions, architecture,
+  and in-progress plans. Anything here must reflect current code.
+- **Plans are temporary.** When a plan is done:
+  - If it has lasting historical value (design rationale, why-we-rejected, postmortem),
+    move it to `docs/archived/`. Add a status blockquote right under the title:
+    `> **Status: Completed YYYY-MM-DD.** Archived for reference.` Title stays the same.
+    Linked references in other docs must point at the archived path. No entry in
+    `architecture-map.md` — archived files are a graveyard, not part of the live map.
+  - Otherwise, delete it.
+  - Either way, it must not stay in `docs/` root as a "landed" plan.
+- **Active instructions belong in their own doc** (or as a section of an existing general
+  doc like `architecture.md` / `conventions.md`), never inside a plan file. Example: an
+  "adding a new file type" checklist lives in `architecture.md`, not buried in a refactor
+  plan that future readers won't know to open.
