@@ -34,12 +34,46 @@ pub fn render(
     theme_manager: &Rc<ThemeManager>,
     theme_name: PeekThemeName,
 ) -> Result<Vec<String>> {
-    let parser = Parser::new_ext(text, gfm_options());
+    let (frontmatter, body) = split_frontmatter(text);
+    let parser = Parser::new_ext(body, gfm_options());
     let mut w = walker::Walker::new(width.max(20), theme, style_mode, theme_manager, theme_name);
+    if let Some(fm) = frontmatter {
+        w.emit_frontmatter(fm);
+    }
     for ev in parser {
         w.event(ev);
     }
     Ok(w.finish())
+}
+
+/// Recognise a YAML (`---`) or TOML (`+++`) frontmatter block at the
+/// top of the file. Returns the block (without its fence lines) plus
+/// the body text the parser should see. CommonMark would otherwise
+/// render the opening `---` as a horizontal rule and the key/value
+/// lines as a setext heading + paragraph — useless and noisy.
+fn split_frontmatter(text: &str) -> (Option<&str>, &str) {
+    let trimmed = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let fence = if trimmed.starts_with("---\n") || trimmed.starts_with("---\r\n") {
+        "---"
+    } else if trimmed.starts_with("+++\n") || trimmed.starts_with("+++\r\n") {
+        "+++"
+    } else {
+        return (None, text);
+    };
+    let after_open = &trimmed[fence.len()..].trim_start_matches(['\r', '\n']);
+    // Find the closing fence on its own line.
+    let mut offset = 0;
+    for line in after_open.split_inclusive('\n') {
+        if line.trim_end_matches(['\r', '\n']) == fence {
+            let block = &after_open[..offset];
+            let rest_start = offset + line.len();
+            let rest = &after_open[rest_start..];
+            return (Some(block), rest);
+        }
+        offset += line.len();
+    }
+    // Unclosed fence — leave the text alone.
+    (None, text)
 }
 
 /// CommonMark + GFM. Same flag set mdbook uses; gives tables /
@@ -180,6 +214,78 @@ mod tests {
         assert!(out.contains("[image:"));
         assert!(out.contains("alt text"));
         assert!(out.contains("(pic.png)"));
+    }
+
+    #[test]
+    fn task_list_marker_replaces_bullet() {
+        let lines = render_plain("- [x] done\n- [ ] todo\n- plain\n");
+        let joined = lines.join("\n");
+        assert!(
+            joined.contains("✓ done"),
+            "expected check + text in {joined:?}"
+        );
+        assert!(
+            joined.contains("☐ todo"),
+            "expected box + text in {joined:?}"
+        );
+        assert!(
+            joined.contains("• plain"),
+            "expected bullet for non-task in {joined:?}"
+        );
+    }
+
+    #[test]
+    fn frontmatter_yaml_stripped_and_dimmed() {
+        let out = render_styled("---\ntitle: x\n---\n# Heading\n\nbody\n");
+        // YAML key should appear (dimmed) and `# Heading` should not
+        // appear as plain text — it should be styled as a heading.
+        assert!(out.contains("title: x"));
+        // The `---` should NOT render as a horizontal rule, because we
+        // stripped it before parsing.
+        let stripped = strip_ansi(&out);
+        assert!(
+            !stripped.contains("──────────────"),
+            "expected no HR row, got {stripped:?}"
+        );
+    }
+
+    #[test]
+    fn frontmatter_toml_stripped() {
+        let lines = render_plain("+++\ntitle = \"x\"\n+++\n# Heading\n");
+        let joined = lines.join("\n");
+        assert!(joined.contains("title = \"x\""));
+        assert!(joined.contains("Heading"));
+    }
+
+    #[test]
+    fn footnote_reference_and_definition_render() {
+        let lines = render_plain("Body[^a].\n\n[^a]: definition text\n");
+        let joined = lines.join("\n");
+        assert!(joined.contains("[^a]"), "expected ref marker in {joined:?}");
+        assert!(
+            joined.contains("[^a]:") && joined.contains("definition text"),
+            "expected def header + body in {joined:?}"
+        );
+    }
+
+    /// Strip ANSI/CSI sequences so substring assertions can match plain text.
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::with_capacity(s.len());
+        let mut in_esc = false;
+        for c in s.chars() {
+            if in_esc {
+                if c == 'm' {
+                    in_esc = false;
+                }
+                continue;
+            }
+            if c == '\x1b' {
+                in_esc = true;
+                continue;
+            }
+            out.push(c);
+        }
+        out
     }
 
     #[test]

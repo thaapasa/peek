@@ -47,6 +47,10 @@ pub(super) struct Walker<'a> {
     /// Some while a Table is open. Cells route inline events into the
     /// builder's current_cell buffer; End(Table) renders the result.
     table: Option<TableBuilder>,
+    /// One-shot prefix consumed by the next emitted block's first
+    /// line. Used by footnote definitions to inject the `[^label]: `
+    /// header onto the inner Paragraph's first wrapped row.
+    pending_first_line: Option<String>,
 }
 
 /// Accumulator for a table's parsed structure: rows of styled cell
@@ -120,6 +124,7 @@ impl<'a> Walker<'a> {
             containers: Vec::new(),
             suppress_next_blank: false,
             table: None,
+            pending_first_line: None,
         }
     }
 
@@ -234,6 +239,32 @@ impl<'a> Walker<'a> {
             Event::End(TagEnd::CodeBlock) => self.close_leaf(),
 
             Event::Rule => self.emit_rule(),
+
+            Event::TaskListMarker(checked) => self.apply_task_marker(checked),
+
+            Event::FootnoteReference(label) => {
+                self.ensure_leaf_for_inline();
+                if self.leaf.is_some() {
+                    let txt = format!("[^{label}]");
+                    self.pending.push_str(&self.theme.paint_accent(&txt));
+                }
+            }
+
+            Event::Start(Tag::FootnoteDefinition(label)) => {
+                // pulldown wraps the definition content in its own
+                // Paragraph; let that flow through normally and inject
+                // the label as a one-shot first-line prefix.
+                self.flush_open_leaf();
+                self.maybe_blank_separator();
+                let label = format!("[^{label}]: ");
+                self.pending_first_line = Some(self.theme.paint_accent(&label));
+                // The inner Paragraph's open_leaf would otherwise add
+                // a second blank on top of the one we just emitted.
+                self.suppress_next_blank = true;
+            }
+            Event::End(TagEnd::FootnoteDefinition) => {
+                self.pending_first_line = None;
+            }
 
             Event::Start(Tag::Emphasis) => self.push_inline_attr(Attr::Italic),
             Event::End(TagEnd::Emphasis) => self.pop_inline_attr(Attr::Italic),
@@ -457,6 +488,42 @@ impl<'a> Walker<'a> {
         }
     }
 
+    /// Replace the current item's bullet with a task-list glyph
+    /// (`☐ ` / `✓ `). pulldown emits the TaskListMarker event right
+    /// after Start(Item) and before any inline content, so the marker
+    /// hasn't been consumed yet.
+    fn apply_task_marker(&mut self, checked: bool) {
+        if let Some(Container::Item {
+            marker,
+            marker_consumed,
+        }) = self.containers.last_mut()
+            && !*marker_consumed
+        {
+            *marker = if checked {
+                "✓ ".to_string()
+            } else {
+                "☐ ".to_string()
+            };
+        }
+    }
+
+    /// Emit the verbatim frontmatter block at the top of the document
+    /// as a dim wrapped paragraph. Each source line becomes one output
+    /// line — preserves YAML / TOML indentation. The next block's
+    /// `open_leaf` handles the inter-block blank, so no separator row
+    /// is pushed here.
+    pub(super) fn emit_frontmatter(&mut self, fm: &str) {
+        for line in fm.lines() {
+            let dim = format!(
+                "{}{}{}",
+                self.style_mode.attr_open(Attr::Dim),
+                line,
+                self.style_mode.attr_close(Attr::Dim)
+            );
+            self.out.push(dim);
+        }
+    }
+
     /// Render the accumulated table into box-drawing rows and emit
     /// each with the current container prefix.
     fn finish_table(&mut self) {
@@ -579,6 +646,9 @@ impl<'a> Walker<'a> {
                     }
                 }
             }
+        }
+        if let Some(extra) = self.pending_first_line.take() {
+            out.push_str(&extra);
         }
         out
     }
