@@ -104,15 +104,27 @@ Dockerfile.
 Features: syntax-colored source with theme support; toggleable line numbers (✅, `--line-numbers` /
 `-n` / `l`).
 
-#### Markdown ◐
+#### Markdown ✅
 
-`.md` / `.markdown` / `.mdown` / `.mkd` files render as syntax-highlighted source today. The Info
-view adds a Markdown section: heading counts by level (H1..H6), fenced code-block count + declared
-languages, inline-code / link / image / table / list-item counts, task-list progress (`done /
-total + percent`), blockquote lines, footnote definitions, frontmatter detection (YAML / TOML),
-prose word count (excludes fenced code), and reading-time estimate at 230 wpm. Rendered "read mode"
-(styled headings, bold, lists, per-language dispatch inside fenced code) is still planned — see
-[planned.md](planned.md#markup--documentation-).
+`.md` / `.markdown` / `.mdown` / `.mkd` / `.mkdn` / `.mdwn` files get a dual view:
+
+- **Rendered** (default) — pulldown-cmark drives a CommonMark + GFM walker that emits
+  width-wrapped, ANSI-styled text. Styled headings (H1 / H2 underlined with `═` / `─`), bullet
+  and ordered lists with hanging indent, task lists (`☐` / `✓`), blockquote rail (`▍`),
+  horizontal rules, GFM tables as box-drawing (per-column alignment from the header separator
+  row, proportional shrink when the row exceeds available width), fenced code blocks
+  syntect-highlighted by their declared language (falls back to dim plain when language doesn't
+  resolve), emphasis / strong / strikethrough as SGR attributes, inline code dim, links
+  (underlined + dim URL after), images (`[image: alt] (url)`), footnote references and
+  definitions, and frontmatter (YAML `---` / TOML `+++`) stripped to a dim verbatim block at the
+  top.
+- **Source** — syntax-highlighted markdown source via `ContentMode`. Reachable with Tab. Becomes
+  the entry view with `--raw`. `--plain` drops the rendered view.
+
+The Info view adds a Markdown section: heading counts by level (H1..H6), fenced code-block count +
+declared languages, inline-code / link / image / table / list-item counts, task-list progress
+(`done / total + percent`), blockquote lines, footnote definitions, frontmatter detection (YAML /
+TOML), prose word count (excludes fenced code), and reading-time estimate at 230 wpm.
 
 #### HTML ✅
 

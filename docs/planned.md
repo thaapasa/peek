@@ -8,17 +8,16 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 
 ### Markup / Documentation ◐
 
-| Format   | Extensions                           | Status |
-|----------|--------------------------------------|--------|
-| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd` | ◐      |
-| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`      | ◐      |
+| Format   | Extensions                                              | Status |
+|----------|---------------------------------------------------------|--------|
+| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn`  | ✅      |
+| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`                         | ◐      |
 
-Highlighted source + format-aware Info section ship today (see
-[features.md → Markdown / SQL](features.md#markdown-)). Still planned:
+Markdown rendered read mode (CommonMark + GFM, syntect-highlighted fenced code, box-drawing
+tables, task lists, footnotes, frontmatter strip) shipped — see
+[features.md → Markdown](features.md#markdown-). SQL highlighted source + format-aware Info
+section also ship today. Still planned:
 
-- Markdown: rendered "read mode" (styled headings, bold, lists, tables, blockquotes, per-language
-  dispatch into syntect inside fenced code blocks). Cyclable with Tab against the highlighted
-  source.
 - SQL: pretty-print / formatter, statement-outline aux mode, distinct PL/pgSQL grammar dispatch
   inside `$$ … $$` bodies.
 - Outline aux mode shared between Markdown headings and SQL statements (mode + key binding TBD).

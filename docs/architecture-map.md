@@ -52,10 +52,17 @@ src/
       info_gather.rs   — gather_text_stats: streaming UTF-8/UTF-16 stats (lines/words/encoding/indent/shebang)
       info_render.rs   — render_section + push_text_stats: Content/Source section content
     markdown/
-      mod.rs           — Module wiring
+      mod.rs           — Module wiring + MarkdownRenderer re-export
+      compose.rs       — Compose: RenderedTextMode (default, --raw inverts) + ContentMode source view
+      renderer.rs      — MarkdownRenderer: TextRenderer impl that reads source and dispatches to render::render
       info.rs          — MarkdownInfo { text: TextStats, stats: MarkdownStats } + MarkdownStats + FrontmatterKind
       info_gather.rs   — Single-pass MD stats: headings by level, fenced blocks + langs, links/images/tables/lists, task progress, frontmatter, prose word count, reading time
       info_render.rs   — Render Markdown info section (Content + Markdown blocks)
+      render/
+        mod.rs         — Entry: render(text, width, theme, style_mode, tm, theme_name) → Vec<String>. Splits frontmatter, runs pulldown-cmark with GFM options, feeds the walker
+        walker.rs      — Event-stream walker: container stack (List/Item/Blockquote) + leaf block (Paragraph/Heading/CodeBlock) + table builder. Inline styling for emph/strong/strike/code/links/images, task-list marker swap, footnote ref + def, frontmatter dim block, tight-vs-loose list spacing
+        table.rs       — GFM tables → box-drawing. Column widths sized to widest cell then proportional shrink to fit available width; per-column alignment from header separator; cell wrap with SGR preserved
+        wrap.rs        — wrap_with_prefix (rebuild prefix on each wrapped row) + display_width (counts text tokens, ignores SGR)
     sql/
       mod.rs           — Module wiring
       info.rs          — SqlInfo { text: TextStats, stats: SqlStats } + SqlStats + SqlDialect
