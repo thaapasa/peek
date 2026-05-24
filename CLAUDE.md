@@ -76,6 +76,11 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
   only when the user explicitly asks for one.
 - **Run `cargo fmt` after editing Rust code** so formatting drift doesn't pile up across unrelated
   files. Cheap; keeps diffs focused on real changes.
+- **Keep checkup-finding IDs (H4, M2, L1, …) out of commit subjects.** The findings doc is
+  temporary — once an item ships and the entry is deleted, the ID stops resolving and the
+  subject becomes a dangling reference. Body may mention an ID when the commit itself touches
+  the findings doc (so the diff explains the ID's last appearance), but the subject reads
+  by intent, not by tracker ID.
 
 ## Collaboration
 
