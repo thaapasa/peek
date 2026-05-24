@@ -42,21 +42,6 @@ Direction: split into `prepare_pretty(&mut self) -> Option<&mut PrettyView>`
 returning the borrow only when valid for the showing state. Removes the
 two `expect`s and the comment paragraph defending them.
 
-### H5. `render_to_pipe` paths drop renderer warnings on the floor
-
-`take_warnings()` is only drained by `ViewerState` after `render_window`
-(state.rs:842). The pipe paths in:
-
-- `RenderedTextMode<R>` (rendered_text.rs:126-133)
-- `PagedImageMode<R>` (paged.rs:291-307)
-- `ContentMode` via `main.rs:200-204`
-
-render and write but never call `take_warnings()` — PDF / EPUB per-page
-errors that surface in interactive mode are silently swallowed by
-`peek --print broken.pdf`. Fix: drain warnings after the write loop in
-each pipe path (or once in `main.rs` after `render_to_pipe`) and emit to
-stderr.
-
 ### H6. `content_pipe.rs` rebuilds the gutter prefix instead of calling `Gutter`
 
 `content_pipe.rs:60-70` inlines

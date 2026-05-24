@@ -201,6 +201,14 @@ fn run_view(
         modes[primary_idx]
             .render_to_pipe(&ctx, &mut output)
             .with_context(|| format!("failed to render {}", source.name()))?;
+        // Per-page / per-chapter render errors are non-fatal — the pipe
+        // path still wrote a placeholder. Surface them on stderr so a
+        // `peek --print broken.pdf > out` user sees what was skipped
+        // instead of getting silent gaps. Interactive mode drains the
+        // same warnings through the status line.
+        for w in modes[primary_idx].take_warnings() {
+            eprintln!("peek: {w}");
+        }
         output.finish()?;
     }
 
