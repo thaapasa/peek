@@ -12,24 +12,29 @@
 mod walker;
 mod wrap;
 
+use std::rc::Rc;
+
 use anyhow::Result;
 use pulldown_cmark::{Options, Parser};
 
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
 /// Render `text` as styled markdown wrapped to `width` columns.
 ///
 /// `width` is the terminal column count from `RenderedTextMode`. The
 /// shared cache key handles invalidation so we don't need to track
-/// width changes here.
+/// width changes here. `theme_manager` + `theme_name` feed fenced
+/// code blocks through syntect using the active syntax theme.
 pub fn render(
     text: &str,
     width: usize,
     theme: &PeekTheme,
     style_mode: StyleMode,
+    theme_manager: &Rc<ThemeManager>,
+    theme_name: PeekThemeName,
 ) -> Result<Vec<String>> {
     let parser = Parser::new_ext(text, gfm_options());
-    let mut w = walker::Walker::new(width.max(20), theme, style_mode);
+    let mut w = walker::Walker::new(width.max(20), theme, style_mode, theme_manager, theme_name);
     for ev in parser {
         w.event(ev);
     }
@@ -49,11 +54,23 @@ fn gfm_options() -> Options {
 mod tests {
     use super::*;
     use crate::theme::{PeekThemeName, ThemeManager};
+    use std::rc::Rc;
 
     fn render_plain(md: &str) -> Vec<String> {
-        let tm = ThemeManager::new(PeekThemeName::default(), StyleMode::Plain);
+        let tm = Rc::new(ThemeManager::new(
+            PeekThemeName::default(),
+            StyleMode::Plain,
+        ));
         let theme = tm.peek_theme().clone();
-        render(md, 80, &theme, StyleMode::Plain).unwrap()
+        render(
+            md,
+            80,
+            &theme,
+            StyleMode::Plain,
+            &tm,
+            PeekThemeName::default(),
+        )
+        .unwrap()
     }
 
     #[test]
@@ -118,11 +135,21 @@ mod tests {
     }
 
     fn render_styled(md: &str) -> String {
-        let tm = ThemeManager::new(PeekThemeName::default(), StyleMode::TrueColor);
+        let tm = Rc::new(ThemeManager::new(
+            PeekThemeName::default(),
+            StyleMode::TrueColor,
+        ));
         let theme = tm.peek_theme().clone();
-        render(md, 200, &theme, StyleMode::TrueColor)
-            .unwrap()
-            .join("\n")
+        render(
+            md,
+            200,
+            &theme,
+            StyleMode::TrueColor,
+            &tm,
+            PeekThemeName::default(),
+        )
+        .unwrap()
+        .join("\n")
     }
 
     #[test]
@@ -152,6 +179,21 @@ mod tests {
         assert!(out.contains("[image:"));
         assert!(out.contains("alt text"));
         assert!(out.contains("(pic.png)"));
+    }
+
+    #[test]
+    fn fenced_code_block_with_lang_emits_syntect_colors() {
+        let out = render_styled("```rust\nfn main() {}\n```\n");
+        // syntect emits truecolor escapes — a 38;2 fg sequence implies
+        // the highlighter ran rather than the plain dim fallback.
+        assert!(out.contains("38;2"), "expected syntect colors in {out:?}");
+    }
+
+    #[test]
+    fn fenced_code_block_no_lang_falls_back_to_dim() {
+        let out = render_styled("```\nbare text\n```\n");
+        // Dim attribute opens with [2m.
+        assert!(out.contains("\x1b[2m"), "expected dim fallback in {out:?}");
     }
 
     #[test]

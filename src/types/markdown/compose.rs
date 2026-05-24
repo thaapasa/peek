@@ -7,6 +7,8 @@
 //! reachable via Tab. `--plain` drops the rendered view entirely
 //! (consistent with `--plain` meaning "no transformation").
 
+use std::rc::Rc;
+
 use anyhow::Result;
 
 use crate::Args;
@@ -24,7 +26,11 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     let rendered = (!ctx.plain_mode).then(|| -> Box<dyn Mode> {
-        Box::new(RenderedTextMode::new(MarkdownRenderer::new(source.clone())))
+        Box::new(RenderedTextMode::new(MarkdownRenderer::new(
+            source.clone(),
+            Rc::clone(&ctx.theme_manager),
+            ctx.theme_name,
+        )))
     });
     let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args)?;
 

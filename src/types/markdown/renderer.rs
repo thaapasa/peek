@@ -6,21 +6,33 @@
 //! 1 MB. The generic `RenderedTextMode` caches per `(width, style_mode)`,
 //! so resize and color-cycle are the only re-render triggers.
 
+use std::rc::Rc;
+
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{ModeId, TextRenderer};
 
 use super::render;
 
 pub(crate) struct MarkdownRenderer {
     source: InputSource,
+    theme_manager: Rc<ThemeManager>,
+    theme_name: PeekThemeName,
 }
 
 impl MarkdownRenderer {
-    pub(crate) fn new(source: InputSource) -> Self {
-        Self { source }
+    pub(crate) fn new(
+        source: InputSource,
+        theme_manager: Rc<ThemeManager>,
+        theme_name: PeekThemeName,
+    ) -> Self {
+        Self {
+            source,
+            theme_manager,
+            theme_name,
+        }
     }
 }
 
@@ -40,6 +52,13 @@ impl TextRenderer for MarkdownRenderer {
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let text = self.source.read_text()?;
-        render::render(&text, width, theme, style_mode)
+        render::render(
+            &text,
+            width,
+            theme,
+            style_mode,
+            &self.theme_manager,
+            self.theme_name,
+        )
     }
 }

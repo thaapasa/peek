@@ -8,9 +8,12 @@
 //! the bullet / number; continuation lines fall back to whitespace of
 //! matching width so wrapped text and nested blocks line up.
 
-use pulldown_cmark::{Event, HeadingLevel, LinkType, Tag, TagEnd};
+use std::rc::Rc;
 
-use crate::theme::{Attr, PeekTheme, StyleMode};
+use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
+
+use crate::theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager};
+use crate::viewer::highlight_lines;
 
 use super::wrap::{display_width, wrap_with_prefix};
 
@@ -19,8 +22,9 @@ pub(super) struct Walker<'a> {
     pending: String,
     width: usize,
     theme: &'a PeekTheme,
-    #[allow(dead_code)]
     style_mode: StyleMode,
+    theme_manager: &'a Rc<ThemeManager>,
+    theme_name: PeekThemeName,
     leaf: Option<Leaf>,
     /// Inline-span stack: each entry is the URL destination of an open
     /// link or image. End(Link/Image) pops the entry and appends a
@@ -45,6 +49,12 @@ pub(super) struct Walker<'a> {
 enum Leaf {
     Paragraph,
     Heading(HeadingLevel),
+    /// Fenced or indented code block. `lang` is the declared info
+    /// string token (empty for indented blocks); body buffers the raw
+    /// source verbatim — no inline events fire inside a code block.
+    CodeBlock {
+        lang: String,
+    },
 }
 
 /// Active link / image — the URL string is held so we can append it
@@ -73,13 +83,21 @@ enum Container {
 }
 
 impl<'a> Walker<'a> {
-    pub(super) fn new(width: usize, theme: &'a PeekTheme, style_mode: StyleMode) -> Self {
+    pub(super) fn new(
+        width: usize,
+        theme: &'a PeekTheme,
+        style_mode: StyleMode,
+        theme_manager: &'a Rc<ThemeManager>,
+        theme_name: PeekThemeName,
+    ) -> Self {
         Self {
             out: Vec::new(),
             pending: String::new(),
             width,
             theme,
             style_mode,
+            theme_manager,
+            theme_name,
             leaf: None,
             inline_targets: Vec::new(),
             leaf_implicit: false,
@@ -124,6 +142,19 @@ impl<'a> Walker<'a> {
                 self.suppress_next_blank = false;
             }
 
+            Event::Start(Tag::CodeBlock(kind)) => {
+                let lang = match kind {
+                    CodeBlockKind::Fenced(info) => info.into_string(),
+                    CodeBlockKind::Indented => String::new(),
+                };
+                self.flush_open_leaf();
+                self.maybe_blank_separator();
+                self.leaf = Some(Leaf::CodeBlock { lang });
+                self.leaf_implicit = false;
+                self.pending.clear();
+            }
+            Event::End(TagEnd::CodeBlock) => self.close_leaf(),
+
             Event::Rule => self.emit_rule(),
 
             Event::Start(Tag::Emphasis) => self.push_inline_attr(Attr::Italic),
@@ -152,6 +183,8 @@ impl<'a> Walker<'a> {
                 }
             }
             Event::Code(code) => {
+                // Inline code only — code-block bodies arrive as Text
+                // events, not Code.
                 self.ensure_leaf_for_inline();
                 if self.leaf.is_some() {
                     self.pending.push_str(self.style_mode.attr_open(Attr::Dim));
@@ -190,15 +223,15 @@ impl<'a> Walker<'a> {
             return;
         };
         let body = std::mem::take(&mut self.pending);
-        let body = match leaf {
-            Leaf::Paragraph => body,
-            Leaf::Heading(level) => style_heading(&body, level, self.theme),
-        };
-        self.emit_lines(&body);
-        if let Leaf::Heading(level) = leaf
-            && matches!(level, HeadingLevel::H1 | HeadingLevel::H2)
-        {
-            self.emit_heading_underline(level);
+        match &leaf {
+            Leaf::Paragraph => self.emit_lines(&body),
+            Leaf::Heading(level) => {
+                self.emit_lines(&style_heading(&body, *level, self.theme));
+                if matches!(level, HeadingLevel::H1 | HeadingLevel::H2) {
+                    self.emit_heading_underline(*level);
+                }
+            }
+            Leaf::CodeBlock { lang } => self.emit_code_block(&body, lang),
         }
     }
 
@@ -343,6 +376,47 @@ impl<'a> Walker<'a> {
         if matches!(self.containers.last(), Some(Container::Item { .. })) {
             self.open_leaf(Leaf::Paragraph);
             self.leaf_implicit = true;
+        }
+    }
+
+    /// Render a fenced or indented code block. Tries to highlight via
+    /// syntect when `lang` resolves; falls back to dim-styled plain
+    /// lines on miss / failure. Each row gets the container chain
+    /// prefix plus an `  ` indent so code stands apart from prose.
+    fn emit_code_block(&mut self, body: &str, lang: &str) {
+        let prefix = self.continuation_prefix();
+        let indent = "  ";
+        let highlighted: Option<Vec<String>> = (!lang.is_empty()
+            && self.style_mode != StyleMode::Plain)
+            .then(|| {
+                highlight_lines(
+                    body,
+                    lang,
+                    self.theme_manager,
+                    self.theme_name,
+                    self.style_mode,
+                )
+                .ok()
+            })
+            .flatten();
+
+        let rows: Vec<String> = match highlighted {
+            Some(lines) => lines,
+            None => body
+                .lines()
+                .map(|l| {
+                    format!(
+                        "{}{}{}",
+                        self.style_mode.attr_open(Attr::Dim),
+                        l,
+                        self.style_mode.attr_close(Attr::Dim)
+                    )
+                })
+                .collect(),
+        };
+
+        for row in rows {
+            self.out.push(format!("{prefix}{indent}{row}"));
         }
     }
 
