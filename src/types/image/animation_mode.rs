@@ -23,6 +23,16 @@ use crate::viewer::ui::{Action, HelpEntry};
 /// per-frame cache because the underlying `DynamicImage` changes every
 /// tick. `ImageView`'s pan offsets persist across ticks (panning a long
 /// banner GIF stays put while frames cycle).
+///
+/// **Not unified into an `AnimatedView<FrameSource>` shell with
+/// [`crate::types::svg::animation_mode::SvgAnimationMode`] despite the
+/// shared Mode-trait shape.** Cache strategies diverge by design: this
+/// mode has no per-frame cache (decoded pixels already in memory; per
+/// render = re-prepare); SVG holds a bounded LRU of rasterized frames.
+/// A shared shell would either drop one of those optimisations or push
+/// them through a fan-through enum that loses the type-level
+/// distinction. Prior `/checkup` rounds decided the duplicated Mode
+/// body (~80 lines) is cheaper than the abstraction.
 pub(crate) struct AnimationMode {
     frames: Vec<AnimFrame>,
     anim: AnimFrameState,

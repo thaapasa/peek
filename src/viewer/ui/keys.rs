@@ -118,6 +118,16 @@ pub(crate) enum Action {
     ToggleSoftWrap,
     /// Play / pause an animated image.
     PlayPause,
+    // The three Next* / Prev* pairs below all bind to `n` / `p`. Each
+    // mode handles its own variant; the dispatch is unambiguous because
+    // only one is meaningful per active mode (animations get
+    // NextFrame, EPUB gets NextChapter, ContentMode + searchable views
+    // get NextMatch). Kept as distinct actions on purpose: collapsing
+    // to one `Action::Next` would force each mode's `handle` to
+    // disambiguate "next what" inline, losing the semantic clarity
+    // that lets a reader skim `match action` and see exactly what the
+    // mode does on `n`. Prior `/checkup` rounds revisit this; the
+    // separation is deliberate.
     /// Advance to the next animation frame.
     NextFrame,
     /// Step back to the previous animation frame.
@@ -199,8 +209,8 @@ impl Action {
             Action::ToggleLineNumbers   => binds![B::plain(Char('l'))],
             Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
             Action::PlayPause           => binds![B::plain(Char(' '))],
-            Action::NextFrame           => binds![B::plain(Char('n'))], // n — also NextChapter / NextMatch (different mode)
-            Action::PrevFrame           => binds![B::plain(Char('p'))], // p — also PrevChapter / PrevMatch (different mode)
+            Action::NextFrame           => binds![B::plain(Char('n'))],
+            Action::PrevFrame           => binds![B::plain(Char('p'))],
             Action::NextChapter         => binds![B::plain(Char('n'))],
             Action::PrevChapter         => binds![B::plain(Char('p'))],
             Action::OpenSearch          => binds![B::plain(Char('/'))],

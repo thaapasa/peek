@@ -17,6 +17,17 @@
 //!   the source has at least one `<img>`) render that first image as
 //!   ASCII art inline. The TOC view still exposes every container
 //!   entry for general image inspection via recursive peek.
+//!
+//! **Not a `PagedImageMode<EpubChapterRenderer>` despite the surface
+//! similarity to PDF / CBZ.** Chapter search and cover-image rendering
+//! would have to be generalised onto `PagedImageMode<R>` first, but
+//! neither concept belongs in the paged-image trait (PDFs don't search
+//! per page; comics never cover-render text). Prior `/checkup` rounds
+//! decided lifting those two features into a shared shell for one
+//! consumer would cost more than the duplicated step / cache / status
+//! plumbing — and that plumbing already reuses `paged::render_cached`,
+//! `paged::step_paged`, `paged::cycle_image_config`, and
+//! `paged::PageCacheKey`.
 
 use anyhow::Result;
 use syntect::highlighting::Color;

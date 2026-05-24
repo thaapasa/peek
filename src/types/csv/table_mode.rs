@@ -21,6 +21,14 @@
 //!
 //! Print mode renders the seeded widths only — no auto-widen — so the
 //! table layout never depends on the deepest row consumed.
+//!
+//! **Not a [`crate::viewer::table::TableMode`] subclass despite the
+//! shared shape.** That widget assumes a fully-materialised row list
+//! with fixed column widths. CSV grows widths as records stream in and
+//! consumes the body lazily — different invariants, different state.
+//! Visual similarity is intentional; prior `/checkup` rounds concluded
+//! shared scaffolding (sticky header, pan-step, `n`/`p` search reveal)
+//! is too small to lift without losing clarity.
 
 use std::borrow::Cow;
 use std::ops::Range;

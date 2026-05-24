@@ -6,6 +6,16 @@
 //! frames keyed by `(frame_idx, grid_cols, grid_rows)` so playback
 //! after one full loop becomes free, and switching fit / mode
 //! invalidates only the entries whose grid no longer matches.
+//!
+//! **Not merged into a shared `AnimatedView<FrameSource>` shell with
+//! `AnimationMode`.** The LRU cache here is load-bearing — rasterizing
+//! an SVG frame is two orders of magnitude more expensive than walking
+//! a pre-decoded pixel buffer, so caching has to live close to the
+//! prep step. `AnimationMode` has no cache for the opposite reason
+//! (per render is already cheap). A shared shell would either erase
+//! one strategy or fan-through an enum that loses the type-level
+//! distinction. Prior `/checkup` rounds decided the duplicated Mode
+//! body (~80 lines) is cheaper than the abstraction.
 
 use std::collections::VecDeque;
 use std::sync::Arc;

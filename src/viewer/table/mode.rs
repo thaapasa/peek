@@ -13,6 +13,16 @@
 //!
 //! Display-only: vertical scroll, Left/Right pan, `/` search. Rows
 //! wider than the terminal are panned, never wrapped.
+//!
+//! **Not unified with [`crate::types::csv::table_mode::CsvTableMode`]
+//! despite surface similarity.** This mode renders a fully-materialised
+//! [`Table`] — rows decided up front, widths fixed at construction.
+//! `CsvTableMode` streams records lazily and grows column widths
+//! monotonically as wider cells scroll into view: different state
+//! machine, different invariants. Repeated review rounds concluded the
+//! shared scaffolding (sticky header, pan-step, search reveal) is too
+//! small to justify a shared widget; lifting it hurts readability more
+//! than the duplication.
 
 use anyhow::Result;
 use syntect::highlighting::Color;

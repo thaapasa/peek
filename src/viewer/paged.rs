@@ -11,7 +11,13 @@
 //! [`PageRenderer`] trait, mirroring [`crate::viewer::modes::RenderedTextMode`]
 //! for text documents. Only the per-page render body — Pdfium raster
 //! vs ZIP-entry decode — lives in each format's `page_renderer.rs`.
-//! EPUB stays separate: it adds chapter search and cover rendering.
+//! EPUB stays separate by design: chapter search and cover-style inline
+//! image rendering would have to be lifted into [`PagedImageMode<R>`]
+//! as generic concerns first — neither belongs in PDF / CBZ. Prior
+//! `/checkup` rounds decided that's not worth doing for one consumer;
+//! [`crate::types::ebook::epub::read_mode::EpubReadMode`] keeps its own
+//! `Mode` impl reusing the building blocks here ([`render_cached`],
+//! [`step_paged`], [`cycle_image_config`], [`PageCacheKey`]).
 
 use anyhow::Result;
 use syntect::highlighting::Color;
