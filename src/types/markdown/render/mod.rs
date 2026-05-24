@@ -72,4 +72,48 @@ mod tests {
         let second = lines.iter().position(|l| l.contains("second")).unwrap();
         assert!(second > first + 1, "expected blank line between paragraphs");
     }
+
+    #[test]
+    fn bullet_list_emits_marker_per_item() {
+        let lines = render_plain("- one\n- two\n- three\n");
+        let items: Vec<&String> = lines.iter().filter(|l| l.contains("•")).collect();
+        assert_eq!(items.len(), 3, "expected three bullet rows, got {lines:?}");
+    }
+
+    #[test]
+    fn ordered_list_numbers_from_start() {
+        let lines = render_plain("3. third\n4. fourth\n");
+        assert!(lines.iter().any(|l| l.contains("3. third")));
+        assert!(lines.iter().any(|l| l.contains("4. fourth")));
+    }
+
+    #[test]
+    fn blockquote_renders_with_rail() {
+        let lines = render_plain("> quoted\n");
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.contains("▍") && l.contains("quoted")),
+            "expected rail + content, got {lines:?}"
+        );
+    }
+
+    #[test]
+    fn horizontal_rule_emits_dashes() {
+        let lines = render_plain("text\n\n---\n\nmore\n");
+        assert!(
+            lines.iter().any(|l| l.contains("─")),
+            "expected horizontal rule glyph, got {lines:?}"
+        );
+    }
+
+    #[test]
+    fn nested_list_indents_under_parent() {
+        let lines = render_plain("- outer\n  - inner\n");
+        let inner = lines.iter().find(|l| l.contains("inner")).unwrap();
+        assert!(
+            inner.starts_with("  "),
+            "expected nested item indent, got {inner:?}"
+        );
+    }
 }
