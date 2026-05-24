@@ -176,6 +176,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
         FileType::Html => "text/html",
+        FileType::Markdown => "text/markdown",
         FileType::Ebook(EbookFormat::Epub) => "application/epub+zip",
         FileType::Comic(ComicFormat::Cbz) => "application/vnd.comicbook+zip",
         FileType::Document(DocumentFormat::Docx) => {
@@ -273,6 +274,7 @@ pub fn extension_mismatch(
 /// the extension as wrong.
 fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
     match file_type {
+        FileType::Markdown => &["md", "markdown", "mdown", "mkd", "mkdn", "mdwn"],
         FileType::Comic(ComicFormat::Cbz) => &["cbz"],
         FileType::Ebook(EbookFormat::Epub) => &["epub"],
         FileType::Document(DocumentFormat::Docx) => &["docx"],

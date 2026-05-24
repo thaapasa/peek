@@ -268,6 +268,9 @@ impl Registry {
             FileType::Html => {
                 crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::Markdown => {
+                crate::types::markdown::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
             FileType::Image => {
                 crate::types::image::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
@@ -440,7 +443,7 @@ impl ComposeCtx {
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
-            FileType::Svg | FileType::Html => "Source",
+            FileType::Svg | FileType::Html | FileType::Markdown => "Source",
             _ => "Content",
         };
 
@@ -523,6 +526,7 @@ pub(crate) fn syntax_token_for(
         ),
         FileType::Svg => Some("XML".to_string()),
         FileType::Html => Some("HTML".to_string()),
+        FileType::Markdown => Some("Markdown".to_string()),
         _ => None,
     }
 }

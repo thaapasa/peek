@@ -48,6 +48,11 @@ pub enum FileType {
     Svg,
     /// HTML document (rendered text view via html2text, XML source for raw view)
     Html,
+    /// Markdown document. Renders to width-wrapped, ANSI-styled text via
+    /// `pulldown-cmark` (headings / lists / blockquotes / tables / fenced
+    /// code with syntect highlight), paired with a syntax-highlighted
+    /// source view.
+    Markdown,
     /// E-book (EPUB = ZIP container with HTML chapters + OPF
     /// metadata). Drives a per-chapter rendered read mode plus the
     /// container's listing TOC.
@@ -664,6 +669,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "html" | "htm" | "xhtml" => FileType::Html,
         "pdf" => FileType::Pdf,
         "class" => FileType::Classfile,
+        "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn" => FileType::Markdown,
         _ => return None,
     })
 }
