@@ -259,7 +259,10 @@ src/
       viewport.rs      — ListingViewport: scroll + selection state + sticky-chain math. `select_row` pins a file selection; `scroll_to_row` brings any row (file or dir) into the content slot without moving the selection cursor
     modes/
       mod.rs           — Mode trait, ModeId, RenderCtx, ExtractTarget (extract_target hook: EntryPath / FrameIndex)
-      content.rs       — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed); wrap/scroll geometry delegated to `viewer::wrap_scroll`, pretty branch to `pretty_view`, active branch exposed to the geometry as a `LineView` borrow built by the `active_view` free fn
+      content.rs           — ContentMode: streamed text / syntax / structured / SVG XML source (LineSource-backed); wrap/scroll geometry delegated to `viewer::wrap_scroll`, pretty branch to `pretty_view`, active branch exposed to the geometry as a `LineView` borrow built by the `active_view` free fn
+      content_rendering.rs — Active-output state for ContentMode: `Rendering` enum (`RawOnly` vs `Either { showing, pretty }`) replacing the old pretty-Option / use_pretty-bool / forced-flag triple; owns the `PrettyView` when one exists
+      content_pipe.rs      — Pipe-mode rendering for ContentMode: pretty whole-text write, raw stream with highlighter, raw stream without highlighter; shared gutter prefix builder for the two raw paths
+      content_tests.rs     — ContentMode tests; loaded as a child of `content` via `#[path]` to reach private fields
       pretty_view.rs   — PrettyView: the lazy structured pretty-print branch — one-shot parse (size-capped at PRETTY_MAX_BYTES), size-cap / parse-error fallback state, theme-keyed rendered-line cache. ContentMode keeps the raw-vs-pretty view state + windowing
       gutter.rs        — Gutter: ContentMode's line-number gutter — on/off state + digit-width sizing, per-visual-row `prefix` (interactive), whole-Vec `apply` (pipe)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
@@ -292,7 +295,6 @@ docs/                  — Builder / agent reference (architecture, conventions,
   release.md           — Release pipeline, install.sh, recovery from failed runs
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
   svg-anim-perf.md     — SVG animation memory profile + optimization options
-  css-info-plan.md     — Plan for rich CSS info view + lightningcss adoption
   refactor-types-colocation-plan.md — Plan for tightening input / display / type-support split
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
   book.toml            — mdbook config

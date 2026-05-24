@@ -23,6 +23,28 @@ Highlighted source + format-aware Info section ship today (see
   inside `$$ … $$` bodies.
 - Outline aux mode shared between Markdown headings and SQL statements (mode + key binding TBD).
 
+### CSS ◐
+
+Syntax-highlighted source + CSS-aware Info section (stylesheet stats, `@import` list,
+colour-palette swatches) ship today — see
+[features.md → CSS](features.md#css-). Two items still planned:
+
+#### Selector specificity inline-annotation
+
+Annotate each rule's selector list with its specificity tuple (`a,b,c`) in the highlighted CSS
+source view. The "killer feature" for debugging "why isn't my style winning". Biggest cost is the
+`ContentMode` integration: a separate code path (gutter or trailing-comment rendering) and a
+parsed-selector cache plumbed through `RenderCtx`. Specificity itself is cheap to compute.
+
+#### svg_anim keyframe-parser rewrite
+
+Replace the hand-rolled `types/image/pipeline/svg_anim` CSS parsing (`keyframes.rs` /
+`spec.rs` / transform parsing, ~250 LOC) with a typed parser. Separate concern with real
+SVG-animation regression risk, and the one piece that would actually justify `lightningcss`'s
+typed `Transform` / `Animation` values over the current `cssparser` + `cssparser-color` pair
+(picked for the Info view because it's ~120–200 KB vs ~400–700 KB and covers everything the Info
+view needs). Revisit as its own task; if picked up, weigh swapping the CSS dep then.
+
 ### Structured Data Additions ☐
 
 CSV / TSV shipped — see [features.md](features.md#structured-data--config-files).
@@ -47,13 +69,12 @@ spreadsheet engine.
 #### PDFium Distribution
 
 PDF support ships with `pdfium-render` (dynamically loads `libpdfium.dylib` / `.so` / `.dll`).
-Still-pending packaging work:
+The release tarball already bundles the matching Pdfium build next to the binary — see
+`release.yml`'s `Bundle Pdfium` step. Still-pending packaging work:
 
-- **Release tarball**: `release.yml` needs a per-target Pdfium-fetch step (download from
-  `bblanchon/pdfium-binaries` matching the build target) and a packaging step that copies
-  `libpdfium.*` next to the `peek` binary so the shipped tarball runs without a system install.
 - **install.sh**: detect an already-installed system Pdfium (homebrew etc.) and skip the bundled
-  copy when present. Pin the Pdfium version per peek release.
+  copy when present. (Version pinning per release is already handled — the workflow reads the
+  bundled `BUILD` from `.pdfium/VERSION`.)
 - **`cargo install`**: build-time path search via `PDFIUM_DYNAMIC_LIB_PATH` only finds the lib
   if the user has set it; document install steps in the README.
 - **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size down for
@@ -290,22 +311,16 @@ chosen size through the existing image pipeline. Glyph rasterization needs a sep
 
 Crates: `ttf-parser` or `skrifa` (read-fonts) for metadata. `fontdue` for specimen rasterization.
 
-### Single-File Compressed ☐
+### Single-File Compressed ◐
+
+`.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` single-stream wrappers ship — see
+[features.md → Single-stream Compression](features.md#single-stream-compression-). Still planned:
 
 | Format | Extensions |
 |--------|------------|
-| gzip   | `.gz`      |
-| bzip2  | `.bz2`     |
-| xz     | `.xz`      |
-| zstd   | `.zst`     |
+| brotli | `.br`      |
 
-Distinct from tar archives — these wrap a single file. Treat transparently: streaming-decompress
-through `ByteSource`, run the regular file-type detection on the inner content, render with the
-matching viewer. The outer container is invisible to the viewer except for a header line in the
-file info screen ("Compressed: gzip, original 12.4 MB → 3.1 MB on disk").
-
-Reuses the same compression crates as the Archive Files plan (`flate2`, `bzip2-rs`, `lzma-rs`,
-`zstd`).
+Brotli would slot into the same transparent-decompress pipeline (`brotli` crate).
 
 ### Databases ☐
 
