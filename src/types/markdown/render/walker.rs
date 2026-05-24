@@ -10,11 +10,12 @@
 
 use std::rc::Rc;
 
-use pulldown_cmark::{CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
 use crate::theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::highlight_lines;
 
+use super::table;
 use super::wrap::{display_width, wrap_with_prefix};
 
 pub(super) struct Walker<'a> {
@@ -43,6 +44,21 @@ pub(super) struct Walker<'a> {
     /// Loose lists naturally space themselves via explicit Paragraph
     /// events outside the close-item suppress window.
     suppress_next_blank: bool,
+    /// Some while a Table is open. Cells route inline events into the
+    /// builder's current_cell buffer; End(Table) renders the result.
+    table: Option<TableBuilder>,
+}
+
+/// Accumulator for a table's parsed structure: rows of styled cell
+/// strings. Cells preserve inline SGR (bold, italic, links, etc.) so
+/// the rendered table cells match the surrounding prose styling.
+struct TableBuilder {
+    alignments: Vec<Alignment>,
+    head: Vec<Vec<String>>,
+    body: Vec<Vec<String>>,
+    current_row: Vec<String>,
+    in_head: bool,
+    in_cell: bool,
 }
 
 /// Currently-open leaf block. Only one leaf is open at a time.
@@ -103,6 +119,7 @@ impl<'a> Walker<'a> {
             leaf_implicit: false,
             containers: Vec::new(),
             suppress_next_blank: false,
+            table: None,
         }
     }
 
@@ -140,6 +157,67 @@ impl<'a> Walker<'a> {
             Event::End(TagEnd::BlockQuote(_)) => {
                 self.containers.pop();
                 self.suppress_next_blank = false;
+            }
+
+            Event::Start(Tag::Table(alignments)) => {
+                self.flush_open_leaf();
+                self.maybe_blank_separator();
+                self.table = Some(TableBuilder {
+                    alignments,
+                    head: Vec::new(),
+                    body: Vec::new(),
+                    current_row: Vec::new(),
+                    in_head: false,
+                    in_cell: false,
+                });
+            }
+            Event::End(TagEnd::Table) => self.finish_table(),
+            Event::Start(Tag::TableHead) => {
+                if let Some(t) = &mut self.table {
+                    t.in_head = true;
+                    t.current_row.clear();
+                }
+            }
+            Event::End(TagEnd::TableHead) => {
+                if let Some(t) = &mut self.table {
+                    let row = std::mem::take(&mut t.current_row);
+                    if !row.is_empty() {
+                        t.head.push(row);
+                    }
+                    t.in_head = false;
+                }
+            }
+            Event::Start(Tag::TableRow) => {
+                if let Some(t) = &mut self.table {
+                    t.current_row.clear();
+                }
+            }
+            Event::End(TagEnd::TableRow) => {
+                if let Some(t) = &mut self.table {
+                    let row = std::mem::take(&mut t.current_row);
+                    t.body.push(row);
+                }
+            }
+            Event::Start(Tag::TableCell) => {
+                // Reuse the existing inline accumulator (`pending`) by
+                // opening a transient leaf; End(TableCell) drains it
+                // into the row instead of out.
+                if self.table.is_some() {
+                    self.leaf = Some(Leaf::Paragraph);
+                    self.leaf_implicit = false;
+                    self.pending.clear();
+                    if let Some(t) = &mut self.table {
+                        t.in_cell = true;
+                    }
+                }
+            }
+            Event::End(TagEnd::TableCell) => {
+                if let Some(t) = &mut self.table {
+                    let cell = std::mem::take(&mut self.pending);
+                    t.current_row.push(cell);
+                    t.in_cell = false;
+                    self.leaf = None;
+                }
             }
 
             Event::Start(Tag::CodeBlock(kind)) => {
@@ -376,6 +454,20 @@ impl<'a> Walker<'a> {
         if matches!(self.containers.last(), Some(Container::Item { .. })) {
             self.open_leaf(Leaf::Paragraph);
             self.leaf_implicit = true;
+        }
+    }
+
+    /// Render the accumulated table into box-drawing rows and emit
+    /// each with the current container prefix.
+    fn finish_table(&mut self) {
+        let Some(t) = self.table.take() else {
+            return;
+        };
+        let prefix = self.continuation_prefix();
+        let available = self.width.saturating_sub(display_width(&prefix)).max(8);
+        let rows = table::render(&t.head, &t.body, &t.alignments, available, self.theme);
+        for row in rows {
+            self.out.push(format!("{prefix}{row}"));
         }
     }
 

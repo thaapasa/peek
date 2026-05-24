@@ -9,6 +9,7 @@
 //! accumulated text; `wrap` re-applies the active style after each cut
 //! so styled spans survive a line break.
 
+mod table;
 mod walker;
 mod wrap;
 
@@ -179,6 +180,16 @@ mod tests {
         assert!(out.contains("[image:"));
         assert!(out.contains("alt text"));
         assert!(out.contains("(pic.png)"));
+    }
+
+    #[test]
+    fn table_renders_box_drawing_with_header_separator() {
+        let out = render_styled("| a | b |\n|---|---|\n| 1 | 2 |\n");
+        // Top + head-sep + bottom borders use these corner glyphs.
+        assert!(out.contains("┌"), "expected top border in {out:?}");
+        assert!(out.contains("├"), "expected head separator in {out:?}");
+        assert!(out.contains("└"), "expected bottom border in {out:?}");
+        assert!(out.contains("│"), "expected vertical bars in {out:?}");
     }
 
     #[test]
