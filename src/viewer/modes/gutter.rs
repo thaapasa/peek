@@ -34,12 +34,7 @@ impl Gutter {
     /// Digit count for a gutter sized to `total` lines — minimum 2, so
     /// a 9-line file's gutter doesn't bounce in width past line 9.
     pub(crate) fn digit_width(total: usize) -> usize {
-        let mut digits = 1;
-        let mut n = total;
-        while n >= 10 {
-            n /= 10;
-            digits += 1;
-        }
+        let digits = total.checked_ilog10().map_or(1, |n| n as usize + 1);
         digits.max(2)
     }
 

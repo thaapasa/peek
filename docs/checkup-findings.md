@@ -186,12 +186,6 @@ from `status_segments()` (line 332) which runs every render. Noise for a
 typical archive; measurable for a 100k-entry tarball. Precompute at
 construction (count is immutable for the mode's lifetime).
 
-### L9. `Gutter::digit_width` hand-rolls log10 with a loop
-
-`viewer/modes/gutter.rs:36-44`: `while n >= 10 { n /= 10; digits += 1; }`.
-Standard form is `total.checked_ilog10().map_or(1, |n| n + 1).max(2) as
-usize`. Trivial cleanup, removes the manual loop from a hot-ish path.
-
 ### L10. `ModeId` variants are shared by multiple Mode impls without a documented contract
 
 `ModeId::Listing` is returned by `ListingMode` and `DirectoryMode`.
