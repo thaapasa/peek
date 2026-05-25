@@ -322,10 +322,10 @@ fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
 /// `LANG_STATS_BYTE_LIMIT`: PEM is line-oriented and a multi-GB file
 /// claiming the format would otherwise pull the whole blob into memory.
 fn cert_gather(source: &InputSource, _fmt: CertFormat, magic_mime: Option<&str>) -> FileExtras {
-    if let Ok(bs) = source.open_byte_source() {
-        if bs.len() > LANG_STATS_BYTE_LIMIT {
-            return crate::types::binary::info::gather_extras(magic_mime);
-        }
+    if let Ok(bs) = source.open_byte_source()
+        && bs.len() > LANG_STATS_BYTE_LIMIT
+    {
+        return crate::types::binary::info::gather_extras(magic_mime);
     }
     let Some(text_stats) = gather_text_stats(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);

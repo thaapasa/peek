@@ -54,15 +54,6 @@ because the path is reached only after `resolve_transparent` fails. The
 inconsistency works today but the four dispatchers no longer enumerate
 the same set.
 
-### M8. `viewer/mod.rs` (639 lines) has accreted unrelated concerns
-
-Holds Registry + ComposeCtx (dispatch wiring), `LineStreamHighlighter`
-(syntax line feeder), syntax-token resolution, fallback extension table,
-content escape-ranges walker. Three independent abstractions in one file.
-
-Direction: split highlighter + token resolution into `viewer/highlight.rs`;
-keep Registry + ComposeCtx + compose dispatch in `mod.rs`.
-
 ### M10. `ContentMode` is 744 lines, past the conventions refactor signal
 
 `viewer/modes/content.rs` already shed `content_rendering`, `content_pipe`,
