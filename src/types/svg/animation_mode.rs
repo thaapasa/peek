@@ -174,7 +174,8 @@ impl Mode for SvgAnimationMode {
     ) -> Result<()> {
         let snap = self.view.pipe_snapshot();
         self.invalidate_cache();
-        let window = self.render_window(ctx, 0, ctx.term_rows)?;
+        let capped = ctx.capped_for_image_pipe();
+        let window = self.render_window(&capped, 0, capped.term_rows)?;
         ImageView::write_lines(out, window)?;
         self.view.restore(snap);
         Ok(())

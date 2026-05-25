@@ -168,12 +168,3 @@ use `.enumerate().skip(self.h_col)`, the print variants use plain
 `.enumerate()`. Parameterise via `start_col: usize` and have the two
 callers pass `self.h_col` or `0`. Same for separator.
 
-### L12. `PIPE_IMAGE_MAX_ROWS` cap not applied in animation pipe paths
-
-`viewer/paged.rs:67` defines `PIPE_IMAGE_MAX_ROWS = 30`; `pipe_rows()`
-caps paged-document pipe output at that height.
-`types/image/animation_mode.rs:89-99` and `types/svg/animation_mode.rs:170-181`
-both render `render_to_pipe` using `ctx.term_rows` directly with no
-cap, so `peek file.gif | head` gets a different output height than
-`peek file.pdf | head`. Lift to a `RenderCtx::image_pipe_rows()` helper
-so all image-flavored modes share one cap.

@@ -116,6 +116,24 @@ pub(crate) struct RenderCtx<'a> {
     pub term_rows: usize,
 }
 
+impl<'a> RenderCtx<'a> {
+    /// Derived ctx with `term_rows` clamped to the shared image-pipe
+    /// cap. In interactive mode this returns the same `term_rows`; in
+    /// pipe / `--print` (`term_rows == usize::MAX`) it returns
+    /// [`crate::viewer::paged::PIPE_IMAGE_MAX_ROWS`] so an animation
+    /// frame or paged image doesn't dominate piped output.
+    pub(crate) fn capped_for_image_pipe(&self) -> RenderCtx<'a> {
+        RenderCtx {
+            file_info: self.file_info,
+            theme_name: self.theme_name,
+            peek_theme: self.peek_theme,
+            render_opts: self.render_opts,
+            term_cols: self.term_cols,
+            term_rows: crate::viewer::paged::pipe_rows(self.term_rows) as usize,
+        }
+    }
+}
+
 /// Result of `Mode::render_window`: the visible lines for the requested
 /// window plus the mode's total line count. Streaming modes use this to
 /// expose how big the source is without materializing every line.
