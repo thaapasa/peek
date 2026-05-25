@@ -564,17 +564,58 @@ in `pkcs8` / `sec1` / `pkcs1` separately.
 Not yet wired: DER-encoded `.crt` / `.cer` / `.der`, PKCS#12 / PFX, encrypted PKCS#8 password
 prompt, JWK. Tracked in [planned.md](planned.md).
 
+### Fonts ◐
+
+TrueType and OpenType wrappers (`.ttf` / `.otf`) plus font collections (`.ttc` / `.otc`) decode
+into a themed **Font** info section. Detection runs both ways: extension routing covers the four
+extensions; magic-byte sniff catches `00 01 00 00` / `OTTO` / `ttcf` / Apple's `true` variant,
+so unnamed sources (stdin, archive entries) still classify. Source view is omitted — fonts are
+binary containers, so the universal hex aux mode handles raw byte inspection.
+
+Per face (collections list face 0 in the first cut; per-face listing is planned):
+
+- Family, subfamily, full name, postscript name, version
+- OS/2 weight (`100`..`900` with the canonical name in parens), width class, italic flag,
+  monospaced flag
+- Glyph count, units per em, codepoint count (sum across all Unicode cmap subtables)
+- Script coverage — a list bucketed from cmap code-point ranges (`Latin`, `Latin Extended`,
+  `Greek`, `Cyrillic`, `Hebrew`, `Arabic`, `Devanagari`, `Thai`, `Hangul`, `CJK`, `Emoji`,
+  `Symbols`)
+- Hinting present flag (head.flags bit 0)
+- Designer, vendor URL, copyright, license URL
+
+Apple system fonts still ship their canonical name records on the Macintosh platform (Mac
+Roman), so the `name` decoder handles both UTF-16BE (Windows / Unicode platforms) and Mac
+Roman with the full upper-half mapping — `©` / `™` / accented Latin round-trip cleanly.
+
+**Specimen view.** The default open lands on a rasterised sample sentence — a hard-coded
+pangram + digits + ASCII alphabet, run through `fontdue` at a fixed pixel size and routed
+through the existing ASCII image pipeline. Every image-mode key works on the specimen
+(`m` cycles full-color / block / geo / ascii / contour, `b` cycles backgrounds, `f` cycles
+fit modes).
+
+Collections (`.ttc` / `.otc`) expose every face: `n` / `p` step the active face through the
+specimen in place, the status line shows `Face N/M`, and the Info screen lists every face's
+metadata block (family / subfamily / weight / glyphs / scripts / …). A face fontdue can't
+parse leaves the previous specimen in place rather than going blank.
+
+Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
+(pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser.
+
+WOFF / WOFF2 wrappers and multi-script sample sentences keyed on cmap coverage are
+[planned](planned.md#font-files-).
+
 ### Binary and Archive Files ◐
 
-For files peek doesn't have a specialized viewer for — fonts, firmware images — the baseline shows
-the **file info screen**:
+For files peek doesn't have a specialized viewer for — firmware images, opaque container
+formats — the baseline shows the **file info screen**:
 
 - File type / MIME (detected via magic bytes through the `infer` crate)
 - Size (exact + human-readable)
 - Filesystem metadata (permissions, timestamps)
 
-`infer` provides MIME only — no deeper metadata. Format-specific details (font tables, for
-instance) could be added later with dedicated parsers.
+`infer` provides MIME only — no deeper metadata. Format-specific details could be added later
+with dedicated parsers.
 
 Binary files open in the hex-dump viewer by default (`hexdump -C`-style, terminal-width aware,
 streaming via `ByteSource`). File info reachable via Tab / `i` from within hex, and via `--info`.

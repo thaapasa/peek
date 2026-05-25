@@ -18,6 +18,7 @@ pub use crate::types::csv::format::CsvFormat;
 pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
+pub use crate::types::font::format::FontFormat;
 pub use crate::types::structured::format::StructuredFormat;
 
 use crate::types::archive::detect as archive_detect;
@@ -28,6 +29,7 @@ use crate::types::csv::detect as csv_detect;
 use crate::types::disk_image::detect as disk_image_detect;
 use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
+use crate::types::font::detect as font_detect;
 use crate::types::structured::detect as structured_detect;
 
 /// Bytes read from the head of a file for magic-byte detection. `infer`
@@ -104,6 +106,11 @@ pub enum FileType {
     /// key). Source view shows the PEM text; Info decodes per-block
     /// fields (subject, validity, fingerprints, key usage, …).
     Cert(CertFormat),
+    /// TrueType / OpenType font or font collection (`.ttf` / `.otf` /
+    /// `.ttc` / `.otc`). Drives a metadata-only info view in the first
+    /// cut: family / subfamily / weight / glyph + codepoint counts /
+    /// supported scripts. No source view (binary container).
+    Font(FontFormat),
     /// Binary / unknown
     Binary,
 }
@@ -349,6 +356,16 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     {
         return Some("application/java-vm".to_string());
     }
+    if let Some(fmt) = font_detect::sniff_font_bytes(head) {
+        return Some(
+            match fmt {
+                FontFormat::TrueType => "font/ttf",
+                FontFormat::OpenType => "font/otf",
+                FontFormat::Collection => "font/collection",
+            }
+            .to_string(),
+        );
+    }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
 
@@ -384,6 +401,14 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     }
     if let Some(fmt) = audio_detect::format_from_mime(mime) {
         return Some(FileType::Audio(fmt));
+    }
+    if let Some(fmt) = match mime {
+        "font/ttf" | "application/font-sfnt" => Some(FontFormat::TrueType),
+        "font/otf" => Some(FontFormat::OpenType),
+        "font/collection" => Some(FontFormat::Collection),
+        _ => None,
+    } {
+        return Some(FileType::Font(fmt));
     }
     if mime.starts_with("application/x-executable")
         || mime == "application/x-mach-binary"
@@ -667,6 +692,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = cert_detect::format_from_ext(&ext) {
         return Some(FileType::Cert(fmt));
+    }
+    if let Some(fmt) = font_detect::format_from_ext(&ext) {
+        return Some(FileType::Font(fmt));
     }
     if let Some(fmt) = structured_detect::format_from_ext(&ext) {
         return Some(FileType::Structured(fmt));

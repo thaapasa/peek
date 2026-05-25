@@ -21,7 +21,7 @@ use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta}
 use crate::input::InputSource;
 use crate::input::detect::{
     CertFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
-    EbookFormat, FileType,
+    EbookFormat, FileType, FontFormat,
 };
 use crate::input::mime;
 
@@ -297,6 +297,7 @@ fn gather_extras(
         FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
         FileType::Csv(fmt) => csv_gather(source, *fmt),
         FileType::Cert(fmt) => cert_gather(source, *fmt, magic_mime),
+        FileType::Font(fmt) => font_gather(source, *fmt, magic_mime),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
         FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
         FileType::Directory => match source {
@@ -334,4 +335,22 @@ fn cert_gather(source: &InputSource, _fmt: CertFormat, magic_mime: Option<&str>)
         return crate::types::binary::info::gather_extras(magic_mime);
     };
     FileExtras::Cert(crate::types::cert::info_gather::gather(&text, text_stats))
+}
+
+/// Cap on bytes read for font parsing. The largest fonts in the wild —
+/// Noto CJK supersets, Apple's San Francisco collection — sit around
+/// 30–50 MB; 256 MB leaves comfortable headroom for the worst case
+/// without putting an absurd buffer at the mercy of a hostile input.
+const FONT_BYTE_LIMIT: u64 = 256 * 1024 * 1024;
+
+fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) -> FileExtras {
+    if let Ok(bs) = source.open_byte_source()
+        && bs.len() > FONT_BYTE_LIMIT
+    {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    }
+    let Ok(bytes) = source.read_bytes() else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    FileExtras::Font(crate::types::font::info_gather::gather(&bytes, fmt))
 }

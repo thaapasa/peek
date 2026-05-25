@@ -136,6 +136,10 @@ pub(crate) enum Action {
     NextChapter,
     /// Step back to the previous chapter (EPUB read mode).
     PrevChapter,
+    /// Advance to the next face in a font collection (font Specimen mode).
+    NextFace,
+    /// Step back to the previous face (font Specimen mode).
+    PrevFace,
     /// Open the text-search prompt (ContentMode).
     OpenSearch,
     /// Jump to the next search match (ContentMode).
@@ -213,6 +217,8 @@ impl Action {
             Action::PrevFrame           => binds![B::plain(Char('p'))],
             Action::NextChapter         => binds![B::plain(Char('n'))],
             Action::PrevChapter         => binds![B::plain(Char('p'))],
+            Action::NextFace            => binds![B::plain(Char('n'))],
+            Action::PrevFace            => binds![B::plain(Char('p'))],
             Action::OpenSearch          => binds![B::plain(Char('/'))],
             Action::NextMatch           => binds![B::plain(Char('n'))],
             Action::PrevMatch           => binds![B::plain(Char('p'))],

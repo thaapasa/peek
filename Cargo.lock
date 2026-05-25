@@ -1776,6 +1776,7 @@ dependencies = [
  "tar",
  "tempfile",
  "toml",
+ "ttf-parser 0.25.1",
  "two-face",
  "unicode-width",
  "windows-sys 0.59.0",

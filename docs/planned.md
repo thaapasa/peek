@@ -291,24 +291,27 @@ listing shipped (see [features.md](features.md) "Audio Files"). Open ideas:
 - **ASCII waveform or spectrum preview.** Decoding adds cost — decide later. Tags alone are
   cheap and useful.
 
-### Font Files ☐
+### Font Files ◐
 
-| Format          | Extensions        |
-|-----------------|-------------------|
-| TrueType        | `.ttf`            |
-| OpenType        | `.otf`            |
-| Web fonts       | `.woff`, `.woff2` |
-| Font collection | `.ttc`, `.otc`    |
+TTF / OTF / TTC metadata + specimen render ship — see
+[features.md → Fonts](features.md#fonts-). Still planned:
 
-Metadata: family name, subfamily, full name, version, copyright, license URL, designer, vendor;
-units-per-em, glyph count, supported scripts/codepoints, OS/2 weight/width, monospace flag, hinting
-present.
+| Format    | Extensions        |
+|-----------|-------------------|
+| Web fonts | `.woff`, `.woff2` |
 
-Stretch: specimen render — ASCII-art rasterise a sample string ("The quick brown fox…") at a
-chosen size through the existing image pipeline. Glyph rasterization needs a separate crate
-(`fontdue` or `ab_glyph`).
+WOFF / WOFF2 need separate decompressors (zlib / brotli) — deferred until the case for shipping
+their dep weight is concrete.
 
-Crates: `ttf-parser` or `skrifa` (read-fonts) for metadata. `fontdue` for specimen rasterization.
+Stretch:
+
+- Multi-script sample sentences keyed on cmap coverage (Cyrillic / Greek / Arabic / CJK
+  samplers when the font carries the glyphs). The current sampler is a hard-coded ASCII
+  pangram.
+- True recursive peek into a single face of a `.ttc` collection — would need to synthesise
+  a standalone SFNT from the TTC table directory (copy referenced tables, recompute offsets
+  and checksums). The current shape — face-cycle keys (`n` / `p`) on the SpecimenMode and
+  every face's metadata in Info — covers the visible use case at a fraction of the cost.
 
 ### Single-File Compressed ◐
 

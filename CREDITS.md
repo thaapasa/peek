@@ -76,3 +76,15 @@ name, otherwise the bare text is freely usable.
 |---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
 | `test-data/image-post-processing.pdf` | [The open draft](https://commons.wikimedia.org/wiki/File:Image_Post_Processing_12_April_2024.pdf) (Wikimedia Commons)                                              | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | `test-data/surreal-numbers.pdf`       | [Philip Ehrlich](https://commons.wikimedia.org/wiki/File:Conway_names,_the_simplicity_hierarchy_and_the_surreal_number_tree.pdf), *J. Logic & Analysis* 3:1 (2011) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
+
+## Example fonts
+
+Bundled verbatim from [google/fonts](https://github.com/google/fonts); each subdirectory
+carries the upstream `OFL.txt` alongside the font binary. Used by the font-viewer tests and
+to give the specimen render output enough visual range for a useful smoke test.
+
+| File                                                | Author / Source                                                                                | License                                                                  |
+|-----------------------------------------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
+| `test-data/fonts/sacramento/Sacramento-Regular.ttf` | [Astigmatic — Brian J. Bonislawsky](https://github.com/google/fonts/tree/main/ofl/sacramento)  | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/sacramento/OFL.txt) |
+| `test-data/fonts/greatvibes/GreatVibes-Regular.ttf` | [TypeSETit](https://github.com/google/fonts/tree/main/ofl/greatvibes)                          | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/greatvibes/OFL.txt) |
+| `test-data/fonts/cabin/Cabin[wdth,wght].ttf`        | [Pablo Impallari](https://github.com/google/fonts/tree/main/ofl/cabin)                         | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/cabin/OFL.txt)      |
