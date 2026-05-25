@@ -588,12 +588,18 @@ Apple system fonts still ship their canonical name records on the Macintosh plat
 Roman), so the `name` decoder handles both UTF-16BE (Windows / Unicode platforms) and Mac
 Roman with the full upper-half mapping — `©` / `™` / accented Latin round-trip cleanly.
 
-Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
-(pure Rust, no_std, zero-alloc). `fontdue` is also pulled in as a runtime dep (the glyph
-specimen render uses it; the metadata view doesn't need it yet).
+**Specimen view.** The default open lands on a rasterised sample sentence — a hard-coded
+pangram + digits + ASCII alphabet, run through `fontdue` at a fixed pixel size and routed
+through the existing ASCII image pipeline. Every image-mode key works on the specimen
+(`m` cycles full-color / block / geo / ascii / contour, `b` cycles backgrounds, `f` cycles
+fit modes). Face 0 of a collection is the one rasterised; per-face listing recursion is the
+follow-up item.
 
-WOFF / WOFF2 wrappers and a per-face listing recursion for collections are
-[planned](planned.md#font-files-).
+Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
+(pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser.
+
+WOFF / WOFF2 wrappers, multi-script sample sentences keyed on cmap coverage, and a per-face
+listing recursion for collections are [planned](planned.md#font-files-).
 
 ### Binary and Archive Files ◐
 

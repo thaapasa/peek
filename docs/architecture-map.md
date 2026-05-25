@@ -85,10 +85,12 @@ src/
       mod.rs           — Module wiring
       format.rs        — FontFormat enum (TrueType / OpenType / Collection) + label
       detect.rs        — format_from_ext (`.ttf` / `.otf` / `.ttc` / `.otc`) + sniff_font_bytes (4-byte magic: `00 01 00 00` / `true` / `OTTO` / `ttcf`). WOFF / WOFF2 deferred (need separate decompressors)
-      compose.rs       — compose(): no type-specific modes yet; Info + universal Hex tail render the metadata + raw bytes (Phase 2 will push the specimen render here)
+      compose.rs       — compose(): rasterise specimen → SpecimenMode (primary view). Best-effort — a font fontdue can't parse skips the specimen push and falls through to the Info + Hex tail
       info.rs          — FontInfo { format, face_count, faces, parse_errors } + FaceInfo (family / subfamily / postscript_name / version / OS/2 weight + width / italic / monospaced / glyph_count / units_per_em / codepoint_count / scripts / hinting / designer / vendor / copyright / license_url)
       info_gather.rs   — ttf-parser Face walk: read_name_table (UTF-16BE + Mac Roman decoders — Apple system fonts still ship Macintosh-platform records as canonical, so the full Mac Roman upper-half mapping is bundled here) + head_flags (hinting bit) + scan_cmap (Unicode codepoint count + 12-bucket script coverage from cmap ranges). gather_face_at exposed for the Phase 3 per-face listing recursion
       info_render.rs   — Render Font info section (Format + Faces count for collections, then a per-face block per FaceInfo). Weight painted as `<class> (<name>)` for canonical OS/2 weights, bare number otherwise; empty name-table fields skip their row entirely
+      specimen.rs      — rasterise(bytes, face_index, target_height_px) → DynamicImage. fontdue rasterises each glyph of a hard-coded sample (pangrams + digits + ASCII alphabet) at a derived font size, blits them into a white RGBA8 canvas with baseline alignment. Coverage values darken the destination per glyph; the existing image pipeline downsamples + composites
+      specimen_mode.rs — SpecimenMode: parallel to image::ImageRenderMode but owns a pre-decoded DynamicImage instead of a source. Same ImageView wiring (cycle background / image-mode / fit, FitHeight horizontal pan, single-slot cache invalidated on resize / margin / bg / fit change). Pipe path uses capped_for_image_pipe so font specimens don't dominate piped output
     structured/
       mod.rs           — Module wiring
       format.rs        — StructuredFormat enum (JSON/JSONC/JSON5/JSONL/YAML/TOML/XML)
