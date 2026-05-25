@@ -124,14 +124,4 @@ byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
 
-### L11. CsvTableMode `build_separator_row` near-copy of `_print` variant
-
-`types/csv/table_mode.rs` separator pair: interactive variant uses
-`.enumerate().skip(self.h_col)`, print variant uses plain `.enumerate()`
-— otherwise identical character loop. Parameterise via `start_col: usize`.
-
-(The header pair looks similar at a glance but diverges functionally:
-the print variant uses `display_cell`, handles overflow with
-`paint_content_with_markers`, and skips search-highlight ranges. Not a
-candidate for the same parameterisation.)
 

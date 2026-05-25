@@ -385,19 +385,7 @@ impl CsvTableMode {
 
     /// Build the separator row between header and body.
     fn build_separator_row(&self, widths: &[usize], theme: &PeekTheme) -> String {
-        let mut buf = String::new();
-        buf.push(SEP_ROW_CHAR);
-        for (i, w) in widths.iter().enumerate().skip(self.h_col) {
-            if i > self.h_col {
-                buf.push(SEP_ROW_CHAR);
-                buf.push(SEP_JUNCTION_CHAR);
-                buf.push(SEP_ROW_CHAR);
-            }
-            for _ in 0..*w {
-                buf.push(SEP_ROW_CHAR);
-            }
-        }
-        theme.paint_muted(&buf)
+        build_separator_row(widths, theme, self.h_col)
     }
 
     /// Build one body row at record index `body_idx` (0 = first body row).
@@ -928,20 +916,27 @@ impl CsvTableMode {
     }
 
     fn build_separator_row_print(&self, widths: &[usize], theme: &PeekTheme) -> String {
-        let mut buf = String::new();
-        buf.push(SEP_ROW_CHAR);
-        for (i, w) in widths.iter().enumerate() {
-            if i > 0 {
-                buf.push(SEP_ROW_CHAR);
-                buf.push(SEP_JUNCTION_CHAR);
-                buf.push(SEP_ROW_CHAR);
-            }
-            for _ in 0..*w {
-                buf.push(SEP_ROW_CHAR);
-            }
-        }
-        theme.paint_muted(&buf)
+        build_separator_row(widths, theme, 0)
     }
+}
+
+/// Box-drawing separator row between header and body. `start_col` is
+/// the first column index to draw — the interactive view starts at the
+/// horizontal-scroll cursor, print mode always starts at 0.
+fn build_separator_row(widths: &[usize], theme: &PeekTheme, start_col: usize) -> String {
+    let mut buf = String::new();
+    buf.push(SEP_ROW_CHAR);
+    for (i, w) in widths.iter().enumerate().skip(start_col) {
+        if i > start_col {
+            buf.push(SEP_ROW_CHAR);
+            buf.push(SEP_JUNCTION_CHAR);
+            buf.push(SEP_ROW_CHAR);
+        }
+        for _ in 0..*w {
+            buf.push(SEP_ROW_CHAR);
+        }
+    }
+    theme.paint_muted(&buf)
 }
 
 #[cfg(test)]
