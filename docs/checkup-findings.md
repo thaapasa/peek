@@ -46,6 +46,14 @@ render, compose, extract). Acceptable today; flag if a 6th wiring point
 ever appears — at that count a `trait FileTypeRegistry` registering all
 of them at one site beats the explicit dispatches.
 
+Concrete drift already present: `FileType::Compressed(_)` short-circuits
+to `binary::info::gather_extras` in `info/gather/mod.rs:293`, but
+`info/render/mod.rs:36-99` has no `Compressed` arm in the 20-arm match,
+and `compose_modes`' compressed block (`viewer/mod.rs:330-338`) is empty
+because the path is reached only after `resolve_transparent` fails. The
+inconsistency works today but the four dispatchers no longer enumerate
+the same set.
+
 ### M7. `ContentMode::scroll` empty-doc action set duplicates the wrap-scroll match
 
 `content.rs:604-619` short-circuits an empty-doc by matching against
@@ -65,6 +73,70 @@ content escape-ranges walker. Three independent abstractions in one file.
 
 Direction: split highlighter + token resolution into `viewer/highlight.rs`;
 keep Registry + ComposeCtx + compose dispatch in `mod.rs`.
+
+### M9. `PagedImageMode::render_to_pipe` and `EpubReadMode::render_to_pipe` byte-identical
+
+`viewer/paged.rs:297-313` and `types/ebook/epub/read_mode.rs:226-242`.
+Both walk total items, save/restore current, call `ensure_rendered()`,
+write lines, insert blank between pages. The chapter renderer correctly
+isn't a `PagedImageMode<EpubChapterRenderer>` (cache strategy diverges,
+documented), but the pipe walk doesn't depend on cache strategy. Lift
+`pipe_walk_pages(&mut self, ctx, out, render_page_fn)` into `paged.rs`
+and call from both sites.
+
+### M10. `ContentMode` is 744 lines, past the conventions refactor signal
+
+`viewer/modes/content.rs` already shed `content_rendering`, `content_pipe`,
+`pretty_view`, `gutter`, `wrap_scroll`. What's left is five concerns:
+window prepare (raw catch-up + pretty cache refresh), visual-row emission
+with overlay/wrap, search wiring, `Mode` impl, keyboard/state plumbing.
+The window-prepare + emit pair (`prepare_window`, `emit_window`,
+`emit_visual_rows`, `usable_width`) is its own concern — a
+`WindowRenderer` taking `(rendering, line_source, highlighter, gutter,
+wrap, search)` borrows would let `ContentMode`'s impl fit on screen.
+Current shape leaks `wrap`'s clamp invariants into every render path
+(`clamp_top()` called twice per render).
+
+### M11. `retry_frame_detection` duplicates `SessionFrame::new` construction
+
+`viewer/ui/state.rs:771-811` rebuilds modes from `mode_builder` and
+re-derives `last_primary` via `f.modes[0].is_aux()` (lines 796-800),
+resets `scroll/views/position` (lines 801-803) — the same shape
+`SessionFrame::new` runs at lines 117-127. A future tweak to
+`SessionFrame::new` (e.g., changing the is_aux-of-0 invariant or adding
+a new field) won't flow into the retry path. Lift to
+`SessionFrame::reseed_from_modes(modes)`.
+
+### M12. `--plain` mutates `args.color` instead of being its own intent
+
+`main.rs:24-25`: `if args.plain { args.color = StyleMode::Plain; }`.
+Downstream code reads `args.plain` independently of `args.color`:
+`viewer/mod.rs:392,404,423,433` thread `args.plain` into
+`ComposeCtx.plain_mode`; `text_content_mode` branches on `plain_mode` to
+disable syntax tokens. Two sources of truth for the same intent — an
+`info_render` that paints accent-color when `args.plain` is set but
+`args.color != Plain` would be a bug; today the code is correct only
+because every `paint_*` flows through `StyleMode::Plain`. Either drop
+`args.plain` (it's `--color plain` + a derived tweak), or have
+`compose_ctx` derive `plain_mode` from the resolved `StyleMode`.
+
+### M13. `gather_code_extras` and `gather_markdown_extras` read the file twice
+
+`info/gather/mod.rs:59-88` (code) and lines around 98-99 (markdown):
+`gather_text_stats(source)?` streams the bytes for stats, then
+`source.read_text()` re-walks from offset 0 to build the String for the
+language-specific gather. For an 8 MB CSS file that's 16 MB of I/O for
+one info screen. Either expose `gather_text_stats_with_body` returning
+`(TextStats, String)`, or skip the stats pass when the language gather
+will read the whole text anyway.
+
+### M14. `cert_gather` parses PEM without any size cap
+
+`info/gather/mod.rs:322-330`. Other gathers (`gather_code_extras`,
+`gather_markdown_extras`) cap at `LANG_STATS_BYTE_LIMIT` (64 MB) before
+`read_text()`; cert path skips the check and calls `read_text()`
+unconditionally. PEM is line-oriented — a 1 GB `.pem` file currently
+parses end-to-end into memory. Apply the same cap or scan line-by-line.
 
 ## Low
 
@@ -105,3 +177,53 @@ Alternative: `HexMode::new` returns `Err` for sources that can't be
 byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
+
+### L7. `markdown/render/walker.rs:383` uses unnecessary `unwrap` after pattern guard
+
+The outer arm `Some(ord @ Some(_))` (line 382) already proves the inner
+`Option` is `Some`, then line 383 does `let n = ord.unwrap();`. Unreachable
+panic today but a smell that survives refactors. Rebind directly:
+`Some(ord @ Some(n)) => { *ord = Some(n + 1); … }`.
+
+### L8. `ListingMode::file_count()` recounts rows on every render
+
+`viewer/listing/mode.rs:91-93`:
+`self.rows.iter().filter(|r| r.inner_path.is_some()).count()`. Called
+from `status_segments()` (line 332) which runs every render. Noise for a
+typical archive; measurable for a 100k-entry tarball. Precompute at
+construction (count is immutable for the mode's lifetime).
+
+### L9. `Gutter::digit_width` hand-rolls log10 with a loop
+
+`viewer/modes/gutter.rs:36-44`: `while n >= 10 { n /= 10; digits += 1; }`.
+Standard form is `total.checked_ilog10().map_or(1, |n| n + 1).max(2) as
+usize`. Trivial cleanup, removes the manual loop from a hot-ish path.
+
+### L10. `ModeId` variants are shared by multiple Mode impls without a documented contract
+
+`ModeId::Listing` is returned by `ListingMode` and `DirectoryMode`.
+`ModeId::Content` is returned by `ContentMode`, `viewer/table/mode::TableMode`,
+and `CsvTableMode`. `ModeId::Rendered` is returned by `RenderedTextMode<R>`,
+`PagedImageMode<R>`, and `EpubReadMode`. Works because each file type
+has at most one mode per id — undocumented invariant. `TableMode::id`
+already carries a one-line comment about this; lift it into the
+architecture doc as "`ModeId` is the role the mode fills in its stack,
+not the impl name". No code change needed.
+
+### L11. CsvTableMode `build_header_row` / `build_separator_row` near-copies of `_print` variants
+
+`types/csv/table_mode.rs:367-387` vs `:900-931` (header) and `:390-404`
+vs `:933-947` (separator). Core loop identical; the interactive variants
+use `.enumerate().skip(self.h_col)`, the print variants use plain
+`.enumerate()`. Parameterise via `start_col: usize` and have the two
+callers pass `self.h_col` or `0`. Same for separator.
+
+### L12. `PIPE_IMAGE_MAX_ROWS` cap not applied in animation pipe paths
+
+`viewer/paged.rs:67` defines `PIPE_IMAGE_MAX_ROWS = 30`; `pipe_rows()`
+caps paged-document pipe output at that height.
+`types/image/animation_mode.rs:89-99` and `types/svg/animation_mode.rs:170-181`
+both render `render_to_pipe` using `ctx.term_rows` directly with no
+cap, so `peek file.gif | head` gets a different output height than
+`peek file.pdf | head`. Lift to a `RenderCtx::image_pipe_rows()` helper
+so all image-flavored modes share one cap.
