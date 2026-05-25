@@ -8,10 +8,8 @@
 
 use pulldown_cmark::Alignment;
 
-use crate::theme::PeekTheme;
+use crate::theme::{PeekTheme, display_width};
 use crate::viewer::ui::wrap_styled;
-
-use super::wrap::display_width;
 
 const MIN_COL_WIDTH: usize = 3;
 const CELL_PAD: usize = 1;

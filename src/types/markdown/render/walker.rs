@@ -12,11 +12,11 @@ use std::rc::Rc;
 
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
-use crate::theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager};
+use crate::theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager, display_width};
 use crate::viewer::highlight_lines;
 
 use super::table;
-use super::wrap::{display_width, wrap_with_prefix};
+use super::wrap::wrap_with_prefix;
 
 pub(super) struct Walker<'a> {
     out: Vec<String>,
@@ -51,6 +51,14 @@ pub(super) struct Walker<'a> {
     /// line. Used by footnote definitions to inject the `[^label]: `
     /// header onto the inner Paragraph's first wrapped row.
     pending_first_line: Option<String>,
+    /// Nesting depth of open `Blockquote` containers. The container
+    /// stack already tracks this; we mirror it here so the
+    /// outermost-close finalizer can paint the highlight without
+    /// re-scanning the stack.
+    bq_depth: usize,
+    /// Index into `out` at which the outermost open blockquote
+    /// started. Valid only while `bq_depth > 0`.
+    bq_outer_start: usize,
 }
 
 /// Accumulator for a table's parsed structure: rows of styled cell
@@ -125,6 +133,8 @@ impl<'a> Walker<'a> {
             suppress_next_blank: false,
             table: None,
             pending_first_line: None,
+            bq_depth: 0,
+            bq_outer_start: 0,
         }
     }
 
@@ -156,11 +166,20 @@ impl<'a> Walker<'a> {
                 // open with a lone rail row, then another rail row of
                 // content, doubling the visual gap.
                 self.maybe_blank_separator();
+                if self.bq_depth == 0 {
+                    self.bq_outer_start = self.out.len();
+                }
+                self.bq_depth += 1;
                 self.containers.push(Container::Blockquote);
                 self.suppress_next_blank = true;
             }
             Event::End(TagEnd::BlockQuote(_)) => {
+                self.flush_open_leaf();
                 self.containers.pop();
+                self.bq_depth = self.bq_depth.saturating_sub(1);
+                if self.bq_depth == 0 {
+                    self.paint_blockquote_highlight();
+                }
                 self.suppress_next_blank = false;
             }
 
@@ -537,9 +556,15 @@ impl<'a> Walker<'a> {
     /// Render a fenced or indented code block. Tries to highlight via
     /// syntect when `lang` resolves; falls back to dim-styled plain
     /// lines on miss / failure. Each row gets the container chain
-    /// prefix plus an `  ` indent so code stands apart from prose.
+    /// prefix plus an `  ` indent so code stands apart from prose, and
+    /// the indent + body region gets the shared surface-tint
+    /// background so the block reads as a card. When the code block
+    /// is inside a blockquote the outer BQ paint covers the same
+    /// lines with the same tint — skip the per-row paint here so
+    /// double-painting doesn't show seams.
     fn emit_code_block(&mut self, body: &str, lang: &str) {
         let prefix = self.continuation_prefix();
+        let prefix_w = display_width(&prefix);
         let indent = "  ";
         let highlighted: Option<Vec<String>> = (!lang.is_empty()
             && self.style_mode != StyleMode::Plain)
@@ -570,8 +595,16 @@ impl<'a> Walker<'a> {
                 .collect(),
         };
 
+        let inside_bq = self.bq_depth > 0;
+        let avail = self.width.saturating_sub(prefix_w).max(1);
         for row in rows {
-            self.out.push(format!("{prefix}{indent}{row}"));
+            let body = format!("{indent}{row}");
+            let painted = if inside_bq {
+                body
+            } else {
+                self.theme.paint_bg_filled(&body, self.theme.surface, avail)
+            };
+            self.out.push(format!("{prefix}{painted}"));
         }
     }
 
@@ -608,6 +641,20 @@ impl<'a> Walker<'a> {
         }
         let prefix = self.continuation_prefix();
         self.out.push(prefix.trim_end().to_string());
+    }
+
+    /// Repaint every line emitted while the outermost blockquote was
+    /// open with a subtle background highlight. Called exactly once
+    /// when the outermost `Blockquote` container closes — nested
+    /// quotes are already inside the outer range and don't need a
+    /// second pass.
+    fn paint_blockquote_highlight(&mut self) {
+        let range = self.bq_outer_start..self.out.len();
+        for i in range {
+            self.out[i] = self
+                .theme
+                .paint_bg_filled(&self.out[i], self.theme.surface, self.width);
+        }
     }
 
     fn emit_lines(&mut self, body: &str) {

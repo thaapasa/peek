@@ -181,6 +181,20 @@ pub fn scan(s: &str) -> SgrScan<'_> {
     SgrScan { s, i: 0 }
 }
 
+/// Display width of a string with possibly embedded SGR escapes — only
+/// text tokens contribute their `UnicodeWidthStr` width; escapes count
+/// as zero. Used by every consumer that needs to size styled output
+/// against a column budget (wrap, tables, bg-filled lines).
+pub fn display_width(s: &str) -> usize {
+    let mut w = 0;
+    for tok in scan(s) {
+        if let Sgr::Text(text) = tok {
+            w += unicode_width::UnicodeWidthStr::width(text);
+        }
+    }
+    w
+}
+
 impl<'a> Iterator for SgrScan<'a> {
     type Item = Sgr<'a>;
 

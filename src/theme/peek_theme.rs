@@ -28,6 +28,11 @@ pub struct PeekTheme {
     pub gutter: Color,
     pub search_match: Color,
     pub selection: Color,
+    /// Subtle block-level background tint (rendered Markdown code
+    /// blocks, blockquotes, similar "card" surfaces). Sits between
+    /// `background` and `foreground` so the area reads as a
+    /// distinct surface without competing with the text inside it.
+    pub surface: Color,
     /// Output color encoding. Toggled at runtime — paint helpers read
     /// this on each call so a cycle invalidating the line cache is enough
     /// to switch the whole UI.
@@ -59,6 +64,7 @@ impl PeekTheme {
                 .settings
                 .selection
                 .unwrap_or_else(|| blend(bg, fg, 0.15)),
+            surface: blend(bg, fg, 0.05),
             style_mode: StyleMode::TrueColor,
         }
     }
@@ -108,6 +114,40 @@ impl PeekTheme {
             content,
             self.style_mode.reset()
         )
+    }
+
+    /// Paint a styled line on a solid background and pad with
+    /// bg-coloured spaces to `width`. Inner SGR resets clear the
+    /// background — every reset is re-armed in place so the bg
+    /// persists across attribute spans inside the line. Returns the
+    /// line unchanged in plain (no-style) modes.
+    ///
+    /// Used by block-level surface highlights (rendered Markdown code
+    /// blocks, blockquotes) where the whole row should read as a
+    /// distinct card and short lines still show the full gutter band.
+    pub fn paint_bg_filled(&self, content: &str, color: Color, width: usize) -> String {
+        if !self.style_mode.styled() {
+            return content.to_string();
+        }
+        let bg_open = self.style_mode.bg_seq(color);
+        let reset = self.style_mode.reset();
+        let body = if reset.is_empty() {
+            content.to_string()
+        } else {
+            content.replace(reset, &format!("{reset}{bg_open}"))
+        };
+        let visible = super::sgr::display_width(content);
+        let pad = width.saturating_sub(visible);
+        let mut out = String::with_capacity(content.len() + bg_open.len() * 2 + reset.len() + pad);
+        out.push_str(&bg_open);
+        out.push_str(&body);
+        if pad > 0 {
+            for _ in 0..pad {
+                out.push(' ');
+            }
+        }
+        out.push_str(reset);
+        out
     }
 
     pub fn paint_heading(&self, text: &str) -> String {

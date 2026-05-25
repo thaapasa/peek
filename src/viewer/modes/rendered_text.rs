@@ -125,13 +125,12 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
-        let lines =
-            self.ensure_rendered(
-                ctx.term_cols,
-                ctx.peek_theme,
-                ctx.theme_name,
-                ctx.peek_theme.style_mode,
-            )?;
+        let lines = self.ensure_rendered(
+            ctx.term_cols,
+            ctx.peek_theme,
+            ctx.theme_name,
+            ctx.peek_theme.style_mode,
+        )?;
         let total = lines.len();
         let mut win = slice_window(lines, scroll, rows);
         search::overlay_window(&mut win, scroll, self.search.as_ref(), ctx.peek_theme);
@@ -143,13 +142,12 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
     }
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        let lines =
-            self.ensure_rendered(
-                ctx.term_cols,
-                ctx.peek_theme,
-                ctx.theme_name,
-                ctx.peek_theme.style_mode,
-            )?;
+        let lines = self.ensure_rendered(
+            ctx.term_cols,
+            ctx.peek_theme,
+            ctx.theme_name,
+            ctx.peek_theme.style_mode,
+        )?;
         for line in lines {
             out.write_line(line)?;
         }
