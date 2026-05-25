@@ -66,6 +66,28 @@ pub(crate) struct CachedRender {
 /// the output. Shared across paged viewers.
 pub(crate) const PIPE_IMAGE_MAX_ROWS: u32 = 30;
 
+/// Pipe-mode walk shared by paged viewers (`PagedImageMode`,
+/// `EpubReadMode`): emit each page in order, separated by a blank
+/// line. The caller's `emit_page` closure picks how to render index
+/// `i` and write to `out` — typically setting some `current` cursor,
+/// reading from a render cache, and writing the lines.
+pub(crate) fn pipe_walk_pages<F>(
+    out: &mut PrintOutput,
+    total: usize,
+    mut emit_page: F,
+) -> Result<()>
+where
+    F: FnMut(usize, &mut PrintOutput) -> Result<()>,
+{
+    for i in 0..total {
+        emit_page(i, out)?;
+        if i + 1 < total {
+            out.write_line("")?;
+        }
+    }
+    Ok(())
+}
+
 /// Translate a `term_rows` value (possibly `usize::MAX` for pipe mode)
 /// into a `u32` row count for the image pipeline. Pipe mode is capped
 /// at [`PIPE_IMAGE_MAX_ROWS`] so a tall image doesn't dominate output.
@@ -297,19 +319,17 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let total = self.renderer.page_count();
         let saved = self.current;
-        for i in 0..total {
+        let res = pipe_walk_pages(out, total, |i, out| {
             self.current = i;
             let lines =
                 self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
             for line in lines {
                 out.write_line(line)?;
             }
-            if i + 1 < total {
-                out.write_line("")?;
-            }
-        }
+            Ok(())
+        });
         self.current = saved;
-        Ok(())
+        res
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {

@@ -74,16 +74,6 @@ content escape-ranges walker. Three independent abstractions in one file.
 Direction: split highlighter + token resolution into `viewer/highlight.rs`;
 keep Registry + ComposeCtx + compose dispatch in `mod.rs`.
 
-### M9. `PagedImageMode::render_to_pipe` and `EpubReadMode::render_to_pipe` byte-identical
-
-`viewer/paged.rs:297-313` and `types/ebook/epub/read_mode.rs:226-242`.
-Both walk total items, save/restore current, call `ensure_rendered()`,
-write lines, insert blank between pages. The chapter renderer correctly
-isn't a `PagedImageMode<EpubChapterRenderer>` (cache strategy diverges,
-documented), but the pipe walk doesn't depend on cache strategy. Lift
-`pipe_walk_pages(&mut self, ctx, out, render_page_fn)` into `paged.rs`
-and call from both sites.
-
 ### M10. `ContentMode` is 744 lines, past the conventions refactor signal
 
 `viewer/modes/content.rs` already shed `content_rendering`, `content_pipe`,

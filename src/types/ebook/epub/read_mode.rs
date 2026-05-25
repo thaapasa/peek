@@ -42,7 +42,8 @@ use crate::types::image::pipeline::render::{
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::paged::{
-    self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, render_cached, step_paged,
+    self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, pipe_walk_pages,
+    render_cached, step_paged,
 };
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -226,19 +227,17 @@ impl Mode for EpubReadMode {
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let total = self.chapters.len();
         let saved = self.current;
-        for i in 0..total {
+        let res = pipe_walk_pages(out, total, |i, out| {
             self.current = i;
             let lines =
                 self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
             for line in lines {
                 out.write_line(line)?;
             }
-            if i + 1 < total {
-                out.write_line("")?;
-            }
-        }
+            Ok(())
+        });
         self.current = saved;
-        Ok(())
+        res
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
