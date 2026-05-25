@@ -318,8 +318,15 @@ fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
 
 /// Parse the source text as a PEM container (or SSH public-key file).
 /// Falls back to plain text stats / binary if it isn't valid UTF-8 —
-/// that handles a `.pem` extension misapplied to a DER blob.
+/// that handles a `.pem` extension misapplied to a DER blob. Capped at
+/// `LANG_STATS_BYTE_LIMIT`: PEM is line-oriented and a multi-GB file
+/// claiming the format would otherwise pull the whole blob into memory.
 fn cert_gather(source: &InputSource, _fmt: CertFormat, magic_mime: Option<&str>) -> FileExtras {
+    if let Ok(bs) = source.open_byte_source() {
+        if bs.len() > LANG_STATS_BYTE_LIMIT {
+            return crate::types::binary::info::gather_extras(magic_mime);
+        }
+    }
     let Some(text_stats) = gather_text_stats(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };

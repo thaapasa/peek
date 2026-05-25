@@ -130,14 +130,6 @@ one info screen. Either expose `gather_text_stats_with_body` returning
 `(TextStats, String)`, or skip the stats pass when the language gather
 will read the whole text anyway.
 
-### M14. `cert_gather` parses PEM without any size cap
-
-`info/gather/mod.rs:322-330`. Other gathers (`gather_code_extras`,
-`gather_markdown_extras`) cap at `LANG_STATS_BYTE_LIMIT` (64 MB) before
-`read_text()`; cert path skips the check and calls `read_text()`
-unconditionally. PEM is line-oriented — a 1 GB `.pem` file currently
-parses end-to-end into memory. Apply the same cap or scan line-by-line.
-
 ## Low
 
 ### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)
