@@ -178,17 +178,6 @@ byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
 
-### L10. `ModeId` variants are shared by multiple Mode impls without a documented contract
-
-`ModeId::Listing` is returned by `ListingMode` and `DirectoryMode`.
-`ModeId::Content` is returned by `ContentMode`, `viewer/table/mode::TableMode`,
-and `CsvTableMode`. `ModeId::Rendered` is returned by `RenderedTextMode<R>`,
-`PagedImageMode<R>`, and `EpubReadMode`. Works because each file type
-has at most one mode per id — undocumented invariant. `TableMode::id`
-already carries a one-line comment about this; lift it into the
-architecture doc as "`ModeId` is the role the mode fills in its stack,
-not the impl name". No code change needed.
-
 ### L11. CsvTableMode `build_header_row` / `build_separator_row` near-copies of `_print` variants
 
 `types/csv/table_mode.rs:367-387` vs `:900-931` (header) and `:390-404`
