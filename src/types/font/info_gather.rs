@@ -8,17 +8,20 @@ use crate::types::font::format::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
 
 /// Parse `bytes` as a font of the given container `format` and produce
-/// a [`FontInfo`]. Face 0 is always surfaced when parseable; collection
-/// face count is reported even when only face 0 is read.
+/// a [`FontInfo`]. Every face in a collection is gathered so the Info
+/// view can list them all; a malformed face surfaces as a `parse_errors`
+/// entry without suppressing the rest.
 pub fn gather(bytes: &[u8], format: FontFormat) -> FontInfo {
     let face_count = fonts_in_collection(bytes).unwrap_or(1);
 
     let mut faces = Vec::new();
     let mut parse_errors = Vec::new();
 
-    match Face::parse(bytes, 0) {
-        Ok(face) => faces.push(gather_face(0, &face)),
-        Err(e) => parse_errors.push(format!("face 0: {e}")),
+    for index in 0..face_count {
+        match Face::parse(bytes, index) {
+            Ok(face) => faces.push(gather_face(index, &face)),
+            Err(e) => parse_errors.push(format!("face {index}: {e}")),
+        }
     }
 
     FontInfo {
@@ -29,18 +32,10 @@ pub fn gather(bytes: &[u8], format: FontFormat) -> FontInfo {
     }
 }
 
-/// Parse a single face out of a collection by index. Returns `None`
-/// when the index is out of range or the face is malformed. Used by
-/// the per-face listing recursion (Phase 3).
-#[allow(dead_code)]
-pub fn gather_face_at(bytes: &[u8], index: u32) -> Option<FaceInfo> {
-    let face = Face::parse(bytes, index).ok()?;
-    Some(gather_face(index, &face))
-}
-
 /// Returns the embedded face count for a font collection, falling
-/// back to 1 for plain single-face containers.
-#[allow(dead_code)]
+/// back to 1 for plain single-face containers. Used by the compose
+/// path so the specimen mode knows how many faces it can cycle through
+/// without re-parsing every face's metadata.
 pub fn face_count(bytes: &[u8]) -> u32 {
     fonts_in_collection(bytes).unwrap_or(1)
 }

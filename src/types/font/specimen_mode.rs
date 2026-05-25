@@ -7,10 +7,12 @@
 //! decoded per resize.
 
 use anyhow::Result;
+use bytes::Bytes;
 use image::DynamicImage;
 use syntect::highlighting::Color;
 
 use crate::theme::PeekTheme;
+use crate::types::font::specimen;
 use crate::types::image::pipeline::render::{self, PreparedImage, TermSize};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::types::image::scroll::ScrollBounds;
@@ -61,19 +63,52 @@ const SPECIMEN_ACTIONS: &[HelpEntry] = &[
     ),
 ];
 
+const SPECIMEN_ACTIONS_WITH_FACE_CYCLE: &[HelpEntry] = &[
+    CYCLE_BACKGROUND_HELP,
+    CYCLE_IMAGE_MODE_HELP,
+    CYCLE_FIT_HELP,
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Scroll left / right (FitHeight)",
+    ),
+    (
+        &[Action::NextFace, Action::PrevFace],
+        "Next / previous face",
+    ),
+];
+
 pub(crate) struct SpecimenMode {
-    /// Pre-rasterised RGBA8 sample. Built once when the mode is
-    /// composed; image-config changes route through `prepare_decoded`
-    /// against this same buffer (the cached `composited` is the
-    /// resize+composite result that varies with terminal size).
+    /// Original font bytes — kept so face-cycle keys can re-rasterise a
+    /// different face without re-reading the source. Cheap to clone
+    /// since [`Bytes`] is refcounted.
+    bytes: Bytes,
+    /// Target canvas height for the rasteriser. Stored so face-cycle
+    /// re-rasters reuse the same size as the initial render.
+    target_height_px: u32,
+    /// Embedded face count from the TTC header (1 for plain TTF/OTF).
+    face_count: u32,
+    /// Currently rendered face. `current < face_count`.
+    current: u32,
+    /// Rasterised sample for the active face. Mutated when face-cycle
+    /// keys step `current`; the cache below is invalidated alongside.
     decoded: DynamicImage,
     view: ImageView,
     cache: Option<CachedFrame>,
 }
 
 impl SpecimenMode {
-    pub(crate) fn new(decoded: DynamicImage, config: ImageConfig) -> Self {
+    pub(crate) fn new(
+        bytes: Bytes,
+        face_count: u32,
+        decoded: DynamicImage,
+        target_height_px: u32,
+        config: ImageConfig,
+    ) -> Self {
         Self {
+            bytes,
+            target_height_px,
+            face_count: face_count.max(1),
+            current: 0,
             decoded,
             view: ImageView::new(config),
             cache: None,
@@ -86,6 +121,27 @@ impl SpecimenMode {
             let prep = render::prepare_decoded(self.decoded.clone(), &self.view.config, term);
             self.cache = Some(CachedFrame { key, prep });
         }
+    }
+
+    /// Step the active face by `delta` (wraps at both ends) and
+    /// re-rasterise. A face that fontdue can't parse leaves the
+    /// previous specimen in place rather than silently going blank.
+    fn step_face(&mut self, delta: i32) -> bool {
+        if self.face_count < 2 {
+            return false;
+        }
+        let n = self.face_count as i32;
+        let next = ((self.current as i32 + delta).rem_euclid(n)) as u32;
+        if next == self.current {
+            return false;
+        }
+        let Ok(new_image) = specimen::rasterise(&self.bytes, next, self.target_height_px) else {
+            return false;
+        };
+        self.current = next;
+        self.decoded = new_image;
+        self.cache = None;
+        true
     }
 }
 
@@ -146,14 +202,47 @@ impl Mode for SpecimenMode {
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
-        SPECIMEN_ACTIONS
+        if self.face_count > 1 {
+            SPECIMEN_ACTIONS_WITH_FACE_CYCLE
+        } else {
+            SPECIMEN_ACTIONS
+        }
     }
 
     fn handle(&mut self, action: Action) -> Handled {
+        if self.face_count > 1 {
+            match action {
+                Action::NextFace => {
+                    return if self.step_face(1) {
+                        Handled::Yes
+                    } else {
+                        Handled::No
+                    };
+                }
+                Action::PrevFace => {
+                    return if self.step_face(-1) {
+                        Handled::Yes
+                    } else {
+                        Handled::No
+                    };
+                }
+                _ => {}
+            }
+        }
         self.view.handle_config_cycle(action).unwrap_or(Handled::No)
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        self.view.status_segments(theme)
+        let mut segs = self.view.status_segments(theme);
+        if self.face_count > 1 {
+            segs.insert(
+                0,
+                (
+                    format!("Face {}/{}", self.current + 1, self.face_count),
+                    theme.muted,
+                ),
+            );
+        }
+        segs
     }
 }

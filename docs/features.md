@@ -592,14 +592,18 @@ Roman with the full upper-half mapping — `©` / `™` / accented Latin round-t
 pangram + digits + ASCII alphabet, run through `fontdue` at a fixed pixel size and routed
 through the existing ASCII image pipeline. Every image-mode key works on the specimen
 (`m` cycles full-color / block / geo / ascii / contour, `b` cycles backgrounds, `f` cycles
-fit modes). Face 0 of a collection is the one rasterised; per-face listing recursion is the
-follow-up item.
+fit modes).
+
+Collections (`.ttc` / `.otc`) expose every face: `n` / `p` step the active face through the
+specimen in place, the status line shows `Face N/M`, and the Info screen lists every face's
+metadata block (family / subfamily / weight / glyphs / scripts / …). A face fontdue can't
+parse leaves the previous specimen in place rather than going blank.
 
 Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
 (pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser.
 
-WOFF / WOFF2 wrappers, multi-script sample sentences keyed on cmap coverage, and a per-face
-listing recursion for collections are [planned](planned.md#font-files-).
+WOFF / WOFF2 wrappers and multi-script sample sentences keyed on cmap coverage are
+[planned](planned.md#font-files-).
 
 ### Binary and Archive Files ◐
 

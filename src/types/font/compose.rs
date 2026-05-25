@@ -13,6 +13,7 @@ use anyhow::Result;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
+use crate::types::font::info_gather;
 use crate::types::font::specimen;
 use crate::types::font::specimen_mode::SpecimenMode;
 use crate::viewer::ComposeCtx;
@@ -38,7 +39,14 @@ pub fn compose(
         && let Ok(image) = specimen::rasterise(&bytes, 0, SPECIMEN_TARGET_HEIGHT_PX)
     {
         let config = crate::viewer::image_config(args);
-        modes.push(Box::new(SpecimenMode::new(image, config)));
+        let face_count = info_gather::face_count(&bytes);
+        modes.push(Box::new(SpecimenMode::new(
+            bytes,
+            face_count,
+            image,
+            SPECIMEN_TARGET_HEIGHT_PX,
+            config,
+        )));
     }
     Ok(())
 }
