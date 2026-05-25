@@ -97,16 +97,6 @@ wrap, search)` borrows would let `ContentMode`'s impl fit on screen.
 Current shape leaks `wrap`'s clamp invariants into every render path
 (`clamp_top()` called twice per render).
 
-### M11. `retry_frame_detection` duplicates `SessionFrame::new` construction
-
-`viewer/ui/state.rs:771-811` rebuilds modes from `mode_builder` and
-re-derives `last_primary` via `f.modes[0].is_aux()` (lines 796-800),
-resets `scroll/views/position` (lines 801-803) — the same shape
-`SessionFrame::new` runs at lines 117-127. A future tweak to
-`SessionFrame::new` (e.g., changing the is_aux-of-0 invariant or adding
-a new field) won't flow into the retry path. Lift to
-`SessionFrame::reseed_from_modes(modes)`.
-
 ### M12. `--plain` mutates `args.color` instead of being its own intent
 
 `main.rs:24-25`: `if args.plain { args.color = StyleMode::Plain; }`.

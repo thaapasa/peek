@@ -129,6 +129,21 @@ impl SessionFrame {
         }
     }
 
+    /// Replace the mode stack and reset all per-mode caches (active,
+    /// last_primary, scroll, views, position) to the same shape
+    /// `SessionFrame::new` would produce. Used by the retry-detection
+    /// path so a future tweak to `new`'s reset rules flows here too.
+    fn reseed_from_modes(&mut self, modes: Vec<Box<dyn Mode>>) {
+        assert!(!modes.is_empty(), "SessionFrame needs at least one mode");
+        let n = modes.len();
+        self.last_primary = if modes[0].is_aux() { None } else { Some(0) };
+        self.modes = modes;
+        self.active = 0;
+        self.scroll = vec![0; n];
+        self.views = (0..n).map(|_| None).collect();
+        self.position = Position::Unknown;
+    }
+
     fn mode_index(&self, id: ModeId) -> Option<usize> {
         self.modes.iter().position(|m| m.id() == id)
     }
@@ -786,21 +801,11 @@ impl ViewerState {
             crate::input::compression::resolve_transparent(self.frame().source.clone(), retried);
         let modes = (self.mode_builder)(&source_clone, &retried)?;
         let file_info = crate::info::gather(&source_clone, &retried)?;
-        let n = modes.len();
         let frame = self.frame_mut();
         frame.source = source_clone;
         frame.detected = retried;
         frame.file_info = file_info;
-        frame.modes = modes;
-        frame.active = 0;
-        frame.last_primary = if frame.modes[0].is_aux() {
-            None
-        } else {
-            Some(0)
-        };
-        frame.scroll = vec![0; n];
-        frame.views = (0..n).map(|_| None).collect();
-        frame.position = Position::Unknown;
+        frame.reseed_from_modes(modes);
         frame.retry_attempted = true;
         // Drop the ScreenBuffer's row-diff cache so the next draw
         // repaints every row — the rebuilt frame's mode set, status
