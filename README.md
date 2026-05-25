@@ -19,6 +19,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
 - **Java classfiles** — `.class` header, fields, methods with decoded signatures
 - **Certificates and keys** — PEM X.509 / CSR / CRL / keys / OpenSSH pubkeys: subject, validity, SANs, fingerprints
+- **Fonts** — TrueType / OpenType / TTC collections: rasterised specimen render + family / weight / glyphs / script coverage
 - **Hex dump** fallback for binary, reachable from any view with `x`
 - **Interactive viewer** with live theme cycling, info screen, extraction, text search
 
@@ -49,6 +50,7 @@ peek archive.tar.gz     # listing view + per-entry extract
 peek /bin/ls            # executable — header / sections / symbols
 peek Main.class         # Java classfile — fields, methods, signatures
 peek server.pem         # certificate / key — subject, validity, SANs, fingerprints
+peek Lobster.ttf        # font — rasterised specimen + family / weight / scripts
 peek -                  # explicit stdin
 echo '{"a":1}' | peek   # piped stdin auto-detected
 ```
