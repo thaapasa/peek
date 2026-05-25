@@ -178,14 +178,6 @@ byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
 
-### L8. `ListingMode::file_count()` recounts rows on every render
-
-`viewer/listing/mode.rs:91-93`:
-`self.rows.iter().filter(|r| r.inner_path.is_some()).count()`. Called
-from `status_segments()` (line 332) which runs every render. Noise for a
-typical archive; measurable for a 100k-entry tarball. Precompute at
-construction (count is immutable for the mode's lifetime).
-
 ### L10. `ModeId` variants are shared by multiple Mode impls without a documented contract
 
 `ModeId::Listing` is returned by `ListingMode` and `DirectoryMode`.

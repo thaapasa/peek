@@ -34,6 +34,9 @@ pub struct ListingMode {
     /// Pre-flattened tree-walk rows. Populated once at construction;
     /// scrolling slices into this without rebuilding.
     rows: Vec<TreeRow>,
+    /// Cached count of file rows (directories excluded). Status segment
+    /// reads it every render; recomputing per-render is O(rows).
+    file_count: usize,
     pending_warnings: Vec<String>,
     viewport: ListingViewport,
     /// Active leaf-name search, if any. Scans every row's leaf string
@@ -76,20 +79,17 @@ impl ListingMode {
         warnings: Vec<String>,
     ) -> Self {
         let rows = flatten(&entries);
+        let file_count = rows.iter().filter(|r| r.inner_path.is_some()).count();
         let viewport = ListingViewport::new(&rows);
         Self {
             format_name: format_name.into(),
             label: label.into(),
             rows,
+            file_count,
             pending_warnings: warnings,
             viewport,
             search: None,
         }
-    }
-
-    /// File rows only, no directories.
-    fn file_count(&self) -> usize {
-        self.rows.iter().filter(|r| r.inner_path.is_some()).count()
     }
 
     fn paint_row(
@@ -329,7 +329,7 @@ impl Mode for ListingMode {
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        let files = self.file_count();
+        let files = self.file_count;
         let mut segs = Vec::new();
         let s = match self.viewport.selected_file_pos(&self.rows) {
             Some(pos) => format!("{}/{} ({})", pos, files, self.format_name),
