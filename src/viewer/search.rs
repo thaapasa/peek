@@ -8,6 +8,9 @@
 //! - [`SearchState`] holds the result of a scan — every match plus the
 //!   `n`/`p` cursor — and the helpers a mode needs to render and
 //!   navigate it. Shared by every searchable view.
+//! - [`SearchTarget`] is what `Mode::set_search` returns — `Owned` for
+//!   modes that handle their own scroll, `ScrollTo(line)` for flat
+//!   modes that hand the scroll target back to the caller.
 //!
 //! Match positions are byte offsets into *raw* (un-styled) line text;
 //! `overlay_matches` is the one place that bridges raw offsets to the
@@ -61,6 +64,24 @@ use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
 /// common letter in a huge file) would otherwise build an unbounded
 /// `Vec`; past the cap the scan stops and the count reflects the cap.
 pub(crate) const MAX_MATCHES: usize = 100_000;
+
+/// Outcome of `Mode::set_search` — tells the caller whether the mode
+/// already scrolled to the first match itself, or hands back a line for
+/// the caller's scroll bookkeeping.
+///
+/// Replaces an earlier `Option<usize>` shape whose semantics depended on
+/// `Mode::owns_scroll()`: the same `Some(n)` meant "scroll here" for
+/// flat modes and "ignored" for owns-scroll modes, so an owns-scroll
+/// mode silently returning a line was a latent contract violation.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum SearchTarget {
+    /// Mode handled the scroll (or had no work to do — query cleared,
+    /// no matches in an owns-scroll mode). Caller does nothing.
+    Owned,
+    /// First match is on this line; caller should scroll to it. Only
+    /// returned by flat modes that delegate viewport positioning.
+    ScrollTo(usize),
+}
 
 /// Smart-case rule: a query with any uppercase character searches
 /// case-sensitively; an all-lowercase query searches case-insensitively.

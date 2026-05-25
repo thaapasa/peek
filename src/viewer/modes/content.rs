@@ -12,7 +12,7 @@ use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::LineStreamHighlighter;
-use crate::viewer::search::{self, SearchState};
+use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, wrap_styled};
 use crate::viewer::wrap_scroll::{LineView, WrapScroll};
 
@@ -703,13 +703,13 @@ impl Mode for ContentMode {
     /// The scan is one full pass over the active branch — `LineSource`
     /// when raw, the pretty-printed string when pretty. `ContentMode`
     /// owns its scroll, so it positions itself on the first match and
-    /// the returned line is unused by the caller.
-    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+    /// returns `Owned`.
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
         let query = match query {
             Some(q) if !q.is_empty() => q,
             _ => {
                 self.search = None;
-                return None;
+                return SearchTarget::Owned;
             }
         };
         let pretty_text = self.rendering.active_pretty().and_then(PrettyView::text);
@@ -730,6 +730,6 @@ impl Mode for ContentMode {
             self.reveal_match_h(line);
         }
         self.clamp_top();
-        first
+        SearchTarget::Owned
     }
 }

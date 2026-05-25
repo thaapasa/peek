@@ -25,18 +25,6 @@ sites read directly. Then `ComposeCtx` shrinks to
 `theme_manager + theme_name`, which collapses into `&Rc<ThemeManager>`
 since `theme_name` is `tm.active_theme_name()`.
 
-### M4. `Mode::set_search` return contract is mode-dependent in a way the trait doesn't enforce
-
-`ViewerState::handle_prompt_key` (state.rs:317-333) checks `owns_scroll()`
-before using the returned line. If an `owns_scroll` mode returned
-`Some(line)`, the line would silently drop. Current `owns_scroll` modes
-all return `None`, but the trait doesn't say that. Two opposite return
-meanings keyed off a separate trait method is begging for a future bug.
-
-Direction: split into `Search { Owned, Scrolled(usize) }` enum, or have
-`owns_scroll` modes declare `fn set_search(…) -> ()` via a default impl,
-so the trait signature reflects the contract.
-
 ### M6. `gather_extras` is the third major `match file_type` chain
 
 Already exists in `compose_modes` (clean wiring) and `extract::extract`.
@@ -123,5 +111,4 @@ Alternative: `HexMode::new` returns `Err` for sources that can't be
 byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
-
 

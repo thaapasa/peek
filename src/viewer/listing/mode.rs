@@ -25,7 +25,7 @@ use crate::theme::PeekTheme;
 use crate::viewer::modes::{
     ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
 };
-use crate::viewer::search::{SearchState, overlay_matches};
+use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry};
 
 pub struct ListingMode {
@@ -378,12 +378,12 @@ impl Mode for ListingMode {
         }
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
         let query = match query {
             Some(q) if !q.is_empty() => q,
             _ => {
                 self.search = None;
-                return None;
+                return SearchTarget::Owned;
             }
         };
         let search = SearchState::scan(self.rows.iter().map(|r| r.leaf.as_str()), query);
@@ -392,8 +392,7 @@ impl Mode for ListingMode {
         if let Some(row_idx) = first {
             self.reveal_match(row_idx);
         }
-        // ListingMode owns scroll, so no line index to return.
-        None
+        SearchTarget::Owned
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {

@@ -335,12 +335,10 @@ impl ViewerState {
                             let f = self.frame_mut();
                             let active = f.active;
                             let target = f.modes[active].set_search(query);
-                            // Modes that own their scroll position
-                            // themselves; others get scrolled to the
-                            // first match here.
-                            if let Some(line) = target
-                                && !f.modes[active].owns_scroll()
-                            {
+                            // owns-scroll modes return `Owned` and
+                            // position themselves; flat modes return
+                            // `ScrollTo(line)` for the caller.
+                            if let crate::viewer::search::SearchTarget::ScrollTo(line) = target {
                                 f.scroll[active] = line;
                             }
                         }

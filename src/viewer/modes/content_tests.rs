@@ -305,7 +305,8 @@ fn set_search_finds_matches_and_jumps() {
     let search = mode.search.as_ref().expect("search armed");
     assert_eq!(search.match_count(), 2);
     assert_eq!(search.first_line(), Some(1));
-    assert_eq!(first, Some(1));
+    // ContentMode owns its scroll, so the return is always `Owned`.
+    assert_eq!(first, crate::viewer::search::SearchTarget::Owned);
     assert_eq!(mode.wrap.top_logical(), 1, "jumped to first match's line");
 }
 

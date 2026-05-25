@@ -32,7 +32,7 @@ use super::{Align, Cell, CellRole, Column, Table};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
-use crate::viewer::search::{SearchState, overlay_matches, reveal_h_scroll};
+use crate::viewer::search::{SearchState, SearchTarget, overlay_matches, reveal_h_scroll};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
 
 /// Sticky rows at the top of the viewport — the header and its rule.
@@ -287,12 +287,12 @@ impl Mode for TableMode {
         segs
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
         let query = match query {
             Some(q) if !q.is_empty() => q,
             _ => {
                 self.search = None;
-                return None;
+                return SearchTarget::Owned;
             }
         };
         let search = SearchState::scan(self.body_plain.iter(), query);
@@ -301,7 +301,7 @@ impl Mode for TableMode {
         if let Some(line) = first {
             self.reveal_match(line);
         }
-        first
+        SearchTarget::Owned
     }
 }
 

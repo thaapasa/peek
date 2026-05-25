@@ -45,7 +45,7 @@ use crate::viewer::paged::{
     self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, pipe_walk_pages,
     render_cached, step_paged,
 };
-use crate::viewer::search::{self, SearchState};
+use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::{self, Chapter, Package};
@@ -307,7 +307,7 @@ impl Mode for EpubReadMode {
         self.search = None;
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
         match query {
             Some(q) if !q.is_empty() => {
                 // Scan the current chapter's rendered lines. The prompt
@@ -321,11 +321,11 @@ impl Mode for EpubReadMode {
                 let state = SearchState::scan(lines.iter(), q);
                 let first = state.first_line();
                 self.search = Some(state);
-                first
+                first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
             }
             _ => {
                 self.search = None;
-                None
+                SearchTarget::Owned
             }
         }
     }

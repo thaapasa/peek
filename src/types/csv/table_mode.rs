@@ -40,7 +40,9 @@ use unicode_width::UnicodeWidthStr;
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
-use crate::viewer::search::{MAX_MATCHES, find_matches, overlay_matches, smart_case_sensitive};
+use crate::viewer::search::{
+    MAX_MATCHES, SearchTarget, find_matches, overlay_matches, smart_case_sensitive,
+};
 use crate::viewer::ui::{Action, HelpEntry, take_cols};
 
 use super::parse::{CellKind, CsvData, classify_cell};
@@ -863,19 +865,18 @@ impl Mode for CsvTableMode {
         segs
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> Option<usize> {
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
         let query = match query {
             Some(q) if !q.is_empty() => q,
             _ => {
                 self.search = None;
-                return None;
+                return SearchTarget::Owned;
             }
         };
         let search = self.build_search(query);
         self.search = Some(search);
         self.scroll_to_current_match();
-        // CsvTableMode owns scroll, so the caller doesn't need a line index.
-        None
+        SearchTarget::Owned
     }
 }
 
