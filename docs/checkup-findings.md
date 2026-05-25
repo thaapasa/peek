@@ -42,6 +42,33 @@ because the path is reached only after `resolve_transparent` fails. The
 inconsistency works today but the four dispatchers no longer enumerate
 the same set.
 
+### M12. `--plain` mutates `args.color` — wontfix, kept as analysis record
+
+Original finding suggested either (a) dropping `--plain` as "`--color
+plain` + a derived tweak" or (b) deriving `plain_mode` from the resolved
+`StyleMode`. Both miss the semantic distinction. Three effects of
+`--plain` are *not* derivable from `StyleMode::Plain`:
+
+1. Disables structured pretty-print (`viewer/mod.rs:247`:
+   `pretty_target = None`). `--color plain` alone still reformats JSON.
+2. Skips the syntect pipeline entirely (`syntax_token = None`).
+   `--color plain` still parses and styles, just drops the ANSI at
+   the encoder.
+3. Suppresses rendered views for SVG / HTML / Markdown
+   (`svg|html|markdown/compose.rs`). `--color plain` still composes them.
+
+A user passing `--color plain` to get sterile output expects pretty-print
+and rendered views to keep working. Conflating the two flags would
+break that.
+
+The one real wart is `main.rs:24-25` mutating `args.color` to
+`StyleMode::Plain` when `args.plain` is set — the mutation is correct
+but hides the user's actual `--color` choice. A cleaner shape would
+compute `effective_color = if args.plain { Plain } else { args.color }`
+at theme construction without mutating args. Tiny win, not worth a
+commit on its own; fold in next time `main.rs` argument plumbing gets
+touched.
+
 ### M10. `ContentMode` is 744 lines, past the conventions refactor signal
 
 `viewer/modes/content.rs` already shed `content_rendering`, `content_pipe`,
@@ -54,19 +81,6 @@ The window-prepare + emit pair (`prepare_window`, `emit_window`,
 wrap, search)` borrows would let `ContentMode`'s impl fit on screen.
 Current shape leaks `wrap`'s clamp invariants into every render path
 (`clamp_top()` called twice per render).
-
-### M12. `--plain` mutates `args.color` instead of being its own intent
-
-`main.rs:24-25`: `if args.plain { args.color = StyleMode::Plain; }`.
-Downstream code reads `args.plain` independently of `args.color`:
-`viewer/mod.rs:392,404,423,433` thread `args.plain` into
-`ComposeCtx.plain_mode`; `text_content_mode` branches on `plain_mode` to
-disable syntax tokens. Two sources of truth for the same intent — an
-`info_render` that paints accent-color when `args.plain` is set but
-`args.color != Plain` would be a bug; today the code is correct only
-because every `paint_*` flows through `StyleMode::Plain`. Either drop
-`args.plain` (it's `--color plain` + a derived tweak), or have
-`compose_ctx` derive `plain_mode` from the resolved `StyleMode`.
 
 ### M13. `gather_code_extras` and `gather_markdown_extras` read the file twice
 
