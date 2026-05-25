@@ -1218,13 +1218,14 @@ mod tests {
     /// frame so Back returns to the listing.
     #[test]
     fn directory_file_descent_pushes_frame() {
-        // test-data/ contains only files. Row 0 is the synthetic
-        // `..`; advance past it to land on a real file row.
+        // DirectoryMode sorts dirs first then files, so `Bottom`
+        // always lands on a file row regardless of how many
+        // subdirectories test-data picks up.
         let source = fixture_source("test-data");
         let detected = crate::input::detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-data"], source, detected);
         assert_eq!(state.stack_depth(), 1);
-        state.try_active_scroll(Action::ScrollDown);
+        state.try_active_scroll(Action::Bottom);
         state.apply(Action::Descend).unwrap();
         assert_eq!(state.stack_depth(), 2, "dir → file descent pushes a frame");
         let back = state.apply(Action::Back).unwrap();

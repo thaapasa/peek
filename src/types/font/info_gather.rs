@@ -290,3 +290,50 @@ fn script_bucket(cp: u32) -> Option<usize> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Bundled OFL specimen: walks the full gather pipeline against a
+    /// real TTF and asserts that the high-signal fields decode as
+    /// expected. Catches regressions in the `name` table walker, OS/2
+    /// weight readout, and cmap script bucketing.
+    #[test]
+    fn cabin_gathers_real_metadata() {
+        let bytes =
+            std::fs::read("test-data/fonts/cabin/Cabin[wdth,wght].ttf").expect("fixture present");
+        let info = gather(&bytes, FontFormat::TrueType);
+
+        assert_eq!(info.face_count, 1);
+        assert!(info.parse_errors.is_empty(), "{:?}", info.parse_errors);
+        let face = &info.faces[0];
+        assert_eq!(face.family, "Cabin");
+        assert_eq!(face.subfamily, "Regular");
+        assert_eq!(face.postscript_name, "Cabin-Regular");
+        assert_eq!(face.weight, 400);
+        assert!(face.glyph_count > 100);
+        assert!(face.codepoint_count > 100);
+        assert!(face.scripts.contains(&"Latin".to_string()));
+    }
+
+    /// Script bucketing for a script-heavy face — Sacramento ships
+    /// Latin / Latin Extended / Greek / Symbols, so cmap walk should
+    /// surface all four. Regression guard for the `script_bucket`
+    /// ranges.
+    #[test]
+    fn sacramento_surfaces_multiple_scripts() {
+        let bytes = std::fs::read("test-data/fonts/sacramento/Sacramento-Regular.ttf")
+            .expect("fixture present");
+        let info = gather(&bytes, FontFormat::TrueType);
+        let face = &info.faces[0];
+        assert_eq!(face.family, "Sacramento");
+        for script in ["Latin", "Latin Extended", "Greek", "Symbols"] {
+            assert!(
+                face.scripts.contains(&script.to_string()),
+                "missing {script} in {:?}",
+                face.scripts
+            );
+        }
+    }
+}
