@@ -127,6 +127,15 @@ ssh-key = { version = "0.6", default-features = false, features = ["alloc", "ecd
 sha1 = "0.10"
 sha2 = "0.10"
 
+# Font (TTF/OTF/TTC) parsing for metadata + per-face listing. Pure Rust,
+# no_std-friendly, zero-alloc. Decodes name / head / maxp / cmap / OS/2 /
+# post tables — everything the info view needs. Specimen rasterization
+# is handled by `fontdue` (promoted to a non-dev dep below).
+ttf-parser = "0.25"
+# Glyph rasterizer for font specimen render. Already used by the image
+# pipeline's glyph atlas; now also promoted to a runtime dep.
+fontdue = "0.9"
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -143,9 +152,6 @@ windows-sys = { version = "0.59", features = [
 ] }
 
 [dev-dependencies]
-# Font rasterization for glyph atlas generation
-fontdue = "0.9"
-
 # Snapshot testing for image rendering output
 insta = "1"
 

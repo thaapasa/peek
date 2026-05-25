@@ -291,24 +291,21 @@ listing shipped (see [features.md](features.md) "Audio Files"). Open ideas:
 - **ASCII waveform or spectrum preview.** Decoding adds cost — decide later. Tags alone are
   cheap and useful.
 
-### Font Files ☐
+### Font Files ◐
 
-| Format          | Extensions        |
-|-----------------|-------------------|
-| TrueType        | `.ttf`            |
-| OpenType        | `.otf`            |
-| Web fonts       | `.woff`, `.woff2` |
-| Font collection | `.ttc`, `.otc`    |
+`.ttf` / `.otf` / `.ttc` / `.otc` metadata view ships — see
+[features.md → Fonts](features.md#fonts-). Still planned:
 
-Metadata: family name, subfamily, full name, version, copyright, license URL, designer, vendor;
-units-per-em, glyph count, supported scripts/codepoints, OS/2 weight/width, monospace flag, hinting
-present.
+| Format    | Extensions        |
+|-----------|-------------------|
+| Web fonts | `.woff`, `.woff2` |
+
+WOFF / WOFF2 need separate decompressors (zlib / brotli) — deferred until the case for shipping
+their dep weight is concrete.
 
 Stretch: specimen render — ASCII-art rasterise a sample string ("The quick brown fox…") at a
-chosen size through the existing image pipeline. Glyph rasterization needs a separate crate
-(`fontdue` or `ab_glyph`).
-
-Crates: `ttf-parser` or `skrifa` (read-fonts) for metadata. `fontdue` for specimen rasterization.
+chosen size through the existing image pipeline. Glyph rasterization uses `fontdue` (already
+promoted from a dev-dep when the metadata view landed).
 
 ### Single-File Compressed ◐
 

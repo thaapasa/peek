@@ -205,6 +205,9 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Csv(crate::input::detect::CsvFormat::Csv) => "text/csv",
         FileType::Csv(crate::input::detect::CsvFormat::Tsv) => "text/tab-separated-values",
         FileType::Cert(_) => "application/x-pem-file",
+        FileType::Font(crate::input::detect::FontFormat::TrueType) => "font/ttf",
+        FileType::Font(crate::input::detect::FontFormat::OpenType) => "font/otf",
+        FileType::Font(crate::input::detect::FontFormat::Collection) => "font/collection",
         // For Image, Archive, Compressed, ObjectFile, and Binary, the
         // magic-byte MIME is more specific than any generic registered
         // fallback would be.
