@@ -178,13 +178,6 @@ byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
 
-### L7. `markdown/render/walker.rs:383` uses unnecessary `unwrap` after pattern guard
-
-The outer arm `Some(ord @ Some(_))` (line 382) already proves the inner
-`Option` is `Some`, then line 383 does `let n = ord.unwrap();`. Unreachable
-panic today but a smell that survives refactors. Rebind directly:
-`Some(ord @ Some(n)) => { *ord = Some(n + 1); … }`.
-
 ### L8. `ListingMode::file_count()` recounts rows on every render
 
 `viewer/listing/mode.rs:91-93`:

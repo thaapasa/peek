@@ -379,10 +379,10 @@ impl<'a> Walker<'a> {
             Container::List { ordered } => Some(ordered),
             _ => None,
         }) {
-            Some(ord @ Some(_)) => {
-                let n = ord.unwrap();
-                *ord = Some(n + 1);
-                format!("{n}. ")
+            Some(Some(n)) => {
+                let marker = format!("{n}. ");
+                *n += 1;
+                marker
             }
             _ => "• ".to_string(),
         };
