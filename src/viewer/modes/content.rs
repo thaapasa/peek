@@ -599,19 +599,10 @@ impl Mode for ContentMode {
     fn scroll(&mut self, action: Action) -> bool {
         let cl = active_view(&self.rendering, &self.line_source);
         if cl.total() == 0 {
-            // No content yet — nothing to navigate. Still consume the
-            // action so it doesn't fall through to a nonsensical global.
-            return matches!(
-                action,
-                Action::ScrollUp
-                    | Action::ScrollDown
-                    | Action::PageUp
-                    | Action::PageDown
-                    | Action::Top
-                    | Action::Bottom
-                    | Action::ScrollLeft
-                    | Action::ScrollRight
-            );
+            // No content yet — nothing to navigate. Still consume any
+            // scroll action so it doesn't fall through to a nonsensical
+            // global handler.
+            return action.is_scroll();
         }
         let usable = self.usable_width(cl.total());
         let rows = self.cached_rows.max(1);

@@ -239,6 +239,24 @@ impl Action {
     pub fn matches(self, key: KeyEvent) -> bool {
         self.bindings().iter().any(|b| b.matches(key))
     }
+
+    /// True for every action that conceptually moves the viewport.
+    /// Used by modes that need to consume scroll input when they have
+    /// no content to scroll, so the action doesn't bubble up to a
+    /// nonsensical global handler.
+    pub fn is_scroll(self) -> bool {
+        matches!(
+            self,
+            Action::ScrollUp
+                | Action::ScrollDown
+                | Action::PageUp
+                | Action::PageDown
+                | Action::Top
+                | Action::Bottom
+                | Action::ScrollLeft
+                | Action::ScrollRight
+        )
+    }
 }
 
 /// One help-screen entry: a group of actions that share a description.

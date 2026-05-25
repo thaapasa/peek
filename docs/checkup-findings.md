@@ -54,17 +54,6 @@ because the path is reached only after `resolve_transparent` fails. The
 inconsistency works today but the four dispatchers no longer enumerate
 the same set.
 
-### M7. `ContentMode::scroll` empty-doc action set duplicates the wrap-scroll match
-
-`content.rs:604-619` short-circuits an empty-doc by matching against
-`ScrollUp | ScrollDown | PageUp | PageDown | Top | Bottom | ScrollLeft | ScrollRight`.
-The `match action` below (lines 623-640) handles the same set. Adding a
-new scroll action means editing both places or seeing the empty-doc path
-silently fall through.
-
-Fix: drop the empty-doc guard and `return false` from inside each arm
-when `cl.total() == 0`, or extract an `Action::is_scroll()` helper.
-
 ### M8. `viewer/mod.rs` (639 lines) has accreted unrelated concerns
 
 Holds Registry + ComposeCtx (dispatch wiring), `LineStreamHighlighter`
