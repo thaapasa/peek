@@ -48,9 +48,6 @@ use super::parse::{CellKind, CsvData, classify_cell};
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
 const COL_SEP: &str = " │ ";
-/// Visible cell-width contribution of [`COL_SEP`] (one separator + two
-/// surrounding spaces — the bar is 1 col, spaces are 2 cols).
-const COL_SEP_WIDTH: usize = 3;
 /// Glyph for separator-row segments under a column.
 const SEP_ROW_CHAR: char = '─';
 /// Junction glyph at column boundaries on the separator row.
@@ -946,13 +943,6 @@ impl CsvTableMode {
         theme.paint_muted(&buf)
     }
 }
-
-#[allow(dead_code)]
-const _: () = {
-    // Compile-time sanity check — keeps unused warnings off the COL_SEP_WIDTH
-    // constant while making it available for future overflow math.
-    let _ = COL_SEP_WIDTH;
-};
 
 #[cfg(test)]
 mod tests {

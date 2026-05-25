@@ -108,12 +108,6 @@ called only from the Mode in `modes/hex.rs`. Split is intentional but
 hex layout has been stable; folding back into one file would reduce
 nothing semantically but shorten a click-through. Net minor.
 
-### L2. `COL_SEP_WIDTH` and its compile-time guard are dead
-
-`csv/table_mode.rs:42-46` defines the constant; `csv/table_mode.rs:942`
-has `const _: () = { let _ = COL_SEP_WIDTH; };` to keep it alive. Comment
-says "for future overflow math". Drop both; resurrect when needed.
-
 ### L3. `CYCLE_BACKGROUND_HELP` etc. spliced into every image-mode's `EXTRA_ACTIONS`
 
 `image/mode.rs:70-77`, `image/animation_mode.rs:32-46`,
