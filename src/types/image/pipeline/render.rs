@@ -456,8 +456,17 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
 /// mode-specific glyph render runs against this. Cached by
 /// `ImageRenderMode` so mode/color-mode cycling skips the costly
 /// decode + Lanczos + composite stages.
+///
+/// `composited` is the resized + composited image at the *base*
+/// (zoom = 1) cell grid — the fast path for `ImageView::render_prepared`
+/// when zoom = 1. `source` is the same composited content at the
+/// native source resolution, used by the zoom > 1 path so each
+/// viewport-sized ROI can be cropped and rescaled directly from the
+/// full-resolution pixels (memory stays proportional to the viewport,
+/// not to zoom²).
 pub struct PreparedImage {
     pub composited: DynamicImage,
+    pub source: DynamicImage,
     pub cols: u32,
     pub rows: u32,
 }
@@ -481,13 +490,128 @@ pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) 
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
-    let img = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
-    let img = composite_with_bg(img, config.background);
+    let resized = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
+    let composited = composite_with_bg(resized, config.background);
+    let source = composite_with_bg(img, config.background);
 
     PreparedImage {
-        composited: img,
+        composited,
+        source,
         cols,
         rows,
+    }
+}
+
+/// Output of the zoom > 1 render path. The lines are the rendered
+/// viewport; the dimensions describe the effective grid (base ×
+/// zoom) so the caller can clamp scroll and feed the status line.
+pub struct ZoomedRender {
+    pub lines: Vec<String>,
+    pub effective_cols: u32,
+    pub effective_rows: u32,
+    pub viewport_cols: u32,
+    pub viewport_rows: u32,
+}
+
+/// Render the visible viewport of an image at zoom > 1 by cropping the
+/// native-resolution source to the matching pixel ROI and rescaling
+/// only that crop. Memory peaks at one viewport-sized intermediate;
+/// growing the zoom level does not enlarge the working buffer.
+///
+/// `scroll_x` / `scroll_y` are cell offsets in the *effective* grid
+/// (= base × zoom). They are clamped here to keep the viewport on the
+/// effective grid, and the clamped values are reflected back through
+/// the returned `viewport_*` dimensions.
+pub fn render_prepared_zoomed(
+    prep: &PreparedImage,
+    config: &ImageConfig,
+    term: TermSize,
+    zoom: f32,
+    scroll_x: u32,
+    scroll_y: u32,
+) -> ZoomedRender {
+    let zoom = zoom.max(1.0);
+    let effective_cols = ((prep.cols as f32 * zoom).round() as u32).max(1);
+    let effective_rows = ((prep.rows as f32 * zoom).round() as u32).max(1);
+    let viewport_cols = effective_cols.min(term.cols).max(1);
+    let viewport_rows = effective_rows.min(term.rows).max(1);
+
+    let max_scroll_x = effective_cols.saturating_sub(viewport_cols);
+    let max_scroll_y = effective_rows.saturating_sub(viewport_rows);
+    let scroll_x = scroll_x.min(max_scroll_x);
+    let scroll_y = scroll_y.min(max_scroll_y);
+
+    let src_w = prep.source.width().max(1);
+    let src_h = prep.source.height().max(1);
+    let to_src_x = |c: u32| -> u32 {
+        ((c as u64 * src_w as u64) / effective_cols as u64).min(src_w as u64) as u32
+    };
+    let to_src_y = |r: u32| -> u32 {
+        ((r as u64 * src_h as u64) / effective_rows as u64).min(src_h as u64) as u32
+    };
+    let x0 = to_src_x(scroll_x);
+    let x1 = to_src_x(scroll_x + viewport_cols);
+    let y0 = to_src_y(scroll_y);
+    let y1 = to_src_y(scroll_y + viewport_rows);
+    let crop_w = x1.saturating_sub(x0).max(1);
+    let crop_h = y1.saturating_sub(y0).max(1);
+    let crop = prep.source.crop_imm(x0, y0, crop_w, crop_h);
+
+    let full_window = GridWindow::full(viewport_cols, viewport_rows);
+    let lines = match config.mode {
+        ImageMode::Ascii => {
+            let target = crop.resize_exact(
+                viewport_cols,
+                viewport_rows,
+                image::imageops::FilterType::Lanczos3,
+            );
+            render_density(
+                &target,
+                viewport_cols,
+                viewport_rows,
+                full_window,
+                config.style_mode,
+            )
+        }
+        ImageMode::Contour => {
+            let target = crop.resize_exact(
+                viewport_cols * CELL_W,
+                viewport_rows * CELL_H,
+                image::imageops::FilterType::Lanczos3,
+            );
+            let edges = super::contour::detect_edges(&target, config.edge_density);
+            render_contour(
+                &edges,
+                viewport_cols,
+                viewport_rows,
+                full_window,
+                config.mode,
+                config.style_mode,
+            )
+        }
+        ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
+            let target = crop.resize_exact(
+                viewport_cols * CELL_W,
+                viewport_rows * CELL_H,
+                image::imageops::FilterType::Lanczos3,
+            );
+            render_block_color(
+                &target,
+                viewport_cols,
+                viewport_rows,
+                full_window,
+                config.mode,
+                config.style_mode,
+            )
+        }
+    };
+
+    ZoomedRender {
+        lines,
+        effective_cols,
+        effective_rows,
+        viewport_cols,
+        viewport_rows,
     }
 }
 
@@ -620,7 +744,11 @@ fn prepare_svg_inner(
     let img = DynamicImage::ImageRgba8(canvas);
     let img = composite_with_bg(img, config.background);
 
+    // SVG prep does not retain a higher-resolution source; the zoom > 1
+    // path falls back to upscaling the rasterized buffer until phase 2
+    // re-rasterizes the visible ROI at zoom-aware density.
     Ok(PreparedImage {
+        source: img.clone(),
         composited: img,
         cols,
         rows,

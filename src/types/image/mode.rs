@@ -75,6 +75,22 @@ const IMAGE_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
     ),
+    (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
+    (&[Action::ZoomReset], "Reset zoom to 1×"),
+    (
+        &[
+            Action::ZoomPreset(1),
+            Action::ZoomPreset(2),
+            Action::ZoomPreset(3),
+            Action::ZoomPreset(4),
+            Action::ZoomPreset(5),
+            Action::ZoomPreset(6),
+            Action::ZoomPreset(7),
+            Action::ZoomPreset(8),
+            Action::ZoomPreset(9),
+        ],
+        "Zoom 1×–9×",
+    ),
 ];
 
 impl ImageRenderMode {
@@ -164,15 +180,17 @@ impl Mode for ImageRenderMode {
         let Some(cache) = &self.cache else {
             return false;
         };
-        let (max_x, max_y) = render::max_scroll(
-            cache.prep.cols,
-            cache.prep.rows,
-            cache.key.term_cols,
-            cache.key.term_rows,
-        );
-        let page_y = cache.key.term_rows.saturating_sub(1);
-        self.view
-            .scroll(action, ScrollBounds::clamped(max_x, max_y, page_y))
+        let term = TermSize {
+            cols: cache.key.term_cols,
+            rows: cache.key.term_rows,
+            cell_h_over_w: 1.0,
+        };
+        let bounds_v = self.view.view_bounds(&cache.prep, term);
+        let page_y = bounds_v.viewport_rows.saturating_sub(1);
+        self.view.scroll(
+            action,
+            ScrollBounds::clamped(bounds_v.max_x, bounds_v.max_y, page_y),
+        )
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
@@ -180,7 +198,21 @@ impl Mode for ImageRenderMode {
     }
 
     fn handle(&mut self, action: Action) -> Handled {
-        self.view.handle_config_cycle(action).unwrap_or(Handled::No)
+        if let Some(h) = self.view.handle_config_cycle(action) {
+            return h;
+        }
+        if let Some(cache) = &self.cache {
+            let term = TermSize {
+                cols: cache.key.term_cols,
+                rows: cache.key.term_rows,
+                cell_h_over_w: 1.0,
+            };
+            let bounds = self.view.view_bounds(&cache.prep, term);
+            if let Some(h) = self.view.handle_zoom(action, bounds) {
+                return h;
+            }
+        }
+        Handled::No
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

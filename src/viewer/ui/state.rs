@@ -503,7 +503,11 @@ impl ViewerState {
             | Action::CycleImageModeBack
             | Action::ToggleStickyParents
             | Action::ReflowWidths
-            | Action::ToggleHeader => Outcome::Unhandled,
+            | Action::ToggleHeader
+            | Action::ZoomIn
+            | Action::ZoomOut
+            | Action::ZoomReset
+            | Action::ZoomPreset(_) => Outcome::Unhandled,
         })
     }
 
