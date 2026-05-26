@@ -55,7 +55,14 @@ navigate matches instead, and `Esc` clears the search to get chapter stepping ba
 | `m` / `M` | Cycle render mode (full / block / geo / ascii / contour) |
 | `b` / `B` | Cycle background (auto / black / white / checkerboard)   |
 | `f`       | Cycle fit mode (Contain / FitWidth / FitHeight)          |
+| `+` / `-` | Zoom in / out (1.25× per step, capped at 16×)            |
+| `0`       | Reset zoom to 1× and pan to origin                       |
+| `1`..`9` | Jump to whole-number zoom (1× .. 9×)                     |
 | `e`       | Extract current animation frame                          |
+
+Zoom anchors on the viewport centre — the pixel under the centre
+stays put across `+` / `-`. The same zoom keys work in animation,
+PDF / CBZ, and font specimen views.
 
 ## Animation views (GIF / WebP / animated SVG)
 
