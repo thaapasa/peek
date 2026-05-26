@@ -459,11 +459,11 @@ pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
 ///
 /// `composited` is the resized + composited image at the *base*
 /// (zoom = 1) cell grid — the fast path for `ImageView::render_prepared`
-/// when zoom = 1. `source` is the same composited content at the
-/// native source resolution, used by the zoom > 1 path so each
-/// viewport-sized ROI can be cropped and rescaled directly from the
-/// full-resolution pixels (memory stays proportional to the viewport,
-/// not to zoom²).
+/// when zoom = 1. `source` is the post-margin native-resolution image
+/// *before* alpha compositing; the zoom > 1 path crops the matching
+/// pixel ROI from it, then composites only that crop. Keeping `source`
+/// pre-composite means animation prep stays cheap — compositing a
+/// full-res alpha frame every tick would be the dominant cost otherwise.
 pub struct PreparedImage {
     pub composited: DynamicImage,
     pub source: DynamicImage,
@@ -492,11 +492,10 @@ pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) 
     };
     let resized = img.resize_exact(px_w, px_h, image::imageops::FilterType::Lanczos3);
     let composited = composite_with_bg(resized, config.background);
-    let source = composite_with_bg(img, config.background);
 
     PreparedImage {
         composited,
-        source,
+        source: img,
         cols,
         rows,
     }
@@ -558,13 +557,15 @@ pub fn render_prepared_zoomed(
     let crop = prep.source.crop_imm(x0, y0, crop_w, crop_h);
 
     let full_window = GridWindow::full(viewport_cols, viewport_rows);
+    let resize_to = |w: u32, h: u32| -> DynamicImage {
+        let resized = crop.resize_exact(w, h, image::imageops::FilterType::Lanczos3);
+        // Source is held pre-composite so animation per-tick prep stays
+        // cheap; composite the small viewport-sized crop here.
+        composite_with_bg(resized, config.background)
+    };
     let lines = match config.mode {
         ImageMode::Ascii => {
-            let target = crop.resize_exact(
-                viewport_cols,
-                viewport_rows,
-                image::imageops::FilterType::Lanczos3,
-            );
+            let target = resize_to(viewport_cols, viewport_rows);
             render_density(
                 &target,
                 viewport_cols,
@@ -574,11 +575,7 @@ pub fn render_prepared_zoomed(
             )
         }
         ImageMode::Contour => {
-            let target = crop.resize_exact(
-                viewport_cols * CELL_W,
-                viewport_rows * CELL_H,
-                image::imageops::FilterType::Lanczos3,
-            );
+            let target = resize_to(viewport_cols * CELL_W, viewport_rows * CELL_H);
             let edges = super::contour::detect_edges(&target, config.edge_density);
             render_contour(
                 &edges,
@@ -590,11 +587,7 @@ pub fn render_prepared_zoomed(
             )
         }
         ImageMode::Full | ImageMode::Block | ImageMode::Geo => {
-            let target = crop.resize_exact(
-                viewport_cols * CELL_W,
-                viewport_rows * CELL_H,
-                image::imageops::FilterType::Lanczos3,
-            );
+            let target = resize_to(viewport_cols * CELL_W, viewport_rows * CELL_H);
             render_block_color(
                 &target,
                 viewport_cols,
@@ -741,15 +734,15 @@ fn prepare_svg_inner(
         offset_x as i64,
         offset_y as i64,
     );
-    let img = DynamicImage::ImageRgba8(canvas);
-    let img = composite_with_bg(img, config.background);
+    let pre_composite = DynamicImage::ImageRgba8(canvas);
+    let composited = composite_with_bg(pre_composite.clone(), config.background);
 
     // SVG prep does not retain a higher-resolution source; the zoom > 1
-    // path falls back to upscaling the rasterized buffer until phase 2
-    // re-rasterizes the visible ROI at zoom-aware density.
+    // path falls back to upscaling the rasterized buffer until a later
+    // pass re-rasterizes the visible ROI at zoom-aware density.
     Ok(PreparedImage {
-        source: img.clone(),
-        composited: img,
+        source: pre_composite,
+        composited,
         cols,
         rows,
     })

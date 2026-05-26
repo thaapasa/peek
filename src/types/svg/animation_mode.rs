@@ -74,6 +74,22 @@ const SVG_ANIM_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
     ),
+    (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
+    (&[Action::ZoomReset], "Reset zoom to 1×"),
+    (
+        &[
+            Action::ZoomPreset(1),
+            Action::ZoomPreset(2),
+            Action::ZoomPreset(3),
+            Action::ZoomPreset(4),
+            Action::ZoomPreset(5),
+            Action::ZoomPreset(6),
+            Action::ZoomPreset(7),
+            Action::ZoomPreset(8),
+            Action::ZoomPreset(9),
+        ],
+        "Zoom 1×–9×",
+    ),
 ];
 
 impl SvgAnimationMode {
@@ -192,8 +208,8 @@ impl Mode for SvgAnimationMode {
         // optimistic path; render_window will clamp on next draw.
         let bounds = match (self.last_term, self.cache.back()) {
             (Some(term), Some((_, prep))) => {
-                let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
-                ScrollBounds::clamped(max_x, max_y, term.rows.saturating_sub(1))
+                let b = self.view.view_bounds(prep, term);
+                ScrollBounds::clamped(b.max_x, b.max_y, b.viewport_rows.saturating_sub(1))
             }
             _ => ScrollBounds::unbounded(),
         };
@@ -210,6 +226,12 @@ impl Mode for SvgAnimationMode {
             // cache — the new grid won't match the cached entries.
             self.invalidate_cache();
             return h;
+        }
+        if let (Some(term), Some((_, prep))) = (self.last_term, self.cache.back()) {
+            let bounds = self.view.view_bounds(prep, term);
+            if let Some(h) = self.view.handle_zoom(action, bounds) {
+                return h;
+            }
         }
         match action {
             Action::PlayPause => self.anim.play_pause(),
