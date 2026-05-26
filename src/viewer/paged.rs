@@ -25,7 +25,10 @@ use syntect::highlighting::Color;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
+use crate::types::image::scroll::{self as image_scroll, ScrollBounds};
+use crate::types::image::zoom::ZoomLevel;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::viewer::ui::slice_styled_h;
 use crate::viewer::ui::{Action, HelpEntry};
 
 /// Inputs that affect a single page's rendered output. Stored
@@ -199,7 +202,7 @@ pub(crate) const CYCLE_FIT_HELP: HelpEntry = (
 );
 
 /// Mode-local help entries for [`PagedImageMode`]: page navigation plus
-/// the shared image-config block.
+/// the shared image-config block plus zoom.
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
         &[Action::NextChapter, Action::PrevChapter],
@@ -208,6 +211,22 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
     CYCLE_BACKGROUND_HELP,
     CYCLE_IMAGE_MODE_HELP,
     CYCLE_FIT_HELP,
+    (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
+    (&[Action::ZoomReset], "Reset zoom to 1×"),
+    (
+        &[
+            Action::ZoomPreset(1),
+            Action::ZoomPreset(2),
+            Action::ZoomPreset(3),
+            Action::ZoomPreset(4),
+            Action::ZoomPreset(5),
+            Action::ZoomPreset(6),
+            Action::ZoomPreset(7),
+            Action::ZoomPreset(8),
+            Action::ZoomPreset(9),
+        ],
+        "Zoom 1×–9×",
+    ),
 ];
 
 /// Renders one page of a paged-image document to ASCII-art lines.
@@ -237,15 +256,32 @@ pub(crate) trait PageRenderer {
 /// Paged-image read mode generic over its [`PageRenderer`].
 ///
 /// Shows one page at a time through the image pipeline; `n` / `p` step
-/// pages, `b` / `m` / `f` cycle image config. Per-page render cache is
-/// keyed by viewport size + image config. Mirrors
+/// pages, `b` / `m` / `f` cycle image config, `+` / `-` / `0` / `1`..`9`
+/// zoom. Per-page render cache is keyed by viewport size + image config
+/// — zoom is encoded by multiplying viewport size into the cache key,
+/// so two views that produce the same effective grid share a cached
+/// render automatically. Mirrors
 /// [`crate::viewer::modes::RenderedTextMode`] for text documents.
+///
+/// At zoom > 1 the renderer produces a bigger Vec<String> than the
+/// viewport (zoom-aware "effective grid"); the visible viewport is
+/// sliced out per render by [`slice_styled_h`] + [`slice_window`].
+/// This is the "naive" zoom path — full effective grid rendered into
+/// the per-page cache rather than re-rasterizing only the visible ROI.
 pub(crate) struct PagedImageMode<R: PageRenderer> {
     renderer: R,
     image_config: ImageConfig,
     current: usize,
     cache: Vec<Option<CachedRender>>,
     warnings: Vec<String>,
+    zoom: ZoomLevel,
+    scroll_x: u32,
+    scroll_y: u32,
+    /// Last viewport rendered into, captured at the end of
+    /// `render_window`. Read by `handle` / `scroll` to compute the
+    /// effective grid bounds without re-running the renderer.
+    last_viewport_cols: u32,
+    last_viewport_rows: u32,
 }
 
 impl<R: PageRenderer> PagedImageMode<R> {
@@ -259,9 +295,18 @@ impl<R: PageRenderer> PagedImageMode<R> {
             current: 0,
             cache,
             warnings: Vec::new(),
+            zoom: ZoomLevel::one(),
+            scroll_x: 0,
+            scroll_y: 0,
+            last_viewport_cols: 0,
+            last_viewport_rows: 0,
         }
     }
 
+    /// Cache + render the current page at the given viewport, scaled
+    /// by the live zoom level. The returned slice contains the
+    /// *effective grid* (viewport × zoom) — the caller slices the
+    /// visible viewport out of it.
     fn ensure_rendered(
         &mut self,
         width: usize,
@@ -272,7 +317,15 @@ impl<R: PageRenderer> PagedImageMode<R> {
             return Ok(&[]);
         }
         let idx = self.current;
-        let key = PageCacheKey::build(&self.image_config, width, rows, style_mode);
+        let zoom_factor = self.zoom.factor();
+        let scaled_width = ((width as f32 * zoom_factor).round() as usize).max(1);
+        // `rows` may be `usize::MAX` (pipe path); guard the multiply.
+        let scaled_rows = if rows == usize::MAX {
+            rows
+        } else {
+            ((rows as f32 * zoom_factor).round() as usize).max(1)
+        };
+        let key = PageCacheKey::build(&self.image_config, scaled_width, scaled_rows, style_mode);
         // Disjoint-borrow split: the render closure captures
         // `&self.renderer` and `&mut self.warnings` while `render_cached`
         // holds `&mut self.cache` — all distinct fields.
@@ -282,6 +335,62 @@ impl<R: PageRenderer> PagedImageMode<R> {
         render_cached(&mut self.cache, idx, key, |k| {
             renderer.render_page(idx, config, k, warnings)
         })
+    }
+
+    fn effective_grid(&self, lines: &[String]) -> (u32, u32) {
+        let rows = lines.len() as u32;
+        let cols = lines
+            .iter()
+            .map(|l| crate::viewer::ui::strip_ansi_width(l) as u32)
+            .max()
+            .unwrap_or(0);
+        (cols, rows)
+    }
+
+    /// Apply a zoom action against the last-rendered viewport. Anchors
+    /// the viewport-centre cell across the change so the page point
+    /// under the cursor stays put. Mirrors `ImageView::handle_zoom` —
+    /// the math is duplicated rather than shared because the paged
+    /// scroll state lives on this struct, not on an `ImageView`.
+    fn apply_zoom(&mut self, action: Action) -> Option<Handled> {
+        let new_zoom = match action {
+            Action::ZoomIn => self.zoom.step_in(),
+            Action::ZoomOut => self.zoom.step_out(),
+            Action::ZoomReset => {
+                self.zoom = ZoomLevel::one();
+                self.scroll_x = 0;
+                self.scroll_y = 0;
+                return Some(Handled::Yes);
+            }
+            Action::ZoomPreset(n) => ZoomLevel::preset(n),
+            _ => return None,
+        };
+        if new_zoom == self.zoom {
+            return Some(Handled::Yes);
+        }
+        let old = self.zoom.factor();
+        let new = new_zoom.factor();
+        let half_w = self.last_viewport_cols as f32 / 2.0;
+        let half_h = self.last_viewport_rows as f32 / 2.0;
+        let cx = (self.scroll_x as f32 + half_w) * (new / old);
+        let cy = (self.scroll_y as f32 + half_h) * (new / old);
+        self.zoom = new_zoom;
+        self.scroll_x = (cx - half_w).max(0.0).round() as u32;
+        self.scroll_y = (cy - half_h).max(0.0).round() as u32;
+        Some(Handled::Yes)
+    }
+
+    fn clamp_scroll(
+        &mut self,
+        eff_cols: u32,
+        eff_rows: u32,
+        viewport_cols: u32,
+        viewport_rows: u32,
+    ) {
+        let max_x = eff_cols.saturating_sub(viewport_cols);
+        let max_y = eff_rows.saturating_sub(viewport_rows);
+        self.scroll_x = self.scroll_x.min(max_x);
+        self.scroll_y = self.scroll_y.min(max_y);
     }
 }
 
@@ -298,12 +407,33 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         true
     }
 
-    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
+    fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, rows: usize) -> Result<Window> {
+        let term_cols = ctx.term_cols as u32;
         let lines =
             self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
-        let total = lines.len();
-        let win = slice_window(lines, scroll, rows);
-        Ok(Window { lines: win, total })
+        // Slice owned into vec so we can drop the cache borrow before
+        // mutating self's scroll state.
+        let lines: Vec<String> = lines.to_vec();
+        let (eff_cols, eff_rows) = self.effective_grid(&lines);
+        let viewport_cols = eff_cols.min(term_cols).max(1);
+        let viewport_rows = eff_rows.min(rows.min(u32::MAX as usize) as u32).max(1);
+        self.clamp_scroll(eff_cols, eff_rows, viewport_cols, viewport_rows);
+        self.last_viewport_cols = viewport_cols;
+        self.last_viewport_rows = viewport_rows;
+
+        let vert = slice_window(&lines, self.scroll_y as usize, viewport_rows as usize);
+        let lines: Vec<String> = if eff_cols <= term_cols && self.scroll_x == 0 {
+            // No horizontal overflow — skip the SGR-aware slice.
+            vert
+        } else {
+            vert.iter()
+                .map(|l| slice_styled_h(l, self.scroll_x as usize, viewport_cols as usize))
+                .collect()
+        };
+        Ok(Window {
+            lines,
+            total: eff_rows as usize,
+        })
     }
 
     fn total_lines(&self) -> Option<usize> {
@@ -313,12 +443,42 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             .map(|c| c.lines.len())
     }
 
+    fn owns_scroll(&self) -> bool {
+        true
+    }
+
+    fn scroll(&mut self, action: Action) -> bool {
+        // Need cached lines + last viewport to compute bounds; bail
+        // optimistically before first render.
+        let Some(cached) = self.cache.get(self.current).and_then(|c| c.as_ref()) else {
+            return false;
+        };
+        let (eff_cols, eff_rows) = self.effective_grid(&cached.lines);
+        let max_x = eff_cols.saturating_sub(self.last_viewport_cols);
+        let max_y = eff_rows.saturating_sub(self.last_viewport_rows);
+        let page_y = self.last_viewport_rows.saturating_sub(1);
+        image_scroll::apply(
+            &mut self.scroll_x,
+            &mut self.scroll_y,
+            action,
+            ScrollBounds::clamped(max_x, max_y, page_y),
+        )
+    }
+
     /// Print mode walks every page in order, separated by a blank line.
     /// Honors the cache so already-rendered pages reuse their output;
-    /// the interactive view stays single-page.
+    /// the interactive view stays single-page. Forces zoom = 1× and
+    /// pan = origin for the duration — pipe output is non-interactive,
+    /// so the user's live zoom can't help and would only widen lines
+    /// past the terminal.
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let total = self.renderer.page_count();
         let saved = self.current;
+        let saved_zoom = self.zoom;
+        let saved_scroll = (self.scroll_x, self.scroll_y);
+        self.zoom = ZoomLevel::one();
+        self.scroll_x = 0;
+        self.scroll_y = 0;
         let res = pipe_walk_pages(out, total, |i, out| {
             self.current = i;
             let lines =
@@ -329,6 +489,9 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             Ok(())
         });
         self.current = saved;
+        self.zoom = saved_zoom;
+        self.scroll_x = saved_scroll.0;
+        self.scroll_y = saved_scroll.1;
         res
     }
 
@@ -338,12 +501,34 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
 
     fn handle(&mut self, action: Action) -> Handled {
         if let Some(h) = cycle_image_config(action, &mut self.image_config) {
+            // Fit change invalidates the rendered grid; reset pan.
+            if matches!(action, Action::CycleFitMode) {
+                self.scroll_x = 0;
+                self.scroll_y = 0;
+            }
+            return h;
+        }
+        if let Some(h) = self.apply_zoom(action) {
             return h;
         }
         let count = self.renderer.page_count();
         match action {
-            Action::NextChapter => step_paged(&mut self.current, count, 1),
-            Action::PrevChapter => step_paged(&mut self.current, count, -1),
+            Action::NextChapter => {
+                let h = step_paged(&mut self.current, count, 1);
+                if matches!(h, Handled::YesResetScroll) {
+                    self.scroll_x = 0;
+                    self.scroll_y = 0;
+                }
+                h
+            }
+            Action::PrevChapter => {
+                let h = step_paged(&mut self.current, count, -1);
+                if matches!(h, Handled::YesResetScroll) {
+                    self.scroll_x = 0;
+                    self.scroll_y = 0;
+                }
+                h
+            }
             _ => Handled::No,
         }
     }
@@ -353,7 +538,11 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         if count == 0 {
             return Vec::new();
         }
-        vec![(format!("page {}/{}", self.current + 1, count), theme.muted)]
+        let mut out = vec![(format!("page {}/{}", self.current + 1, count), theme.muted)];
+        if !self.zoom.is_one() {
+            out.push((self.zoom.label(), theme.label));
+        }
+        out
     }
 
     fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> {
