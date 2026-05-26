@@ -160,6 +160,148 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
     out
 }
 
+/// Word-boundary variant of `wrap_styled`. Splits at runs of ASCII
+/// spaces, dropping the separator so wrapped rows have no trailing
+/// space and continuation rows have no leading space. SGR style is
+/// preserved across cuts identically to `wrap_styled`.
+///
+/// A single word wider than `width` falls back to the raw char-count
+/// split (same shape as `wrap_styled`) so over-long URLs / inline code
+/// still render rather than overflow.
+pub(crate) fn wrap_styled_words(s: &str, width: usize) -> Vec<String> {
+    if width == 0 {
+        return vec![String::new()];
+    }
+    struct Word {
+        text: String,
+        width: usize,
+    }
+    let mut words: Vec<Word> = Vec::new();
+    let mut cur = String::new();
+    let mut cur_w = 0usize;
+    let mut in_word = false;
+
+    for token in scan(s) {
+        match token {
+            Sgr::Esc(esc) => cur.push_str(esc),
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    if c == ' ' {
+                        if in_word {
+                            words.push(Word {
+                                text: std::mem::take(&mut cur),
+                                width: cur_w,
+                            });
+                            cur_w = 0;
+                            in_word = false;
+                        }
+                    } else {
+                        cur.push(c);
+                        cur_w += UnicodeWidthChar::width(c).unwrap_or(0);
+                        in_word = true;
+                    }
+                }
+            }
+        }
+    }
+    if in_word {
+        words.push(Word {
+            text: std::mem::take(&mut cur),
+            width: cur_w,
+        });
+    } else if !cur.is_empty()
+        && let Some(last) = words.last_mut()
+    {
+        last.text.push_str(&cur);
+    }
+
+    if words.is_empty() {
+        return vec![String::new()];
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut col = 0usize;
+    let mut active = ActiveStyle::default();
+    let mut line_has_text = false;
+
+    for word in words {
+        let space_w = usize::from(line_has_text);
+        let fits = col + space_w + word.width <= width;
+
+        if !fits && line_has_text {
+            if !active.is_empty() {
+                line.push_str(RESET_ALL);
+            }
+            out.push(std::mem::take(&mut line));
+            col = 0;
+            line_has_text = false;
+            active.write(&mut line);
+        }
+
+        if !line_has_text && word.width > width {
+            hard_split_into(
+                &mut out,
+                &mut line,
+                &mut col,
+                &mut active,
+                &word.text,
+                width,
+            );
+            line_has_text = col > 0;
+        } else {
+            if line_has_text {
+                line.push(' ');
+                col += 1;
+            }
+            for tok in scan(&word.text) {
+                if let Sgr::Esc(esc) = tok {
+                    active.observe(esc);
+                }
+            }
+            line.push_str(&word.text);
+            col += word.width;
+            line_has_text = true;
+        }
+    }
+
+    out.push(line);
+    out
+}
+
+fn hard_split_into(
+    out: &mut Vec<String>,
+    line: &mut String,
+    col: &mut usize,
+    active: &mut ActiveStyle,
+    word_text: &str,
+    width: usize,
+) {
+    for token in scan(word_text) {
+        match token {
+            Sgr::Esc(esc) => {
+                active.observe(esc);
+                line.push_str(esc);
+            }
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    let cw = UnicodeWidthChar::width(c).unwrap_or(0);
+                    if cw > 0 && *col + cw > width {
+                        if !active.is_empty() {
+                            line.push_str(RESET_ALL);
+                        }
+                        out.push(std::mem::take(line));
+                        *col = 0;
+                        active.write(line);
+                    }
+                    line.push(c);
+                    *col += cw;
+                }
+            }
+        }
+    }
+}
+
 /// Count how many visual chunks `wrap_styled(s, width)` would produce
 /// without actually allocating them. Returns at least 1 (an empty line
 /// still occupies one visual row). Matches `wrap_styled`'s wide-char
@@ -472,6 +614,61 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0], format!("{fg}{bg}ab\x1b[0m"));
         assert_eq!(chunks[1], format!("{fg}{bg}c"));
+    }
+
+    #[test]
+    fn wrap_words_breaks_at_space_and_drops_separator() {
+        // "hi everybody" at width 5 — break after "hi", continue with
+        // "everybody" which itself overflows and hard-splits.
+        let chunks = wrap_styled_words("hi everybody", 5);
+        assert_eq!(chunks, vec!["hi", "every", "body"]);
+    }
+
+    #[test]
+    fn wrap_words_trims_leading_and_trailing_whitespace() {
+        assert_eq!(wrap_styled_words("  hello  ", 80), vec!["hello"]);
+    }
+
+    #[test]
+    fn wrap_words_collapses_internal_whitespace() {
+        // Multiple consecutive spaces between words collapse to a single
+        // separator — never an empty word, never extra trailing space.
+        assert_eq!(wrap_styled_words("a    b", 80), vec!["a b"]);
+    }
+
+    #[test]
+    fn wrap_words_falls_back_to_char_split_when_no_break() {
+        // Single oversized word — same shape as wrap_styled.
+        assert_eq!(
+            wrap_styled_words("abcdefghij", 3),
+            vec!["abc", "def", "ghi", "j"]
+        );
+    }
+
+    #[test]
+    fn wrap_words_empty_input_yields_one_empty_chunk() {
+        assert_eq!(wrap_styled_words("", 5), vec![""]);
+        assert_eq!(wrap_styled_words("   ", 5), vec![""]);
+    }
+
+    #[test]
+    fn wrap_words_preserves_active_style_across_word_break() {
+        // Red opens before "hello", reset closes after "world". Wrap
+        // between words: each row carries fg=red + explicit close.
+        let red = "\x1b[31m";
+        let reset = "\x1b[0m";
+        let input = format!("{red}hello world{reset}");
+        let chunks = wrap_styled_words(&input, 5);
+        assert_eq!(
+            chunks,
+            vec![format!("{red}hello{reset}"), format!("{red}world{reset}")]
+        );
+    }
+
+    #[test]
+    fn wrap_words_keeps_word_intact_when_it_fits_at_eol() {
+        // Word landing exactly at width must not trigger an extra wrap.
+        assert_eq!(wrap_styled_words("ab cd ef", 5), vec!["ab cd", "ef"]);
     }
 
     #[test]
