@@ -203,6 +203,11 @@ pub(crate) const CYCLE_FIT_HELP: HelpEntry = (
 
 /// Mode-local help entries for [`PagedImageMode`]: page navigation plus
 /// the shared image-config block plus zoom.
+///
+/// `ScrollLeft` / `ScrollRight` are listed explicitly even though the
+/// scroll machinery handles them — dispatch goes through this slice to
+/// find a key binding, and the global slice only carries vertical
+/// scroll. Without this entry Left/Right never reach the mode.
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
         &[Action::NextChapter, Action::PrevChapter],
@@ -211,6 +216,10 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
     CYCLE_BACKGROUND_HELP,
     CYCLE_IMAGE_MODE_HELP,
     CYCLE_FIT_HELP,
+    (
+        &[Action::ScrollLeft, Action::ScrollRight],
+        "Pan left / right (when zoomed or fit=FitHeight)",
+    ),
     (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
     (&[Action::ZoomReset], "Reset zoom to 1×"),
     (
@@ -621,5 +630,269 @@ mod tests {
         for action in [Action::NextMatch, Action::OpenSearch, Action::Back] {
             assert!(cycle_image_config(action, &mut cfg).is_none());
         }
+    }
+
+    /// Regression: PagedImageMode must advertise `ScrollLeft` /
+    /// `ScrollRight` in its `EXTRA_ACTIONS` slice so the global key
+    /// dispatcher can match Left/Right and route them to the mode.
+    /// `GLOBAL_ACTIONS` only carries vertical scroll; horizontal pan
+    /// is opt-in per mode (same pattern as ImageRenderMode +
+    /// AnimationMode + SvgAnimationMode + SpecimenMode).
+    #[test]
+    fn paged_extra_actions_carries_horizontal_scroll() {
+        let actions: Vec<Action> = EXTRA_ACTIONS
+            .iter()
+            .flat_map(|(keys, _)| keys.iter().copied())
+            .collect();
+        assert!(
+            actions.contains(&Action::ScrollLeft),
+            "EXTRA_ACTIONS must include ScrollLeft so Left routes through dispatch"
+        );
+        assert!(
+            actions.contains(&Action::ScrollRight),
+            "EXTRA_ACTIONS must include ScrollRight so Right routes through dispatch"
+        );
+    }
+
+    /// Regression: horizontal scroll under zoom on PagedImageMode. With
+    /// a wide effective grid (e.g. zoomed CBZ page), pressing `Right`
+    /// must advance scroll_x and the next render must slice from the
+    /// new offset.
+    #[test]
+    fn paged_mode_horizontal_scroll_under_zoom() {
+        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+        use crate::types::binary::info::BinaryInfo;
+
+        struct WideRenderer;
+        impl PageRenderer for WideRenderer {
+            fn page_count(&self) -> usize {
+                1
+            }
+            fn render_page(
+                &self,
+                _idx: usize,
+                _config: ImageConfig,
+                _key: &PageCacheKey,
+                _warnings: &mut Vec<String>,
+            ) -> Result<Vec<String>> {
+                // 40 rows × 160 visible cells per row — wider than the
+                // 80-col terminal so horizontal pan must engage.
+                Ok((0..40).map(|_| "X".repeat(160)).collect())
+            }
+        }
+
+        let cfg = ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit: FitMode::Contain,
+        };
+        let mut mode = PagedImageMode::new(WideRenderer, cfg);
+
+        let syntect = load_embedded_theme(PeekThemeName::default().tmtheme_source());
+        let peek_theme = PeekTheme::from_syntect(&syntect);
+        let file_info = FileInfo {
+            file_name: String::new(),
+            path: String::new(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: FileExtras::Binary(BinaryInfo { format: None }),
+        };
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::default(),
+            peek_theme: &peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 40,
+        };
+
+        // Populate the cache + bounds via an initial render.
+        let win = mode.render_window(&ctx, 0, 40).expect("render");
+        assert_eq!(win.lines.len(), 40);
+        assert_eq!(mode.last_viewport_cols, 80);
+        assert_eq!(mode.scroll_x, 0);
+
+        // Right arrow: scroll_x advances by HSTEP (= 4 cells).
+        assert!(Mode::scroll(&mut mode, Action::ScrollRight));
+        assert_eq!(mode.scroll_x, 4);
+
+        // Next render slices from col 4 — verifies the horizontal slice
+        // path engages with scroll_x > 0.
+        let win = mode.render_window(&ctx, 0, 40).expect("render");
+        assert_eq!(win.lines[0].chars().filter(|&c| c == 'X').count(), 80);
+    }
+
+    /// Real-world repro: a landscape CBZ page at zoom 2× under fit=Contain
+    /// produces a grid wider than the viewport, so Right arrow must
+    /// advance scroll_x.
+    #[test]
+    fn cbz_horizontal_scroll_at_zoom_2x() {
+        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::input::InputSource;
+        use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+        use crate::types::binary::info::BinaryInfo;
+        use crate::types::comic::CbzPageRenderer;
+        use crate::types::comic::cbz;
+        use crate::types::image::zoom::ZoomLevel;
+        use std::path::PathBuf;
+
+        let cbz_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-books/sample-pages.cbz");
+        if !cbz_path.exists() {
+            eprintln!("skip: fixture missing");
+            return;
+        }
+        let source = InputSource::File(cbz_path);
+        let pages = cbz::package::list_pages(&source).expect("list pages");
+        assert!(pages.len() >= 2);
+        let cfg = ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit: FitMode::Contain,
+        };
+        let mut mode = PagedImageMode::new(CbzPageRenderer::new(source, pages), cfg);
+        // Page 2 is landscape (1500x1000) — likeliest to overflow at zoom 2×.
+        mode.current = 1;
+        mode.zoom = ZoomLevel::preset(2);
+
+        let syntect = load_embedded_theme(PeekThemeName::default().tmtheme_source());
+        let peek_theme = PeekTheme::from_syntect(&syntect);
+        let file_info = FileInfo {
+            file_name: String::new(),
+            path: String::new(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: FileExtras::Binary(BinaryInfo { format: None }),
+        };
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::default(),
+            peek_theme: &peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 40,
+        };
+
+        let win = mode.render_window(&ctx, 0, 40).expect("render");
+        let cached = mode.cache.get(1).and_then(|c| c.as_ref()).expect("cached");
+        let max_line_w = cached
+            .lines
+            .iter()
+            .map(|l| crate::viewer::ui::strip_ansi_width(l))
+            .max()
+            .unwrap_or(0);
+        // Effective grid must overflow the 80-col viewport at zoom 2× on
+        // landscape content.
+        eprintln!(
+            "cached lines: {}  max width: {}  last_vp: ({},{})  total: {}",
+            cached.lines.len(),
+            max_line_w,
+            mode.last_viewport_cols,
+            mode.last_viewport_rows,
+            win.total
+        );
+        assert!(
+            max_line_w > 80,
+            "expected overflow at zoom 2×, got max line width {max_line_w}"
+        );
+
+        assert!(Mode::scroll(&mut mode, Action::ScrollRight));
+        assert_eq!(mode.scroll_x, 4, "scroll_x must advance by HSTEP");
+    }
+
+    /// Reproduces zoom=1 + fit=FitHeight on a landscape CBZ page —
+    /// the case where horizontal overflow exists without any zoom.
+    /// Pressing Right must pan horizontally.
+    #[test]
+    fn cbz_horizontal_scroll_fit_height_zoom_one() {
+        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::input::InputSource;
+        use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+        use crate::types::binary::info::BinaryInfo;
+        use crate::types::comic::CbzPageRenderer;
+        use crate::types::comic::cbz;
+        use std::path::PathBuf;
+
+        let cbz_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-books/sample-pages.cbz");
+        if !cbz_path.exists() {
+            return;
+        }
+        let source = InputSource::File(cbz_path);
+        let pages = cbz::package::list_pages(&source).expect("list pages");
+        let cfg = ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit: FitMode::FitHeight,
+        };
+        let mut mode = PagedImageMode::new(CbzPageRenderer::new(source, pages), cfg);
+        mode.current = 1; // landscape page
+
+        let syntect = load_embedded_theme(PeekThemeName::default().tmtheme_source());
+        let peek_theme = PeekTheme::from_syntect(&syntect);
+        let file_info = FileInfo {
+            file_name: String::new(),
+            path: String::new(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: FileExtras::Binary(BinaryInfo { format: None }),
+        };
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::default(),
+            peek_theme: &peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 40,
+        };
+
+        let _ = mode.render_window(&ctx, 0, 40).expect("render");
+        let cached = mode.cache.get(1).and_then(|c| c.as_ref()).expect("cached");
+        let max_line_w = cached
+            .lines
+            .iter()
+            .map(|l| crate::viewer::ui::strip_ansi_width(l))
+            .max()
+            .unwrap_or(0);
+        eprintln!(
+            "FitHeight zoom=1: lines={} max_w={} vp=({},{})",
+            cached.lines.len(),
+            max_line_w,
+            mode.last_viewport_cols,
+            mode.last_viewport_rows
+        );
+
+        assert!(Mode::scroll(&mut mode, Action::ScrollRight));
+        eprintln!("after Right: scroll_x={}", mode.scroll_x);
+        assert!(max_line_w > 80, "expected horizontal overflow");
+        assert!(mode.scroll_x > 0, "Right arrow must advance scroll_x");
     }
 }
