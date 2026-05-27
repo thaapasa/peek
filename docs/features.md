@@ -432,19 +432,22 @@ PDF / CBZ pages, font specimen) supports zoom:
 - `1`..`9` — jump to a whole-number preset (1× .. 9×).
 - Maximum 16×.
 
-For raster images, animation frames, CBZ pages, and PDF pages, only
-the visible viewport's pixel ROI is cropped from a native-resolution
-source and rescaled — memory stays proportional to the viewport, not
-to zoom². CBZ caches the decoded native bitmap per page; PDF
-rasterises once at Pdfium's 4096-pixel render ceiling and keeps a
-single-slot cache (current page only) so even a long document does
-not accumulate per-page rasterisations. Beyond Pdfium's render ceiling
-PDF upscales pixels rather than re-rasterising; the font specimen and
-SVG still use the naive path (render the full zoomed grid into the
-per-face / per-frame cache, then 2D-slice the viewport per draw).
-Follow-up work tracked under
-[planned.md](planned.md#zoom-in-font-specimen--svg--roi-only-render-)
-will bring those to the same ROI-only shape.
+For raster images, animation frames, CBZ pages, PDF pages, and font
+specimens, only the visible viewport's pixel ROI is cropped from a
+native-resolution source and rescaled — memory stays proportional to
+the viewport, not to zoom². CBZ caches the decoded native bitmap per
+page; PDF rasterises once at Pdfium's 4096-pixel render ceiling and
+keeps a single-slot cache (current page only) so even a long document
+does not accumulate per-page rasterisations; the font specimen
+re-rasterises the active face at higher resolution as zoom grows
+(quantized to integer zoom buckets so a 1.25× step doesn't trigger an
+expensive fontdue re-pass — only crossing into the next integer does).
+Beyond Pdfium's render ceiling PDF upscales pixels rather than
+re-rasterising. SVG still uses the naive path (render the full zoomed
+grid into the per-frame cache, then 2D-slice the viewport per draw).
+Follow-up tracked under
+[planned.md](planned.md#zoom-in-svg--roi-only-render-) will bring it to
+the same ROI-only shape.
 
 Zoom is interactive only — pipe / `--print` output always renders at 1×.
 

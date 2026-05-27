@@ -17,6 +17,7 @@ use crate::types::image::pipeline::render::{self, PreparedImage, TermSize};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::view::ImageView;
+use crate::types::image::zoom::ZoomLevel;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -107,16 +108,24 @@ pub(crate) struct SpecimenMode {
     /// different face without re-reading the source. Cheap to clone
     /// since [`Bytes`] is refcounted.
     bytes: Bytes,
-    /// Target canvas height for the rasteriser. Stored so face-cycle
-    /// re-rasters reuse the same size as the initial render.
-    target_height_px: u32,
+    /// Base canvas height for the rasteriser at zoom = 1. Scaled by
+    /// the active zoom bucket when re-rasterising so the source has
+    /// enough pixel detail to ROI-crop sharply at the current zoom.
+    base_target_height_px: u32,
     /// Embedded face count from the TTC header (1 for plain TTF/OTF).
     face_count: u32,
     /// Currently rendered face. `current < face_count`.
     current: u32,
-    /// Rasterised sample for the active face. Mutated when face-cycle
-    /// keys step `current`; the cache below is invalidated alongside.
+    /// Rasterised sample for the active face. Re-rasterised at higher
+    /// resolution as zoom grows so [`ImageView`]'s ROI crop has enough
+    /// source detail. Invalidates [`cache`] whenever it changes.
     decoded: DynamicImage,
+    /// Zoom bucket the active `decoded` was rasterised for. Buckets
+    /// step in integer zoom levels (1, 2, 3, …) so a 1.25× → 1.56×
+    /// step doesn't trigger an expensive fontdue re-pass. Zoom out
+    /// keeps the higher-resolution decoded — over-detail is fine; the
+    /// ROI crop just resamples a sharper source.
+    decoded_zoom_bucket: u32,
     view: ImageView,
     cache: Option<CachedFrame>,
 }
@@ -131,10 +140,11 @@ impl SpecimenMode {
     ) -> Self {
         Self {
             bytes,
-            target_height_px,
+            base_target_height_px: target_height_px,
             face_count: face_count.max(1),
             current: 0,
             decoded,
+            decoded_zoom_bucket: 1,
             view: ImageView::new(config),
             cache: None,
         }
@@ -148,9 +158,37 @@ impl SpecimenMode {
         }
     }
 
+    /// Quantize zoom into an integer bucket so a 1.25× step doesn't
+    /// trigger a re-rasterise — only crossing into the next integer
+    /// (1×, 2×, 3×, …) does. Clamped to fontdue's practical range.
+    fn zoom_bucket(zoom: f32) -> u32 {
+        let n = zoom.ceil().max(1.0);
+        let max = ZoomLevel::MAX.ceil() as u32;
+        (n as u32).clamp(1, max)
+    }
+
+    /// Re-rasterise the active face at higher resolution when the live
+    /// zoom outgrows the current source detail. Down-zooming keeps the
+    /// existing high-res decoded — the ROI crop just resamples a
+    /// sharper source, no quality loss.
+    fn ensure_decoded_for_zoom(&mut self, zoom: f32) {
+        let bucket = Self::zoom_bucket(zoom);
+        if bucket <= self.decoded_zoom_bucket {
+            return;
+        }
+        let target = self.base_target_height_px.saturating_mul(bucket);
+        if let Ok(new_image) = specimen::rasterise(&self.bytes, self.current, target) {
+            self.decoded = new_image;
+            self.decoded_zoom_bucket = bucket;
+            self.cache = None;
+        }
+    }
+
     /// Step the active face by `delta` (wraps at both ends) and
-    /// re-rasterise. A face that fontdue can't parse leaves the
-    /// previous specimen in place rather than silently going blank.
+    /// re-rasterise at the current zoom bucket so a face cycle
+    /// preserves the active zoom's sharpness. A face that fontdue
+    /// can't parse leaves the previous specimen in place rather than
+    /// silently going blank.
     fn step_face(&mut self, delta: i32) -> bool {
         if self.face_count < 2 {
             return false;
@@ -160,7 +198,10 @@ impl SpecimenMode {
         if next == self.current {
             return false;
         }
-        let Ok(new_image) = specimen::rasterise(&self.bytes, next, self.target_height_px) else {
+        let target = self
+            .base_target_height_px
+            .saturating_mul(self.decoded_zoom_bucket);
+        let Ok(new_image) = specimen::rasterise(&self.bytes, next, target) else {
             return false;
         };
         self.current = next;
@@ -181,6 +222,7 @@ impl Mode for SpecimenMode {
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         let term = self.view.prepare_term(ctx);
+        self.ensure_decoded_for_zoom(self.view.zoom.factor());
         let key = CacheKey::build(&self.view.config, term);
         self.ensure_prepared(key, term);
         let prep = &self.cache.as_ref().expect("populated above").prep;
