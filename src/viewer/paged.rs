@@ -26,7 +26,7 @@ use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::types::image::scroll::{self as image_scroll, ScrollBounds};
-use crate::types::image::zoom::ZoomLevel;
+use crate::types::image::zoom::{ZoomLevel, anchor_zoom_change};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::viewer::ui::slice_styled_h;
 use crate::viewer::ui::{Action, HelpEntry};
@@ -377,15 +377,15 @@ impl<R: PageRenderer> PagedImageMode<R> {
         if new_zoom == self.zoom {
             return Some(Handled::Yes);
         }
-        let old = self.zoom.factor();
-        let new = new_zoom.factor();
-        let half_w = self.last_viewport_cols as f32 / 2.0;
-        let half_h = self.last_viewport_rows as f32 / 2.0;
-        let cx = (self.scroll_x as f32 + half_w) * (new / old);
-        let cy = (self.scroll_y as f32 + half_h) * (new / old);
+        anchor_zoom_change(
+            self.zoom.factor(),
+            new_zoom.factor(),
+            self.last_viewport_cols,
+            self.last_viewport_rows,
+            &mut self.scroll_x,
+            &mut self.scroll_y,
+        );
         self.zoom = new_zoom;
-        self.scroll_x = (cx - half_w).max(0.0).round() as u32;
-        self.scroll_y = (cy - half_h).max(0.0).round() as u32;
         Some(Handled::Yes)
     }
 

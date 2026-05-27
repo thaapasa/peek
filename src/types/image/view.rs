@@ -27,7 +27,7 @@ use syntect::highlighting::Color;
 use super::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
 use super::pipeline::{FitMode, ImageConfig};
 use super::scroll::{self, ScrollBounds};
-use super::zoom::ZoomLevel;
+use super::zoom::{ZoomLevel, ZoomedView, anchor_zoom_change};
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::cell_size;
@@ -86,14 +86,18 @@ impl ImageView {
     /// terminal viewport. Use this — not `render::max_scroll` directly
     /// — anywhere that clamps pan so zoom is honoured.
     pub fn view_bounds(&self, prep: &PreparedImage, term: TermSize) -> ViewBounds {
-        let zoom = self.zoom.factor();
-        let effective_cols = ((prep.cols as f32 * zoom).round() as u32).max(1);
-        let effective_rows = ((prep.rows as f32 * zoom).round() as u32).max(1);
-        let viewport_cols = effective_cols.min(term.cols).max(1);
-        let viewport_rows = effective_rows.min(term.rows).max(1);
+        let zv = ZoomedView {
+            base_cols: prep.cols,
+            base_rows: prep.rows,
+            term_cols: term.cols,
+            term_rows: term.rows,
+            zoom: self.zoom.factor(),
+        };
+        let (max_x, max_y) = zv.max_scroll();
+        let (viewport_cols, viewport_rows) = zv.viewport();
         ViewBounds {
-            max_x: effective_cols.saturating_sub(viewport_cols),
-            max_y: effective_rows.saturating_sub(viewport_rows),
+            max_x,
+            max_y,
             viewport_cols,
             viewport_rows,
         }
@@ -243,15 +247,15 @@ impl ImageView {
         if new_zoom == self.zoom {
             return Some(Handled::Yes);
         }
-        let old_zoom = self.zoom.factor();
-        let new_zoom_f = new_zoom.factor();
-        let half_w = bounds.viewport_cols as f32 / 2.0;
-        let half_h = bounds.viewport_rows as f32 / 2.0;
-        let centre_x = (self.scroll_x as f32 + half_w) * (new_zoom_f / old_zoom);
-        let centre_y = (self.scroll_y as f32 + half_h) * (new_zoom_f / old_zoom);
+        anchor_zoom_change(
+            self.zoom.factor(),
+            new_zoom.factor(),
+            bounds.viewport_cols,
+            bounds.viewport_rows,
+            &mut self.scroll_x,
+            &mut self.scroll_y,
+        );
         self.zoom = new_zoom;
-        self.scroll_x = (centre_x - half_w).max(0.0).round() as u32;
-        self.scroll_y = (centre_y - half_h).max(0.0).round() as u32;
         Some(Handled::Yes)
     }
 

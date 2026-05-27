@@ -529,32 +529,26 @@ pub fn render_prepared_zoomed(
     scroll_x: u32,
     scroll_y: u32,
 ) -> ZoomedRender {
-    let zoom = zoom.max(1.0);
-    let effective_cols = ((prep.cols as f32 * zoom).round() as u32).max(1);
-    let effective_rows = ((prep.rows as f32 * zoom).round() as u32).max(1);
-    let viewport_cols = effective_cols.min(term.cols).max(1);
-    let viewport_rows = effective_rows.min(term.rows).max(1);
-
-    let max_scroll_x = effective_cols.saturating_sub(viewport_cols);
-    let max_scroll_y = effective_rows.saturating_sub(viewport_rows);
-    let scroll_x = scroll_x.min(max_scroll_x);
-    let scroll_y = scroll_y.min(max_scroll_y);
-
-    let src_w = prep.source.width().max(1);
-    let src_h = prep.source.height().max(1);
-    let to_src_x = |c: u32| -> u32 {
-        ((c as u64 * src_w as u64) / effective_cols as u64).min(src_w as u64) as u32
+    let zv = super::super::zoom::ZoomedView {
+        base_cols: prep.cols,
+        base_rows: prep.rows,
+        term_cols: term.cols,
+        term_rows: term.rows,
+        zoom,
     };
-    let to_src_y = |r: u32| -> u32 {
-        ((r as u64 * src_h as u64) / effective_rows as u64).min(src_h as u64) as u32
-    };
-    let x0 = to_src_x(scroll_x);
-    let x1 = to_src_x(scroll_x + viewport_cols);
-    let y0 = to_src_y(scroll_y);
-    let y1 = to_src_y(scroll_y + viewport_rows);
-    let crop_w = x1.saturating_sub(x0).max(1);
-    let crop_h = y1.saturating_sub(y0).max(1);
-    let crop = prep.source.crop_imm(x0, y0, crop_w, crop_h);
+    let (effective_cols, effective_rows) = zv.effective();
+    let (viewport_cols, viewport_rows) = zv.viewport();
+    let mut scroll_x = scroll_x;
+    let mut scroll_y = scroll_y;
+    zv.clamp_scroll(&mut scroll_x, &mut scroll_y);
+
+    let roi = zv.pixel_roi(
+        prep.source.width(),
+        prep.source.height(),
+        scroll_x,
+        scroll_y,
+    );
+    let crop = prep.source.crop_imm(roi.x, roi.y, roi.w, roi.h);
 
     let full_window = GridWindow::full(viewport_cols, viewport_rows);
     let resize_to = |w: u32, h: u32| -> DynamicImage {
