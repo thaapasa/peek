@@ -96,7 +96,7 @@ pub(crate) enum Action {
     CycleBackground,
     /// Cycle the image-render background backward (`B`).
     CycleBackgroundBack,
-    /// Cycle the image rendering mode (full/block/geo/ascii).
+    /// Cycle the image rendering mode (full/block/geo/ascii/contour).
     CycleImageMode,
     /// Cycle the image rendering mode backward (`M`).
     CycleImageModeBack,

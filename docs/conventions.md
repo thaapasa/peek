@@ -30,15 +30,17 @@
 
 One abstraction, two output paths.
 
-- **`Mode` trait** (`viewer/modes/mod.rs`) is the single rendering contract. Impls: `ContentMode`,
-  `HexMode`, `ImageRenderMode`, `AnimationMode`, `InfoMode`, `HelpMode`, `AboutMode`. Each file type
-  composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes`.
-- **Interactive path** (`viewer::interactive::run`) drives the stack through an event loop, calling
-  `Mode::render(ctx) -> Vec<String>` per redraw and slicing into the visible viewport.
+- **`Mode` trait** (`viewer/modes/mod.rs`) is the single rendering contract. Each file type
+  composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes` — see
+  [architecture.md](architecture.md#key-abstractions) for the full mode table and trait shape.
+- **Interactive path** (`viewer::interactive::run`) drives the stack through an event loop,
+  calling `Mode::render_window(ctx, scroll, rows) -> Result<Window>` per redraw. Streaming modes
+  honour the requested window; fixed-content modes (Info/Help/About) materialise their output
+  and slice via `slice_window`.
 - **Pipe path** (`main`) picks the first non-aux mode (or first mode for binary, where all are aux)
-  and calls `Mode::render_to_pipe(ctx, &mut PrintOutput)`. Default impl materializes `render(ctx)`;
-  override when streaming or byte-faithful output matters (HexMode streams chunks, ContentMode
-  preserves trailing-newline fidelity for un-highlighted text).
+  and calls `Mode::render_to_pipe(ctx, &mut PrintOutput)`. Default impl asks `render_window` for
+  the full viewport and writes each line; override when streaming or byte-faithful output matters
+  (HexMode streams chunks, ContentMode preserves trailing-newline fidelity for un-highlighted text).
 
 Adding a file type: add a `Mode` impl (or reuse `ContentMode`) and a line in `compose_modes`.
 

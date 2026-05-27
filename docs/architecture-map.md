@@ -128,7 +128,8 @@ src/
         image_mode.rs  — ImageMode enum (full/block/geo/ascii/contour palette selection)
         render.rs      — Image → glyph-matched ASCII art with true color
         animate.rs     — GIF/WebP frame decoding + frame counting + render_frame
-        glyph_atlas.rs — Precomputed glyph bitmaps
+        glyph_atlas.rs — Precomputed glyph bitmaps + atlas indexing
+        glyph_atlas_data.rs — Generated companion to `glyph_atlas.rs`: the raw bitmap data table (kept in its own file so the API stays in `glyph_atlas.rs` and the codegen blob doesn't drown it)
         clustering.rs  — Two-color clustering for cell rendering
         contour.rs     — Sobel + Otsu edge detection for ImageMode::Contour
         svg.rs         — SVG rasterization (resvg): svg_dimensions / rasterize_svg
@@ -139,6 +140,7 @@ src/
           keyframes.rs — CSS @keyframes rule parser → KeyframeStop, TransformValue
           timeline.rs  — Merged frame timeline: build_frames, sample_target (steps + linear)
           marker.rs    — __PEEK_ANIM_*__ marker injection + per-frame substitution
+          selectors.rs — Flat CSS selector parser (`Class` / `Id` / `Tag` / `TagClass`) for `@keyframes` rule targets; combinators / pseudo-classes / attribute selectors / `*` are detected and dropped (matcher API stays tiny)
           util.rs      — Shared helpers: skip_ws, find_substr/brace, parse_length, root_svg_dimensions
     html/
       mod.rs           — Module wiring; re-exports HtmlRenderer
@@ -180,7 +182,8 @@ src/
         mod.rs         — Module wiring; re-exports RtfRenderer. RTF stays outside the shared AST because its on-the-wire shape is a flat painter-tagged text stream, not a paragraph/run tree
         parse.rs       — Pre-process RTF (strip `{\info ...}` group, inject `\\\n` after each `\par` so rtf-parser's lexer emits CRLF) → RtfDocument::try_from → owned Vec<Block { painter, paragraph, text }> with painter resolved against \colortbl. Hand-scans `\info` group bytes for title / author / subject / keywords / creatim / revtim
         render.rs      — render(&Parsed, width, theme, style_mode) -> Vec<String>: wraps StyleBlock.text by width, emits SGR for painter bold/italic/underline/strike + colortbl color
-        renderer.rs    — RtfRenderer: TextRenderer impl over the parsed RTF stream via render::render; no listing or extract (RTF is single-file)
+        renderer.rs    — RtfRenderer: TextRenderer impl over the parsed RTF stream via render::render
+        extract.rs     — Per-embed extract from parsed `\pict` / `\object` groups: key is the synthetic name from `parse::embeds_to_entries` (e.g. `image1.jpg`) → InputSource::Memory (image bytes re-detect through recursive peek)
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
       mod.rs           — Module wiring; re-exports PdfStats, PdfPageRenderer, PdfTextRenderer
@@ -197,7 +200,7 @@ src/
       compose.rs       — compose(): PagedImageMode<CbzPageRenderer> (paged images) + ZIP TOC ListingMode
       detect.rs        — format_from_ext: `.cbz` → ComicFormat::Cbz
       format.rs        — ComicFormat enum + label
-      info.rs          — Shared comic-archive info shape (CBZ / CBR / CB7 / CBT): ComicStats { format, page_count, total_image_bytes }
+      info.rs          — Shared comic-archive info shape (only CBZ ships today; the shape is sized for CBR / CB7 / CBT if they're ever added): ComicStats { format, page_count, total_image_bytes }
       cbz/
         mod.rs         — Module wiring; re-exports CbzPageRenderer
         package.rs     — list_pages: walk ZIP central directory, filter image entries by extension (png/jpg/jpeg/webp/gif/bmp/tif/tiff), skip __MACOSX/, sort by name; open_zip + read_page for body fetch
@@ -252,6 +255,7 @@ src/
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
       iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
       dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes)
+      mbr.rs           — MBR partition-table parser for raw `.img` / `.bin` / `.dd` images; reads the 512-byte boot sector and populates `MbrTable` / `MbrPartition` shown in the Info view
       extract.rs       — ISO entry extract: lookup_file_range → zero-copy FileRange (or Bytes::slice for stdin-piped); DMG returns Unsupported
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
       info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
@@ -325,6 +329,8 @@ docs/                  — Builder / agent reference (architecture, conventions,
   release.md           — Release pipeline, install.sh, recovery from failed runs
   theme-conversion.md  — How to port VS Code / IDEA themes to peek .tmTheme
   svg-anim-perf.md     — SVG animation memory profile + optimization options
+  image-rendering.md   — Image rendering pipeline reference (glyph atlas, fast 2-colour clustering, contour mode)
+  checkup-findings.md  — Temporary findings list from the current `/checkup` round (IDs retire as items ship; gaps in numbering are deliberate)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
   book.toml            — mdbook config
   src/                 — Chapter sources (SUMMARY.md + per-topic .md files)

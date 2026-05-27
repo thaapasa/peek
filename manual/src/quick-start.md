@@ -25,7 +25,7 @@ echo '{"a":1}' | peek
 curl -s https://example.com/data.json | peek
 
 # Force a syntax when piping plain text
-cat src/main.rs | peek -l rust
+cat src/main.rs | peek -L rust
 
 # Direct stdout (no viewer)
 peek --print file.txt

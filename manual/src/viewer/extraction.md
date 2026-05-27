@@ -32,8 +32,8 @@ Adding `--print` or `--info` instead replaces the active source with the extract
 runs the rest of the pipeline against it — recursive peek:
 
 ```sh
-peek archive.zip --extract foo.py --print     # syntax-highlight the inner file
-peek photo.heic --extract thumbnail --info    # info screen on the extracted thumbnail
+peek archive.zip --extract foo.py --print              # syntax-highlight the inner file
+peek song.mp3 --extract pictures/front_cover.jpg --info  # info screen on the embedded cover
 ```
 
 ## Viewer

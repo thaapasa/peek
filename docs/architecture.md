@@ -6,8 +6,11 @@ rules: [conventions.md](conventions.md).
 ## Design principles
 
 1. **Single-file viewer.** One path (or stdin) at a time — closer to `less` than to `cat`.
-2. **Zero runtime deps.** Themes, glyph bitmaps, and syntax definitions are compiled in. No config
-   files, no downloads, no setup.
+2. **Zero runtime deps in the common path.** Themes, glyph bitmaps, and syntax definitions are
+   compiled in. No config files, no downloads, no setup. PDF is the one exception: peek
+   dynamically loads `libpdfium.{dylib,so,dll}` from alongside the binary (release tarball ships
+   it; dev builds find it under `.pdfium/{lib,bin}`). The library has to be present for PDF
+   support to work, but no system install is required.
 3. **One mode stack, two outputs.** `compose_modes` builds a `Vec<Box<dyn Mode>>` per file type.
    TTY → interactive viewer (alternate screen, scrolling, key bindings). Pipe → first non-aux
    mode's `render_to_pipe(ctx)` straight to stdout. Same rendering logic, different targets — no
@@ -126,16 +129,24 @@ raw).
 A `Mode` is one renderable + interactive view of a file. The interactive viewer drives a
 `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x` shortcuts to Info/Help/Hex). Today's modes:
 
-| Mode                | Used by                                       | Owns scroll?           | Reacts to resize? |
-|---------------------|-----------------------------------------------|------------------------|-------------------|
-| `ContentMode`       | text, source, structured, SVG XML             | no                     | no                |
-| `HexMode`           | binary; reachable from any view via `x`       | **yes** (byte-aligned) | **yes**           |
-| `ImageRenderMode`   | raster + rasterized SVG                       | no                     | **yes**           |
-| `AnimationMode`     | GIF / WebP (drives `next_tick`/`tick`)        | no                     | **yes**           |
-| `SvgAnimationMode`  | CSS-`@keyframes` SVG (lazy per-frame raster)  | no                     | **yes**           |
-| `InfoMode`          | every file (file metadata)                    | no                     | no                |
-| `HelpMode`          | every file (keyboard-shortcut listing)        | no                     | no                |
-| `AboutMode`         | every file (logo, version, palette swatches)  | no                     | no                |
+| Mode                  | Used by                                                     | Owns scroll?           | Reacts to resize? |
+|-----------------------|-------------------------------------------------------------|------------------------|-------------------|
+| `ContentMode`         | text, source, structured, SVG XML                           | **yes**                | **yes**           |
+| `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text) | no                     | **yes**           |
+| `EpubReadMode`        | EPUB chapter-by-chapter read (cover render + chapter search) | no                     | **yes**           |
+| `ListingMode`         | archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic TOC | **yes**                | **yes**           |
+| `DirectoryMode`       | filesystem directory listings                               | **yes**                | **yes**           |
+| `HexMode`             | binary; reachable from any view via `x`                     | **yes** (byte-aligned) | **yes**           |
+| `ImageRenderMode`     | raster + rasterized SVG                                     | **yes** (FitWidth/Height pan) | **yes**    |
+| `AnimationMode`       | GIF / WebP (drives `next_tick`/`tick`)                      | **yes**                | **yes**           |
+| `SvgAnimationMode`    | CSS-`@keyframes` SVG (lazy per-frame raster)                | **yes**                | **yes**           |
+| `PagedImageMode<R>`   | PDF / CBZ paged image render                                | **yes**                | **yes**           |
+| `SpecimenMode`        | font specimen rasterisation (`.ttf` / `.otf` / `.ttc`)      | **yes**                | **yes**           |
+| `TableMode`           | objfile / classfile aligned tables                          | **yes**                | **yes**           |
+| `CsvTableMode`        | streaming CSV / TSV table                                   | **yes**                | **yes**           |
+| `InfoMode`            | every file (file metadata)                                  | no                     | no                |
+| `HelpMode`            | every file (keyboard-shortcut listing)                      | no                     | no                |
+| `AboutMode`           | every file (logo, version, palette swatches)                | no                     | no                |
 
 ### Pipe-mode rendering (`Mode::render_to_pipe`)
 
@@ -412,6 +423,9 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 
 ## Adding a new file type
 
+See [conventions.md → File types](conventions.md#file-types) for the complete owned-files /
+wiring-sites checklist. Quick summary:
+
 1. Add a `FileType` variant in `input/detect.rs` and wire detection. Per-type format and detection
    helpers live alongside the type under `types/<x>/{format,detect}.rs`.
 2. Create the `types/<x>/` module and build the type's `Mode` impls there. Generic, reusable modes
@@ -422,8 +436,10 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then a `compose_modes`
    arm delegating to it. Hex / Info / About / Help are appended automatically; pipe mode picks the
    first non-aux mode (or first, if all are aux).
-4. Add info gathering in `info/gather/` if the type has interesting metadata (and themed display in
-   `info/render/` for novel field types).
+4. Add `types/<x>/info_gather.rs` (`gather_extras(...)`) and `types/<x>/info_render.rs`
+   (`render_section(...)`) for type-specific metadata, then add the matching `FileExtras`
+   variant in `info/mod.rs` and wire dispatch in `info/gather/mod.rs` + `info/render/mod.rs`.
+   Tiny types may combine gather + render into one `info.rs`.
 
 Example — PDF (`src/types/pdf/compose.rs`):
 

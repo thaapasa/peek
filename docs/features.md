@@ -16,6 +16,7 @@ Status legend: ✅ implemented · ◐ partial
   - [Image Files](#image-files-)
   - [Audio Files](#audio-files-)
   - [Animated Images (GIF, WebP)](#animated-images-gif-webp-)
+  - [Comic Archives](#comic-archives-)
   - [Object Files](#object-files-)
   - [Java Classfiles](#java-classfiles-)
   - [Certificates and Keys](#certificates-and-keys-)
@@ -226,7 +227,9 @@ single styled-text view:
 - **Info** — title, author, subject, keywords, plus created / revised dates pulled from the
   `\info` group, and paragraph / word counts.
 
-There is no TOC view or per-entry extract — RTF isn't a container.
+RTF opens to a single Read view by default. When the file embeds images as `\pict` groups,
+a synthetic TOC of those embeds is pushed alongside Read; `e` / `--extract` pulls one out
+through the recursive-peek pipeline. Plain RTFs without embeds stay single-view.
 
 #### PDF ✅
 
@@ -378,9 +381,12 @@ timeline (one frame per stop for `steps()` timing, ~30 fps interpolated for `lin
 entries, keyed by `(frame, grid_cols, grid_rows)`) makes a full second loop free.
 
 Phase 1 covers what termsvg / asciinema-svg-style files use: `transform: translateX/Y/translate`
-under `steps()` or `linear` timing, inline-style targets only. SMIL (`<animate>`,
-`<animateMotion>`) and class/id-selector targets are deferred. `--no-svg-anim` forces the static
-render. The Info panel reports frame count, total duration, and looping vs one-shot.
+under `steps()` or `linear` timing. Targets resolve via inline `style="..."` *or* flat CSS
+selectors (tag, `.class`, `#id`, `tag.class`) parsed by
+`types/image/pipeline/svg_anim/selectors.rs`; combinators, pseudo-classes, attribute selectors,
+and `*` are silently dropped. SMIL (`<animate>`, `<animateMotion>`) is still deferred.
+`--no-svg-anim` forces the static render. The Info panel reports frame count, total duration,
+and looping vs one-shot.
 
 #### Transparency Handling ◐
 
@@ -493,6 +499,28 @@ Auto-plays at native frame rate. `Space` toggles play/pause; `n`/`p` and Left/Ri
 cycles background. Status line shows frame counter and play/pause. Print mode renders the first
 frame. Frame count appears in the file info screen. Transparency handling applies.
 
+### Comic Archives ✅
+
+| Format | Extensions | Status |
+|--------|------------|--------|
+| CBZ    | `.cbz`     | ✅      |
+
+`.cbz` files (Comic Book ZIP — a ZIP container holding page images in name order) get a
+multi-mode view:
+
+- **Read** (default) — paged image render through the shared image pipeline (same
+  `PagedImageMode<R>` machinery as PDF). `n` / `p` step pages; the status line shows
+  `page X/Y`. Pages are decoded lazily and held in a single-slot cache so resize / image-mode
+  cycle / background cycle re-render only the current page.
+- **TOC** — the raw ZIP file tree via the shared `ListingMode`. `e` / `--extract` pulls an
+  individual page through recursive peek (an extracted PNG opens in the image viewer).
+- **Info** — format label, page count, total uncompressed image bytes.
+
+Page entries are filtered by image extension (`.png` / `.jpg` / `.jpeg` / `.webp` / `.gif` /
+`.bmp` / `.tif` / `.tiff`) and sorted by name. `__MACOSX/` and other non-image entries are
+skipped from the Read view but remain visible in the TOC. `.cbr` / `.cb7` / `.cbt` (other comic
+archive containers) are not supported — only CBZ ships today.
+
 ### Object Files ✅
 
 ELF, Mach-O, and PE/COFF binaries — executables, shared libraries, relocatable objects — get a
@@ -509,10 +537,10 @@ Three views, Tab-cycled:
 - **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
   falls back to the dynamic symbol table when the file is stripped.
 
-The two tables are an `ObjectTableMode`: the column header stays pinned through vertical scroll,
-each column is repainted live on a theme cycle, `Left`/`Right` pan columns, and `/` searches names
-(`n`/`p` step matches, panning horizontally only as far as needed to reveal an off-screen hit).
-Column widths fit their content.
+The two tables use the shared `TableMode` (the same one classfiles use): the column header
+stays pinned through vertical scroll, each column is repainted live on a theme cycle,
+`Left`/`Right` pan columns, and `/` searches names (`n`/`p` step matches, panning horizontally
+only as far as needed to reveal an off-screen hit). Column widths fit their content.
 
 Universal (fat) Mach-O containers are unwrapped transparently — the host architecture's slice is
 parsed and the Info view lists every slice. No extract path: sections and symbols are not
@@ -952,22 +980,24 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `Down` / `j`          | Scroll down  |
 | `Page Up`             | Page up      |
 | `Page Down` / `Space` | Page down    |
-| `Home`                | Go to top    |
-| `End`                 | Go to bottom |
+| `Home` / `g`          | Go to top    |
+| `End` / `G`           | Go to bottom |
 | `Enter`               | Descend into selection (recursive peek) |
 | `e`                   | Extract selected entry / current frame |
+| `s`                   | Toggle sticky parent-directory breadcrumb in listing TOCs |
 
 ### Views and Modes
 
-| Key       | Action                                      |
-|-----------|---------------------------------------------|
-| `Tab`     | Toggle content / file info                  |
-| `i`       | Jump to file info screen                    |
-| `h` / `?` | Toggle help screen                          |
-| `t`       | Cycle theme                                 |
-| `c`       | Cycle output color mode                     |
-| `x`       | Toggle hex dump (no-op when hex is default) |
-| `a`       | Toggle about / status screen                |
+| Key             | Action                                      |
+|-----------------|---------------------------------------------|
+| `Tab`           | Cycle the file's view modes forward         |
+| `Shift+Tab`     | Cycle the file's view modes backward        |
+| `i`             | Jump to file info screen                    |
+| `h` / `?`       | Toggle help screen                          |
+| `t` / `T`       | Cycle theme forward / backward              |
+| `c` / `C`       | Cycle output color mode forward / backward  |
+| `x`             | Toggle hex dump (no-op when hex is default) |
+| `a`             | Toggle about / status screen                |
 
 ### Search *(context: text / source / structured views)*
 
@@ -987,12 +1017,15 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 ### Image Views *(context)*
 
-| Key              | Action                                              |
-|------------------|-----------------------------------------------------|
-| `m`              | Cycle rendering mode (full/block/geo/ascii/contour) |
-| `b`              | Cycle background (auto/black/white/checkerboard)    |
-| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)     |
-| `Left` / `Right` | Pan horizontally (FitHeight)                        |
+| Key              | Action                                                        |
+|------------------|---------------------------------------------------------------|
+| `m` / `M`        | Cycle rendering mode forward / backward (full/block/geo/ascii/contour) |
+| `b` / `B`        | Cycle background forward / backward (auto/black/white/checkerboard) |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)               |
+| `Left` / `Right` | Pan horizontally (FitHeight)                                  |
+| `+` / `-`        | Zoom in / out in 1.25× steps (viewport-centre anchored)       |
+| `0`              | Reset zoom to 1× and pan to origin                            |
+| `1`..`9`         | Jump to whole-number preset zoom (1×..9×)                     |
 
 ### Animated Image Views *(context: GIF, WebP)*
 
@@ -1008,8 +1041,21 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 `Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
 `n` / `p` exclusively (the previous Left/Right frame-step bindings are gone).
 
-These bindings are initial suggestions and may be revised. The help screen (`h`) is the
-authoritative in-app reference.
+### CSV / TSV Table *(context)*
+
+| Key       | Action                                                        |
+|-----------|---------------------------------------------------------------|
+| `Shift+H` | Toggle CSV header row on / off (override the heuristic)       |
+| `Shift+R` | Reflow column widths from the currently-visible viewport      |
+
+### Font Specimen *(context)*
+
+| Key       | Action                                          |
+|-----------|-------------------------------------------------|
+| `n` / `p` | Step to the next / previous face in a `.ttc`    |
+
+The help screen (`h`) is the authoritative in-app reference — all bindings derive from a single
+source (`viewer/ui/keys.rs::Action::bindings`).
 
 ## Color and Rendering
 

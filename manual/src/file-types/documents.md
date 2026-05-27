@@ -19,7 +19,8 @@
 - **Info** — title, author, subject, keywords, created / modified timestamps, paragraph / word
   / image counts.
 
-**RTF** is a single file (not a container), so it has only the Read and Info views.
+**RTF** opens to Read and Info by default. When the file embeds images as `\pict` groups,
+a TOC view appears alongside, listing each embed; `e` / `--extract` pulls one out.
 
 ## Caveats
 

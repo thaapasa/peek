@@ -4,11 +4,11 @@ Source files render as syntax-highlighted text via [syntect](https://github.com/
 with [two-face](https://github.com/Enselic/two-face) / bat extended grammars — 100+ languages
 including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML, Dockerfile.
 
-If detection misses, force a language with `-l`:
+If detection misses, force a language with `-L`:
 
 ```sh
-cat script | peek -l bash
-peek -l rust unknown_file
+cat script | peek -L bash
+peek -L rust unknown_file
 ```
 
 ## Line numbers

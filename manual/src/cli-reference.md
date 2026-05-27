@@ -14,15 +14,16 @@
 | `--image-mode`   | `-m`  | Image render mode (full / block / geo / ascii / contour)      |
 | `--background`   |       | Image transparency background (auto / black / white / checkerboard) |
 | `--margin`       |       | Image margin in transparent pixels                            |
+| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)          |
 | `--edge-density` |       | Tune contour line count (image-mode contour)                  |
 | `--no-svg-anim` |       | Force static render for animated SVG                          |
 | `--info`         | `-i`  | Print file info and exit                                      |
-| `--list`         | `-l`  | Print container TOC to stdout (archives / disks / PDF embeds) |
+| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              |
 | `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           |
-| `--extract`      |       | Extract a single inner item — see [Extraction](./viewer/extraction.md) |
+| `--extract`      | `-x`  | Extract a single inner item — see [Extraction](./viewer/extraction.md) |
 | `-o` / `--output`|       | Output path for `--extract` (or `-` for stdout)               |
-| `--extract-size` |       | Output size for animation frame extract                       |
+| `--extract-size` |       | Output pixel size for animation / SVG frame extract           |
 | `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  |
 | `--update`       |       | Check for newer release and re-run `install.sh`               |
 

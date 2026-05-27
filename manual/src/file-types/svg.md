@@ -18,8 +18,10 @@ per stop for `steps()` timing, ~30 fps interpolated for `linear`), and rasterize
 demand. A bounded LRU cache (64 entries) keeps a full second loop free.
 
 Covers what termsvg / asciinema-svg-style files use: `transform: translateX/Y/translate` under
-`steps()` or `linear` timing, inline-style targets only. SMIL (`<animate>`, `<animateMotion>`)
-and class/id-selector targets are not supported. `--no-svg-anim` forces the static render.
+`steps()` or `linear` timing. Targets resolve via inline `style="..."` *or* flat CSS selectors
+(tag, `.class`, `#id`, `tag.class`); combinators, pseudo-classes, attribute selectors, and `*`
+are silently dropped. SMIL (`<animate>`, `<animateMotion>`) is still not supported.
+`--no-svg-anim` forces the static render.
 
 `Space` plays / pauses, `n` / `p` step frames, `e` extracts the current frame as PNG.
 
