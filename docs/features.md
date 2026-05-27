@@ -421,10 +421,10 @@ Scroll keys in image views:
 Toggling fit mode resets the scroll offset (the old position has no
 meaning in the new grid). No `--sizing` CLI flag yet.
 
-#### Zoom ◐
+#### Zoom ✅
 
 Every graphic-rendering view (raster images, animations, animated SVG,
-PDF / CBZ pages, font specimen) supports zoom:
+PDF / CBZ pages, font specimen, static SVG) supports zoom:
 
 - `+` / `-` — zoom in / out in 1.25× steps. Anchored on the viewport
   centre so the pixel under the centre stays put across the change.
@@ -432,22 +432,28 @@ PDF / CBZ pages, font specimen) supports zoom:
 - `1`..`9` — jump to a whole-number preset (1× .. 9×).
 - Maximum 16×.
 
-For raster images, animation frames, CBZ pages, PDF pages, and font
-specimens, only the visible viewport's pixel ROI is cropped from a
-native-resolution source and rescaled — memory stays proportional to
-the viewport, not to zoom². CBZ caches the decoded native bitmap per
-page; PDF rasterises once at Pdfium's 4096-pixel render ceiling and
-keeps a single-slot cache (current page only) so even a long document
-does not accumulate per-page rasterisations; the font specimen
-re-rasterises the active face at higher resolution as zoom grows
-(quantized to integer zoom buckets so a 1.25× step doesn't trigger an
-expensive fontdue re-pass — only crossing into the next integer does).
-Beyond Pdfium's render ceiling PDF upscales pixels rather than
-re-rasterising. SVG still uses the naive path (render the full zoomed
-grid into the per-frame cache, then 2D-slice the viewport per draw).
-Follow-up tracked under
-[planned.md](planned.md#zoom-in-svg--roi-only-render-) will bring it to
-the same ROI-only shape.
+Every backend now ROI-renders: only the visible viewport's pixel ROI
+is cropped from a native-resolution source and rescaled, so memory
+stays proportional to the viewport, not to zoom². Each backend picks
+its source strategy:
+
+- **Raster / GIF / WebP** — source is the decoded native image.
+- **CBZ** — decoded native bitmap per page; lazy-loaded, held for the
+  renderer's lifetime.
+- **PDF** — rasterised once at Pdfium's 4096-pixel render ceiling,
+  single-slot cache (current page only) so a long document does not
+  accumulate per-page rasterisations. Beyond the render ceiling the
+  viewport upscales pixels rather than re-rasterising.
+- **Font specimen** — re-rasterise the active face at higher resolution
+  when zoom crosses into a new integer bucket (1×, 2×, 3×, …). A 1.25×
+  step inside the same bucket reuses the existing source; only the
+  bucket cross triggers a fontdue re-pass.
+- **SVG (static + animated)** — same integer-bucket strategy: the
+  rasterised source bitmap is rebuilt at `bucket × base` resolution
+  when zoom crosses the next integer, so ROI crops read native resvg
+  detail rather than upscaling pixels. The animated path caches per
+  `(frame, grid, bucket)` in its bounded LRU so a frame revisited at
+  the same zoom stays a cache hit.
 
 Zoom is interactive only — pipe / `--print` output always renders at 1×.
 

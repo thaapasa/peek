@@ -660,10 +660,15 @@ pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
 }
 
 /// Run the rasterize → margin → composite pipeline for an SVG source.
+/// `zoom_bucket` (≥ 1) multiplies the rasterise target so the
+/// `source` field carries enough pixel detail to ROI-crop sharply at
+/// the live zoom level. The cell grid (`cols` / `rows`) stays at base
+/// regardless of bucket — only the source bitmap grows.
 pub fn prepare_svg(
     source: &InputSource,
     config: &ImageConfig,
     term: TermSize,
+    zoom_bucket: u32,
 ) -> Result<PreparedImage> {
     let (svg_w, svg_h) = super::svg::svg_dimensions(source)?;
     prepare_svg_inner(
@@ -672,6 +677,7 @@ pub fn prepare_svg(
         svg_h,
         config,
         term,
+        zoom_bucket,
     )
 }
 
@@ -685,6 +691,7 @@ pub fn prepare_svg_bytes(
     svg_h: u32,
     config: &ImageConfig,
     term: TermSize,
+    zoom_bucket: u32,
 ) -> Result<PreparedImage> {
     prepare_svg_inner(
         |w, h| super::svg::rasterize_svg_bytes(bytes, w, h),
@@ -692,6 +699,7 @@ pub fn prepare_svg_bytes(
         svg_h,
         config,
         term,
+        zoom_bucket,
     )
 }
 
@@ -701,16 +709,22 @@ fn prepare_svg_inner(
     svg_h: u32,
     config: &ImageConfig,
     term: TermSize,
+    zoom_bucket: u32,
 ) -> Result<PreparedImage> {
     let margin = config.margin;
     let padded_w = svg_w + margin * 2;
     let padded_h = svg_h + margin * 2;
     let (cols, rows) = compute_grid(padded_w, padded_h, term, config.width, config.fit);
 
-    let (px_w, px_h) = match config.mode {
+    let bucket = zoom_bucket.max(1);
+    let (base_px_w, base_px_h) = match config.mode {
         ImageMode::Ascii => (cols, rows),
         _ => (cols * CELL_W, rows * CELL_H),
     };
+    // Rasterise the source bitmap at `bucket × base` so the ROI crop
+    // at zoom > 1 reads native detail rather than upscaling pixels.
+    let px_w = base_px_w.saturating_mul(bucket).max(1);
+    let px_h = base_px_h.saturating_mul(bucket).max(1);
     let scale_x = px_w as f64 / padded_w as f64;
     let scale_y = px_h as f64 / padded_h as f64;
     let target_margin_x = (margin as f64 * scale_x).round() as u32;
@@ -729,11 +743,20 @@ fn prepare_svg_inner(
         offset_y as i64,
     );
     let pre_composite = DynamicImage::ImageRgba8(canvas);
-    let composited = composite_with_bg(pre_composite.clone(), config.background);
 
-    // SVG prep does not retain a higher-resolution source; the zoom > 1
-    // path falls back to upscaling the rasterized buffer until a later
-    // pass re-rasterizes the visible ROI at zoom-aware density.
+    // `composited` drives the zoom = 1 fast path so it must stay at
+    // base dims. When the source bitmap is bucket-upscaled, resize it
+    // down for the composite. Skip the resize at bucket = 1 — the
+    // source already matches the base grid.
+    let composited_pre = if bucket == 1 {
+        pre_composite.clone()
+    } else {
+        let resized =
+            pre_composite.resize_exact(base_px_w, base_px_h, image::imageops::FilterType::Lanczos3);
+        DynamicImage::ImageRgba8(resized.to_rgba8())
+    };
+    let composited = composite_with_bg(composited_pre, config.background);
+
     Ok(PreparedImage {
         source: pre_composite,
         composited,

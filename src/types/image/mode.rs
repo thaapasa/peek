@@ -5,6 +5,7 @@ use super::pipeline::render::{self, TermSize};
 use super::pipeline::{ImageConfig, ImageMode};
 use super::scroll::ScrollBounds;
 use super::view::ImageView;
+use super::zoom::integer_bucket;
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
@@ -32,10 +33,15 @@ struct CacheKey {
     bg: super::pipeline::Background,
     ascii: bool,
     fit: super::pipeline::FitMode,
+    /// Zoom bucket the prep was built for. Only consulted by the SVG
+    /// kind — raster sources are already native-resolution. The key
+    /// stays uniform across kinds so all the cache-miss / fast-path
+    /// logic stays single-shape.
+    zoom_bucket: u32,
 }
 
 impl CacheKey {
-    fn build(config: &ImageConfig, term: TermSize) -> Self {
+    fn build(config: &ImageConfig, term: TermSize, zoom_bucket: u32) -> Self {
         Self {
             term_cols: term.cols,
             term_rows: term.rows,
@@ -43,6 +49,7 @@ impl CacheKey {
             bg: config.background,
             ascii: matches!(config.mode, ImageMode::Ascii),
             fit: config.fit,
+            zoom_bucket,
         }
     }
 }
@@ -127,7 +134,9 @@ impl ImageRenderMode {
         if stale {
             let prep = match self.kind {
                 ImageKind::Raster => render::prepare_raster(&self.source, &self.view.config, term)?,
-                ImageKind::Svg => render::prepare_svg(&self.source, &self.view.config, term)?,
+                ImageKind::Svg => {
+                    render::prepare_svg(&self.source, &self.view.config, term, key.zoom_bucket)?
+                }
             };
             self.cache = Some(CachedFrame { key, prep });
         }
@@ -146,7 +155,14 @@ impl Mode for ImageRenderMode {
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         let term = self.view.prepare_term(ctx);
-        let key = CacheKey::build(&self.view.config, term);
+        // SVG rebuilds the source bitmap when zoom crosses an integer
+        // bucket so the ROI crop has native detail; raster sources are
+        // already native, so the bucket is pinned at 1 for them.
+        let zoom_bucket = match self.kind {
+            ImageKind::Raster => 1,
+            ImageKind::Svg => integer_bucket(self.view.zoom.factor()),
+        };
+        let key = CacheKey::build(&self.view.config, term, zoom_bucket);
         self.ensure_prepared(key, term)?;
         let prep = &self.cache.as_ref().expect("populated above").prep;
         Ok(self.view.render_prepared(prep, term))

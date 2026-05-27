@@ -53,7 +53,7 @@ fn render_raster(rel: &str, mode: ImageMode, style_mode: StyleMode, bg: Backgrou
 fn render_svg(rel: &str, mode: ImageMode, style_mode: StyleMode, bg: Background) -> String {
     let source = fixture(rel);
     let config = config(mode, style_mode, bg);
-    let prep = render::prepare_svg(&source, &config, TERM).expect("prepare_svg");
+    let prep = render::prepare_svg(&source, &config, TERM, 1).expect("prepare_svg");
     let window = GridWindow::full(prep.cols, prep.rows);
     render::render_prepared(&prep, &config, window).join("\n")
 }

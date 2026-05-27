@@ -368,32 +368,6 @@ Symbols tables, universal-binary unwrapping (see [features.md](features.md)). St
 
 ## Image Features
 
-### Zoom in SVG — ROI-only render ☐
-
-CBZ and PDF cache a native-resolution-ish source bitmap per page and crop the viewport's pixel
-ROI on each draw (same shape as the raster path). PDF rasterises once at Pdfium's 4096-pixel
-render ceiling and keeps a single-slot cache (current page only) — even a 1000-page document
-does not accumulate per-page rasterisations. Beyond Pdfium's render ceiling, PDF upscales pixels
-rather than re-rasterising; true zoom-aware DPI would need `PdfRenderConfig::clip(left, top,
-right, bottom)` plus a matrix-translate to render just the ROI into a viewport-sized bitmap
-(deferred because the fixed-DPI cache covers the typical zoom range cheaply).
-
-The font specimen re-rasterises the active face at higher resolution as zoom grows. Zoom
-buckets quantize to integer levels (1×, 2×, 3×, …) so a 1.25× step doesn't trigger an
-expensive fontdue re-pass — only crossing into the next integer does. Zoom-out keeps the
-high-resolution decoded source; the existing ROI crop just resamples a sharper canvas.
-
-SVG (static and animated) is the last backend still on the naive path: the renderer produces
-the full effective grid (`term × zoom`) into the per-frame cache, and the visible viewport is
-sliced out per draw. Memory grows with `zoom²`.
-
-Follow-up: SVG needs the parsed `resvg::usvg::Tree` retained in `PreparedImage.source` so
-`rasterize_tree()` can be called at viewport ROI dimensions instead of upscaling the rasterized
-canvas the current `prepare_svg_inner` keeps.
-
-The raster + GIF / WebP + CBZ + PDF + font-specimen paths all crop from a native-resolution
-source and rescale only the viewport-sized ROI; this item brings SVG in line.
-
 ## Viewer Features
 
 ### Text Search ◐

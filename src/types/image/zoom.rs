@@ -77,6 +77,17 @@ impl Default for ZoomLevel {
     }
 }
 
+/// Quantize a zoom factor into an integer bucket (1, 2, 3, …) for
+/// backends whose source detail is rebuilt per bucket. A 1.25× step
+/// stays in the same bucket as 1× so a single press doesn't trigger
+/// an expensive re-rasterise; crossing into the next integer does.
+/// Clamped to `ZoomLevel`'s practical range.
+pub(crate) fn integer_bucket(zoom: f32) -> u32 {
+    let n = zoom.ceil().max(1.0);
+    let max = ZoomLevel::MAX.ceil() as u32;
+    (n as u32).clamp(1, max)
+}
+
 impl PartialEq for ZoomLevel {
     fn eq(&self, other: &Self) -> bool {
         // ~1e-3 tolerance is well below any user-visible step (1.25×).

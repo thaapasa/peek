@@ -31,6 +31,7 @@ use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
 use crate::types::image::pipeline::{FitMode, ImageConfig};
 use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::view::ImageView;
+use crate::types::image::zoom::integer_bucket;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -46,6 +47,12 @@ struct CacheKey {
     margin: u32,
     ascii: bool,
     fit: FitMode,
+    /// Zoom bucket the frame's source bitmap was rasterised for. A
+    /// zoom-up crossing into the next integer bucket invalidates the
+    /// entry (cache miss → re-rasterise at higher detail); zoom-down
+    /// leaves the higher-bucket entry intact so a subsequent
+    /// zoom-back-up is a cache hit.
+    zoom_bucket: u32,
 }
 
 pub(crate) struct SvgAnimationMode {
@@ -118,6 +125,7 @@ impl SvgAnimationMode {
             self.view.config.width,
             self.view.config.fit,
         );
+        let zoom_bucket = integer_bucket(self.view.zoom.factor());
         let key = CacheKey {
             frame_idx: self.anim.current as u32,
             cols: probe_cols,
@@ -128,6 +136,7 @@ impl SvgAnimationMode {
                 crate::types::image::pipeline::ImageMode::Ascii
             ),
             fit: self.view.config.fit,
+            zoom_bucket,
         };
 
         if let Some(pos) = self.cache.iter().position(|(k, _)| *k == key) {
@@ -143,6 +152,7 @@ impl SvgAnimationMode {
                 self.model.height_px,
                 &self.view.config,
                 term,
+                zoom_bucket,
             )?;
 
             if self.cache.len() == FRAME_CACHE {

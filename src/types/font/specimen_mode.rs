@@ -17,7 +17,7 @@ use crate::types::image::pipeline::render::{self, PreparedImage, TermSize};
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
 use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::view::ImageView;
-use crate::types::image::zoom::ZoomLevel;
+use crate::types::image::zoom::integer_bucket;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -158,21 +158,12 @@ impl SpecimenMode {
         }
     }
 
-    /// Quantize zoom into an integer bucket so a 1.25× step doesn't
-    /// trigger a re-rasterise — only crossing into the next integer
-    /// (1×, 2×, 3×, …) does. Clamped to fontdue's practical range.
-    fn zoom_bucket(zoom: f32) -> u32 {
-        let n = zoom.ceil().max(1.0);
-        let max = ZoomLevel::MAX.ceil() as u32;
-        (n as u32).clamp(1, max)
-    }
-
     /// Re-rasterise the active face at higher resolution when the live
     /// zoom outgrows the current source detail. Down-zooming keeps the
     /// existing high-res decoded — the ROI crop just resamples a
     /// sharper source, no quality loss.
     fn ensure_decoded_for_zoom(&mut self, zoom: f32) {
-        let bucket = Self::zoom_bucket(zoom);
+        let bucket = integer_bucket(zoom);
         if bucket <= self.decoded_zoom_bucket {
             return;
         }
