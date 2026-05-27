@@ -432,12 +432,18 @@ PDF / CBZ pages, font specimen) supports zoom:
 - `1`..`9` — jump to a whole-number preset (1× .. 9×).
 - Maximum 16×.
 
-For raster images and animation frames, only the visible viewport's
-pixel ROI is cropped from the native-resolution source and rescaled —
-memory stays proportional to the viewport, not to zoom². PDF / CBZ
-pages and font specimens currently use a naive path (render the full
+For raster images, animation frames, and CBZ pages, only the visible
+viewport's pixel ROI is cropped from the native-resolution source and
+rescaled — memory stays proportional to the viewport, not to zoom².
+CBZ caches the decoded native bitmap per page rather than the rendered
+ASCII grid, so a zoomed long comic does not balloon by `zoom²`. PDF
+pages and font specimens still use the naive path (render the full
 zoomed grid into the per-page cache, then 2D-slice the viewport per
-draw); follow-up work will move them to the ROI-only path.
+draw); follow-up work tracked under
+[planned.md](planned.md#zoom-in-pdf--cbz--font-specimen--roi-only-render-)
+will bring them to the same ROI-only shape — PDF needs Pdfium's
+`PdfRenderConfig::clip()`, the font specimen needs a higher-resolution
+source bake.
 
 Zoom is interactive only — pipe / `--print` output always renders at 1×.
 
