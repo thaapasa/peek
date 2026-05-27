@@ -28,6 +28,7 @@ pub mod pipeline;
 pub(crate) mod scroll;
 pub(crate) mod view;
 pub mod xmp;
+pub(crate) mod zoom;
 
 pub(crate) use animation_mode::AnimationMode;
 pub(crate) use mode::{ImageKind, ImageRenderMode};

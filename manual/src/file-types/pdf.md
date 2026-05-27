@@ -9,8 +9,8 @@ Cycled with Tab:
 
 - **Read** (default) — paged image render. Each page is rasterized via Pdfium and ASCII-rendered
   through the shared image pipeline. `n` / `p` step pages; the status line shows `page X/Y`.
-  Per-page cache keyed by terminal size + render settings; resize or mode cycling re-renders
-  only the visible page.
+  `+` / `-` / `0` / `1`..`9` zoom; arrow keys pan the zoomed view. Per-page cache keyed by
+  terminal size + render settings; resize or mode cycling re-renders only the visible page.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers.
 - **Embeds** — listing of every extractable inner item. Covers `/EmbeddedFiles` attachments

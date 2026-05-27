@@ -368,21 +368,19 @@ Symbols tables, universal-binary unwrapping (see [features.md](features.md)). St
 
 ## Image Features
 
-### Zoom ☐
+### Zoom in PDF / CBZ / font specimen — ROI-only render ☐
 
-`+`/`-` to scale up/down from the current sizing baseline. Height overflow uses viewer scrolling.
-Width overflow uses the existing horizontal-pan mechanism — `Left`/`Right` already pans image
-views under `FitHeight`; zoom can reuse that path so an over-wide zoomed image scrolls horizontally
-instead of wrapping or truncating.
+Today's PDF / CBZ / font specimen zoom is naive: the renderer produces the full effective grid
+(`term × zoom`) into the per-page or per-face cache, and the visible viewport is sliced out per
+draw. Memory grows with `zoom²`, so high zoom on long documents is unbounded.
 
-Implementation sketch: zoom multiplies the rendered grid size from the active sizing baseline. When
-the resulting width exceeds the terminal, treat it like `FitHeight` — render full width, scroll
-horizontally; render full height, scroll vertically. Effectively a free-zoom mode where both axes
-scroll. A position indicator (`[3,2]/[5,4]`) can show viewport location. Print mode wouldn't
-support zoom (interactive-only).
+Follow-up: re-rasterize only the visible ROI at zoom-aware DPI — Pdfium supports rendering a
+clip rect at arbitrary scale, fontdue can rasterize at higher target heights. SVG (static and
+animated) has the same gap — `prepare_svg_inner` keeps the rasterized canvas as `source`, so
+zoom > 1 upscales pixels instead of re-rasterizing the vector source.
 
-Capping zoom at terminal width is a simpler fallback if the dual-axis scroll proves clunky, but
-horizontal pan is already in the viewer, so the marginal cost is small.
+The raster + GIF / WebP path already crops from the native-resolution source and rescales only
+the viewport-sized ROI; this item brings the remaining backends in line.
 
 ## Viewer Features
 

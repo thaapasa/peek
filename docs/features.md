@@ -421,6 +421,26 @@ Scroll keys in image views:
 Toggling fit mode resets the scroll offset (the old position has no
 meaning in the new grid). No `--sizing` CLI flag yet.
 
+#### Zoom ◐
+
+Every graphic-rendering view (raster images, animations, animated SVG,
+PDF / CBZ pages, font specimen) supports zoom:
+
+- `+` / `-` — zoom in / out in 1.25× steps. Anchored on the viewport
+  centre so the pixel under the centre stays put across the change.
+- `0` — reset to 1× and pan to the origin.
+- `1`..`9` — jump to a whole-number preset (1× .. 9×).
+- Maximum 16×.
+
+For raster images and animation frames, only the visible viewport's
+pixel ROI is cropped from the native-resolution source and rescaled —
+memory stays proportional to the viewport, not to zoom². PDF / CBZ
+pages and font specimens currently use a naive path (render the full
+zoomed grid into the per-page cache, then 2D-slice the viewport per
+draw); follow-up work will move them to the ROI-only path.
+
+Zoom is interactive only — pipe / `--print` output always renders at 1×.
+
 ### Audio Files ✅
 
 Metadata-only Info view (no playback, no waveform). Container + codec params from a symphonia

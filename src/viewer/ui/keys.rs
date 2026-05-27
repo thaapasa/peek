@@ -165,6 +165,16 @@ pub(crate) enum Action {
     /// Toggle the CSV header row on / off. CsvTableMode only; no-op
     /// elsewhere.
     ToggleHeader,
+    /// Zoom the current graphic view in by one step. Anchored on the
+    /// viewport centre so the pixel under the centre stays put.
+    ZoomIn,
+    /// Zoom the current graphic view out by one step. Same anchor as
+    /// `ZoomIn`.
+    ZoomOut,
+    /// Reset zoom to 1× and pan to the origin.
+    ZoomReset,
+    /// Jump to a whole-number preset zoom: `1`..=`9` → 1×..=9×.
+    ZoomPreset(u8),
 }
 
 impl Action {
@@ -228,6 +238,21 @@ impl Action {
             Action::Back                => binds![B::plain(Esc)],
             Action::ReflowWidths        => binds![B::plain(Char('R'))],
             Action::ToggleHeader        => binds![B::plain(Char('H'))],
+            Action::ZoomIn              => binds![B::plain(Char('+')), B::plain(Char('='))],
+            Action::ZoomOut             => binds![B::plain(Char('-'))],
+            Action::ZoomReset           => binds![B::plain(Char('0'))],
+            Action::ZoomPreset(n) => match n {
+                1 => binds![B::plain(Char('1'))],
+                2 => binds![B::plain(Char('2'))],
+                3 => binds![B::plain(Char('3'))],
+                4 => binds![B::plain(Char('4'))],
+                5 => binds![B::plain(Char('5'))],
+                6 => binds![B::plain(Char('6'))],
+                7 => binds![B::plain(Char('7'))],
+                8 => binds![B::plain(Char('8'))],
+                9 => binds![B::plain(Char('9'))],
+                _ => &[],
+            },
         }
     }
 

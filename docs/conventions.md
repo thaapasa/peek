@@ -101,6 +101,37 @@ at a wiring site and the per-arm body belongs in the corresponding type module.
   split a 200-line file that does one thing well. Split when one file demands tracking multiple
   unrelated mental models.
 
+## Arithmetic
+
+Inline arithmetic is fine for simple things — a sum, an average, one
+`min` / `max` clamp, a 2- or 3-step ratio. The moment a calculation
+crosses into a multi-step shape (effective grid from base × zoom,
+viewport clamp + max-scroll, cell→pixel projection, anchored
+zoom-around-centre, packed-bit decode, byte-offset → line-and-column,
+…) it earns a named helper.
+
+- **Name the calculation, not the formula.** `zoomed_view.pixel_roi(...)`
+  beats `let crop_w = x1.saturating_sub(x0).max(1);` repeated three
+  places. The reader doesn't have to derive intent from operator
+  arithmetic.
+- **Lift on the first duplicate, not the third.** Two parallel sites
+  with the same formula is the threshold — by the third you've already
+  paid the drift cost. Especially when both sites *must* agree (e.g.
+  pan-bounds reported by one site must match the clamp the other
+  applies); the compiler doesn't enforce parallel arithmetic agreement,
+  a shared helper does.
+- **Pin the formulas with tests in the helper module**, not in each
+  caller. Move the existing inline tests over when extracting.
+- **Free fn vs method**: methods on a state-bearing struct
+  (`ZoomedView::pixel_roi`) when the calculation reads several of its
+  fields; free fn (`anchor_zoom_change`) when it operates on values
+  the caller hands in and doesn't need a struct shape.
+
+Concretely: any block that takes more than ~5 lines, repeats across
+files, or uses casts plus `saturating_*` plus `.max(1)` to defend
+against edge cases — extract it. The cast/saturating/floor pattern
+is a signal the math has invariants worth naming.
+
 ## Tests
 
 - **New `info::gather` / `info::render` / `input::detect` functionality needs fixture-based tests.**

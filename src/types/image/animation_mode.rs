@@ -8,7 +8,7 @@ use super::pipeline::ImageConfig;
 use super::pipeline::animate::AnimFrame;
 use super::pipeline::render;
 use super::scroll::ScrollBounds;
-use super::view::ImageView;
+use super::view::{ImageView, ViewBounds};
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
@@ -37,6 +37,12 @@ pub(crate) struct AnimationMode {
     frames: Vec<AnimFrame>,
     anim: AnimFrameState,
     view: ImageView,
+    /// Most recent viewport bounds, captured at the end of
+    /// `render_window`. Read by `handle` so zoom anchor math reflects
+    /// the actual visible viewport — `ImageView::view_bounds` needs a
+    /// live `PreparedImage` we don't keep between frames, so we cache
+    /// the result of the last render instead.
+    last_bounds: Option<ViewBounds>,
 }
 
 const ANIM_ACTIONS: &[HelpEntry] = &[
@@ -53,6 +59,22 @@ const ANIM_ACTIONS: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
     ),
+    (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
+    (&[Action::ZoomReset], "Reset zoom to 1×"),
+    (
+        &[
+            Action::ZoomPreset(1),
+            Action::ZoomPreset(2),
+            Action::ZoomPreset(3),
+            Action::ZoomPreset(4),
+            Action::ZoomPreset(5),
+            Action::ZoomPreset(6),
+            Action::ZoomPreset(7),
+            Action::ZoomPreset(8),
+            Action::ZoomPreset(9),
+        ],
+        "Zoom 1×–9×",
+    ),
 ];
 
 impl AnimationMode {
@@ -62,6 +84,7 @@ impl AnimationMode {
             frames,
             anim: AnimFrameState::new(),
             view: ImageView::new(config),
+            last_bounds: None,
         }
     }
 }
@@ -79,6 +102,7 @@ impl Mode for AnimationMode {
         let term = self.view.prepare_term(ctx);
         let frame = &self.frames[self.anim.current];
         let prep = render::prepare_decoded(frame.image.clone(), &self.view.config, term);
+        self.last_bounds = Some(self.view.view_bounds(&prep, term));
         Ok(self.view.render_prepared(&prep, term))
     }
 
@@ -118,6 +142,11 @@ impl Mode for AnimationMode {
 
     fn handle(&mut self, action: Action) -> Handled {
         if let Some(h) = self.view.handle_config_cycle(action) {
+            return h;
+        }
+        if let Some(bounds) = self.last_bounds
+            && let Some(h) = self.view.handle_zoom(action, bounds)
+        {
             return h;
         }
         match action {

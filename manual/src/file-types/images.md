@@ -62,6 +62,14 @@ Pipe / `--print` output always uses `Contain`. Scroll keys: `Up` / `Down` / `PgU
 vertical (FitWidth), `Left` / `Right` for horizontal (FitHeight), `Home` / `End` for top-left
 / bottom-right.
 
+## Zoom
+
+`+` / `-` zoom in / out in 1.25× steps, anchored on the viewport centre so the pixel under the
+centre stays put. `0` resets to 1× and pan to origin. `1`..`9` jump to whole-number presets (1×
+.. 9×). Maximum 16×. The visible viewport's pixel ROI is cropped from the native-resolution
+source and rescaled per draw, so memory stays viewport-sized at any zoom. Pipe / `--print`
+ignores zoom (always 1×).
+
 ## Animated GIF / WebP
 
 Auto-plays at native frame rate. `Space` toggles play/pause, `n` / `p` step frames, `e`

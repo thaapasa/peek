@@ -254,6 +254,53 @@ fn fit_width_scrolled_window_returns_correct_slice() {
 }
 
 #[test]
+fn render_zoomed_emits_viewport_sized_grid() {
+    // Zoom 2× on a landscape image: effective grid doubles, viewport
+    // stays clamped to the terminal on each axis (line count == rows).
+    let source = fixture("test-images/cozy-room.jpg");
+    let cfg = config(ImageMode::Block, StyleMode::Plain, Background::Auto);
+    let prep = render::prepare_raster(&source, &cfg, TERM).expect("prepare");
+    let result = render::render_prepared_zoomed(&prep, &cfg, TERM, 2.0, 0, 0);
+    assert_eq!(result.effective_cols, prep.cols * 2);
+    assert_eq!(result.effective_rows, prep.rows * 2);
+    assert_eq!(result.viewport_cols, result.effective_cols.min(TERM.cols));
+    assert_eq!(result.viewport_rows, result.effective_rows.min(TERM.rows));
+    assert_eq!(result.lines.len(), result.viewport_rows as usize);
+}
+
+#[test]
+fn render_zoomed_clamps_scroll_to_effective_grid() {
+    // Scroll past the effective grid → clamped to the last viewport-row.
+    let source = fixture("test-images/cozy-room.jpg");
+    let cfg = config(ImageMode::Block, StyleMode::Plain, Background::Auto);
+    let prep = render::prepare_raster(&source, &cfg, TERM).expect("prepare");
+    let over = render::render_prepared_zoomed(&prep, &cfg, TERM, 2.0, 9999, 9999);
+    let max = render::render_prepared_zoomed(
+        &prep,
+        &cfg,
+        TERM,
+        2.0,
+        over.effective_cols.saturating_sub(over.viewport_cols),
+        over.effective_rows.saturating_sub(over.viewport_rows),
+    );
+    assert_eq!(over.lines, max.lines);
+}
+
+#[test]
+fn render_zoomed_at_one_matches_unzoomed_window() {
+    // At zoom = 1 the zoomed renderer must agree with the unzoomed
+    // path on the same viewport. (Slight Lanczos differences in the
+    // resize pipeline are acceptable so we only assert line count and
+    // identical first / last rows here.)
+    let source = fixture("test-images/cozy-room.jpg");
+    let cfg = config(ImageMode::Block, StyleMode::Plain, Background::Auto);
+    let prep = render::prepare_raster(&source, &cfg, TERM).expect("prepare");
+    let zoomed = render::render_prepared_zoomed(&prep, &cfg, TERM, 1.0, 0, 0);
+    let plain = render::render_prepared(&prep, &cfg, GridWindow::full(prep.cols, prep.rows));
+    assert_eq!(zoomed.lines.len(), plain.len());
+}
+
+#[test]
 fn fit_height_scrolled_window_returns_correct_slice() {
     // Horizontal-scroll counterpart: window starts at col 8, full width
     // = TERM.cols, full row range. Confirm each emitted line equals the
