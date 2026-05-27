@@ -14,9 +14,15 @@ goal is to find where the architecture itself has drifted, where past
 decisions no longer fit, and where the code has grown duplication or
 debt that the conventions don't catch.
 
-Be skeptical. A review that concludes "all good" has almost always
-failed to look hard enough at the seams. Conformance to conventions is
-the floor, not the finding.
+**Precision over recall.** A short report of real issues beats a long
+report padded with speculation. Every finding the user must dismiss as
+"already considered" or "not actually a problem" is a tax on the
+review's value. If you are not confident a finding is a real problem
+*right now*, do not report it. Better to ship five solid findings than
+twenty mixed ones.
+
+Be skeptical of the code — and equally skeptical of your own findings
+before they go in the report.
 
 ## Step 1: Load context
 
@@ -82,6 +88,15 @@ values low cognitive load over dogmatic DRY — three short copies a
 reader can hold in their head can beat one abstraction they must chase
 across four files. Make that call explicitly; don't just demand DRY.
 
+**Check existing rationale before reporting a dedup candidate.** If
+the duplicated sites carry comments explaining *why* they are not
+unified (e.g. "kept separate because X differs in subtle way Y", "tried
+to merge in commit Z, reverted because…"), read them and judge whether
+the rationale still holds against the current code. If it does, drop
+the finding silently — do not report it just to make the user
+re-litigate a settled decision. Only report it if the rationale is
+clearly stale or wrong, and say *why* it's stale.
+
 ## Step 4: Convention & correctness sweep
 
 The mechanical checks — quicker, lower-value, but still worth a pass:
@@ -96,9 +111,38 @@ The mechanical checks — quicker, lower-value, but still worth a pass:
   missing standard key bindings
 - `docs/features.md` status out of date vs. the actual code
 
-## Step 5: Report
+## Step 5: Self-validate before reporting
 
-Lead with **what's most worth changing** — the 3-5 highest-leverage
+Before each candidate finding goes in the report, run it through this
+filter. Drop anything that fails — do not pad the report with weak
+items.
+
+- **Read the surrounding context.** Open the file at the cited lines
+  and read enough around them to understand what the code is doing and
+  why. Many "issues" evaporate once the local context is clear.
+- **Look for explanatory comments or doc blocks.** If a comment, doc
+  comment, or commit message explains why the code is shaped this way
+  (intentional duplication, deliberate non-abstraction, a workaround
+  for a known constraint), assess whether the rationale still applies.
+  If it does, drop the finding. If it doesn't, the finding must say
+  *why* the rationale is stale.
+- **Confirm the problem exists today.** "This could be a problem if X"
+  is not a finding unless X is real. Speculative or hypothetical issues
+  ("might cause a race if called concurrently" — is it?) belong in the
+  report only when you have confirmed the precondition holds.
+- **Check that the fix is actually better.** If the proposed
+  refactoring would trade one form of complexity for another of roughly
+  equal weight, drop it. The fix must produce a clearly better
+  cognitive-load / surface-area / correctness outcome.
+- **Beware of style-only nits dressed up as findings.** Renames,
+  reorderings, or "I'd write it differently" are not findings.
+
+If after this filter a severity group is empty, leave it empty. Empty
+is an honest result; padded is not.
+
+## Step 6: Report
+
+Lead with **what's most worth changing** — the highest-leverage
 findings, architecture and duplication first. Then the rest, grouped:
 
 - **High** — bugs, correctness issues, architectural violations
@@ -108,15 +152,16 @@ findings, architecture and duplication first. Then the rest, grouped:
 
 Each finding: file path + line, what's wrong, *why it matters now*, and a
 concrete fix or direction. For refactor candidates, sketch the target
-shape.
+shape. If you considered and rejected a related finding (e.g. a
+dedup candidate where the existing rationale still holds), do **not**
+mention it — silence is the right outcome.
 
 Rules:
 
 - No praise. Don't restate what the code does well. The report is a list
   of things to change.
-- Don't manufacture issues to hit a quota. But a non-trivial codebase
-  always carries trade-offs worth naming — if a section is empty, it's
-  more likely you under-looked than that the area is perfect. Surface
-  the weakest parts and the trade-off each represents even when none is
-  an outright bug.
-- Omit a severity group only if it is genuinely empty after a real look.
+- No quotas. Do not invent or inflate findings to fill a section. A
+  short, sharp report is the goal; a long one with mixed signal is a
+  failure mode.
+- Omit a severity group when it is empty. Do not synthesise a finding
+  just because the group looks bare.
