@@ -125,7 +125,7 @@ impl SvgAnimationMode {
             self.view.config.width,
             self.view.config.fit,
         );
-        let zoom_bucket = integer_bucket(self.view.zoom.factor());
+        let zoom_bucket = integer_bucket(self.view.zoom().factor());
         let key = CacheKey {
             frame_idx: self.anim.current as u32,
             cols: probe_cols,

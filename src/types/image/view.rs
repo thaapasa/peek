@@ -26,8 +26,9 @@ use syntect::highlighting::Color;
 
 use super::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
 use super::pipeline::{FitMode, ImageConfig};
-use super::scroll::{self, ScrollBounds};
-use super::zoom::{ZoomLevel, ZoomedView, anchor_zoom_change};
+use super::scroll::ScrollBounds;
+use super::zoom::{ZoomLevel, ZoomedView};
+use super::zoom_pan::{ViewBounds, ZoomPanState};
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::cell_size;
@@ -35,19 +36,17 @@ use crate::viewer::modes::{Handled, RenderCtx, Window};
 use crate::viewer::paged::cycle_image_config;
 use crate::viewer::ui::Action;
 
-/// Image-grid view state: image config + 2D pan offset + zoom. Embedded
+/// Image-grid view state: image config + zoom/pan apparatus. Embedded
 /// by every Mode that scrolls through a [`PreparedImage`].
 ///
 /// At zoom = 1 the prepared grid drives the viewport directly. Above
 /// 1 the *effective* grid is `(prep.cols × zoom, prep.rows × zoom)`
-/// and `(scroll_x, scroll_y)` are cell offsets into that effective
-/// grid; rendering crops the matching pixel ROI from `prep.source` so
-/// the working buffer stays viewport-sized regardless of zoom.
+/// and `pan.scroll_x/y` are cell offsets into that effective grid;
+/// rendering crops the matching pixel ROI from `prep.source` so the
+/// working buffer stays viewport-sized regardless of zoom.
 pub(crate) struct ImageView {
     pub config: ImageConfig,
-    pub scroll_x: u32,
-    pub scroll_y: u32,
-    pub zoom: ZoomLevel,
+    pub pan: ZoomPanState,
 }
 
 /// Snapshot of the fields [`ImageView::pipe_snapshot`] overrides for
@@ -55,31 +54,21 @@ pub(crate) struct ImageView {
 #[derive(Copy, Clone)]
 pub(crate) struct ImageViewPipeSnapshot {
     fit: FitMode,
-    scroll_x: u32,
-    scroll_y: u32,
-    zoom: ZoomLevel,
-}
-
-/// Scroll bounds suitable for the active view: the effective grid
-/// minus the terminal-clamped viewport, on each axis. Used by every
-/// caller that needs to clamp pan after a scroll action so zoom > 1
-/// pan ranges respect the larger effective grid.
-#[derive(Copy, Clone, Debug)]
-pub(crate) struct ViewBounds {
-    pub max_x: u32,
-    pub max_y: u32,
-    pub viewport_cols: u32,
-    pub viewport_rows: u32,
+    pan: ZoomPanState,
 }
 
 impl ImageView {
     pub fn new(config: ImageConfig) -> Self {
         Self {
             config,
-            scroll_x: 0,
-            scroll_y: 0,
-            zoom: ZoomLevel::one(),
+            pan: ZoomPanState::new(),
         }
+    }
+
+    /// Live zoom level. Exposed for renderers that bucket detail by
+    /// integer zoom (SVG / font specimen).
+    pub fn zoom(&self) -> ZoomLevel {
+        self.pan.zoom
     }
 
     /// Compute scroll bounds for the live zoom level + prepared grid +
@@ -91,7 +80,7 @@ impl ImageView {
             base_rows: prep.rows,
             term_cols: term.cols,
             term_rows: term.rows,
-            zoom: self.zoom.factor(),
+            zoom: self.pan.zoom.factor(),
         };
         let (max_x, max_y) = zv.max_scroll();
         let (viewport_cols, viewport_rows) = zv.viewport();
@@ -125,17 +114,17 @@ impl ImageView {
     /// (zoom-aware) so the status line's scroll math has the right
     /// denominator at every zoom level.
     pub fn render_prepared(&mut self, prep: &PreparedImage, term: TermSize) -> Window {
-        if self.zoom.is_one() {
+        if self.pan.zoom.is_one() {
             let (max_x, max_y) = render::max_scroll(prep.cols, prep.rows, term.cols, term.rows);
-            self.scroll_x = self.scroll_x.min(max_x);
-            self.scroll_y = self.scroll_y.min(max_y);
+            self.pan.scroll_x = self.pan.scroll_x.min(max_x);
+            self.pan.scroll_y = self.pan.scroll_y.min(max_y);
             let visible_cols = prep.cols.min(term.cols);
             let visible_rows = prep.rows.min(term.rows);
             let window = GridWindow {
-                col_start: self.scroll_x,
-                col_end: self.scroll_x + visible_cols,
-                row_start: self.scroll_y,
-                row_end: self.scroll_y + visible_rows,
+                col_start: self.pan.scroll_x,
+                col_end: self.pan.scroll_x + visible_cols,
+                row_start: self.pan.scroll_y,
+                row_end: self.pan.scroll_y + visible_rows,
             };
             let lines = render::render_prepared(prep, &self.config, window);
             return Window {
@@ -147,14 +136,14 @@ impl ImageView {
             prep,
             &self.config,
             term,
-            self.zoom.factor(),
-            self.scroll_x,
-            self.scroll_y,
+            self.pan.zoom.factor(),
+            self.pan.scroll_x,
+            self.pan.scroll_y,
         );
         let max_x = result.effective_cols.saturating_sub(result.viewport_cols);
         let max_y = result.effective_rows.saturating_sub(result.viewport_rows);
-        self.scroll_x = self.scroll_x.min(max_x);
-        self.scroll_y = self.scroll_y.min(max_y);
+        self.pan.scroll_x = self.pan.scroll_x.min(max_x);
+        self.pan.scroll_y = self.pan.scroll_y.min(max_y);
         Window {
             lines: result.lines,
             total: result.effective_rows as usize,
@@ -170,23 +159,17 @@ impl ImageView {
     pub fn pipe_snapshot(&mut self) -> ImageViewPipeSnapshot {
         let snap = ImageViewPipeSnapshot {
             fit: self.config.fit,
-            scroll_x: self.scroll_x,
-            scroll_y: self.scroll_y,
-            zoom: self.zoom,
+            pan: self.pan,
         };
         self.config.fit = FitMode::Contain;
-        self.scroll_x = 0;
-        self.scroll_y = 0;
-        self.zoom = ZoomLevel::one();
+        self.pan = ZoomPanState::new();
         snap
     }
 
     /// Undo [`pipe_snapshot`](Self::pipe_snapshot).
     pub fn restore(&mut self, snap: ImageViewPipeSnapshot) {
         self.config.fit = snap.fit;
-        self.scroll_x = snap.scroll_x;
-        self.scroll_y = snap.scroll_y;
-        self.zoom = snap.zoom;
+        self.pan = snap.pan;
     }
 
     /// Write the rendered window line-by-line. Convenience wrapper —
@@ -202,7 +185,7 @@ impl ImageView {
     /// caller-supplied bounds (clamped to live prep dims, or
     /// unbounded for per-tick decode paths).
     pub fn scroll(&mut self, action: Action, bounds: ScrollBounds) -> bool {
-        scroll::apply(&mut self.scroll_x, &mut self.scroll_y, action, bounds)
+        self.pan.scroll(action, bounds)
     }
 
     /// Apply an image-config cycle key (`b` / `m` / `f` family) and
@@ -213,55 +196,15 @@ impl ImageView {
     pub fn handle_config_cycle(&mut self, action: Action) -> Option<Handled> {
         let h = cycle_image_config(action, &mut self.config)?;
         if action == Action::CycleFitMode {
-            self.scroll_x = 0;
-            self.scroll_y = 0;
+            self.pan.reset_pan();
         }
         Some(h)
     }
 
-    /// Apply a zoom action (`+` / `-` / `0` / `1`..`9`) against the
-    /// currently-displayed grid + viewport. `bounds` describes the
-    /// *current* effective grid the user is looking at — only the
-    /// viewport dimensions are read, so the pre-zoom anchor math has
-    /// the viewport centre to work with. Returns `Some(Handled::Yes)`
-    /// when the action matched, `None` to bubble to the caller's own
-    /// match.
-    ///
-    /// Anchor rule: after zoom, the pixel that was under the viewport
-    /// centre stays under the viewport centre (clamped to the new
-    /// effective grid's edges). `ZoomReset` always sends scroll to
-    /// the origin regardless of the prior pan.
+    /// Apply a zoom action against the currently-displayed grid +
+    /// viewport — delegates to [`ZoomPanState::handle_zoom`].
     pub fn handle_zoom(&mut self, action: Action, bounds: ViewBounds) -> Option<Handled> {
-        let new_zoom = match action {
-            Action::ZoomIn => self.zoom.step_in(),
-            Action::ZoomOut => self.zoom.step_out(),
-            Action::ZoomReset => {
-                self.zoom = ZoomLevel::one();
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                return Some(Handled::Yes);
-            }
-            Action::ZoomPreset(n) => ZoomLevel::preset(n),
-            _ => return None,
-        };
-        if new_zoom == self.zoom {
-            return Some(Handled::Yes);
-        }
-        anchor_zoom_change(
-            self.zoom.factor(),
-            new_zoom.factor(),
-            bounds.viewport_cols,
-            bounds.viewport_rows,
-            &mut self.scroll_x,
-            &mut self.scroll_y,
-        );
-        self.zoom = new_zoom;
-        Some(Handled::Yes)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn set_zoom_for_test(&mut self, zoom: ZoomLevel) {
-        self.zoom = zoom;
+        self.pan.handle_zoom(action, bounds)
     }
 
     /// `[mode.label, fit.label, zoom.label?]` — the status segments
@@ -274,83 +217,9 @@ impl ImageView {
             (self.config.mode.label().to_string(), theme.label),
             (self.config.fit.label().to_string(), theme.label),
         ];
-        if !self.zoom.is_one() {
-            out.push((self.zoom.label(), theme.label));
+        if !self.pan.zoom.is_one() {
+            out.push((self.pan.zoom.label(), theme.label));
         }
         out
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::theme::StyleMode;
-    use crate::types::image::pipeline::{Background, FitMode, ImageMode};
-
-    fn default_config() -> ImageConfig {
-        ImageConfig {
-            mode: ImageMode::Block,
-            width: 0,
-            background: Background::Auto,
-            margin: 0,
-            style_mode: StyleMode::Plain,
-            edge_density: 0.10,
-            fit: FitMode::Contain,
-        }
-    }
-
-    fn bounds(viewport_cols: u32, viewport_rows: u32) -> ViewBounds {
-        ViewBounds {
-            max_x: 0,
-            max_y: 0,
-            viewport_cols,
-            viewport_rows,
-        }
-    }
-
-    #[test]
-    fn zoom_in_keeps_viewport_centre_pixel_fixed() {
-        // Viewport 80×24, scroll at origin. After zoom 1→1.25 the
-        // pixel at the viewport centre (col 40, row 12) projects to
-        // 50, 15 in the new effective grid. New scroll = centre − half
-        // = (10, 3).
-        let mut v = ImageView::new(default_config());
-        v.handle_zoom(Action::ZoomIn, bounds(80, 24));
-        assert_eq!((v.scroll_x, v.scroll_y), (10, 3));
-        assert!((v.zoom.factor() - 1.25).abs() < 1e-3);
-    }
-
-    #[test]
-    fn zoom_out_after_zoom_in_returns_to_origin() {
-        let mut v = ImageView::new(default_config());
-        v.handle_zoom(Action::ZoomIn, bounds(80, 24));
-        v.handle_zoom(Action::ZoomOut, bounds(80, 24));
-        assert!(v.zoom.is_one());
-        assert_eq!((v.scroll_x, v.scroll_y), (0, 0));
-    }
-
-    #[test]
-    fn zoom_reset_clears_scroll_regardless_of_pan() {
-        let mut v = ImageView::new(default_config());
-        v.set_zoom_for_test(ZoomLevel::new(4.0));
-        v.scroll_x = 100;
-        v.scroll_y = 50;
-        v.handle_zoom(Action::ZoomReset, bounds(80, 24));
-        assert!(v.zoom.is_one());
-        assert_eq!((v.scroll_x, v.scroll_y), (0, 0));
-    }
-
-    #[test]
-    fn zoom_preset_jumps_to_integer_zoom() {
-        let mut v = ImageView::new(default_config());
-        v.handle_zoom(Action::ZoomPreset(3), bounds(80, 24));
-        assert_eq!(v.zoom.factor(), 3.0);
-    }
-
-    #[test]
-    fn zoom_passes_through_non_zoom_actions() {
-        let mut v = ImageView::new(default_config());
-        let h = v.handle_zoom(Action::CycleFitMode, bounds(80, 24));
-        assert!(h.is_none());
     }
 }

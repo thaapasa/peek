@@ -31,8 +31,9 @@ use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::types::image::pipeline::render::TermSize;
 use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode};
-use crate::types::image::scroll::{self as image_scroll, ScrollBounds};
-use crate::types::image::zoom::{ZoomLevel, anchor_zoom_change};
+use crate::types::image::scroll::ScrollBounds;
+use crate::types::image::zoom::ZoomLevel;
+use crate::types::image::zoom_pan::{ViewBounds, ZoomPanState};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -329,9 +330,7 @@ pub(crate) struct PagedImageMode<R: PageRenderer> {
     image_config: ImageConfig,
     current: usize,
     warnings: Vec<String>,
-    zoom: ZoomLevel,
-    scroll_x: u32,
-    scroll_y: u32,
+    pan: ZoomPanState,
     /// Last viewport rendered into, captured at the end of
     /// `render_window`. Read by `handle` / `scroll` to compute scroll
     /// bounds and zoom anchoring without re-running the renderer.
@@ -350,47 +349,12 @@ impl<R: PageRenderer> PagedImageMode<R> {
             image_config,
             current: 0,
             warnings: Vec::new(),
-            zoom: ZoomLevel::one(),
-            scroll_x: 0,
-            scroll_y: 0,
+            pan: ZoomPanState::new(),
             last_viewport_cols: 0,
             last_viewport_rows: 0,
             last_effective_cols: 0,
             last_effective_rows: 0,
         }
-    }
-
-    /// Apply a zoom action against the last-rendered viewport. Anchors
-    /// the viewport-centre cell across the change so the page point
-    /// under the cursor stays put. Mirrors `ImageView::handle_zoom` —
-    /// the math is duplicated rather than shared because the paged
-    /// scroll state lives on this struct, not on an `ImageView`.
-    fn apply_zoom(&mut self, action: Action) -> Option<Handled> {
-        let new_zoom = match action {
-            Action::ZoomIn => self.zoom.step_in(),
-            Action::ZoomOut => self.zoom.step_out(),
-            Action::ZoomReset => {
-                self.zoom = ZoomLevel::one();
-                self.scroll_x = 0;
-                self.scroll_y = 0;
-                return Some(Handled::Yes);
-            }
-            Action::ZoomPreset(n) => ZoomLevel::preset(n),
-            _ => return None,
-        };
-        if new_zoom == self.zoom {
-            return Some(Handled::Yes);
-        }
-        anchor_zoom_change(
-            self.zoom.factor(),
-            new_zoom.factor(),
-            self.last_viewport_cols,
-            self.last_viewport_rows,
-            &mut self.scroll_x,
-            &mut self.scroll_y,
-        );
-        self.zoom = new_zoom;
-        Some(Handled::Yes)
     }
 }
 
@@ -420,9 +384,9 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         }
         let args = RenderArgs {
             term: term_size_for(ctx.term_cols, ctx.term_rows),
-            zoom: self.zoom,
-            scroll_x: self.scroll_x,
-            scroll_y: self.scroll_y,
+            zoom: self.pan.zoom,
+            scroll_x: self.pan.scroll_x,
+            scroll_y: self.pan.scroll_y,
             style_mode: ctx.peek_theme.style_mode,
         };
         let render =
@@ -436,8 +400,8 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         // future redraws / scroll calls start from a valid origin.
         let max_x = render.effective_cols.saturating_sub(render.viewport_cols);
         let max_y = render.effective_rows.saturating_sub(render.viewport_rows);
-        self.scroll_x = self.scroll_x.min(max_x);
-        self.scroll_y = self.scroll_y.min(max_y);
+        self.pan.scroll_x = self.pan.scroll_x.min(max_x);
+        self.pan.scroll_y = self.pan.scroll_y.min(max_y);
         Ok(Window {
             lines: render.lines,
             total: render.effective_rows as usize,
@@ -469,12 +433,8 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             .last_effective_rows
             .saturating_sub(self.last_viewport_rows);
         let page_y = self.last_viewport_rows.saturating_sub(1);
-        image_scroll::apply(
-            &mut self.scroll_x,
-            &mut self.scroll_y,
-            action,
-            ScrollBounds::clamped(max_x, max_y, page_y),
-        )
+        self.pan
+            .scroll(action, ScrollBounds::clamped(max_x, max_y, page_y))
     }
 
     /// Print mode walks every page in order, separated by a blank line.
@@ -485,15 +445,11 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
     /// past the terminal.
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let total = self.renderer.page_count();
-        let saved = self.current;
-        let saved_zoom = self.zoom;
-        let saved_scroll = (self.scroll_x, self.scroll_y);
-        self.zoom = ZoomLevel::one();
-        self.scroll_x = 0;
-        self.scroll_y = 0;
+        let saved_current = self.current;
+        let saved_pan = std::mem::replace(&mut self.pan, ZoomPanState::new());
         let args = RenderArgs {
             term: term_size_for(ctx.term_cols, ctx.term_rows),
-            zoom: self.zoom,
+            zoom: self.pan.zoom,
             scroll_x: 0,
             scroll_y: 0,
             style_mode: ctx.peek_theme.style_mode,
@@ -508,10 +464,8 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             }
             Ok(())
         });
-        self.current = saved;
-        self.zoom = saved_zoom;
-        self.scroll_x = saved_scroll.0;
-        self.scroll_y = saved_scroll.1;
+        self.current = saved_current;
+        self.pan = saved_pan;
         res
     }
 
@@ -523,12 +477,21 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         if let Some(h) = cycle_image_config(action, &mut self.image_config) {
             // Fit change invalidates the rendered grid; reset pan.
             if matches!(action, Action::CycleFitMode) {
-                self.scroll_x = 0;
-                self.scroll_y = 0;
+                self.pan.reset_pan();
             }
             return h;
         }
-        if let Some(h) = self.apply_zoom(action) {
+        let zoom_bounds = ViewBounds {
+            max_x: self
+                .last_effective_cols
+                .saturating_sub(self.last_viewport_cols),
+            max_y: self
+                .last_effective_rows
+                .saturating_sub(self.last_viewport_rows),
+            viewport_cols: self.last_viewport_cols,
+            viewport_rows: self.last_viewport_rows,
+        };
+        if let Some(h) = self.pan.handle_zoom(action, zoom_bounds) {
             return h;
         }
         let count = self.renderer.page_count();
@@ -536,16 +499,14 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             Action::NextChapter => {
                 let h = step_paged(&mut self.current, count, 1);
                 if matches!(h, Handled::YesResetScroll) {
-                    self.scroll_x = 0;
-                    self.scroll_y = 0;
+                    self.pan.reset_pan();
                 }
                 h
             }
             Action::PrevChapter => {
                 let h = step_paged(&mut self.current, count, -1);
                 if matches!(h, Handled::YesResetScroll) {
-                    self.scroll_x = 0;
-                    self.scroll_y = 0;
+                    self.pan.reset_pan();
                 }
                 h
             }
@@ -559,8 +520,8 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             return Vec::new();
         }
         let mut out = vec![(format!("page {}/{}", self.current + 1, count), theme.muted)];
-        if !self.zoom.is_one() {
-            out.push((self.zoom.label(), theme.label));
+        if !self.pan.zoom.is_one() {
+            out.push((self.pan.zoom.label(), theme.label));
         }
         out
     }
@@ -747,12 +708,12 @@ mod tests {
         assert_eq!(win.lines.len(), 40);
         assert_eq!(mode.last_viewport_cols, 80);
         assert_eq!(mode.last_effective_cols, 160);
-        assert_eq!(mode.scroll_x, 0);
+        assert_eq!(mode.pan.scroll_x, 0);
         assert_eq!(mode.renderer.last_scroll_x.get(), 0);
 
         // Right arrow: scroll_x advances by HSTEP (= 4 cells).
         assert!(Mode::scroll(&mut mode, Action::ScrollRight));
-        assert_eq!(mode.scroll_x, 4);
+        assert_eq!(mode.pan.scroll_x, 4);
 
         // Next render hands the updated scroll_x to the renderer so the
         // ROI path picks up the pan.
@@ -795,7 +756,7 @@ mod tests {
         let mut mode = PagedImageMode::new(CbzPageRenderer::new(source, pages), cfg);
         // Page 2 is landscape (1500x1000) — likeliest to overflow at zoom 2×.
         mode.current = 1;
-        mode.zoom = ZoomLevel::preset(2);
+        mode.pan.zoom = ZoomLevel::preset(2);
 
         let syntect = load_embedded_theme(PeekThemeName::default().tmtheme_source());
         let peek_theme = PeekTheme::from_syntect(&syntect);
@@ -841,7 +802,7 @@ mod tests {
         );
 
         assert!(Mode::scroll(&mut mode, Action::ScrollRight));
-        assert_eq!(mode.scroll_x, 4, "scroll_x must advance by HSTEP");
+        assert_eq!(mode.pan.scroll_x, 4, "scroll_x must advance by HSTEP");
     }
 
     /// Reproduces zoom=1 + fit=FitHeight on a landscape CBZ page —
@@ -909,11 +870,11 @@ mod tests {
         );
 
         assert!(Mode::scroll(&mut mode, Action::ScrollRight));
-        eprintln!("after Right: scroll_x={}", mode.scroll_x);
+        eprintln!("after Right: scroll_x={}", mode.pan.scroll_x);
         assert!(
             mode.last_effective_cols > 80,
             "expected horizontal overflow at fit=FitHeight"
         );
-        assert!(mode.scroll_x > 0, "Right arrow must advance scroll_x");
+        assert!(mode.pan.scroll_x > 0, "Right arrow must advance scroll_x");
     }
 }

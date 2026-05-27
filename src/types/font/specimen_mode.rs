@@ -213,7 +213,7 @@ impl Mode for SpecimenMode {
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, _rows: usize) -> Result<Window> {
         let term = self.view.prepare_term(ctx);
-        self.ensure_decoded_for_zoom(self.view.zoom.factor());
+        self.ensure_decoded_for_zoom(self.view.zoom().factor());
         let key = CacheKey::build(&self.view.config, term);
         self.ensure_prepared(key, term);
         let prep = &self.cache.as_ref().expect("populated above").prep;

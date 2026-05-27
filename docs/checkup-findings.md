@@ -92,26 +92,6 @@ one info screen. Either expose `gather_text_stats_with_body` returning
 `(TextStats, String)`, or skip the stats pass when the language gather
 will read the whole text anyway.
 
-### M14. `PagedImageMode` reimplements `ImageView`'s zoom/pan/bounds dance
-
-`src/viewer/paged.rs:327-578`. Carries its own `zoom`, `scroll_x`,
-`scroll_y`, `last_viewport_cols/rows`, `last_effective_cols/rows`,
-`apply_zoom()` (lines 365-395), and a hand-built `ScrollBounds::clamped`
-+ `image_scroll::apply` call (lines 459-478). The `apply_zoom`
-doc-comment already admits "mirrors `ImageView::handle_zoom` — math
-duplicated rather than shared".
-
-When the duplication was introduced `ImageView::view_bounds` needed a
-live `PreparedImage` the paged renderer didn't expose. After the ROI/zoom
-refactor `PagedRender` returns `effective_cols/rows` + `viewport_cols/rows`
-— exactly the `ViewBounds` shape `ImageView` consumes. Both modes are
-now solving the same problem with the same inputs in two spellings.
-
-Direction: lift `(zoom, scroll_x, scroll_y, last-bounds-cache)` into a
-shared `ZoomPanState` with `handle_zoom(action, ViewBounds)` and
-`scroll(action, ScrollBounds)`. `apply_zoom` body deletes; scroll body
-becomes a one-liner.
-
 ### M15. `InfoMode::render_window` re-builds every styled line per call
 
 `src/viewer/modes/info.rs:22-27`. Calls `crate::info::render(...)` to

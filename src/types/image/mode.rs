@@ -160,7 +160,7 @@ impl Mode for ImageRenderMode {
         // already native, so the bucket is pinned at 1 for them.
         let zoom_bucket = match self.kind {
             ImageKind::Raster => 1,
-            ImageKind::Svg => integer_bucket(self.view.zoom.factor()),
+            ImageKind::Svg => integer_bucket(self.view.zoom().factor()),
         };
         let key = CacheKey::build(&self.view.config, term, zoom_bucket);
         self.ensure_prepared(key, term)?;
