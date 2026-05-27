@@ -62,7 +62,8 @@ navigate matches instead, and `Esc` clears the search to get chapter stepping ba
 
 Zoom anchors on the viewport centre — the pixel under the centre
 stays put across `+` / `-`. The same zoom keys work in animation,
-PDF / CBZ, and font specimen views.
+PDF / CBZ, and font specimen views. See
+[Zoom & pan](./viewer/zoom-pan.md) for full behaviour.
 
 ## Animation views (GIF / WebP / animated SVG)
 

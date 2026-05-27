@@ -64,11 +64,7 @@ vertical (FitWidth), `Left` / `Right` for horizontal (FitHeight), `Home` / `End`
 
 ## Zoom
 
-`+` / `-` zoom in / out in 1.25× steps, anchored on the viewport centre so the pixel under the
-centre stays put. `0` resets to 1× and pan to origin. `1`..`9` jump to whole-number presets (1×
-.. 9×). Maximum 16×. The visible viewport's pixel ROI is cropped from the native-resolution
-source and rescaled per draw, so memory stays viewport-sized at any zoom. Pipe / `--print`
-ignores zoom (always 1×).
+See [Zoom & pan](../viewer/zoom-pan.md) for keys and behaviour.
 
 ## Animated GIF / WebP
 

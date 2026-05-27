@@ -38,10 +38,8 @@ Every image-mode key works on the specimen:
 | `m` | Cycle image mode (full-color / block / geo / ascii / contour)       |
 | `b` | Cycle background (auto / black / white / checkerboard)              |
 | `f` | Cycle fit mode (contain / fit width / fit height)                   |
-| `←` / `→` | Pan left / right (only meaningful in fit-height)              |
-| `+` / `-` | Zoom in / out (1.25× per step, capped at 16×)                 |
-| `0` | Reset zoom to 1× and pan to origin                                  |
-| `1`..`9` | Jump to whole-number zoom (1× .. 9×)                           |
+
+Zoom / pan keys ([Zoom & pan](../viewer/zoom-pan.md)) work on the specimen as well.
 
 A font that the rasteriser can't parse silently falls through to the Info + Hex tail.
 

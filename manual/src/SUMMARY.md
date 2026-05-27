@@ -39,6 +39,7 @@
 - [Themes](./viewer/themes.md)
 - [Color modes](./viewer/colors.md)
 - [Line numbers & wrap](./viewer/line-numbers-wrap.md)
+- [Zoom & pan](./viewer/zoom-pan.md)
 - [Extraction](./viewer/extraction.md)
 
 # Reference
