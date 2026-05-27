@@ -92,6 +92,109 @@ one info screen. Either expose `gather_text_stats_with_body` returning
 `(TextStats, String)`, or skip the stats pass when the language gather
 will read the whole text anyway.
 
+### M14. `PagedImageMode` reimplements `ImageView`'s zoom/pan/bounds dance
+
+`src/viewer/paged.rs:327-578`. Carries its own `zoom`, `scroll_x`,
+`scroll_y`, `last_viewport_cols/rows`, `last_effective_cols/rows`,
+`apply_zoom()` (lines 365-395), and a hand-built `ScrollBounds::clamped`
++ `image_scroll::apply` call (lines 459-478). The `apply_zoom`
+doc-comment already admits "mirrors `ImageView::handle_zoom` — math
+duplicated rather than shared".
+
+When the duplication was introduced `ImageView::view_bounds` needed a
+live `PreparedImage` the paged renderer didn't expose. After the ROI/zoom
+refactor `PagedRender` returns `effective_cols/rows` + `viewport_cols/rows`
+— exactly the `ViewBounds` shape `ImageView` consumes. Both modes are
+now solving the same problem with the same inputs in two spellings.
+
+Direction: lift `(zoom, scroll_x, scroll_y, last-bounds-cache)` into a
+shared `ZoomPanState` with `handle_zoom(action, ViewBounds)` and
+`scroll(action, ScrollBounds)`. `apply_zoom` body deletes; scroll body
+becomes a one-liner.
+
+### M15. `InfoMode::render_window` re-builds every styled line per call
+
+`src/viewer/modes/info.rs:22-27`. Calls `crate::info::render(...)` to
+build every themed line from scratch each invocation — every scroll
+keystroke re-themes character data. Only Mode that re-themes on every
+`render_window`. `ViewerState` invalidates the view-cache via
+`f.views[i] = None` on theme changes, but the underlying styled lines
+get rebuilt regardless.
+
+As more file types push async warnings (audio, PDF page-extract failures,
+CSV malformed counts), the `state.rs:851-856` warnings-edit path clears
+the InfoMode cache and next view triggers a full re-paint.
+
+Direction: cache keyed by `(PeekThemeName, StyleMode, warnings_len)` —
+same shape `RenderedTextMode` already uses.
+
+### M16. `Action::{Next,Prev}{Frame,Chapter,Face,Match}` six-variant family leaks mechanism
+
+`src/viewer/ui/keys.rs:131-148` and `src/viewer/ui/state.rs:485-510`.
+Six variants all bind to `n`/`p`; every consumer matches exactly the one
+variant it cares about; the giant `Action::Next* | ...` arm in
+`state.rs::apply` lists them only so exhaustiveness fires.
+
+The `keys.rs:120-130` comment defends the split on "semantic clarity at
+the call site". Reasonable when there were two pairs. With six (NextFace
+added in font work), the marginal cost is: every new `n`/`p` consumer
+needs two Action variants, two `bindings()` arms, two more
+fallthrough-list entries, and the mode still does a one-line match.
+
+Direction: collapse to one `Action::Next` / `Action::Prev` pair. Each
+consumer's `handle()` matches one variant. Help text per-mode already
+names the stepped thing ("Next / previous chapter"), so semantic clarity
+lives at the help layer not the action layer.
+
+Counter (existing comment's defence): a single `Next` loses "skim
+`match action` and see what the mode does on `n`". True for a reader
+scanning the global match, but the mode's `handle` already has *one*
+`Action::Next` arm — its body names what's stepped (`self.anim.step(...)`
+/ `step_paged(...)` / `step_search(...)`). Clarity loss is small.
+
+### M17. `ContentMode::set_search` streams the entire file per query
+
+`src/viewer/modes/content.rs:716-725`. Each `/`-then-Enter pulls every
+line through `LineSource::iter_all().map(...)` into `SearchState::scan`.
+`MAX_MATCHES = 100_000` caps match storage but the streaming read isn't
+capped — `'scan: for ... break 'scan` in `search::SearchState::scan`
+exits only after the match cap, so a zero-hit query on a 1 GB log walks
+the whole file every search. Violates the spirit of "stream, don't load"
+even while streaming — the cost is paid per query, not per session.
+
+Two directions:
+- Cheap: cap by *bytes scanned* in addition to match count, so a no-match
+  search on a multi-GB file degrades cleanly with a status warning.
+- Invasive: move scanning to a background thread that streams matches in.
+
+### M18. `Mode::render_window`'s `_scroll` parameter is dead for half the modes
+
+`src/viewer/modes/content.rs:452,599` declares `owns_scroll() = true` and
+ignores caller's `scroll`. Same pattern in `HexMode`, `TableMode`,
+`CsvTableMode`, `PagedImageMode`, `ListingMode`. Trait surface still
+passes `_scroll`; readers must learn that `owns_scroll`-true modes
+silently discard it and use their internal scroll instead.
+
+Two reasonable directions:
+- Split `Mode` into `ScrolledMode` / `OwnsScrollMode`, drop the dead
+  parameter, add trait-discrimination in `ViewerState`.
+- Keep as-is, document the contract more loudly on the trait.
+
+Not urgent. Flag as refactor candidate — every new owns-scroll mode adds
+another `_scroll` underscore.
+
+### M19. `state.rs::apply`'s 25-arm mode-local fall-through is ceremony
+
+`src/viewer/ui/state.rs:485-510`. Lists every mode-local action
+explicitly so non-exhaustive-match flags new variants. Works, but list
+hit 25 entries; every new action adds a line in a file that does nothing
+with it.
+
+Direction: small `Action::category()` (or `is_mode_local()`) on the enum
+itself plus one catch-all arm. Compiler still forces new variants to be
+categorised — author declares the category at the enum site instead of
+the global dispatcher. Not a bug; arm-count smell as action set grows.
+
 ## Low
 
 ### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)
@@ -125,4 +228,37 @@ Alternative: `HexMode::new` returns `Err` for sources that can't be
 byte-sourced and the dispatcher unconditionally `if let Ok(m) = …`.
 Current spot has the comment explaining "why"; relocating doesn't reduce
 complexity, just moves it. Note only.
+
+### L7. `viewer/paged.rs` at 919 lines mixes four concerns
+
+Holds `PageCacheKey`, `CachedRender`, `render_cached`, `step_paged`,
+`cycle_image_config`, the `PageRenderer` trait, `PagedImageMode<R>` impl,
+plus three integration tests. Past the conventions ~400-line refactor
+signal (`docs/conventions.md:84`) for mixed-concern files. The
+multi-page CBZ regression tests (lines 580-918) want to live next to
+the real renderer rather than the generic shell.
+
+Direction: lift `PagedImageMode<R>` + its tests into `viewer/paged/mode.rs`;
+keep `paged/mod.rs` as primitives (`PageCacheKey`, `render_cached`,
+`step_paged`, `pipe_walk_pages`, `cycle_image_config`, help constants,
+`PageRenderer` trait).
+
+### L8. Three sites re-construct `TermSize`, one with a magic `1.0`
+
+`src/types/image/view.rs:109-116` (`ImageView::prepare_term`),
+`src/viewer/paged.rs:309-315` (`term_size_for`), and inline at
+`image/mode.rs:199-203` / `font/specimen_mode.rs:251-255` in `scroll()`.
+The `cell_h_over_w` source differs: one reads
+`cell_size::cell_aspect_h_over_w()`, one reads from a cache key, two
+hardcode `1.0`. One helper would collapse this and stop `1.0` from
+drifting into more places.
+
+### L9. `Action::ZoomPreset(n)` help/handler pin test missing
+
+`src/viewer/paged.rs:620-644` has `image_config_help_pinned_to_handler`
+pinning the `CYCLE_*_HELP` rows to `cycle_image_config`. Same gap exists
+for the `Zoom 1×-9×` help row in every image mode's `EXTRA_ACTIONS` and
+the `Action::ZoomPreset(n)` bindings — adding `ZoomPreset(10)` to
+`bindings()` while forgetting the help row would slip through. Pattern's
+good; needs one more application.
 
