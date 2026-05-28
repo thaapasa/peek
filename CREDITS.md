@@ -88,3 +88,16 @@ to give the specimen render output enough visual range for a useful smoke test.
 | `test-data/fonts/sacramento/Sacramento-Regular.ttf` | [Astigmatic — Brian J. Bonislawsky](https://github.com/google/fonts/tree/main/ofl/sacramento)  | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/sacramento/OFL.txt) |
 | `test-data/fonts/greatvibes/GreatVibes-Regular.ttf` | [TypeSETit](https://github.com/google/fonts/tree/main/ofl/greatvibes)                          | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/greatvibes/OFL.txt) |
 | `test-data/fonts/cabin/Cabin[wdth,wght].ttf`        | [Pablo Impallari](https://github.com/google/fonts/tree/main/ofl/cabin)                         | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/cabin/OFL.txt)      |
+
+## Example databases
+
+`test-data/library.sqlite` is built by `examples/gen_sqlite_fixture.py`
+from the Project Gutenberg catalogue feed
+(<https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv>). The
+catalogue records bibliographic facts about public-domain works and
+is itself freely redistributable; Project Gutenberg's trademark
+restrictions apply only to use of the "Project Gutenberg" name, not
+to the underlying metadata. The fixture normalises the first 2500
+text entries into eight tables (books / authors / subjects /
+bookshelves / languages plus three join tables) and a
+`popular_authors` view.
