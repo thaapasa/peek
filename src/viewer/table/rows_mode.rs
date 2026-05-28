@@ -1,4 +1,5 @@
-//! Aligned CSV / TSV table view.
+//! Aligned, streaming table view used by CSV / TSV and the SQLite
+//! contents viewer.
 //!
 //! Rendered shape:
 //!
@@ -11,24 +12,23 @@
 //!
 //! State:
 //!
-//! * [`CsvData`] backing parser — owns the record cache + ongoing reader
-//! * `widths` — monotonic per-column widths, seeded from the first 1000
-//!   records and grown (never shrunk) as wider cells scroll into view
-//! * `has_header` — runtime override of the parser's header heuristic
-//!   (`Shift+H` toggles)
+//! * a [`RowSource`] backing — owns the row cache + pull-on-demand
+//!   semantics (CSV's `csv::Reader`, SQLite's sliding-window cursor)
+//! * `widths` — monotonic per-column widths, seeded from the first
+//!   1000 rows and grown (never shrunk) as wider cells scroll into view
+//! * `has_header` — runtime toggle (`Shift+H`), starts from the
+//!   caller-provided seed
 //! * `top_record` — record index at the top of the body viewport
 //! * `h_col` — left-most visible column (column-step horizontal pan)
 //!
 //! Print mode renders the seeded widths only — no auto-widen — so the
 //! table layout never depends on the deepest row consumed.
 //!
-//! **Not a [`crate::viewer::table::TableMode`] subclass despite the
-//! shared shape.** That widget assumes a fully-materialised row list
-//! with fixed column widths. CSV grows widths as records stream in and
-//! consumes the body lazily — different invariants, different state.
-//! Visual similarity is intentional; prior `/checkup` rounds concluded
-//! shared scaffolding (sticky header, pan-step, `n`/`p` search reveal)
-//! is too small to lift without losing clarity.
+//! **Not a [`super::TableMode`] subclass despite the shared shape.**
+//! `TableMode` assumes a fully-materialised row list with fixed column
+//! widths. This mode grows widths as rows stream in and consumes the
+//! body lazily — different invariants, different state. Visual
+//! similarity is intentional.
 
 use std::borrow::Cow;
 use std::ops::Range;
@@ -43,9 +43,8 @@ use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCt
 use crate::viewer::search::{
     MAX_MATCHES, SearchTarget, find_matches, overlay_matches, smart_case_sensitive,
 };
+use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols};
-
-use super::parse::{CellKind, CsvData, classify_cell};
 
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
@@ -62,55 +61,53 @@ const TRUNCATE_MARKER: char = '…';
 /// truncated with [`TRUNCATE_MARKER`].
 const MAX_COLUMN_WIDTH: usize = 64;
 
-/// Horizontal alignment of a column's body cells. Inferred at open
-/// time: numeric columns (Int / Float only across the seed body) get
-/// right-alignment so digits line up; everything else stays left.
+/// Horizontal alignment of a column's body cells. Decided up front by
+/// the source's compose path (CSV: type inference from the seed body;
+/// SQLite: declared column types).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Alignment {
     Left,
     Right,
 }
 
-pub(crate) struct CsvTableMode {
-    data: CsvData,
+pub(crate) struct RowsTableMode {
+    source: Box<dyn RowSource>,
     /// Per-column widths. Monotonic — auto-widen grows them, `Shift+R`
     /// recomputes from the visible window. Length matches the column
-    /// count of the first non-malformed record.
+    /// count of the source.
     widths: Vec<usize>,
     /// Seed widths captured at open time. Print-mode rendering uses
     /// these directly; interactive rendering may grow `widths` past them.
     seed_widths: Vec<usize>,
-    /// Per-column horizontal alignment, inferred from the seed scan.
-    /// Stable across the session — toggling the header doesn't shift
-    /// numeric data to text.
+    /// Per-column horizontal alignment, fixed at construction so a
+    /// header toggle doesn't shift numeric data to text.
     align: Vec<Alignment>,
-    /// Runtime override of the parser's header heuristic. `Shift+H`
-    /// toggles; reset to the heuristic on construction.
+    /// Runtime override of the caller-provided header seed. `Shift+H`
+    /// toggles.
     has_header: bool,
     top_record: usize,
     h_col: usize,
     cached_cols: usize,
     cached_rows: usize,
     label: &'static str,
-    /// Active cell-scoped search, or `None`. Cleared by raw/pretty-style
-    /// state changes (none yet here) and by `Back` / empty query.
-    search: Option<CsvSearch>,
+    /// Active cell-scoped search, or `None`. Cleared by `Back` / empty query.
+    search: Option<CellSearch>,
 }
 
-/// Match-position cache for an active CSV search. Each [`CsvMatch`]
-/// covers a single occurrence inside one cell; multi-occurrence cells
-/// produce multiple entries with the same `(record_idx, col_idx)` and
-/// different byte ranges. Ranges are byte offsets into the cell's
-/// *display* form (post [`display_cell`]) so they line up with
-/// `overlay_matches`.
-struct CsvSearch {
-    matches: Vec<CsvMatch>,
+/// Match-position cache for an active cell-scoped search. Each
+/// [`CellMatch`] covers a single occurrence inside one cell; multi-
+/// occurrence cells produce multiple entries with the same
+/// `(record_idx, col_idx)` and different byte ranges. Ranges are byte
+/// offsets into the cell's *display* form (post [`display_cell`]) so
+/// they line up with `overlay_matches`.
+struct CellSearch {
+    matches: Vec<CellMatch>,
     /// Active-match index into `matches`. Unused when `matches` is empty.
     cursor: usize,
 }
 
 #[derive(Clone)]
-struct CsvMatch {
+struct CellMatch {
     record_idx: usize,
     col_idx: usize,
     /// Byte range inside the cell's display form.
@@ -128,23 +125,28 @@ const TABLE_ACTIONS: &[HelpEntry] = &[
     NEXT_PREV_MATCH_HELP,
 ];
 
-impl CsvTableMode {
-    pub(crate) fn new(data: CsvData) -> Self {
-        let widths = seed_widths(&data);
-        let has_header = data.header_heuristic;
-        let body_start = if has_header { 1 } else { 0 };
-        let align = infer_alignments(&data, body_start);
+impl RowsTableMode {
+    /// Build a row-table mode over the given source. `align` and
+    /// `has_header` come from the source's compose path — they're
+    /// decided per file type, not derived inside this generic mode.
+    pub(crate) fn new(
+        source: Box<dyn RowSource>,
+        align: Vec<Alignment>,
+        has_header: bool,
+        label: &'static str,
+    ) -> Self {
+        let widths = seed_widths(&*source);
         Self {
             seed_widths: widths.clone(),
             widths,
             align,
             has_header,
-            data,
+            source,
             top_record: 0,
             h_col: 0,
             cached_cols: 0,
             cached_rows: 0,
-            label: "Table",
+            label,
             search: None,
         }
     }
@@ -155,7 +157,7 @@ impl CsvTableMode {
 
     /// Total body records (excludes the header row when `has_header`).
     fn body_total(&self) -> usize {
-        let loaded = self.data.loaded();
+        let loaded = self.source.loaded();
         loaded.saturating_sub(self.body_start())
     }
 
@@ -194,32 +196,15 @@ impl CsvTableMode {
             return;
         }
         let mut new_widths = vec![0usize; cols];
-        // Header text first.
-        if self.has_header
-            && let Some(rec) = self.data.records.first()
-        {
-            for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-                let w = display_cell(cell).width().min(MAX_COLUMN_WIDTH);
-                if w > new_widths[i] {
-                    new_widths[i] = w;
-                }
-            }
+        if self.has_header {
+            grow_widths_from_row(&*self.source, 0, &mut new_widths, cols);
         }
-        // Visible body rows.
         let reserved = if self.has_header { 2 } else { 0 };
         let rows = self.cached_rows.saturating_sub(reserved);
         let start = self.body_start() + self.top_record;
-        let end = (start + rows).min(self.data.loaded());
-        for rec in &self.data.records[start..end] {
-            if rec.malformed {
-                continue;
-            }
-            for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-                let w = display_cell(cell).width().min(MAX_COLUMN_WIDTH);
-                if w > new_widths[i] {
-                    new_widths[i] = w;
-                }
-            }
+        let end = (start + rows).min(self.source.loaded());
+        for idx in start..end {
+            grow_widths_from_row(&*self.source, idx, &mut new_widths, cols);
         }
         // Don't drop below a single column-character — empty columns
         // would render zero-width and merge into their neighbour separator.
@@ -242,27 +227,12 @@ impl CsvTableMode {
         let reserved = if self.has_header { 2 } else { 0 };
         let rows = self.cached_rows.saturating_sub(reserved);
         let start = self.body_start() + self.top_record;
-        let end = (start + rows).min(self.data.loaded());
-        for rec in &self.data.records[start..end] {
-            if rec.malformed {
-                continue;
-            }
-            for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-                let w = display_cell(cell).width().min(MAX_COLUMN_WIDTH);
-                if w > self.widths[i] {
-                    self.widths[i] = w;
-                }
-            }
+        let end = (start + rows).min(self.source.loaded());
+        for idx in start..end {
+            grow_widths_from_row(&*self.source, idx, &mut self.widths, cols);
         }
-        if self.has_header
-            && let Some(rec) = self.data.records.first()
-        {
-            for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-                let w = display_cell(cell).width().min(MAX_COLUMN_WIDTH);
-                if w > self.widths[i] {
-                    self.widths[i] = w;
-                }
-            }
+        if self.has_header {
+            grow_widths_from_row(&*self.source, 0, &mut self.widths, cols);
         }
     }
 
@@ -293,22 +263,27 @@ impl CsvTableMode {
         (ranges, current)
     }
 
-    /// Build a `CsvSearch` from the loaded records. Drives the reader
+    /// Build a [`CellSearch`] from the loaded records. Drives the source
     /// to EOF first so search is exhaustive — the user expects a search
     /// to span the whole file.
-    fn build_search(&mut self, query: &str) -> CsvSearch {
-        let _ = self.data.ensure_all();
+    fn build_search(&mut self, query: &str) -> CellSearch {
+        let _ = self.source.ensure_all();
         let sensitive = smart_case_sensitive(query);
-        let mut matches: Vec<CsvMatch> = Vec::new();
+        let mut matches: Vec<CellMatch> = Vec::new();
         let cols = self.widths.len();
-        'records: for (record_idx, rec) in self.data.records.iter().enumerate() {
-            if rec.malformed {
+        let loaded = self.source.loaded();
+        'records: for record_idx in 0..loaded {
+            if self.source.row_is_malformed(record_idx) {
                 continue;
             }
-            for (col_idx, cell) in rec.cells.iter().enumerate().take(cols) {
-                let display = display_cell(cell);
+            let Some(cells) = self.source.row(record_idx) else {
+                continue;
+            };
+            for (col_idx, cell) in cells.iter().enumerate().take(cols) {
+                let raw = cell.as_deref().unwrap_or("");
+                let display = display_cell(raw);
                 for r in find_matches(&display, query, sensitive) {
-                    matches.push(CsvMatch {
+                    matches.push(CellMatch {
                         record_idx,
                         col_idx,
                         range: r,
@@ -319,7 +294,7 @@ impl CsvTableMode {
                 }
             }
         }
-        CsvSearch { matches, cursor: 0 }
+        CellSearch { matches, cursor: 0 }
     }
 
     /// Step the search cursor by `delta`, wrapping at both ends, and
@@ -367,7 +342,7 @@ impl CsvTableMode {
         if !self.has_header {
             return String::new();
         }
-        let Some(rec) = self.data.records.first() else {
+        let Some(cells) = self.source.row(0) else {
             return String::new();
         };
         let mut out = String::new();
@@ -376,7 +351,7 @@ impl CsvTableMode {
             if i > self.h_col {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
-            let cell = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
+            let cell = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
             let (ranges, current) = self.cell_match_ranges(0, i);
             let painted = render_cell(cell, *w, theme.heading, align, theme, &ranges, current);
@@ -399,18 +374,19 @@ impl CsvTableMode {
         theme: &PeekTheme,
     ) -> Option<String> {
         let rec_idx = self.body_start() + body_idx;
-        let rec = self.data.records.get(rec_idx)?;
+        let malformed = self.source.row_is_malformed(rec_idx);
+        let cells = self.source.row(rec_idx)?;
         let mut out = String::new();
         out.push(' ');
         for (i, w) in widths.iter().enumerate().skip(self.h_col) {
             if i > self.h_col {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
-            let (cell, color): (&str, Color) = if rec.malformed {
+            let (cell, color): (&str, Color) = if malformed {
                 ("<error>", theme.warning)
             } else {
                 (
-                    rec.cells.get(i).map(|s| s.as_str()).unwrap_or(""),
+                    cells.get(i).and_then(|c| c.as_deref()).unwrap_or(""),
                     theme.foreground,
                 )
             };
@@ -421,6 +397,25 @@ impl CsvTableMode {
             ));
         }
         Some(out)
+    }
+}
+
+/// Walk one row of `source` and grow `widths` to fit each cell. Skips
+/// malformed rows and missing rows. Shared between seed-width
+/// construction, the auto-widen-on-scroll pass, and the manual reflow.
+fn grow_widths_from_row(source: &dyn RowSource, idx: usize, widths: &mut [usize], cols: usize) {
+    if source.row_is_malformed(idx) {
+        return;
+    }
+    let Some(cells) = source.row(idx) else {
+        return;
+    };
+    for (i, cell) in cells.iter().enumerate().take(cols) {
+        let s = cell.as_deref().unwrap_or("");
+        let w = display_cell(s).width().min(MAX_COLUMN_WIDTH);
+        if w > widths[i] {
+            widths[i] = w;
+        }
     }
 }
 
@@ -526,36 +521,6 @@ fn paint_content_with_markers(out: &mut String, content: &str, base: Color, them
     }
 }
 
-/// Infer per-column alignment from the seed body. Right-align when
-/// every non-empty body cell classifies as Int or Float and at least
-/// one such cell exists; otherwise left.
-fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
-    let cols = data.column_count();
-    let mut numeric = vec![true; cols];
-    let mut any_typed = vec![false; cols];
-    for rec in data.records.iter().skip(body_start) {
-        if rec.malformed {
-            continue;
-        }
-        for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-            match classify_cell(cell) {
-                CellKind::Empty => {}
-                CellKind::Int | CellKind::Float => any_typed[i] = true,
-                _ => numeric[i] = false,
-            }
-        }
-    }
-    (0..cols)
-        .map(|i| {
-            if numeric[i] && any_typed[i] {
-                Alignment::Right
-            } else {
-                Alignment::Left
-            }
-        })
-        .collect()
-}
-
 /// Sanitize a cell's content for single-row display. Embedded newlines
 /// would break the terminal cursor (pushing subsequent columns onto the
 /// next visual row); tabs would expand to 8 cells unpredictably. The
@@ -567,7 +532,7 @@ fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
 ///
 /// Returns `Cow::Borrowed` when the cell carries none of these — the
 /// common case — so the hot path doesn't allocate.
-fn display_cell(s: &str) -> Cow<'_, str> {
+pub(crate) fn display_cell(s: &str) -> Cow<'_, str> {
     if !s.contains(['\n', '\r', '\t']) {
         return Cow::Borrowed(s);
     }
@@ -585,27 +550,20 @@ fn display_cell(s: &str) -> Cow<'_, str> {
 
 /// Build the initial per-column widths from the seed scan. Header cells
 /// participate so the header text fits when present.
-fn seed_widths(data: &CsvData) -> Vec<usize> {
-    let cols = data.column_count();
+fn seed_widths(source: &dyn RowSource) -> Vec<usize> {
+    let cols = source.column_count();
     if cols == 0 {
         return Vec::new();
     }
     let mut widths = vec![1usize; cols];
-    for rec in &data.records {
-        if rec.malformed {
-            continue;
-        }
-        for (i, cell) in rec.cells.iter().enumerate().take(cols) {
-            let w = display_cell(cell).width().min(MAX_COLUMN_WIDTH);
-            if w > widths[i] {
-                widths[i] = w;
-            }
-        }
+    let loaded = source.loaded();
+    for idx in 0..loaded {
+        grow_widths_from_row(source, idx, &mut widths, cols);
     }
     widths
 }
 
-impl Mode for CsvTableMode {
+impl Mode for RowsTableMode {
     fn id(&self) -> ModeId {
         ModeId::Content
     }
@@ -622,8 +580,8 @@ impl Mode for CsvTableMode {
         let body_rows = rows.saturating_sub(reserved);
         let body_target = self.body_start() + self.top_record + body_rows;
         // Pull enough records to fill the viewport (cheap when already
-        // loaded; pulls from the reader when not).
-        let _ = self.data.ensure_record(body_target.saturating_sub(1));
+        // loaded; pulls from the source when not).
+        let _ = self.source.ensure_row(body_target.saturating_sub(1));
 
         self.clamp_top();
         self.clamp_h_col();
@@ -661,21 +619,22 @@ impl Mode for CsvTableMode {
     }
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        // Drive the parser to EOF so every record renders.
-        let _ = self.data.ensure_all();
+        // Drive the source to its end so every record renders.
+        let _ = self.source.ensure_all();
         // Print mode uses seed widths only — single-row overflow allowed
         // (alignment breaks for that row, next row realigns).
         let widths = self.seed_widths.clone();
-        if self.has_header && !self.data.records.is_empty() {
+        if self.has_header && self.source.loaded() > 0 {
             out.write_line(&self.build_header_row_print(&widths, ctx.peek_theme))?;
             out.write_line(&self.build_separator_row_print(&widths, ctx.peek_theme))?;
         }
         let body_start = self.body_start();
-        for rec_idx in body_start..self.data.records.len() {
-            let rec = &self.data.records[rec_idx];
+        let loaded = self.source.loaded();
+        for rec_idx in body_start..loaded {
+            let malformed = self.source.row_is_malformed(rec_idx);
             let mut row = String::new();
             row.push(' ');
-            if rec.malformed {
+            if malformed {
                 row.push_str(
                     &ctx.peek_theme
                         .paint("<malformed record>", ctx.peek_theme.warning),
@@ -683,11 +642,14 @@ impl Mode for CsvTableMode {
                 out.write_line(&row)?;
                 continue;
             }
+            let Some(cells) = self.source.row(rec_idx) else {
+                continue;
+            };
             for (i, w) in widths.iter().enumerate() {
                 if i > 0 {
                     row.push_str(&ctx.peek_theme.paint_muted(COL_SEP));
                 }
-                let raw = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
+                let raw = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
                 let cell = display_cell(raw);
                 let cell_w = cell.width();
                 let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
@@ -753,7 +715,7 @@ impl Mode for CsvTableMode {
                 // Try to pull records before clamping so Bottom-ish jumps
                 // surface every loadable row.
                 let body_target = self.body_start() + self.top_record + step;
-                let _ = self.data.ensure_record(body_target.saturating_sub(1));
+                let _ = self.source.ensure_row(body_target.saturating_sub(1));
                 self.clamp_top();
                 true
             }
@@ -763,7 +725,7 @@ impl Mode for CsvTableMode {
             }
             Action::Bottom => {
                 // Drive to EOF so the bottom is a true bottom.
-                let _ = self.data.ensure_all();
+                let _ = self.source.ensure_all();
                 self.top_record = self.max_top();
                 true
             }
@@ -831,7 +793,7 @@ impl Mode for CsvTableMode {
         // Records: `cur/total` body rows (or `cur/≥loaded` while partial).
         let body_total = self.body_total();
         let cur = self.top_record.saturating_add(1).min(body_total.max(1));
-        let total_label = match self.data.total_records() {
+        let total_label = match self.source.total() {
             Some(_) => body_total.to_string(),
             None => format!("≥{body_total}"),
         };
@@ -843,11 +805,9 @@ impl Mode for CsvTableMode {
         }
         // Surface malformed counter only when non-zero (status-bar
         // minimalism convention).
-        if self.data.malformed_count > 0 {
-            segs.push((
-                format!("malformed {}", self.data.malformed_count),
-                theme.warning,
-            ));
+        let malformed = self.source.malformed_count();
+        if malformed > 0 {
+            segs.push((format!("malformed {malformed}"), theme.warning));
         }
         // Header-on default; surface only when the user has flipped it off.
         if !self.has_header {
@@ -880,11 +840,11 @@ impl Mode for CsvTableMode {
     }
 }
 
-impl CsvTableMode {
+impl RowsTableMode {
     /// Header row variant for print mode — uses plain widths without
     /// honoring `h_col` (print mode emits every column from index 0).
     fn build_header_row_print(&self, widths: &[usize], theme: &PeekTheme) -> String {
-        let Some(rec) = self.data.records.first() else {
+        let Some(cells) = self.source.row(0) else {
             return String::new();
         };
         let mut out = String::new();
@@ -893,7 +853,7 @@ impl CsvTableMode {
             if i > 0 {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
-            let raw = rec.cells.get(i).map(|s| s.as_str()).unwrap_or("");
+            let raw = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
             let cell = display_cell(raw);
             let cell_w = cell.width();
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
@@ -947,24 +907,29 @@ mod tests {
     use super::*;
     use crate::input::InputSource;
     use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use crate::types::csv::compose::{build_csv_mode, infer_alignments};
     use crate::types::csv::format::CsvFormat;
+    use crate::types::csv::parse::CsvData;
     use bytes::Bytes;
 
     fn stdin(text: &str) -> InputSource {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
-    /// Build a `PeekTheme` for the render-function tests. CsvTableMode
-    /// itself takes no theme — it paints from the live `RenderCtx`.
+    /// Build a `PeekTheme` for the render-function tests.
     fn theme_manager() -> Rc<ThemeManager> {
         Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain))
     }
 
+    fn mode_from(text: &str, fmt: CsvFormat) -> RowsTableMode {
+        let src = stdin(text);
+        let data = CsvData::open(&src, fmt).unwrap();
+        build_csv_mode(data)
+    }
+
     #[test]
     fn seed_widths_grow_with_widest_seed_cell() {
-        let src = stdin("name,age\nalice,30\nelizabeth,99\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data);
+        let mode = mode_from("name,age\nalice,30\nelizabeth,99\n", CsvFormat::Csv);
         // Column 0: max("name"=4, "alice"=5, "elizabeth"=9) = 9
         // Column 1: max("age"=3, "30"=2, "99"=2) = 3
         assert_eq!(mode.widths, vec![9, 3]);
@@ -972,9 +937,7 @@ mod tests {
 
     #[test]
     fn scrolldown_advances_top_record_clamped_to_max() {
-        let src = stdin("h\na\nb\nc\nd\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+        let mut mode = mode_from("h\na\nb\nc\nd\n", CsvFormat::Csv);
         mode.cached_cols = 80;
         mode.cached_rows = 5; // 2 reserved for header+sep → 3 body rows
 
@@ -990,9 +953,7 @@ mod tests {
 
     #[test]
     fn shift_h_toggles_header() {
-        let src = stdin("name,age\nalice,30\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+        let mut mode = mode_from("name,age\nalice,30\n", CsvFormat::Csv);
         assert!(mode.has_header);
         assert_eq!(mode.handle(Action::ToggleHeader), Handled::Yes);
         assert!(!mode.has_header);
@@ -1003,9 +964,10 @@ mod tests {
     fn shift_r_reflows_widths_to_viewport() {
         // After scrolling past a wide-cell block, Shift+R recomputes from
         // the visible window to reclaim space.
-        let src = stdin("a,b\nshort,x\nmuchlongercell,y\nshort,z\nshort,w\nshort,v\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+        let mut mode = mode_from(
+            "a,b\nshort,x\nmuchlongercell,y\nshort,z\nshort,w\nshort,v\n",
+            CsvFormat::Csv,
+        );
         mode.cached_cols = 80;
         mode.cached_rows = 4; // 2 reserved → 2 body rows visible
         assert!(
@@ -1027,9 +989,7 @@ mod tests {
 
     #[test]
     fn scroll_right_steps_by_column_clamped_at_last() {
-        let src = stdin("a,b,c\n1,2,3\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+        let mut mode = mode_from("a,b,c\n1,2,3\n", CsvFormat::Csv);
         mode.cached_cols = 80;
         mode.cached_rows = 5;
         assert_eq!(mode.h_col, 0);
@@ -1046,9 +1006,7 @@ mod tests {
 
     #[test]
     fn status_segments_show_record_position_and_column_count() {
-        let src = stdin("a,b\n1,2\n3,4\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data);
+        let mode = mode_from("a,b\n1,2\n3,4\n", CsvFormat::Csv);
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         let segs = mode.status_segments(&theme);
@@ -1060,9 +1018,7 @@ mod tests {
     fn numeric_columns_right_align() {
         // `id`, `salary` are numeric; `name`, `department`, `start_date`,
         // `active` are not. Right-align matches the numeric columns only.
-        let src = stdin("id,name,age\n1,Alice,30\n2,Bob,25\n");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mode = CsvTableMode::new(data);
+        let mode = mode_from("id,name,age\n1,Alice,30\n2,Bob,25\n", CsvFormat::Csv);
         assert_eq!(
             mode.align,
             vec![Alignment::Right, Alignment::Left, Alignment::Right]
@@ -1126,7 +1082,11 @@ mod tests {
             .records
             .iter()
             .filter(|r| !r.malformed)
-            .filter(|r| r.cells.iter().any(|c| c.contains('\n')))
+            .filter(|r| {
+                r.cells
+                    .iter()
+                    .any(|c| c.as_deref().is_some_and(|s| s.contains('\n')))
+            })
             .count();
         assert_eq!(multi, 2, "books.csv should have two multi-line cells");
 
@@ -1140,7 +1100,8 @@ mod tests {
             for (i, cell) in rec.cells.iter().enumerate() {
                 let w = 60usize;
                 let align = Alignment::Left;
-                let rendered = render_cell(cell, w, theme.foreground, align, &theme, &[], None);
+                let raw = cell.as_deref().unwrap_or("");
+                let rendered = render_cell(raw, w, theme.foreground, align, &theme, &[], None);
                 assert!(
                     !rendered.contains('\n'),
                     "row {i} cell rendered with embedded newline: {rendered:?}"
@@ -1161,9 +1122,18 @@ mod tests {
         let multi = data
             .records
             .iter()
-            .find(|r| !r.malformed && r.cells.iter().any(|c| c.contains('\n')))
+            .find(|r| {
+                !r.malformed
+                    && r.cells
+                        .iter()
+                        .any(|c| c.as_deref().is_some_and(|s| s.contains('\n')))
+            })
             .expect("at least one multi-line row");
-        let cell = multi.cells.iter().find(|c| c.contains('\n')).unwrap();
+        let cell = multi
+            .cells
+            .iter()
+            .find_map(|c| c.as_deref().filter(|s| s.contains('\n')))
+            .unwrap();
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         let rendered = render_cell(
@@ -1190,13 +1160,14 @@ mod tests {
         assert_eq!(data.delimiter, b',');
         assert!(data.header_heuristic, "header row detected");
         assert_eq!(data.column_count(), 6);
-        let mode = CsvTableMode::new(data);
+        let body_start = if data.header_heuristic { 1 } else { 0 };
+        let aligns = infer_alignments(&data, body_start);
         // id (int), name (text), department (text), salary (float),
         // start_date (date), active (bool).
-        assert_eq!(mode.align[0], Alignment::Right, "id column");
-        assert_eq!(mode.align[1], Alignment::Left, "name column");
-        assert_eq!(mode.align[3], Alignment::Right, "salary column");
-        assert_eq!(mode.align[4], Alignment::Left, "start_date column");
+        assert_eq!(aligns[0], Alignment::Right, "id column");
+        assert_eq!(aligns[1], Alignment::Left, "name column");
+        assert_eq!(aligns[3], Alignment::Right, "salary column");
+        assert_eq!(aligns[4], Alignment::Left, "start_date column");
     }
 
     /// measurements.tsv uses tab delimiter via extension.
@@ -1231,10 +1202,8 @@ mod tests {
 
     // --- Search -------------------------------------------------------------
 
-    fn make_mode_from_str(text: &str) -> CsvTableMode {
-        let src = stdin(text);
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+    fn make_mode_from_str(text: &str) -> RowsTableMode {
+        let mut mode = mode_from(text, CsvFormat::Csv);
         mode.cached_cols = 80;
         mode.cached_rows = 10;
         mode
@@ -1355,7 +1324,7 @@ mod tests {
         // `↵` glyph — must still locate the match.
         let src = fixture("test-data/books.csv");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = CsvTableMode::new(data);
+        let mut mode = build_csv_mode(data);
         mode.cached_cols = 200;
         mode.cached_rows = 30;
         // "Includes worked examples" lives on the second physical line

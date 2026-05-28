@@ -38,6 +38,7 @@ use anyhow::{Context, Result};
 use csv::ReaderBuilder;
 
 use crate::input::InputSource;
+use crate::viewer::table::row_source::RowSource;
 
 use super::format::CsvFormat;
 
@@ -80,12 +81,15 @@ impl Encoding {
 
 #[derive(Debug, Clone)]
 pub struct Record {
-    pub cells: Vec<String>,
+    /// `Option<String>` so the cell storage matches the shared
+    /// [`RowSource`] contract — CSV always emits `Some(_)`; NULL only
+    /// arises in other sources (SQLite).
+    pub cells: Vec<Option<String>>,
     pub malformed: bool,
 }
 
 impl Record {
-    fn ok(cells: Vec<String>) -> Self {
+    fn ok(cells: Vec<Option<String>>) -> Self {
         Self {
             cells,
             malformed: false,
@@ -245,6 +249,40 @@ impl CsvData {
     }
 }
 
+impl RowSource for CsvData {
+    fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+        self.ensure_record(idx)
+    }
+
+    fn ensure_all(&mut self) -> Result<()> {
+        self.ensure_all()
+    }
+
+    fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+        self.records.get(idx).map(|r| r.cells.as_slice())
+    }
+
+    fn row_is_malformed(&self, idx: usize) -> bool {
+        self.records.get(idx).map(|r| r.malformed).unwrap_or(false)
+    }
+
+    fn loaded(&self) -> usize {
+        self.loaded()
+    }
+
+    fn total(&self) -> Option<usize> {
+        self.total_records()
+    }
+
+    fn column_count(&self) -> usize {
+        self.column_count()
+    }
+
+    fn malformed_count(&self) -> usize {
+        self.malformed_count
+    }
+}
+
 /// Read the next record. `Ok(None)` on EOF, `Ok(Some(Record))` for both
 /// well-formed and malformed records. Errors are converted to
 /// `Record::error()` so the parser can resync without bubbling out.
@@ -262,7 +300,7 @@ fn read_next(
             if span > MAX_RECORD_LINES || bytes_total > MAX_RECORD_BYTES {
                 return Ok(Some(Record::error()));
             }
-            let cells = sr.iter().map(|s| s.to_string()).collect();
+            let cells = sr.iter().map(|s| Some(s.to_string())).collect();
             Ok(Some(Record::ok(cells)))
         }
         Ok(false) => Ok(None),
@@ -423,10 +461,12 @@ fn detect_header(records: &[Record]) -> bool {
     if first.cells.is_empty() {
         return false;
     }
-    first
-        .cells
-        .iter()
-        .all(|c| matches!(classify_cell(c), CellKind::Text | CellKind::Empty))
+    first.cells.iter().all(|c| {
+        matches!(
+            classify_cell(c.as_deref().unwrap_or("")),
+            CellKind::Text | CellKind::Empty
+        )
+    })
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -513,14 +553,18 @@ mod tests {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
+    fn some_cells(values: &[&str]) -> Vec<Option<String>> {
+        values.iter().map(|v| Some((*v).to_string())).collect()
+    }
+
     #[test]
     fn seed_parses_simple_csv() {
         let src = stdin("name,age\nalice,30\nbob,25\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.delimiter, b',');
         assert_eq!(data.records.len(), 3);
-        assert_eq!(data.records[0].cells, vec!["name", "age"]);
-        assert_eq!(data.records[1].cells, vec!["alice", "30"]);
+        assert_eq!(data.records[0].cells, some_cells(&["name", "age"]));
+        assert_eq!(data.records[1].cells, some_cells(&["alice", "30"]));
         assert!(data.header_heuristic);
         assert_eq!(data.column_count(), 2);
     }
@@ -530,7 +574,7 @@ mod tests {
         let src = stdin("a\tb\tc\n1\t2\t3\n");
         let data = CsvData::open(&src, CsvFormat::Tsv).unwrap();
         assert_eq!(data.delimiter, b'\t');
-        assert_eq!(data.records[0].cells, vec!["a", "b", "c"]);
+        assert_eq!(data.records[0].cells, some_cells(&["a", "b", "c"]));
     }
 
     #[test]
@@ -569,7 +613,7 @@ mod tests {
         let src = stdin("a,b\n\"one\ntwo\",x\nlast,y\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.records.len(), 3);
-        assert_eq!(data.records[1].cells, vec!["one\ntwo", "x"]);
+        assert_eq!(data.records[1].cells, some_cells(&["one\ntwo", "x"]));
     }
 
     #[test]
@@ -581,7 +625,7 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.encoding, Encoding::Utf8);
         assert!(data.has_bom);
-        assert_eq!(data.records[0].cells, vec!["name", "age"]);
+        assert_eq!(data.records[0].cells, some_cells(&["name", "age"]));
     }
 
     #[test]
@@ -596,8 +640,8 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.encoding, Encoding::Utf16Le);
         assert!(data.has_bom);
-        assert_eq!(data.records[0].cells, vec!["a", "b"]);
-        assert_eq!(data.records[1].cells, vec!["1", "2"]);
+        assert_eq!(data.records[0].cells, some_cells(&["a", "b"]));
+        assert_eq!(data.records[1].cells, some_cells(&["1", "2"]));
     }
 
     #[test]

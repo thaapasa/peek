@@ -14,10 +14,10 @@
 //! Display-only: vertical scroll, Left/Right pan, `/` search. Rows
 //! wider than the terminal are panned, never wrapped.
 //!
-//! **Not unified with [`crate::types::csv::table_mode::CsvTableMode`]
-//! despite surface similarity.** This mode renders a fully-materialised
+//! **Not unified with [`super::rows_mode::RowsTableMode`] despite
+//! surface similarity.** This mode renders a fully-materialised
 //! [`Table`] — rows decided up front, widths fixed at construction.
-//! `CsvTableMode` streams records lazily and grows column widths
+//! `RowsTableMode` streams records lazily and grows column widths
 //! monotonically as wider cells scroll into view: different state
 //! machine, different invariants. Repeated review rounds concluded the
 //! shared scaffolding (sticky header, pan-step, search reveal) is too
@@ -165,7 +165,7 @@ impl TableMode {
 
 impl Mode for TableMode {
     fn id(&self) -> ModeId {
-        // Same id CsvTableMode uses — a tabular primary view. Nothing
+        // Same id RowsTableMode uses — a tabular primary view. Nothing
         // keys on Content being unique (Tab cycles by index).
         ModeId::Content
     }

@@ -45,7 +45,7 @@ pub(crate) use rendered_text::{RenderedTextMode, TextRenderer};
 /// A `ModeId` names the **role** the mode fills in its stack, not the
 /// impl type. Multiple Mode impls reuse the same id when they fill the
 /// same slot for different file types: `Content` is used by `ContentMode`,
-/// the generic `TableMode`, and `CsvTableMode`; `Listing` by both
+/// the generic `TableMode`, and `RowsTableMode`; `Listing` by both
 /// `ListingMode` and `DirectoryMode`; `Rendered` by `RenderedTextMode`,
 /// `PagedImageMode`, and `EpubReadMode`. The invariant `compose_modes`
 /// upholds is that each file type's stack has at most one mode per id —

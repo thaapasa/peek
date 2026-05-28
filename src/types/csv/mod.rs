@@ -8,6 +8,5 @@ pub mod info;
 pub mod info_gather;
 pub mod info_render;
 pub mod parse;
-pub mod table_mode;
 
 pub use info::CsvStats;
