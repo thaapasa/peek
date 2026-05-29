@@ -296,6 +296,7 @@ fn gather_extras(
         }
         FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
         FileType::Csv(fmt) => csv_gather(source, *fmt),
+        FileType::Sqlite(_) => crate::types::sqlite::info_gather::gather_extras(source),
         FileType::Cert(fmt) => cert_gather(source, *fmt, magic_mime),
         FileType::Font(fmt) => font_gather(source, *fmt, magic_mime),
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),

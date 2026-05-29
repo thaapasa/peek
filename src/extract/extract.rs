@@ -119,6 +119,7 @@ pub fn extract(
         | FileType::Font(_)
         | FileType::ObjectFile
         | FileType::Classfile
+        | FileType::Sqlite(_)
         | FileType::Binary => Err(ExtractError::Unsupported(
             "this file type has no inner items",
         )),

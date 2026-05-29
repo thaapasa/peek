@@ -19,6 +19,7 @@ pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
 pub use crate::types::font::format::FontFormat;
+pub use crate::types::sqlite::format::SqliteFormat;
 pub use crate::types::structured::format::StructuredFormat;
 
 use crate::types::archive::detect as archive_detect;
@@ -30,6 +31,7 @@ use crate::types::disk_image::detect as disk_image_detect;
 use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
 use crate::types::font::detect as font_detect;
+use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
 
 /// Bytes read from the head of a file for magic-byte detection. `infer`
@@ -101,6 +103,11 @@ pub enum FileType {
     /// Tabular data (`.csv` / `.tsv`). Drives an aligned table view
     /// over a streaming record reader, paired with a raw Source view.
     Csv(CsvFormat),
+    /// SQLite 3 database (`.sqlite` / `.sqlite3` / `.db` / `.db3`).
+    /// Drives a schema listing (tables / views / indexes / triggers)
+    /// plus a streaming contents view per table. Read-only — peek
+    /// never writes to a user database.
+    Sqlite(SqliteFormat),
     /// PEM-encoded certificate / key file (X.509 cert, CSR, CRL,
     /// RSA / EC / Ed25519 private or public key, OpenSSH public
     /// key). Source view shows the PEM text; Info decodes per-block
@@ -417,6 +424,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     {
         return Some(FileType::ObjectFile);
     }
+    if let Some(fmt) = sqlite_detect::format_from_mime(mime) {
+        return Some(FileType::Sqlite(fmt));
+    }
     if mime.starts_with("video/") {
         return Some(FileType::Binary);
     }
@@ -689,6 +699,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = csv_detect::format_from_ext(&ext) {
         return Some(FileType::Csv(fmt));
+    }
+    if let Some(fmt) = sqlite_detect::format_from_ext(&ext) {
+        return Some(FileType::Sqlite(fmt));
     }
     if let Some(fmt) = cert_detect::format_from_ext(&ext) {
         return Some(FileType::Cert(fmt));

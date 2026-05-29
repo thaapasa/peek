@@ -127,6 +127,13 @@ ssh-key = { version = "0.6", default-features = false, features = ["alloc", "ecd
 sha1 = "0.10"
 sha2 = "0.10"
 
+# SQLite database access for the .sqlite / .db viewer. `bundled` compiles
+# the upstream SQLite C amalgamation into the binary so there's no system
+# libsqlite dependency at runtime — matches the bundled-C pattern already
+# used by `bzip2` / `zstd` / `lzma-rs`. Read-only: peek only ever opens
+# DBs with `OpenFlags::SQLITE_OPEN_READ_ONLY`.
+rusqlite = { version = "0.32", features = ["bundled"] }
+
 # Font (TTF/OTF/TTC) parsing for metadata + per-face listing. Pure Rust,
 # no_std-friendly, zero-alloc. Decodes name / head / maxp / cmap / OS/2 /
 # post tables — everything the info view needs. Specimen rasterization

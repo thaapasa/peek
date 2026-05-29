@@ -23,6 +23,7 @@ pub mod markdown;
 pub mod objfile;
 pub mod pdf;
 pub mod sql;
+pub mod sqlite;
 pub mod structured;
 pub mod svg;
 pub mod text;
