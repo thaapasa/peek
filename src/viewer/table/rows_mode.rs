@@ -55,6 +55,11 @@ const SEP_ROW_CHAR: char = '─';
 const SEP_JUNCTION_CHAR: char = '┼';
 /// Truncation marker on cells wider than their column width.
 const TRUNCATE_MARKER: char = '…';
+/// Placeholder for a `NULL` body cell (`Some(None)` from the source).
+/// Painted muted by [`body_cell`] so it reads distinctly from both the
+/// empty string and the literal text `"NULL"` (which paints in the
+/// normal foreground color).
+const NULL_MARKER: &str = "NULL";
 
 /// Hard ceiling on per-column width — keeps a single huge cell from
 /// pushing the whole table off the screen. Cells past this width are
@@ -385,10 +390,7 @@ impl RowsTableMode {
             let (cell, color): (&str, Color) = if malformed {
                 ("<error>", theme.warning)
             } else {
-                (
-                    cells.get(i).and_then(|c| c.as_deref()).unwrap_or(""),
-                    theme.foreground,
-                )
+                body_cell(cells, i, theme.foreground, theme)
             };
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
             let (ranges, current) = self.cell_match_ranges(rec_idx, i);
@@ -411,11 +413,37 @@ fn grow_widths_from_row(source: &dyn RowSource, idx: usize, widths: &mut [usize]
         return;
     };
     for (i, cell) in cells.iter().enumerate().take(cols) {
-        let s = cell.as_deref().unwrap_or("");
+        // A present-but-NULL cell (`None`) reserves the `NULL` marker's
+        // width so the marker isn't truncated when it renders. Cells
+        // absent from the row entirely (ragged rows) never reach here —
+        // they're past the slice end.
+        let s = cell.as_deref().unwrap_or(NULL_MARKER);
         let w = display_cell(s).width().min(MAX_COLUMN_WIDTH);
         if w > widths[i] {
             widths[i] = w;
         }
+    }
+}
+
+/// Render text + paint color for one body cell, distinguishing the three
+/// states `cells.get(i)` can return:
+///
+/// * `Some(Some(v))` — a real value, painted with `base`.
+/// * `Some(None)` — a SQL NULL, rendered as the muted [`NULL_MARKER`] so
+///   it reads distinctly from the empty string and from a literal
+///   `"NULL"` value (which stays `base`-colored).
+/// * `None` — column absent from this row (a ragged row); rendered as
+///   the empty string in `base`.
+fn body_cell<'a>(
+    cells: &'a [Option<String>],
+    i: usize,
+    base: Color,
+    theme: &PeekTheme,
+) -> (&'a str, Color) {
+    match cells.get(i) {
+        Some(Some(v)) => (v.as_str(), base),
+        Some(None) => (NULL_MARKER, theme.muted),
+        None => ("", base),
     }
 }
 
@@ -649,7 +677,7 @@ impl Mode for RowsTableMode {
                 if i > 0 {
                     row.push_str(&ctx.peek_theme.paint_muted(COL_SEP));
                 }
-                let raw = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
+                let (raw, color) = body_cell(cells, i, ctx.peek_theme.foreground, ctx.peek_theme);
                 let cell = display_cell(raw);
                 let cell_w = cell.width();
                 let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
@@ -659,18 +687,13 @@ impl Mode for RowsTableMode {
                     // the marker glyph muted in line with the interactive
                     // path so a multi-line cell prints consistently.
                     let mut painted = String::new();
-                    paint_content_with_markers(
-                        &mut painted,
-                        &cell,
-                        ctx.peek_theme.foreground,
-                        ctx.peek_theme,
-                    );
+                    paint_content_with_markers(&mut painted, &cell, color, ctx.peek_theme);
                     row.push_str(&painted);
                 } else {
                     row.push_str(&render_cell(
                         &cell,
                         *w,
-                        ctx.peek_theme.foreground,
+                        color,
                         align,
                         ctx.peek_theme,
                         &[],
@@ -1041,6 +1064,33 @@ mod tests {
         // Three pad spaces precede the content.
         assert!(out.starts_with("   "));
         assert!(out.contains("42"));
+    }
+
+    #[test]
+    fn body_cell_distinguishes_null_from_empty_and_literal() {
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let cells = vec![Some("NULL".to_string()), None, Some(String::new())];
+
+        // A literal "NULL" string keeps the base color.
+        let (text, color) = body_cell(&cells, 0, theme.foreground, &theme);
+        assert_eq!(text, "NULL");
+        assert_eq!(color, theme.foreground);
+
+        // A SQL NULL renders the marker, painted muted.
+        let (text, color) = body_cell(&cells, 1, theme.foreground, &theme);
+        assert_eq!(text, NULL_MARKER);
+        assert_eq!(color, theme.muted);
+        assert_ne!(theme.muted, theme.foreground, "marker must read distinctly");
+
+        // An empty-string value stays empty (not the NULL marker).
+        let (text, color) = body_cell(&cells, 2, theme.foreground, &theme);
+        assert_eq!(text, "");
+        assert_eq!(color, theme.foreground);
+
+        // A column absent from the row (ragged) is the empty string.
+        let (text, _) = body_cell(&cells, 9, theme.foreground, &theme);
+        assert_eq!(text, "");
     }
 
     #[test]
