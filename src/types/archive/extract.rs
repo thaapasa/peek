@@ -623,6 +623,75 @@ mod tests {
         assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
     }
 
+    /// Long entry paths (> 100 chars) force a GNU `@LongLink` extension
+    /// record ahead of the real header. The zero-copy path uses
+    /// `entry.raw_file_position()`, which must point past that extension
+    /// to the real file data — otherwise the `FileRange` would slice the
+    /// wrong bytes. Guards the realistic deep-path tarball case.
+    #[test]
+    fn extract_uncompressed_tar_long_path_offset_is_correct() {
+        use std::io::Write;
+        let long = format!("deeply/nested/{}/leaf.txt", "x".repeat(150));
+        let body = b"long path body bytes";
+
+        let mut builder = tar::Builder::new(Vec::new());
+        let mut header = tar::Header::new_gnu();
+        header.set_size(body.len() as u64);
+        header.set_mode(0o644);
+        header.set_cksum();
+        builder.append_data(&mut header, &long, &body[..]).unwrap();
+        let tar_bytes = builder.into_inner().unwrap();
+
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&tar_bytes).unwrap();
+        tmp.flush().unwrap();
+        let src = InputSource::File(tmp.path().to_path_buf());
+
+        let extracted =
+            extract(&src, ArchiveFormat::Tar, &long, &opts()).expect("long-path tar extract");
+        assert!(
+            matches!(extracted.source, InputSource::FileRange { .. }),
+            "uncompressed member should be a FileRange, got {:?}",
+            extracted.source
+        );
+        assert_eq!(
+            extracted.source.read_bytes().unwrap().as_ref(),
+            body,
+            "FileRange must slice the real data, not the @LongLink record"
+        );
+    }
+
+    /// Stored zip over a `FileRange` source: exercises `RangeReadSeek`
+    /// under zip's seek-heavy access (EOCD scan from `End`, then seeks to
+    /// the local header). Carve a whole on-disk zip as a range and pull a
+    /// stored entry back out.
+    #[test]
+    fn extract_stored_zip_over_file_range_source() {
+        use std::io::Write;
+        use zip::CompressionMethod;
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
+
+        let payload = b"range-backed stored zip entry";
+        let cursor = std::io::Cursor::new(Vec::<u8>::new());
+        let mut w = ZipWriter::new(cursor);
+        let zopts = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        w.start_file("leaf.txt", zopts).unwrap();
+        w.write_all(payload).unwrap();
+        let zip_bytes = w.finish().unwrap().into_inner();
+
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(&zip_bytes).unwrap();
+        tmp.flush().unwrap();
+        let len = tmp.as_file().metadata().unwrap().len();
+        // Whole file carved as a FileRange → open_seekable uses RangeReadSeek.
+        let src = InputSource::File(tmp.path().to_path_buf()).subrange(0, len, "a.zip");
+
+        let extracted =
+            extract(&src, ArchiveFormat::Zip, "leaf.txt", &opts()).expect("zip over FileRange");
+        assert_eq!(extracted.source.read_bytes().unwrap().as_ref(), payload);
+    }
+
     /// Uncompressed tar over a real file: the member is a verbatim slice
     /// of the archive, so extract returns a zero-copy `FileRange` (no
     /// spool, no buffer copy) rather than a `Memory`/`TempFile`.
