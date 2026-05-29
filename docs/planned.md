@@ -172,13 +172,15 @@ Extract from archive entries ships today via `--extract <KEY>` and `e` in the vi
 `NamedTempFile` (`InputSource::TempFile`), lifting the in-memory 256 MiB cap for the common
 case; stored zip / uncompressed tar members now extract as zero-copy `FileRange` views (no
 spool, no copy) over the backing source — including ranges over a spooled tempfile, kept alive
-by an `Arc<NamedTempFile>` guard. Still planned:
+by an `Arc<NamedTempFile>` guard. tar/cpio extract streams the walk over a seekable reader
+(`open_seekable`, with a windowed range adapter for `FileRange` sources), so finding one member
+no longer reads the whole archive into RAM and compressed tars inflate only up to the match
+(xz still batches — `lzma-rs` has no streaming reader). Still planned:
 
-- **Stream-walk tar/cpio off a `TempFile` source** — recursive descent into an archive entry
-  that itself contains a tar/cpio re-buffers the outer entry via `source.read_bytes()`. Switch
-  to a streaming walk over `open_byte_source()` so nested big-on-big stays disk-only.
 - **RAR extract** — once RAR listing lands, extract reuses the unrar wrapper; same listing-only
   caveats apply.
+- **7z / ar streaming extract** — `sevenz-rust2::read_file` and the ar walk still buffer the
+  matched member internally; only their `FileRange` input streams today.
 
 ### Disk Images ◐
 
@@ -392,9 +394,6 @@ file:line citations as starting points to re-find.
 | Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                                                     |
 | Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                                                           |
 | Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path).                                   |
-
-The tar/cpio re-buffer on `TempFile` sources is already tracked under
-[Archive Files → Extract enhancements](#extract-enhancements).
 
 ## Future / Optional Features
 

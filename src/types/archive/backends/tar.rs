@@ -15,42 +15,62 @@ use std::io::{Cursor, Read};
 use anyhow::{Context, Result};
 use tar::EntryType;
 
+use crate::input::detect::CompressionFormat;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
+
+/// Wrap a seekable tar reader in the streaming decoder for `fmt`. Shared
+/// by listing and extraction so codec dispatch lives in one place. The
+/// Gz/Bz2/Zst/Lz4 decoders stream (only the bytes the caller pulls get
+/// inflated); xz is the exception — `lzma-rs` has no streaming reader, so
+/// the whole plaintext is buffered into a `Cursor<Vec>` up front.
+pub(crate) fn decode_compressed(
+    reader: Box<dyn ReadSeek>,
+    fmt: CompressionFormat,
+) -> Result<Box<dyn Read>> {
+    Ok(match fmt {
+        CompressionFormat::Gz => Box::new(flate2::read::GzDecoder::new(reader)),
+        CompressionFormat::Bz2 => Box::new(bzip2::read::BzDecoder::new(reader)),
+        CompressionFormat::Zst => Box::new(
+            zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?,
+        ),
+        CompressionFormat::Lz4 => Box::new(lz4_flex::frame::FrameDecoder::new(reader)),
+        CompressionFormat::Xz => {
+            let mut reader = reader;
+            let mut compressed = Vec::new();
+            reader
+                .read_to_end(&mut compressed)
+                .context("failed to read xz stream")?;
+            let mut plain = Vec::new();
+            lzma_rs::xz_decompress(&mut Cursor::new(compressed), &mut plain)
+                .context("failed to decompress xz")?;
+            Box::new(Cursor::new(plain))
+        }
+    })
+}
 
 pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     list_from_read(reader)
 }
 
 pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let dec = flate2::read::GzDecoder::new(reader);
-    list_from_read(dec)
+    list_from_read(decode_compressed(reader, CompressionFormat::Gz)?)
 }
 
 pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let dec = bzip2::read::BzDecoder::new(reader);
-    list_from_read(dec)
+    list_from_read(decode_compressed(reader, CompressionFormat::Bz2)?)
 }
 
 pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let dec = zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?;
-    list_from_read(dec)
+    list_from_read(decode_compressed(reader, CompressionFormat::Zst)?)
 }
 
 pub(crate) fn list_lz4(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let dec = lz4_flex::frame::FrameDecoder::new(reader);
-    list_from_read(dec)
+    list_from_read(decode_compressed(reader, CompressionFormat::Lz4)?)
 }
 
-pub(crate) fn list_xz(mut reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let mut compressed = Vec::new();
-    reader
-        .read_to_end(&mut compressed)
-        .context("failed to read xz stream")?;
-    let mut plain = Vec::new();
-    lzma_rs::xz_decompress(&mut Cursor::new(compressed), &mut plain)
-        .context("failed to decompress xz")?;
-    list_from_read(Cursor::new(plain))
+pub(crate) fn list_xz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+    list_from_read(decode_compressed(reader, CompressionFormat::Xz)?)
 }
 
 fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {

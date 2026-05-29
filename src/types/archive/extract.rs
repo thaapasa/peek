@@ -19,7 +19,7 @@ use crate::extract::{
     ExtractError, ExtractOptions, Extracted, forward_slash_key, sanitize_entry_path,
 };
 use crate::input::InputSource;
-use crate::input::detect::ArchiveFormat;
+use crate::input::detect::{ArchiveFormat, CompressionFormat};
 use crate::types::archive::reader::open_seekable;
 
 /// Hard cap on a single in-memory extracted entry. Only enforced on
@@ -57,6 +57,16 @@ pub fn extract(
     }
 }
 
+/// Basename of an entry path, used as the extracted source's display
+/// name. Falls back to `extracted` for pathological keys.
+fn suggested_name(target: &Path) -> String {
+    target
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("extracted")
+        .to_string()
+}
+
 /// Stream `reader` (with optional `declared_size` hint) into a fresh
 /// [`InputSource`]. Picks between a [`tempfile::NamedTempFile`] spool
 /// and an in-memory `Vec<u8>` based on size + `opts.no_tempfile`. On
@@ -70,11 +80,7 @@ fn materialise<R: Read>(
     raw_key: &str,
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
-    let suggested_name = target
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("extracted")
-        .to_string();
+    let suggested_name = suggested_name(target);
 
     // User-forced memory path: skip spool, no cap.
     if opts.no_tempfile {
@@ -151,23 +157,18 @@ fn extract_cpio(
     compression: CpioCompression,
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
-    // cpio's hand-rolled reader buffers the matching body into a
-    // `Bytes` internally; we then route it through `materialise` so
-    // large entries still spool to disk (the cpio Vec is dropped after
-    // the copy, leaving only the tempfile).
-    let raw = source.read_bytes().map_err(ExtractError::Other)?;
+    // Stream the cpio walk over the source — no whole-archive read into
+    // RAM. `find_entry` stops at the match; its hand-rolled reader buffers
+    // only the matching body into a `Bytes`, which `materialise` then
+    // spools to disk for large entries.
+    use crate::types::archive::backends::cpio::find_entry;
+    let reader = open_seekable(source).map_err(ExtractError::Other)?;
     let target_str = forward_slash_key(target);
     let found = match compression {
-        CpioCompression::None => crate::types::archive::backends::cpio::find_entry(
-            std::io::Cursor::new(&raw[..]),
-            &target_str,
-            u64::MAX,
-        ),
-        CpioCompression::Gz => crate::types::archive::backends::cpio::find_entry(
-            flate2::read::GzDecoder::new(std::io::Cursor::new(&raw[..])),
-            &target_str,
-            u64::MAX,
-        ),
+        CpioCompression::None => find_entry(reader, &target_str, u64::MAX),
+        CpioCompression::Gz => {
+            find_entry(flate2::read::GzDecoder::new(reader), &target_str, u64::MAX)
+        }
     }
     .map_err(ExtractError::Other)?;
     let Some(body) = found else {
@@ -216,11 +217,7 @@ fn extract_zip(
         && !file.encrypted()
         && let Some(data_start) = file.data_start()
     {
-        let suggested_name = target
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("extracted")
-            .to_string();
+        let suggested_name = suggested_name(target);
         let src = source.subrange(data_start, size, &suggested_name);
         return Ok(Extracted {
             source: src,
@@ -240,6 +237,20 @@ enum TarCompression {
     Lz4,
 }
 
+impl TarCompression {
+    /// Codec key for a compressed tar; `None` for plain (uncompressed).
+    fn format(self) -> Option<CompressionFormat> {
+        match self {
+            TarCompression::None => None,
+            TarCompression::Gz => Some(CompressionFormat::Gz),
+            TarCompression::Bz2 => Some(CompressionFormat::Bz2),
+            TarCompression::Xz => Some(CompressionFormat::Xz),
+            TarCompression::Zst => Some(CompressionFormat::Zst),
+            TarCompression::Lz4 => Some(CompressionFormat::Lz4),
+        }
+    }
+}
+
 fn extract_tar(
     source: &InputSource,
     target: &Path,
@@ -247,13 +258,40 @@ fn extract_tar(
     compression: TarCompression,
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
-    let raw = source.read_bytes().map_err(ExtractError::Other)?;
-    let decompressed = decompress_tar(&raw, compression)?;
-    let mut archive = tar::Archive::new(std::io::Cursor::new(decompressed.as_ref()));
+    let reader = open_seekable(source).map_err(ExtractError::Other)?;
+    let target_str = forward_slash_key(target);
+    match compression.format() {
+        // Plain tar: walk the seekable reader directly so non-matching
+        // entry bodies are skipped via seek, not read.
+        None => walk_tar(reader, source, &target_str, target, true, raw_key, opts),
+        // Compressed: stream through the decoder; only the bytes up to the
+        // matched entry get inflated (xz batches — see `decode_compressed`).
+        Some(fmt) => {
+            let dec = crate::types::archive::backends::tar::decode_compressed(reader, fmt)
+                .map_err(ExtractError::Other)?;
+            walk_tar(dec, source, &target_str, target, false, raw_key, opts)
+        }
+    }
+}
+
+/// Walk a tar stream for `target_str`, returning the matched entry as a
+/// fresh source. `uncompressed` selects the extraction strategy: a plain
+/// tar member is a verbatim slice of the backing source, so it returns a
+/// zero-copy [`InputSource::subrange`] view; a member from a compressed
+/// stream is spooled via [`materialise`] as it is read.
+fn walk_tar<R: Read>(
+    reader: R,
+    source: &InputSource,
+    target_str: &str,
+    target: &Path,
+    uncompressed: bool,
+    raw_key: &str,
+    opts: &ExtractOptions,
+) -> Result<Extracted, ExtractError> {
+    let mut archive = tar::Archive::new(reader);
     let entries = archive
         .entries()
         .map_err(|e| ExtractError::Other(e.into()))?;
-    let target_str = forward_slash_key(target);
     for entry in entries {
         let entry = entry.map_err(|e| ExtractError::Other(e.into()))?;
         let path = entry
@@ -262,20 +300,14 @@ fn extract_tar(
             .into_owned();
         let path_str = forward_slash_key(&path);
         let stored = path_str.trim_start_matches("./").trim_start_matches('/');
-        if stored != target_str.as_str() {
+        if stored != target_str {
             continue;
         }
         let size = entry.size();
-        // Uncompressed tar: the member is a verbatim slice of the backing
-        // source, so hand back a zero-copy range instead of spooling.
-        // `raw_file_position` is relative to the tar stream start, which
-        // equals the source start when no codec sits in between.
-        if matches!(compression, TarCompression::None) {
-            let suggested_name = target
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("extracted")
-                .to_string();
+        if uncompressed {
+            // `raw_file_position` is relative to the tar stream start,
+            // which equals the source start when no codec intervenes.
+            let suggested_name = suggested_name(target);
             let src = source.subrange(entry.raw_file_position(), size, &suggested_name);
             return Ok(Extracted {
                 source: src,
@@ -285,25 +317,6 @@ fn extract_tar(
         return materialise(entry, Some(size), target, raw_key, opts);
     }
     Err(ExtractError::NotFound(raw_key.to_string()))
-}
-
-/// Decompress a compressed tar payload. Delegates codec dispatch to
-/// [`crate::input::compression::decompress_bytes`] so the same five
-/// codec implementations cover both transparent single-stream
-/// decompression and tar extraction. None arm refcount-clones the
-/// input `Bytes` (no copy).
-fn decompress_tar(raw: &Bytes, compression: TarCompression) -> Result<Bytes, ExtractError> {
-    use crate::input::compression::decompress_bytes;
-    use crate::input::detect::CompressionFormat;
-    let fmt = match compression {
-        TarCompression::None => return Ok(raw.clone()),
-        TarCompression::Gz => CompressionFormat::Gz,
-        TarCompression::Bz2 => CompressionFormat::Bz2,
-        TarCompression::Xz => CompressionFormat::Xz,
-        TarCompression::Zst => CompressionFormat::Zst,
-        TarCompression::Lz4 => CompressionFormat::Lz4,
-    };
-    decompress_bytes(raw.as_ref(), fmt).map_err(ExtractError::Other)
 }
 
 fn extract_7z(
@@ -520,6 +533,39 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted.source.read_bytes().unwrap();
         assert_eq!(bytes.len(), 2_250);
+    }
+
+    /// Tar extraction over a `FileRange` source must walk the archive
+    /// through the seekable range adapter (`open_seekable`) rather than
+    /// buffering the range — covers recursing into a tar carved as a
+    /// zero-copy view by a previous extract.
+    #[test]
+    fn extract_tar_over_file_range_source() {
+        let InputSource::File(path) = fixture("archive.tar") else {
+            unreachable!("fixture is a File source");
+        };
+        let len = std::fs::metadata(&path).unwrap().len();
+        let src = InputSource::File(path).subrange(0, len, "archive.tar");
+        let extracted =
+            extract(&src, ArchiveFormat::Tar, STABLE_ENTRY, &opts()).expect("tar over FileRange");
+        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
+    }
+
+    /// Compressed-tar extraction over a `TempFile` source streams through
+    /// the decoder (no whole-archive read into RAM, no full inflate).
+    #[test]
+    fn extract_tar_gz_over_tempfile_source() {
+        let InputSource::File(path) = fixture("archive.tar.gz") else {
+            unreachable!("fixture is a File source");
+        };
+        let bytes = std::fs::read(&path).unwrap();
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(&mut tmp, &bytes).unwrap();
+        std::io::Write::flush(&mut tmp).unwrap();
+        let src = InputSource::temp_file(tmp, "archive.tar.gz");
+        let extracted = extract(&src, ArchiveFormat::TarGz, STABLE_ENTRY, &opts())
+            .expect("tar.gz over tempfile");
+        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
     }
 
     /// Uncompressed tar over a real file: the member is a verbatim slice

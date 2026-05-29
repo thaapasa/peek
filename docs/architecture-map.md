@@ -243,13 +243,13 @@ src/
       compose.rs       — compose(): list TOC entries → ListingMode under the format's label
       detect.rs        — format_from_name + format_from_mime (handles double-extensions `.tar.gz` etc. before bare compression)
       format.rs        — ArchiveFormat enum + label
-      reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper
+      reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper + open_seekable (streams File/TempFile/Memory; RangeReadSeek windows a FileRange over its backing file — no slurp)
       info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
-      extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]/ar. decompress_tar() delegates codec dispatch to crate::input::compression::decompress_bytes
+      extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]/ar. Stored zip / uncompressed tar members → zero-copy InputSource::subrange view (no spool). tar/cpio stream the walk over open_seekable (walk_tar; compressed via backends::tar::decode_compressed) — never reads the whole archive into RAM
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
-        tar.rs         — Tar TOC via header walk; gz/bz2/zst/lz4 stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
+        tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/zst/lz4 stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
         cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
     directory/

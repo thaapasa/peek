@@ -3,9 +3,13 @@
 //! shared `ReadSeek` helper lives here because every backend needs a
 //! seekable reader over the source.
 
-use std::io::{Cursor, Read, Seek};
+use std::fs::File;
+use std::io::{self, Cursor, Read, Seek, SeekFrom};
+use std::path::Path;
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use tempfile::NamedTempFile;
 
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
@@ -23,22 +27,96 @@ impl<T: Read + Seek> ReadSeek for T {}
 pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
     match source {
         InputSource::File(path) => {
-            let f = std::fs::File::open(path)
-                .with_context(|| format!("failed to open {}", path.display()))?;
+            let f =
+                File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
             Ok(Box::new(f))
         }
         InputSource::Memory { bytes, .. } => Ok(Box::new(Cursor::new(bytes.clone()))),
-        InputSource::FileRange { .. } => {
-            // Archive over a range view (e.g. recursive peek into an
-            // archive embedded in an ISO entry): read bytes eagerly.
-            let buf = source.read_bytes()?;
-            Ok(Box::new(Cursor::new(buf)))
+        InputSource::FileRange {
+            base,
+            offset,
+            len,
+            guard,
+            ..
+        } => {
+            // Archive over a range view (recursive peek into an archive
+            // carved as a zero-copy `FileRange`): expose the range as a
+            // seekable window over the backing file — no eager read.
+            Ok(Box::new(RangeReadSeek::open(
+                base,
+                *offset,
+                *len,
+                guard.clone(),
+            )?))
         }
         InputSource::TempFile { file, .. } => {
-            let f = std::fs::File::open(file.path())
+            let f = File::open(file.path())
                 .with_context(|| format!("failed to open tempfile {}", file.path().display()))?;
             Ok(Box::new(f))
         }
+    }
+}
+
+/// `Read + Seek` window over `[start, start+len)` of a backing file.
+/// Lets archive backends walk a `FileRange` source (an entry carved as a
+/// zero-copy view) without buffering the range into memory. Holds the
+/// `Arc<NamedTempFile>` guard when the backing file is a spool, so the
+/// range outlives the source it was opened from.
+struct RangeReadSeek {
+    file: File,
+    start: u64,
+    len: u64,
+    /// Cursor position within the window, in `[0, len]`.
+    pos: u64,
+    _guard: Option<Arc<NamedTempFile>>,
+}
+
+impl RangeReadSeek {
+    fn open(base: &Path, offset: u64, len: u64, guard: Option<Arc<NamedTempFile>>) -> Result<Self> {
+        let mut file =
+            File::open(base).with_context(|| format!("failed to open {}", base.display()))?;
+        file.seek(SeekFrom::Start(offset))
+            .with_context(|| format!("failed to seek in {}", base.display()))?;
+        Ok(Self {
+            file,
+            start: offset,
+            len,
+            pos: 0,
+            _guard: guard,
+        })
+    }
+}
+
+impl Read for RangeReadSeek {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let remaining = self.len - self.pos;
+        if remaining == 0 {
+            return Ok(0);
+        }
+        let want = (buf.len() as u64).min(remaining) as usize;
+        let n = self.file.read(&mut buf[..want])?;
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
+impl Seek for RangeReadSeek {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        let target = match pos {
+            SeekFrom::Start(n) => n as i64,
+            SeekFrom::End(n) => self.len as i64 + n,
+            SeekFrom::Current(n) => self.pos as i64 + n,
+        };
+        if target < 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "seek before start of range",
+            ));
+        }
+        let target = (target as u64).min(self.len);
+        self.file.seek(SeekFrom::Start(self.start + target))?;
+        self.pos = target;
+        Ok(self.pos)
     }
 }
 
@@ -77,6 +155,43 @@ mod tests {
         p.push("test-data");
         p.push(name);
         InputSource::File(p)
+    }
+
+    /// `open_seekable` over a `FileRange` must expose a windowed `Read +
+    /// Seek` over the backing file (via `RangeReadSeek`) rather than
+    /// buffering the range into memory. Exercises read clamping and all
+    /// three `SeekFrom` variants.
+    #[test]
+    fn open_seekable_file_range_reads_and_seeks() {
+        use std::io::{Read, Seek, SeekFrom, Write};
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(b"0123456789").unwrap();
+        tmp.flush().unwrap();
+        // Window = bytes 2..7 = "23456".
+        let src = InputSource::File(tmp.path().to_path_buf()).subrange(2, 5, "mid");
+        let mut r = open_seekable(&src).unwrap();
+
+        let mut all = Vec::new();
+        r.read_to_end(&mut all).unwrap();
+        assert_eq!(all, b"23456");
+
+        r.seek(SeekFrom::Start(1)).unwrap();
+        let mut two = [0u8; 2];
+        r.read_exact(&mut two).unwrap();
+        assert_eq!(&two, b"34");
+
+        r.seek(SeekFrom::End(-1)).unwrap();
+        let mut last = [0u8; 1];
+        r.read_exact(&mut last).unwrap();
+        assert_eq!(&last, b"6");
+
+        // At window EOF, reads return 0 even though the base file has more.
+        assert_eq!(r.read(&mut [0u8; 4]).unwrap(), 0);
+
+        r.seek(SeekFrom::Current(-2)).unwrap();
+        let mut rest = Vec::new();
+        r.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, b"56");
     }
 
     /// All formats list the same 14 files. Directory counts vary by
