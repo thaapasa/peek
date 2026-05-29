@@ -249,7 +249,7 @@ src/
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
-        tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/zst/lz4 stream-decompress, xz batch-decompresses (lzma-rs has no streaming Read wrapper)
+        tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/xz/zst/lz4 all stream-decompress (xz via liblzma streaming reader)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
         cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
     directory/

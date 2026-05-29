@@ -63,7 +63,12 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 bzip2 = "0.6"
-lzma-rs = "0.3"
+# Streaming xz decode (liblzma bindings). `static` vendors + builds the
+# liblzma C source statically (no system lib at runtime); default
+# features off drops the `bindgen` default so the build uses the
+# crate's pregenerated bindings instead of requiring libclang — keeps
+# the cross-compile release matrix simple.
+liblzma = { version = "0.4", default-features = false, features = ["static"] }
 zstd = "0.13"
 lz4_flex = { version = "0.11", default-features = false, features = ["frame"] }
 sevenz-rust2 = { version = "0.21", default-features = false }
@@ -130,7 +135,7 @@ sha2 = "0.10"
 # SQLite database access for the .sqlite / .db viewer. `bundled` compiles
 # the upstream SQLite C amalgamation into the binary so there's no system
 # libsqlite dependency at runtime — matches the bundled-C pattern already
-# used by `bzip2` / `zstd` / `lzma-rs`. Read-only: peek only ever opens
+# used by `bzip2` / `zstd` / `liblzma`. Read-only: peek only ever opens
 # DBs with `OpenFlags::SQLITE_OPEN_READ_ONLY`.
 rusqlite = { version = "0.32", features = ["bundled"] }
 

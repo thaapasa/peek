@@ -1,16 +1,12 @@
 //! Tar TOC listing. Walks the tar header chain via the `tar` crate;
 //! compressed tarballs decompress on the fly through a per-codec
-//! streaming `Read` adapter (gzip, bzip2, zstd) or a one-shot batch
-//! decompress for codecs lacking a streaming wrapper (xz via `lzma-rs`).
+//! streaming `Read` adapter (gzip, bzip2, xz, zstd, lz4).
 //!
-//! Only headers are read for streaming codecs — entry payloads are
-//! skipped via tar's seek, so listing a multi-GB tarball doesn't
-//! decompress payload bodies. The xz path is the exception: `lzma-rs`
-//! exposes only batch decompression, so the full plaintext is buffered
-//! before tar parses it. Acceptable for typical archive sizes; can be
-//! optimized later by switching to a streaming xz crate.
+//! Only headers are read — entry payloads are skipped (via tar's seek on
+//! a plain archive, or read-through on a compressed stream), so listing a
+//! multi-GB tarball doesn't materialise payload bodies.
 
-use std::io::{Cursor, Read};
+use std::io::Read;
 
 use anyhow::{Context, Result};
 use tar::EntryType;
@@ -20,10 +16,8 @@ use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
 /// Wrap a seekable tar reader in the streaming decoder for `fmt`. Shared
-/// by listing and extraction so codec dispatch lives in one place. The
-/// Gz/Bz2/Zst/Lz4 decoders stream (only the bytes the caller pulls get
-/// inflated); xz is the exception — `lzma-rs` has no streaming reader, so
-/// the whole plaintext is buffered into a `Cursor<Vec>` up front.
+/// by listing and extraction so codec dispatch lives in one place. Every
+/// codec streams — only the bytes the caller pulls get inflated.
 pub(crate) fn decode_compressed(
     reader: Box<dyn ReadSeek>,
     fmt: CompressionFormat,
@@ -35,17 +29,7 @@ pub(crate) fn decode_compressed(
             zstd::stream::read::Decoder::new(reader).context("failed to init zstd decoder")?,
         ),
         CompressionFormat::Lz4 => Box::new(lz4_flex::frame::FrameDecoder::new(reader)),
-        CompressionFormat::Xz => {
-            let mut reader = reader;
-            let mut compressed = Vec::new();
-            reader
-                .read_to_end(&mut compressed)
-                .context("failed to read xz stream")?;
-            let mut plain = Vec::new();
-            lzma_rs::xz_decompress(&mut Cursor::new(compressed), &mut plain)
-                .context("failed to decompress xz")?;
-            Box::new(Cursor::new(plain))
-        }
+        CompressionFormat::Xz => Box::new(liblzma::read::XzDecoder::new(reader)),
     })
 }
 

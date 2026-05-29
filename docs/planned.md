@@ -157,7 +157,7 @@ instantly via streaming through the existing `ByteSource`.
 | `.tar` family | `tar`         | Pure Rust. Streaming entry iterator.                                                                   |
 | `.gz`         | `flate2`      | Pure Rust (miniz_oxide backend).                                                                       |
 | `.bz2`        | `bzip2-rs`    | Pure Rust.                                                                                             |
-| `.xz`         | `lzma-rs`     | Pure Rust. (`xz2` C-binding alternative if needed.)                                                    |
+| `.xz`         | `liblzma`     | liblzma bindings; `static` vendors + builds the C source (no system lib). Streaming `Read` decoder.    |
 | `.zst`        | `zstd`        | C bindings, well-maintained.                                                                           |
 | `.7z`         | `sevenz-rust` | Pure Rust.                                                                                             |
 | `.rar`        | `unrar`       | Wraps proprietary unrar C lib. License caveats — listing only is fine, but distribution adds friction. |
@@ -182,8 +182,6 @@ up-front allocations. Still planned:
   caveats apply.
 - **7z streaming extract** — `sevenz-rust2` exposes only a `Vec`-returning `read_file`, so the
   matched member is buffered in full before it spools; needs an upstream streaming API.
-- **Streaming xz** — `lzma-rs` has no streaming `Read` wrapper, so xz tarballs buffer the full
-  plaintext during both listing and extract; a streaming xz crate would remove that.
 
 ### Disk Images ◐
 

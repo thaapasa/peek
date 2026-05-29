@@ -53,13 +53,10 @@ pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Bytes> {
                 .context("bzip2 decode failed")?;
         }
         CompressionFormat::Xz => {
-            // lzma-rs has no streaming Read wrapper, so the whole
-            // plaintext lands in `out` in one shot. Size check below
-            // catches over-cap; pre-allocating is pointless without a
-            // streaming reader to bail mid-decode.
-            let mut input = std::io::BufReader::new(raw);
-            lzma_rs::xz_decompress(&mut input, &mut out)
-                .map_err(|e| anyhow::anyhow!("xz decode failed: {e:?}"))?;
+            liblzma::read::XzDecoder::new(raw)
+                .take(take_limit)
+                .read_to_end(&mut out)
+                .context("xz decode failed")?;
         }
         CompressionFormat::Zst => {
             zstd::stream::read::Decoder::new(raw)

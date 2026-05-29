@@ -1005,7 +1005,7 @@ Pull an inner item out of a container as a standalone file. Three sources curren
   dropped — the user has opted in to OOM risk). tar/cpio extract streams the walk over a
   seekable reader (a windowed range adapter backs `FileRange` sources), so locating one member
   never reads the whole archive into RAM and a compressed tar inflates only up to the matched
-  entry (xz is the exception — `lzma-rs` batches the full plaintext).
+  entry — every codec (gz/bz2/xz/zst/lz4) streams.
 - **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
   backing image — no decompression, no buffering, multi-GB ISOs unaffected. A recursive ISO
   inside a spooled archive entry now also yields a guarded `FileRange` rather than buffering the
