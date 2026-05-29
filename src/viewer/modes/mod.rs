@@ -195,6 +195,12 @@ pub(crate) struct DescendFrame {
     pub source: InputSource,
     pub detected: crate::input::detect::Detected,
     pub modes: Vec<Box<dyn Mode>>,
+    /// Breadcrumb label for the pushed frame. Synthetic views reuse the
+    /// *current* source, so `source.name()` would repeat the parent
+    /// (e.g. `library.sqlite > library.sqlite`). `Some(label)` overrides
+    /// it with something meaningful (the table name); `None` falls back
+    /// to the source name.
+    pub breadcrumb_label: Option<String>,
 }
 
 /// One renderable + interactive view of a file.

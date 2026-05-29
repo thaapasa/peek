@@ -74,6 +74,9 @@ impl SqliteListingMode {
             source: self.source.clone(),
             detected: self.detected.clone(),
             modes,
+            // Reuses the db source, so label the crumb with the table
+            // name instead of repeating the db file.
+            breadcrumb_label: Some(target.entity.clone()),
         })
     }
 }

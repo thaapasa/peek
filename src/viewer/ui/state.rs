@@ -103,6 +103,11 @@ pub(crate) struct SessionFrame {
     /// render failure on the rebuilt frame propagates rather than
     /// looping.
     pub retry_attempted: bool,
+    /// Overrides `source.name()` in the breadcrumb when set. Used by
+    /// synthetic descend frames that reuse the parent source (SQLite
+    /// table view) so the crumb shows the table name, not the db file
+    /// repeated.
+    pub breadcrumb_label: Option<String>,
 }
 
 impl SessionFrame {
@@ -126,6 +131,7 @@ impl SessionFrame {
             views: (0..n).map(|_| None).collect(),
             position: Position::Unknown,
             retry_attempted: false,
+            breadcrumb_label: None,
         }
     }
 
@@ -228,7 +234,11 @@ impl ViewerState {
     pub(crate) fn breadcrumb(&self) -> Vec<String> {
         self.frames
             .iter()
-            .map(|f| f.source.name().to_string())
+            .map(|f| {
+                f.breadcrumb_label
+                    .clone()
+                    .unwrap_or_else(|| f.source.name().to_string())
+            })
             .collect()
     }
 
@@ -592,6 +602,7 @@ impl ViewerState {
             source,
             detected,
             modes,
+            breadcrumb_label,
         } = frame;
         let file_info = match crate::info::gather(&source, &detected) {
             Ok(info) => info,
@@ -600,7 +611,8 @@ impl ViewerState {
                 return Ok(());
             }
         };
-        let session = SessionFrame::new(source, detected, file_info, modes);
+        let mut session = SessionFrame::new(source, detected, file_info, modes);
+        session.breadcrumb_label = breadcrumb_label;
         self.frames.push(session);
         self.screen.invalidate();
         Ok(())
@@ -1233,6 +1245,38 @@ mod tests {
         // Last back at depth 1 quits.
         let final_back = state.apply(Action::Back).unwrap();
         assert!(matches!(final_back, Outcome::Quit));
+    }
+
+    /// A SQLite table-contents frame reuses the db source, so its
+    /// breadcrumb must show the table name rather than repeating the
+    /// db file (`library.sqlite > books`, not `library.sqlite >
+    /// library.sqlite`).
+    #[test]
+    fn sqlite_table_frame_breadcrumb_shows_table_name() {
+        let source = fixture_source("test-data/library.sqlite");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(
+            &["peek", "test-data/library.sqlite"],
+            source.clone(),
+            detected.clone(),
+        );
+        assert_eq!(state.breadcrumb(), vec!["library.sqlite".to_string()]);
+
+        // Build the contents descend frame the way the listing does:
+        // a row viewer over the parent source, labelled with the table.
+        let table = crate::types::sqlite::table_mode::build(&source, "books").unwrap();
+        let modes: Vec<Box<dyn Mode>> = vec![Box::new(table)];
+        let frame = crate::viewer::modes::DescendFrame {
+            source: source.clone(),
+            detected,
+            modes,
+            breadcrumb_label: Some("books".to_string()),
+        };
+        state.push_direct_frame(frame).unwrap();
+        assert_eq!(
+            state.breadcrumb(),
+            vec!["library.sqlite".to_string(), "books".to_string()],
+        );
     }
 
     /// Directory descent into a subdirectory must collapse the new
