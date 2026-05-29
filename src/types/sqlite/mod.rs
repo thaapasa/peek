@@ -15,7 +15,6 @@ pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
-pub mod listing_mode;
 pub mod reader;
 pub mod row_set;
 pub mod sql;

@@ -4,18 +4,18 @@
 //! a single `.sql` leaf whose extract dumps the `CREATE …` DDL into a
 //! temp file (handled by [`super::extract`]).
 
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::format::SqliteFormat;
-use crate::types::sqlite::listing_mode::SqliteListingMode;
 use crate::types::sqlite::reader::SqliteReader;
+use crate::types::sqlite::table_mode::build as build_table_mode;
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
-use crate::viewer::modes::Mode;
+use crate::viewer::modes::{AboutMode, DescendFrame, ExtractTarget, InfoMode, Mode};
 
 /// File suffix used for schema-row inner_paths. Mirrors the SQL viewer
 /// the user opens when the row is Enter'd — keeps the listing's leaf
@@ -49,13 +49,75 @@ pub fn compose(
             vec![format!("Failed to read SQLite catalogue: {e:#}")],
         ),
     };
-    let listing = ListingMode::new(fmt.label(), "Schema", entries, warnings);
-    modes.push(Box::new(SqliteListingMode::new(
-        listing,
-        source.clone(),
-        detected.clone(),
-    )));
+    // Descend on a `<entity>.csv` row opens a streaming table viewer
+    // over the *current* database instead of extracting to a temp file.
+    // The closure reuses these clones so each pushed frame owns its own
+    // read-only connection and reuses the original detection (so InfoMode
+    // still renders the SQLite metadata over the same DB).
+    let descend_source = source.clone();
+    let descend_detected = detected.clone();
+    let listing = ListingMode::new(fmt.label(), "Schema", entries, warnings).with_descend_handler(
+        move |target| {
+            let ExtractTarget::EntryPath(key) = target else {
+                return None;
+            };
+            let contents = parse_contents_key(key)?;
+            Some(build_contents_frame(
+                &descend_source,
+                &descend_detected,
+                &contents,
+            ))
+        },
+    );
+    modes.push(Box::new(listing));
     Ok(())
+}
+
+struct ContentsTarget {
+    entity: String,
+}
+
+/// Pick a contents-row `<kind>/<entity>.csv` inner_path apart into its
+/// entity. `None` for any other selection — schema rows (`.sql`), group
+/// directories, non-row-bearing kinds.
+fn parse_contents_key(key: &str) -> Option<ContentsTarget> {
+    let (kind_dir, rest) = key.split_once('/')?;
+    let name = rest.strip_suffix(CONTENTS_SUFFIX)?;
+    if name.is_empty() || name.contains('/') {
+        return None;
+    }
+    // Only tables and views are row-bearing. Indexes / triggers never
+    // get a `.csv` row written by compose, but a defensive check here
+    // keeps a future bug there from opening a SqliteRowSet on something
+    // that has no rows.
+    match kind_dir {
+        KIND_TABLES | KIND_VIEWS => Some(ContentsTarget {
+            entity: name.to_string(),
+        }),
+        _ => None,
+    }
+}
+
+fn build_contents_frame(
+    source: &InputSource,
+    detected: &Detected,
+    target: &ContentsTarget,
+) -> Result<DescendFrame> {
+    let table = build_table_mode(source, &target.entity)
+        .map_err(|e| anyhow!("opening {}: {e:#}", target.entity))?;
+    let modes: Vec<Box<dyn Mode>> = vec![
+        Box::new(table),
+        Box::new(InfoMode::new()),
+        Box::new(AboutMode::new()),
+    ];
+    Ok(DescendFrame {
+        source: source.clone(),
+        detected: detected.clone(),
+        modes,
+        // Reuses the db source, so label the crumb with the table name
+        // instead of repeating the db file.
+        breadcrumb_label: Some(target.entity.clone()),
+    })
 }
 
 fn build_entries(source: &InputSource) -> Result<Vec<Entry>> {
@@ -139,5 +201,36 @@ fn contents_entry(entity: &Entity) -> Entry {
         mtime: None,
         mode: None,
         kind: EntryKind::File,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_contents_key_accepts_tables_and_views() {
+        let t = parse_contents_key("tables/books.csv").expect("tables row");
+        assert_eq!(t.entity, "books");
+        let v = parse_contents_key("views/popular_authors.csv").expect("views row");
+        assert_eq!(v.entity, "popular_authors");
+    }
+
+    #[test]
+    fn parse_contents_key_rejects_non_row_bearing() {
+        assert!(parse_contents_key("indexes/idx_x.csv").is_none());
+        assert!(parse_contents_key("triggers/trg.csv").is_none());
+    }
+
+    #[test]
+    fn parse_contents_key_rejects_schema_rows() {
+        assert!(parse_contents_key("tables/books.sql").is_none());
+    }
+
+    #[test]
+    fn parse_contents_key_rejects_bad_shapes() {
+        assert!(parse_contents_key("books.csv").is_none(), "missing kind");
+        assert!(parse_contents_key("tables/.csv").is_none(), "empty name");
+        assert!(parse_contents_key("tables/a/b.csv").is_none(), "nested");
     }
 }

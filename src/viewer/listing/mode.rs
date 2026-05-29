@@ -23,7 +23,8 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{
-    ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
+    DescendFrame, ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx,
+    Window,
 };
 use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -45,7 +46,18 @@ pub struct ListingMode {
     /// into view when it's on a directory. The `line` field on each
     /// match is the row index in `self.rows`.
     search: Option<SearchState>,
+    /// Synthetic-descend override; `None` = standard extract path. When
+    /// set, [`Mode::build_descend_frame`] hands the selected row's
+    /// `ExtractTarget` to the closure, letting a container build a frame
+    /// over the *current* source instead of extracting to a temp file
+    /// (e.g. SQLite opening a streaming table viewer).
+    descend_handler: Option<DescendHandler>,
 }
+
+/// Closure installed via [`ListingMode::with_descend_handler`]. Returns
+/// `Some(frame)` to push a synthetic frame for the selected row,
+/// `None` to fall back to the extract pipeline.
+type DescendHandler = Box<dyn FnMut(&ExtractTarget) -> Option<Result<DescendFrame>>>;
 
 /// One rendered row in the TOC. Holds enough metadata to render
 /// without traversing the source tree again. Kept `pub(super)` so
@@ -89,7 +101,20 @@ impl ListingMode {
             pending_warnings: warnings,
             viewport,
             search: None,
+            descend_handler: None,
         }
+    }
+
+    /// Install a synthetic-descend handler. The closure receives the
+    /// selected row's [`ExtractTarget`] on `Action::Descend`; returning
+    /// `Some(frame)` pushes it directly (bypassing extract), `None`
+    /// defers to the standard extract path.
+    pub fn with_descend_handler(
+        mut self,
+        handler: impl FnMut(&ExtractTarget) -> Option<Result<DescendFrame>> + 'static,
+    ) -> Self {
+        self.descend_handler = Some(Box::new(handler));
+        self
     }
 
     fn paint_row(
@@ -399,6 +424,14 @@ impl Mode for ListingMode {
         self.viewport
             .selected_inner_path(&self.rows)
             .map(|p| ExtractTarget::EntryPath(p.to_string()))
+    }
+
+    fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
+        // Compute the target first so its immutable borrow ends before
+        // the handler's `&mut` borrow begins.
+        let target = self.extract_target()?;
+        let handler = self.descend_handler.as_mut()?;
+        handler(&target)
     }
 
     fn take_warnings(&mut self) -> Vec<String> {
