@@ -1002,10 +1002,11 @@ Pull an inner item out of a container as a standalone file. Three sources curren
   via `Arc<NamedTempFile>`) — including a `FileRange` carved from a spooled entry, which carries
   the guard so a recursive view keeps its backing tempfile alive. The 256 MiB cap survives only
   on the in-memory fallback path. Pass `--no-tempfile` to force RAM-only behaviour (cap
-  dropped — the user has opted in to OOM risk). tar/cpio extract streams the walk over a
+  dropped — the user has opted in to OOM risk). tar/cpio/ar/7z extract streams the walk over a
   seekable reader (a windowed range adapter backs `FileRange` sources), so locating one member
   never reads the whole archive into RAM and a compressed tar inflates only up to the matched
-  entry — every codec (gz/bz2/xz/zst/lz4) streams.
+  entry — every codec (gz/bz2/xz/zst/lz4) streams. 7z streams per-entry too (solid blocks still
+  decode up to the match — inherent to the format — but the member never buffers).
 - **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
   backing image — no decompression, no buffering, multi-GB ISOs unaffected. A recursive ISO
   inside a spooled archive entry now also yields a guarded `FileRange` rather than buffering the

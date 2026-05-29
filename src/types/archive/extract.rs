@@ -9,7 +9,7 @@
 //! Path safety: keys go through `extract::sanitize_entry_path` before
 //! any TOC lookup so traversal (`..`) is rejected.
 
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::path::Path;
 
 use bytes::Bytes;
@@ -351,20 +351,44 @@ fn extract_7z(
         .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e}")))?;
 
     let target_str = forward_slash_key(target);
-    let size = archive
-        .archive()
-        .files
-        .iter()
-        .find(|e| !e.is_directory() && e.name().trim_start_matches('/') == target_str)
-        .ok_or_else(|| ExtractError::NotFound(raw_key.to_string()))?
-        .size();
-    // sevenz-rust2 exposes only a Vec-returning `read_file`; pipe the
-    // resulting Vec through `materialise` so large entries still
-    // spool to disk and the Vec drops after copy.
-    let buf = archive
-        .read_file(&target_str)
+    // Stream the matched entry through `for_each_entries` (which hands a
+    // `&mut dyn Read` per entry) rather than `read_file`, which buffers
+    // the whole member into a `Vec` first.
+    //
+    // 7z packs files into solid blocks sharing one sequential decode
+    // stream: an entry's bytes must be consumed before the next entry
+    // reads, or that next read is misaligned and its CRC fails. So
+    // non-matching entries before the match are drained to advance the
+    // stream (the inherent solid-block decode cost; output is discarded,
+    // not buffered). Once found, later entries/blocks are skipped without
+    // reading so nothing past the match is decoded.
+    let mut result: Option<Result<Extracted, ExtractError>> = None;
+    let mut found = false;
+    archive
+        .for_each_entries(|entry, reader| {
+            if found {
+                return Ok(true);
+            }
+            if !entry.is_directory() && entry.name().trim_start_matches('/') == target_str {
+                found = true;
+                result = Some(materialise(
+                    reader,
+                    Some(entry.size()),
+                    target,
+                    raw_key,
+                    opts,
+                ));
+                return Ok(false);
+            }
+            if let Err(e) = std::io::copy(reader, &mut std::io::sink()) {
+                found = true;
+                result = Some(Err(ExtractError::Other(e.into())));
+                return Ok(false);
+            }
+            Ok(true)
+        })
         .map_err(|e| ExtractError::Other(anyhow::anyhow!("{e}")))?;
-    materialise(Cursor::new(buf), Some(size), target, raw_key, opts)
+    result.unwrap_or_else(|| Err(ExtractError::NotFound(raw_key.to_string())))
 }
 
 /// Extract a single ar entry. ar uses 60-byte ASCII headers; walk
@@ -454,6 +478,7 @@ fn extract_ar(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {

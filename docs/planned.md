@@ -172,16 +172,16 @@ Extract from archive entries ships today via `--extract <KEY>` and `e` in the vi
 `NamedTempFile` (`InputSource::TempFile`), lifting the in-memory 256 MiB cap for the common
 case; stored zip / uncompressed tar members now extract as zero-copy `FileRange` views (no
 spool, no copy) over the backing source — including ranges over a spooled tempfile, kept alive
-by an `Arc<NamedTempFile>` guard. tar/cpio/ar extract streams the walk over a seekable reader
+by an `Arc<NamedTempFile>` guard. tar/cpio/ar/7z extract streams the walk over a seekable reader
 (`open_seekable`, with a windowed range adapter for `FileRange` sources), so finding one member
 no longer reads the whole archive into RAM, the matched body streams to the spool, and
-compressed tars inflate only up to the match. Untrusted size/name header fields no longer drive
-up-front allocations. Still planned:
+compressed tars inflate only up to the match. 7z streams via `for_each_entries` (a `&mut dyn Read`
+per entry), draining the preceding entries of the target's solid block to advance the shared
+stream — the solid-block decode-up-to-the-match cost is inherent, but the body no longer buffers.
+Untrusted size/name header fields no longer drive up-front allocations. Still planned:
 
 - **RAR extract** — once RAR listing lands, extract reuses the unrar wrapper; same listing-only
   caveats apply.
-- **7z streaming extract** — `sevenz-rust2` exposes only a `Vec`-returning `read_file`, so the
-  matched member is buffered in full before it spools; needs an upstream streaming API.
 
 ### Disk Images ◐
 
