@@ -151,7 +151,7 @@ Two directions:
 
 `src/viewer/modes/content.rs:452,599` declares `owns_scroll() = true` and
 ignores caller's `scroll`. Same pattern in `HexMode`, `TableMode`,
-`CsvTableMode`, `PagedImageMode`, `ListingMode`. Trait surface still
+`RowsTableMode`, `PagedImageMode`, `ListingMode`. Trait surface still
 passes `_scroll`; readers must learn that `owns_scroll`-true modes
 silently discard it and use their internal scroll instead.
 

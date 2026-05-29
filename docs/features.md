@@ -1208,7 +1208,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--image-mode`   | `-m`  | Image rendering mode                                                                                        | ✅      |
 | `--edge-density` |       | Edge density target for `--image-mode contour`                                                              | ✅      |
 | `--info`         | `-i`  | Show file info instead of contents                                                                          | ✅      |
-| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) | ✅      |
+| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                            | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                               | ✅      |
 | `--margin`       |       | Image margin in transparent pixels                                                                          | ✅      |

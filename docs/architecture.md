@@ -143,7 +143,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | `PagedImageMode<R>`   | PDF / CBZ paged image render                                | **yes**                | **yes**           |
 | `SpecimenMode`        | font specimen rasterisation (`.ttf` / `.otf` / `.ttc`)      | **yes**                | **yes**           |
 | `TableMode`           | objfile / classfile aligned tables                          | **yes**                | **yes**           |
-| `CsvTableMode`        | streaming CSV / TSV table                                   | **yes**                | **yes**           |
+| `RowsTableMode`       | streaming CSV / TSV + SQLite contents                       | **yes**                | **yes**           |
 | `InfoMode`            | every file (file metadata)                                  | no                     | no                |
 | `HelpMode`            | every file (keyboard-shortcut listing)                      | no                     | no                |
 | `AboutMode`           | every file (logo, version, palette swatches)                | no                     | no                |

@@ -18,7 +18,7 @@
 | `--edge-density` |       | Tune contour line count (image-mode contour)                  |
 | `--no-svg-anim` |       | Force static render for animated SVG                          |
 | `--info`         | `-i`  | Print file info and exit                                      |
-| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) |
+| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              |
 | `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           |
 | `--extract`      | `-x`  | Extract a single inner item — see [Extraction](./viewer/extraction.md) |
