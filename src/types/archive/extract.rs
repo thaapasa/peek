@@ -35,6 +35,11 @@ const MAX_EXTRACT_BYTES: u64 = 256 * 1024 * 1024;
 /// syscalls.
 const SPOOL_THRESHOLD: u64 = 16 * 1024 * 1024;
 
+/// Sanity cap on an ar BSD long-name length (`#1/<len>` header). Real
+/// member names fit far under this; a bogus value would otherwise size a
+/// huge buffer from an untrusted field.
+const MAX_AR_NAME: u64 = 4096;
+
 pub fn extract(
     source: &InputSource,
     format: ArchiveFormat,
@@ -158,24 +163,40 @@ fn extract_cpio(
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
     // Stream the cpio walk over the source — no whole-archive read into
-    // RAM. `find_entry` stops at the match; its hand-rolled reader buffers
-    // only the matching body into a `Bytes`, which `materialise` then
-    // spools to disk for large entries.
-    use crate::types::archive::backends::cpio::find_entry;
+    // RAM. `find_entry` stops at the match and hands back a size-limited
+    // body reader (never the whole body buffered), which `materialise`
+    // then spools or caps. The matched entry is streamed straight through.
+    use crate::types::archive::backends::cpio::{CpioBody, find_entry};
     let reader = open_seekable(source).map_err(ExtractError::Other)?;
     let target_str = forward_slash_key(target);
-    let found = match compression {
-        CpioCompression::None => find_entry(reader, &target_str, u64::MAX),
-        CpioCompression::Gz => {
-            find_entry(flate2::read::GzDecoder::new(reader), &target_str, u64::MAX)
-        }
+
+    fn finish<R: Read>(
+        found: Option<(CpioBody<R>, u64)>,
+        target: &Path,
+        raw_key: &str,
+        opts: &ExtractOptions,
+    ) -> Result<Extracted, ExtractError> {
+        let Some((body, size)) = found else {
+            return Err(ExtractError::NotFound(raw_key.to_string()));
+        };
+        materialise(body, Some(size), target, raw_key, opts)
     }
-    .map_err(ExtractError::Other)?;
-    let Some(body) = found else {
-        return Err(ExtractError::NotFound(raw_key.to_string()));
-    };
-    let size = body.len() as u64;
-    materialise(Cursor::new(body), Some(size), target, raw_key, opts)
+
+    match compression {
+        CpioCompression::None => finish(
+            find_entry(reader, &target_str).map_err(ExtractError::Other)?,
+            target,
+            raw_key,
+            opts,
+        ),
+        CpioCompression::Gz => finish(
+            find_entry(flate2::read::GzDecoder::new(reader), &target_str)
+                .map_err(ExtractError::Other)?,
+            target,
+            raw_key,
+            opts,
+        ),
+    }
 }
 
 fn extract_zip(
@@ -390,7 +411,10 @@ fn extract_ar(
         // BSD long name: `#1/<len>` header, name in payload prefix.
         let (name, payload_size) = if let Some(rest) = raw_name.strip_prefix("#1/") {
             let name_len: u64 = rest.trim().parse().unwrap_or(0);
-            if name_len > total_size {
+            // Reject an out-of-range name length before allocating: a real
+            // long name fits well under the cap; a bogus one would
+            // otherwise size a multi-GB buffer.
+            if name_len > total_size || name_len > MAX_AR_NAME {
                 ("?".to_string(), total_size)
             } else {
                 let mut nbuf = vec![0u8; name_len as usize];
@@ -413,10 +437,16 @@ fn extract_ar(
             return materialise(body, Some(payload_size), target, raw_key, opts);
         }
 
-        let mut skip = vec![0u8; (payload_size + pad) as usize];
-        reader
-            .read_exact(&mut skip)
+        // Skip the body + padding by streaming to the void — never
+        // allocate a buffer sized by an untrusted header field.
+        let to_skip = payload_size + pad;
+        let skipped = std::io::copy(&mut (&mut reader).take(to_skip), &mut std::io::sink())
             .map_err(|e| ExtractError::Other(e.into()))?;
+        if skipped != to_skip {
+            return Err(ExtractError::Other(anyhow::anyhow!(
+                "truncated ar archive (expected {to_skip} more bytes, got {skipped})"
+            )));
+        }
     }
     Err(ExtractError::NotFound(raw_key.to_string()))
 }

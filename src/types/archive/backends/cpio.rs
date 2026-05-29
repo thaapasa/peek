@@ -26,7 +26,6 @@
 use std::io::{self, Read};
 
 use anyhow::{Context, Result, anyhow, bail};
-use bytes::Bytes;
 
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
@@ -67,31 +66,37 @@ fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
 }
 
 /// Stream-search the cpio archive for `target` (already path-sanitised
-/// by the caller). Returns the body bytes for the first matching entry
-/// or `Ok(None)` if the archive ends without a hit. `max_bytes` caps
-/// extraction so a runaway entry can't force a multi-GB allocation.
+/// by the caller). Returns the matched entry's body as a size-limited
+/// streaming reader plus its declared size, or `Ok(None)` if the archive
+/// ends without a hit. The body is *not* buffered: the caller spools or
+/// caps it, so an entry's (attacker-controlled) `filesize` field can't
+/// force an up-front allocation.
 ///
 /// `target` is matched against the entry path with a leading `./`
 /// trimmed off — newc cpio commonly stores entries as `./foo/bar`.
-pub(crate) fn find_entry<R: Read>(
-    reader: R,
-    target: &str,
-    max_bytes: u64,
-) -> Result<Option<Bytes>> {
+pub(crate) fn find_entry<R: Read>(reader: R, target: &str) -> Result<Option<(CpioBody<R>, u64)>> {
     let mut cpio = CpioReader::new(reader);
     while let Some(hdr) = cpio.next_header()? {
         let stored = hdr.path.trim_start_matches("./").trim_start_matches('/');
         if stored == target {
-            if hdr.size > max_bytes {
-                bail!(
-                    "cpio entry {target:?} is {} bytes; cap is {max_bytes} bytes",
-                    hdr.size
-                );
-            }
-            return Ok(Some(cpio.read_body()?));
+            let size = hdr.size;
+            return Ok(Some((cpio.into_body(), size)));
         }
     }
     Ok(None)
+}
+
+/// Streaming body of a matched cpio entry — a reader limited to the
+/// entry size, pulling straight off the archive so a large member is
+/// never held in RAM before the caller spools it.
+pub(crate) struct CpioBody<R: Read> {
+    inner: io::Take<R>,
+}
+
+impl<R: Read> Read for CpioBody<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -110,8 +115,8 @@ struct EntryHeader {
 
 /// State machine over the cpio header chain. Locks the header variant
 /// from the first record's magic and tracks pending body + padding so
-/// the caller can either skip (default in `next_header`) or pull
-/// bytes via `read_body` before advancing.
+/// the caller can either skip (default in `next_header`) or stream the
+/// body via `into_body` before advancing.
 struct CpioReader<R: Read> {
     inner: R,
     variant: Option<Variant>,
@@ -169,18 +174,14 @@ impl<R: Read> CpioReader<R> {
         Ok(Some(hdr))
     }
 
-    /// Read the current entry's body. Must be called between
-    /// `next_header` calls; the body is consumed and `body_remaining`
-    /// drops to zero. Post-body padding is drained on the next
-    /// `next_header` call.
-    fn read_body(&mut self) -> Result<Bytes> {
-        let n = self.body_remaining as usize;
-        let mut buf = vec![0u8; n];
-        self.inner
-            .read_exact(&mut buf)
-            .context("short cpio entry body")?;
-        self.body_remaining = 0;
-        Ok(Bytes::from(buf))
+    /// Consume the reader, exposing the current entry's body as a
+    /// size-limited stream. Call right after `next_header` returns the
+    /// matching entry; the `Take` caps reads at the entry size so trailing
+    /// records (and padding) can't leak into the body.
+    fn into_body(self) -> CpioBody<R> {
+        CpioBody {
+            inner: self.inner.take(self.body_remaining),
+        }
     }
 
     fn drain_pending(&mut self) -> Result<()> {
@@ -307,4 +308,61 @@ fn parse_hex(s: &[u8]) -> Result<u64> {
 fn parse_oct(s: &[u8]) -> Result<u64> {
     let s = std::str::from_utf8(s).map_err(|_| anyhow!("non-ASCII cpio octal field"))?;
     u64::from_str_radix(s, 8).map_err(|_| anyhow!("invalid cpio octal field: {s:?}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// Build a single-entry newc cpio record. `claimed_size` goes in the
+    /// `c_filesize` header field; `body` is the actual bytes that follow —
+    /// they may be shorter than the claim (truncated / lying archive).
+    fn newc_record(name: &str, claimed_size: u64, body: &[u8]) -> Vec<u8> {
+        let mut out = Vec::new();
+        out.extend_from_slice(b"070701");
+        let name_bytes = name.len() + 1; // NUL-terminated
+        let fields = [
+            1,                 // c_ino
+            0o100644,          // c_mode
+            0,                 // c_uid
+            0,                 // c_gid
+            1,                 // c_nlink
+            0,                 // c_mtime
+            claimed_size,      // c_filesize
+            0,                 // c_devmajor
+            0,                 // c_devminor
+            0,                 // c_rdevmajor
+            0,                 // c_rdevminor
+            name_bytes as u64, // c_namesize
+            0,                 // c_check
+        ];
+        for f in fields {
+            out.extend_from_slice(format!("{f:08x}").as_bytes());
+        }
+        out.extend_from_slice(name.as_bytes());
+        out.push(0);
+        // Header + name padded to a 4-byte boundary.
+        while out.len() % 4 != 0 {
+            out.push(0);
+        }
+        out.extend_from_slice(body);
+        out
+    }
+
+    /// A bogus / truncated `c_filesize` must not drive an up-front
+    /// allocation: `find_entry` hands back a streaming body, so claiming
+    /// ~4 GiB while supplying two bytes returns the two real bytes instead
+    /// of trying to allocate gigabytes.
+    #[test]
+    fn find_entry_streams_without_allocating_claimed_size() {
+        let record = newc_record("f", 0xffff_ff00, b"hi");
+        let (mut body, size) = find_entry(Cursor::new(record), "f")
+            .expect("walk succeeds")
+            .expect("entry found");
+        assert_eq!(size, 0xffff_ff00, "declared size is surfaced verbatim");
+        let mut got = Vec::new();
+        body.read_to_end(&mut got).unwrap();
+        assert_eq!(got, b"hi", "only the real bytes are streamed");
+    }
 }
