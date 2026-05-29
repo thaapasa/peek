@@ -45,7 +45,7 @@ pub(crate) use rendered_text::{RenderedTextMode, TextRenderer};
 /// A `ModeId` names the **role** the mode fills in its stack, not the
 /// impl type. Multiple Mode impls reuse the same id when they fill the
 /// same slot for different file types: `Content` is used by `ContentMode`,
-/// the generic `TableMode`, and `CsvTableMode`; `Listing` by both
+/// the generic `TableMode`, and `RowsTableMode`; `Listing` by both
 /// `ListingMode` and `DirectoryMode`; `Rendered` by `RenderedTextMode`,
 /// `PagedImageMode`, and `EpubReadMode`. The invariant `compose_modes`
 /// upholds is that each file type's stack has at most one mode per id —
@@ -184,6 +184,23 @@ pub(crate) enum ExtractTarget {
     EntryPath(String),
     /// 1-based animation frame index.
     FrameIndex(usize),
+}
+
+/// Pre-built descend frame supplied by [`Mode::build_descend_frame`].
+/// `descend()` pushes this as a new session frame, skipping the
+/// extract → detect → compose pipeline. Use when the next frame is
+/// a synthetic view over the *current* source (e.g. browsing a single
+/// SQLite table) rather than a separate extracted file.
+pub(crate) struct DescendFrame {
+    pub source: InputSource,
+    pub detected: crate::input::detect::Detected,
+    pub modes: Vec<Box<dyn Mode>>,
+    /// Breadcrumb label for the pushed frame. Synthetic views reuse the
+    /// *current* source, so `source.name()` would repeat the parent
+    /// (e.g. `library.sqlite > library.sqlite`). `Some(label)` overrides
+    /// it with something meaningful (the table name); `None` falls back
+    /// to the source name.
+    pub breadcrumb_label: Option<String>,
 }
 
 /// One renderable + interactive view of a file.
@@ -351,6 +368,18 @@ pub(crate) trait Mode {
 
     /// Selection the extract key targets. `None` = no-op for this mode.
     fn extract_target(&self) -> Option<ExtractTarget> {
+        None
+    }
+
+    /// Optional override for `Action::Descend`. Returning `Some(frame)`
+    /// makes the viewer push the supplied frame directly, bypassing
+    /// the extract → detect → compose pipeline. Returning `None` (the
+    /// default) defers to the standard extract path keyed off
+    /// [`Self::extract_target`]. Use this when the next frame is a
+    /// synthetic view backed by the *current* source — e.g. a SQLite
+    /// table's rows — and you'd otherwise have to materialise the
+    /// whole thing to a temp file to fit the extract pipeline.
+    fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
         None
     }
 

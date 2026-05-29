@@ -594,6 +594,54 @@ Two deliberate departures from a naive `javap` port:
 No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
 is not implemented; the Methods view shows signatures only.
 
+### SQLite Databases ✅
+
+`.sqlite` / `.sqlite3` / `.db` / `.db3` files open as a read-only browse over the SQLite
+schema. The bundled `rusqlite` (`bundled` feature compiles the upstream SQLite C
+amalgamation in — no system libsqlite at runtime) drives detection, schema scrape, and row
+reads.
+
+Two views, Tab-cycled:
+
+- **Listing** (landing) — `tables/` / `views/` / `indexes/` / `triggers/` groups, one leaf
+  per entity. Tables and views get two leaves: `<name>.sql` for the `CREATE …` DDL and
+  `<name>.csv` for the contents. Indexes and triggers only get `.sql`. Empty kind groups
+  are omitted. The listing's size column shows DDL byte length for schema rows and the
+  row count for contents rows so users can compare table populations at a glance.
+- **Info** — page size, page count, encoding, journal mode, schema version, user version,
+  application ID (when non-zero), `PRAGMA integrity_check(1)` result, entity counts, total
+  rows, and the five biggest tables.
+
+Drill-down is split by leaf suffix:
+
+- `<name>.sql` → Enter dumps `sqlite_master.sql` for the entity into an in-memory
+  `.sql` source with a `-- <name> from <db>` header comment; the outer re-detect routes
+  it through the existing SQL syntax view. Schema rows can also be extracted (`e`) and
+  saved like any other archive entry.
+- `<name>.csv` → Enter pushes a streaming rows view that mirrors the CSV table viewer
+  (sticky header, horizontal pan, cell-scoped `/` search). A sliding-window cursor
+  buffers 1000 rows at a time; scrolling outside the window triggers a refill via
+  `SELECT * FROM "<entity>" LIMIT 1000 OFFSET k`. `COUNT(*)` runs once at construction
+  so the scrollbar / `Bottom` math is exact without driving a full scan. NULL renders
+  distinct from the empty string (cells are `Option<String>` across the shared
+  `RowSource` trait); BLOBs render as `<blob: N bytes>` (inline hex preview deferred).
+  Per-column alignment is inferred from declared type affinity: `INT` / `REAL` /
+  `NUMERIC` / `DECIMAL` right-align, everything text-shaped (`CHAR` / `CLOB` / `TEXT` /
+  `DATE` / `TIME` / `BOOL`) stays left. `e` extracts the rows to a CSV file on disk
+  by streaming `SELECT *` through a `csv::Writer` into a tempfile — NULL → empty,
+  numbers / text → display form, BLOB → SQL hex literal `X'…'` (lossless,
+  round-trippable into an `INSERT`).
+
+Sources without an on-disk path (stdin, in-memory, extracted from another container)
+spool to a `NamedTempFile` that lives for the connection's lifetime, so piped databases
+work too. peek never writes to the database — connections open with
+`SQLITE_OPEN_READ_ONLY`.
+
+Cell-scoped search currently only covers the buffered window. Predicate-pushdown
+LIKE / GLOB queries and incremental full-scan search are deferred. WAL / `-journal`
+sidecar inspection, SQLCipher-encrypted DBs, and a custom-query prompt are also
+deferred.
+
 ### Certificates and Keys ◐
 
 PEM-encoded cryptographic material gets a per-entry Info section paired with the raw PEM source

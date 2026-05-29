@@ -143,6 +143,11 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
+            FileType::Sqlite(fmt) => {
+                crate::types::sqlite::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
             FileType::Cert(_) => {
                 crate::types::cert::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }

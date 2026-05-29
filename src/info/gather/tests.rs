@@ -9,6 +9,7 @@ use super::super::FileExtras;
 use super::gather;
 use crate::input::InputSource;
 use crate::input::detect;
+use crate::input::detect::FileType;
 use crate::types::image::info::{AnimationStats, LoopCount};
 use crate::types::structured::info::TopLevelKind;
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings};
@@ -307,6 +308,43 @@ fn css_styles_sidecar_stats() {
     // `content:` string and comments must not appear as a colour.
     assert!(stats.palette.iter().any(|c| c.hex == "#ff6b9d"));
     assert_eq!(stats.palette.len(), stats.total_colors);
+}
+
+// ---------------------------------------------------------------------------
+// SQLite fixture
+// ---------------------------------------------------------------------------
+
+/// library.sqlite (Project Gutenberg catalogue) runs the full detect →
+/// gather pipeline: it must classify as SQLite and scrape the catalogue
+/// counts + file pragmas. Guards against an `infer` / `rusqlite` bump
+/// silently breaking detection or pragma scraping.
+#[test]
+fn sqlite_library_catalogue_stats() {
+    let path = fixture("test-data/library.sqlite");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert!(
+        matches!(detected.file_type, FileType::Sqlite(_)),
+        "expected FileType::Sqlite, got {:?}",
+        detected.file_type,
+    );
+
+    let info = gather(&source, &detected).expect("gather");
+    let FileExtras::Sqlite(sqlite) = &info.extras else {
+        panic!("expected Sqlite extras");
+    };
+    let stats = sqlite.stats.as_ref().expect("scrape succeeded");
+    // 8 user tables, 1 view, 5 user indexes (sqlite_* shadow entities
+    // are filtered out by the catalogue walker).
+    assert_eq!(stats.table_count, 8);
+    assert_eq!(stats.view_count, 1);
+    assert_eq!(stats.index_count, 5);
+    // Sum of COUNT(*) across the user tables.
+    assert_eq!(stats.total_rows, 25_895);
+    // File-level pragmas.
+    assert_eq!(stats.page_size, 4096);
+    assert_eq!(stats.encoding, "UTF-8");
+    assert!(stats.integrity_ok, "fixture passes integrity_check");
 }
 
 #[test]

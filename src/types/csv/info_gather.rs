@@ -38,9 +38,10 @@ pub fn gather(data: &CsvData, fmt: CsvFormat) -> CsvStats {
         && let Some(first) = data.records.first()
     {
         for (i, cell) in first.cells.iter().enumerate() {
+            let text = cell.as_deref().unwrap_or("");
             if let Some(col) = columns.get_mut(i) {
-                col.header = Some(cell.clone());
-                col.max_width = display_width(cell);
+                col.header = Some(text.to_string());
+                col.max_width = display_width(text);
             }
         }
     }
@@ -55,11 +56,12 @@ pub fn gather(data: &CsvData, fmt: CsvFormat) -> CsvStats {
             if i >= col_count {
                 break;
             }
-            let w = display_width(cell);
+            let text = cell.as_deref().unwrap_or("");
+            let w = display_width(text);
             if w > columns[i].max_width {
                 columns[i].max_width = w;
             }
-            let kind = classify_cell(cell);
+            let kind = classify_cell(text);
             if matches!(kind, CellKind::Empty) {
                 columns[i].empty_count += 1;
             } else {

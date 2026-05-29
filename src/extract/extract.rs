@@ -109,6 +109,7 @@ pub fn extract(
         FileType::Pdf => crate::types::pdf::extract::extract(source, key),
         FileType::Directory => crate::types::directory::extract::extract(source, key),
         FileType::Audio(fmt) => audio_extract(source, *fmt, key),
+        FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html

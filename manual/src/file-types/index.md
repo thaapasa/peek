@@ -9,6 +9,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Markup            | Markdown, HTML, XML, SQL                                    |
 | Structured data   | JSON / JSONC / JSON5 / JSONL, YAML, TOML, XML               |
 | Tabular data      | CSV, TSV (aligned table view)                               |
+| Databases         | SQLite (schema listing + streaming row viewer)              |
 | Documents         | DOCX, ODT, RTF                                              |
 | PDF               | `.pdf` (paged render + text + embeds)                       |
 | Ebooks            | EPUB                                                        |

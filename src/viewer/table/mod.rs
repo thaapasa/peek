@@ -1,16 +1,22 @@
-//! Generic aligned-table view, shared by the materialised-table file
-//! types — object files (Sections / Symbols) and Java classfiles
-//! (Fields / Methods).
+//! Generic aligned-table views.
 //!
-//! One [`Table`] is a fixed column layout plus rows of typed [`Cell`]s;
-//! [`TableMode`] renders it with a sticky header, content-fitted
-//! columns, character-offset horizontal scroll, and `/` search.
+//! Two flavours live here, sharing the visual shape but differing in
+//! data model:
 //!
-//! `CsvTableMode` is deliberately *not* built on this — its streaming
-//! `CsvData` backing and cell-scoped search are a different mechanism.
-//! This mode is for tables fully materialised up front.
+//! * [`TableMode`] — fully materialised. One [`Table`] is a fixed
+//!   column layout plus rows of typed [`Cell`]s; the mode renders it
+//!   with a sticky header, content-fitted columns, character-offset
+//!   horizontal scroll, and `/` search. Used by object files
+//!   (Sections / Symbols) and Java classfiles (Fields / Methods).
+//! * [`RowsTableMode`] (in [`rows_mode`]) — lazy / streaming. Backed
+//!   by a [`RowSource`](row_source::RowSource); pulls rows on demand,
+//!   grows column widths as wider cells scroll in, cell-scoped
+//!   search. Used by CSV / TSV and (later) the SQLite contents
+//!   viewer.
 
 mod mode;
+pub(crate) mod row_source;
+pub(crate) mod rows_mode;
 
 pub(crate) use mode::TableMode;
 
