@@ -11,16 +11,18 @@ Status legend: ✅ implemented · ◐ partial
 
 - [Operating Modes](#operating-modes)
 - [Supported File Types](#supported-file-types)
-  - [Source Code](#source-code-)
-  - [Structured Data / Config Files](#structured-data--config-files)
-  - [Image Files](#image-files-)
-  - [Audio Files](#audio-files-)
-  - [Animated Images (GIF, WebP)](#animated-images-gif-webp-)
-  - [Comic Archives](#comic-archives-)
-  - [Object Files](#object-files-)
-  - [Java Classfiles](#java-classfiles-)
-  - [Certificates and Keys](#certificates-and-keys-)
-  - [Binary and Archive Files](#binary-and-archive-files-)
+    - [Source Code](#source-code-)
+    - [Structured Data / Config Files](#structured-data--config-files)
+    - [Image Files](#image-files-)
+    - [Audio Files](#audio-files-)
+    - [Animated Images (GIF, WebP)](#animated-images-gif-webp-)
+    - [Comic Archives](#comic-archives-)
+    - [Object Files](#object-files-)
+    - [Java Classfiles](#java-classfiles-)
+    - [SQLite Databases](#sqlite-databases-)
+    - [Certificates and Keys](#certificates-and-keys-)
+    - [Fonts](#fonts-)
+    - [Binary and Archive Files](#binary-and-archive-files-)
 - [Viewer Features](#viewer-features)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 - [Color and Rendering](#color-and-rendering)
@@ -479,19 +481,19 @@ shows `pictures/<usage>.<ext>` per visual (front / back / artist / leaflet / …
 `--extract pictures/front_cover.jpg` dumps the cover. Extracted picture bytes re-enter
 the peek pipeline and render as ASCII art on recursive peek; lyrics re-enter as plain text.
 
-| Format         | Extensions                  | Status |
-|----------------|-----------------------------|--------|
-| MP3            | `.mp3`                      | ✅      |
-| FLAC           | `.flac`                     | ✅      |
-| Ogg Vorbis     | `.ogg`, `.oga`              | ✅      |
-| Opus           | `.opus`                     | ✅      |
-| WAV            | `.wav`, `.wave`             | ✅      |
-| MPEG-4 audio   | `.m4a`, `.m4b`, `.m4p`      | ✅      |
-| AAC (ADTS)     | `.aac`                      | ✅      |
-| AIFF           | `.aiff`, `.aif`, `.aifc`    | ✅      |
-| Apple CAF      | `.caf`                      | ✅      |
-| Matroska audio | `.mka`                      | ✅      |
-| WMA            | `.wma`                      | ◐ container-only — symphonia doesn't decode WMA |
+| Format         | Extensions               | Status                                          |
+|----------------|--------------------------|-------------------------------------------------|
+| MP3            | `.mp3`                   | ✅                                               |
+| FLAC           | `.flac`                  | ✅                                               |
+| Ogg Vorbis     | `.ogg`, `.oga`           | ✅                                               |
+| Opus           | `.opus`                  | ✅                                               |
+| WAV            | `.wav`, `.wave`          | ✅                                               |
+| MPEG-4 audio   | `.m4a`, `.m4b`, `.m4p`   | ✅                                               |
+| AAC (ADTS)     | `.aac`                   | ✅                                               |
+| AIFF           | `.aiff`, `.aif`, `.aifc` | ✅                                               |
+| Apple CAF      | `.caf`                   | ✅                                               |
+| Matroska audio | `.mka`                   | ✅                                               |
+| WMA            | `.wma`                   | ◐ container-only — symphonia doesn't decode WMA |
 
 ### Animated Images (GIF, WebP) ✅
 
@@ -546,11 +548,11 @@ Universal (fat) Mach-O containers are unwrapped transparently — the host archi
 parsed and the Info view lists every slice. No extract path: sections and symbols are not
 standalone files.
 
-| Format    | Coverage                                                       |
-|-----------|----------------------------------------------------------------|
+| Format    | Coverage                                                        |
+|-----------|-----------------------------------------------------------------|
 | ELF       | executables, shared objects (`.so`), relocatable objects (`.o`) |
 | Mach-O    | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
-| PE / COFF | Windows executables and DLLs                                   |
+| PE / COFF | Windows executables and DLLs                                    |
 
 `object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
 through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files
@@ -655,14 +657,14 @@ than mojibake.
 Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports), and
 each renders as its own block under the **PEM** info section:
 
-| Entry             | Surface fields                                                                                                                                                                                                                            |
-|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Entry             | Surface fields                                                                                                                                                                                                                                                                                                                           |
+|-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | X.509 certificate | label, version, subject, issuer, serial (hex), NotBefore / NotAfter (UTC ISO 8601), days remaining (warning-coloured ≤ 30 days; negative for expired), public key algorithm + bits, signature algorithm, SANs (DNS / IP / email / URI), CA flag, self-signed flag, key usage, extended key usage, SHA-1 fingerprint, SHA-256 fingerprint |
-| CSR (PKCS#10)     | label, subject, requested SANs (DNS / IP / email / URI), public key algorithm + bits, signature algorithm                                                                                                                                  |
-| CRL               | label, issuer, This Update / Next Update, revoked entry count, signature algorithm                                                                                                                                                         |
-| Private key       | label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size (best-effort from PKCS#1 / SEC1 / PKCS#8). Encrypted / opaque keys (`ENCRYPTED PRIVATE KEY`, `OPENSSH PRIVATE KEY`) show structural info only — no password prompt    |
-| Public key        | label, key type, bit size (parsed from SPKI envelope)                                                                                                                                                                                      |
-| SSH public key    | algorithm, bits, comment, SHA-256 fingerprint (matches `ssh-keygen -l -E sha256` output)                                                                                                                                                   |
+| CSR (PKCS#10)     | label, subject, requested SANs (DNS / IP / email / URI), public key algorithm + bits, signature algorithm                                                                                                                                                                                                                                |
+| CRL               | label, issuer, This Update / Next Update, revoked entry count, signature algorithm                                                                                                                                                                                                                                                       |
+| Private key       | label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size (best-effort from PKCS#1 / SEC1 / PKCS#8). Encrypted / opaque keys (`ENCRYPTED PRIVATE KEY`, `OPENSSH PRIVATE KEY`) show structural info only — no password prompt                                                                                                 |
+| Public key        | label, key type, bit size (parsed from SPKI envelope)                                                                                                                                                                                                                                                                                    |
+| SSH public key    | algorithm, bits, comment, SHA-256 fingerprint (matches `ssh-keygen -l -E sha256` output)                                                                                                                                                                                                                                                 |
 
 Decode failures don't suppress the rest of the section — a malformed block lands in a per-entry
 **Parse error** row so a single bad PEM in a chain doesn't hide the others. Unrecognised PEM
@@ -751,19 +753,19 @@ descendable entry. `n` / `p` step matches with wrap. Same `/` search is wired in
 ListingMode consumer — archives, ISO 9660, PDF `/EmbeddedFiles`, audio embed bundles,
 directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 
-| Format      | Extensions                     | Status |
-|-------------|--------------------------------|--------|
-| ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅      |
-| Tar         | `.tar`                         | ✅      |
-| Tar + gzip  | `.tar.gz`, `.tgz`              | ✅      |
-| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅      |
-| Tar + xz    | `.tar.xz`, `.txz`              | ✅      |
-| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅      |
-| Tar + lz4   | `.tar.lz4`, `.tlz4`            | ✅      |
-| 7-Zip       | `.7z`                          | ✅      |
-| cpio        | `.cpio`                        | ✅      |
-| cpio + gzip | `.cpio.gz`                     | ✅      |
-| ar / Debian | `.ar`, `.deb`, `.a`            | ✅      |
+| Format      | Extensions                     | Status    |
+|-------------|--------------------------------|-----------|
+| ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅         |
+| Tar         | `.tar`                         | ✅         |
+| Tar + gzip  | `.tar.gz`, `.tgz`              | ✅         |
+| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅         |
+| Tar + xz    | `.tar.xz`, `.txz`              | ✅         |
+| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅         |
+| Tar + lz4   | `.tar.lz4`, `.tlz4`            | ✅         |
+| 7-Zip       | `.7z`                          | ✅         |
+| cpio        | `.cpio`                        | ✅         |
+| cpio + gzip | `.cpio.gz`                     | ✅         |
+| ar / Debian | `.ar`, `.deb`, `.a`            | ✅         |
 | RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
@@ -783,25 +785,25 @@ adds a Compression row showing the codec and the size before / after decompressi
 detour. Decompression failures fall back to a Hex view of the raw compressed bytes plus a
 warning row in info.
 
-| Format | Extensions          | Status |
-|--------|---------------------|--------|
-| gzip   | `.gz`               | ✅      |
-| bzip2  | `.bz2`              | ✅      |
-| xz     | `.xz`               | ✅      |
-| zstd   | `.zst`              | ✅      |
-| lz4    | `.lz4`              | ✅      |
-| brotli | `.br`               | ☐ planned |
+| Format | Extensions | Status    |
+|--------|------------|-----------|
+| gzip   | `.gz`      | ✅         |
+| bzip2  | `.bz2`     | ✅         |
+| xz     | `.xz`      | ✅         |
+| zstd   | `.zst`     | ✅         |
+| lz4    | `.lz4`     | ✅         |
+| brotli | `.br`      | ☐ planned |
 
 Decompressed output is capped at 256 MiB. Anything larger surfaces a warning and the viewer
 shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
 
 #### Disk Images ✅
 
-| Format | Extensions             | Status                                                  |
-|--------|------------------------|---------------------------------------------------------|
-| ISO    | `.iso`                 | ✅ PVD metadata + recursive directory listing (Joliet)   |
-| DMG    | `.dmg`                 | ✅ UDIF trailer-only (no partition map walk yet)        |
-| Raw    | `.img`, `.bin`, `.dd`  | ✅ MBR partition table walk in info (no listing)        |
+| Format | Extensions            | Status                                                |
+|--------|-----------------------|-------------------------------------------------------|
+| ISO    | `.iso`                | ✅ PVD metadata + recursive directory listing (Joliet) |
+| DMG    | `.dmg`                | ✅ UDIF trailer-only (no partition map walk yet)       |
+| Raw    | `.img`, `.bin`, `.dd` | ✅ MBR partition table walk in info (no listing)       |
 
 **ISO 9660** opens to a **TOC view** (the same tree-style listing archive containers use): one row
 per file/directory with size, mtime, and 8.3 / Joliet name; depth tracked by indented tree glyphs.
@@ -946,8 +948,10 @@ content is already fully visible. The gutter does not pan; it stays anchored to 
 uppercase character makes the whole query case-sensitive. Available in every text-rendering
 view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the rendered HTML
 view, the EPUB **Read** view, the DOCX / ODT / RTF **Read** views, the PDF **Text** view, the
-CSV / TSV **Table** view (single-cell scope — a query can't span a delimiter), and every
-listing TOC (leaf-name scope — matches the last path segment only, so `sub/` finds nothing).
+CSV / TSV **Table** view and the SQLite contents view that shares it (single-cell scope —
+a query can't span a delimiter; over a SQLite table the scan currently covers only the
+buffered window), and every listing TOC (leaf-name scope — matches the last path segment only, so
+`sub/` finds nothing).
 The shared search primitives in `viewer/search.rs` back all of them — each view scans its
 own content domain into one.
 
@@ -1020,32 +1024,32 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 ### Navigation
 
-| Key                   | Action       |
-|-----------------------|--------------|
-| `q`                   | Quit         |
+| Key                   | Action                                                              |
+|-----------------------|---------------------------------------------------------------------|
+| `q`                   | Quit                                                                |
 | `Esc`                 | Pop the session stack (exit at depth 1, return to parent otherwise) |
-| `Up` / `k`            | Scroll up    |
-| `Down` / `j`          | Scroll down  |
-| `Page Up`             | Page up      |
-| `Page Down` / `Space` | Page down    |
-| `Home` / `g`          | Go to top    |
-| `End` / `G`           | Go to bottom |
-| `Enter`               | Descend into selection (recursive peek) |
-| `e`                   | Extract selected entry / current frame |
-| `s`                   | Toggle sticky parent-directory breadcrumb in listing TOCs |
+| `Up` / `k`            | Scroll up                                                           |
+| `Down` / `j`          | Scroll down                                                         |
+| `Page Up`             | Page up                                                             |
+| `Page Down` / `Space` | Page down                                                           |
+| `Home` / `g`          | Go to top                                                           |
+| `End` / `G`           | Go to bottom                                                        |
+| `Enter`               | Descend into selection (recursive peek)                             |
+| `e`                   | Extract selected entry / current frame                              |
+| `s`                   | Toggle sticky parent-directory breadcrumb in listing TOCs           |
 
 ### Views and Modes
 
-| Key             | Action                                      |
-|-----------------|---------------------------------------------|
-| `Tab`           | Cycle the file's view modes forward         |
-| `Shift+Tab`     | Cycle the file's view modes backward        |
-| `i`             | Jump to file info screen                    |
-| `h` / `?`       | Toggle help screen                          |
-| `t` / `T`       | Cycle theme forward / backward              |
-| `c` / `C`       | Cycle output color mode forward / backward  |
-| `x`             | Toggle hex dump (no-op when hex is default) |
-| `a`             | Toggle about / status screen                |
+| Key         | Action                                      |
+|-------------|---------------------------------------------|
+| `Tab`       | Cycle the file's view modes forward         |
+| `Shift+Tab` | Cycle the file's view modes backward        |
+| `i`         | Jump to file info screen                    |
+| `h` / `?`   | Toggle help screen                          |
+| `t` / `T`   | Cycle theme forward / backward              |
+| `c` / `C`   | Cycle output color mode forward / backward  |
+| `x`         | Toggle hex dump (no-op when hex is default) |
+| `a`         | Toggle about / status screen                |
 
 ### Search *(context: text / source / structured views)*
 
@@ -1065,15 +1069,15 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 
 ### Image Views *(context)*
 
-| Key              | Action                                                        |
-|------------------|---------------------------------------------------------------|
+| Key              | Action                                                                 |
+|------------------|------------------------------------------------------------------------|
 | `m` / `M`        | Cycle rendering mode forward / backward (full/block/geo/ascii/contour) |
-| `b` / `B`        | Cycle background forward / backward (auto/black/white/checkerboard) |
-| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)               |
-| `Left` / `Right` | Pan horizontally (FitHeight)                                  |
-| `+` / `-`        | Zoom in / out in 1.25× steps (viewport-centre anchored)       |
-| `0`              | Reset zoom to 1× and pan to origin                            |
-| `1`..`9`         | Jump to whole-number preset zoom (1×..9×)                     |
+| `b` / `B`        | Cycle background forward / backward (auto/black/white/checkerboard)    |
+| `f`              | Cycle fit mode (Contain / FitWidth / FitHeight)                        |
+| `Left` / `Right` | Pan horizontally (FitHeight)                                           |
+| `+` / `-`        | Zoom in / out in 1.25× steps (viewport-centre anchored)                |
+| `0`              | Reset zoom to 1× and pan to origin                                     |
+| `1`..`9`         | Jump to whole-number preset zoom (1×..9×)                              |
 
 ### Animated Image Views *(context: GIF, WebP)*
 
@@ -1089,18 +1093,18 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 `Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
 `n` / `p` exclusively (the previous Left/Right frame-step bindings are gone).
 
-### CSV / TSV Table *(context)*
+### Streaming Table — CSV / TSV / SQLite contents *(context)*
 
-| Key       | Action                                                        |
-|-----------|---------------------------------------------------------------|
-| `Shift+H` | Toggle CSV header row on / off (override the heuristic)       |
-| `Shift+R` | Reflow column widths from the currently-visible viewport      |
+| Key       | Action                                                   |
+|-----------|----------------------------------------------------------|
+| `Shift+H` | Toggle header row on / off (CSV: override the heuristic) |
+| `Shift+R` | Reflow column widths from the currently-visible viewport |
 
 ### Font Specimen *(context)*
 
-| Key       | Action                                          |
-|-----------|-------------------------------------------------|
-| `n` / `p` | Step to the next / previous face in a `.ttc`    |
+| Key       | Action                                       |
+|-----------|----------------------------------------------|
+| `n` / `p` | Step to the next / previous face in a `.ttc` |
 
 The help screen (`h`) is the authoritative in-app reference — all bindings derive from a single
 source (`viewer/ui/keys.rs::Action::bindings`).
@@ -1181,32 +1185,32 @@ syntax-highlighted code is downgraded along with everything else.
 
 ## CLI Options
 
-| Option           | Short | Description                                                   | Status |
-|------------------|-------|---------------------------------------------------------------|--------|
-| `--help`         | `-h`  | Show help screen and exit (short / long forms)                | ✅      |
-| `--version`      | `-V`  | Show version info and exit                                    | ✅      |
-| `--print`        | `-p`  | Force print mode (direct stdout)                              | ✅      |
-| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   | ✅      |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      | ✅      |
-| `--theme`        | `-t`  | Syntax highlighting theme                                     | ✅      |
-| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)      | ✅      |
-| `--language`     | `-L`  | Force syntax language                                         | ✅      |
-| `--width`        | `-w`  | Image rendering width in characters                           | ✅      |
-| `--image-mode`   | `-m`  | Image rendering mode                                          | ✅      |
-| `--edge-density` |       | Edge density target for `--image-mode contour`                | ✅      |
-| `--info`         | `-i`  | Show file info instead of contents                            | ✅      |
+| Option           | Short | Description                                                                                                 | Status |
+|------------------|-------|-------------------------------------------------------------------------------------------------------------|--------|
+| `--help`         | `-h`  | Show help screen and exit (short / long forms)                                                              | ✅      |
+| `--version`      | `-V`  | Show version info and exit                                                                                  | ✅      |
+| `--print`        | `-p`  | Force print mode (direct stdout)                                                                            | ✅      |
+| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                 | ✅      |
+| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                                                                    | ✅      |
+| `--theme`        | `-t`  | Syntax highlighting theme                                                                                   | ✅      |
+| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)                                                    | ✅      |
+| `--language`     | `-L`  | Force syntax language                                                                                       | ✅      |
+| `--width`        | `-w`  | Image rendering width in characters                                                                         | ✅      |
+| `--image-mode`   | `-m`  | Image rendering mode                                                                                        | ✅      |
+| `--edge-density` |       | Edge density target for `--image-mode contour`                                                              | ✅      |
+| `--info`         | `-i`  | Show file info instead of contents                                                                          | ✅      |
 | `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) | ✅      |
-| `--utc`          |       | Show timestamps in UTC (default: local + offset)              | ✅      |
-| `--background`   |       | Image transparency background (auto/black/white/checkerboard) | ✅      |
-| `--margin`       |       | Image margin in transparent pixels                            | ✅      |
-| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)          | ✅      |
-| `--no-svg-anim`  |       | Force static render for animated SVG                          | ✅      |
-| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           | ✅      |
-| `--extract`      | `-x`  | Extract a single inner item from a container by key           | ✅      |
-| `--output`       | `-o`  | Output path for `--extract` (or `-` for stdout)               | ✅      |
-| `--extract-size` |       | Output pixel size for animation / SVG frame extract           | ✅      |
-| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  | ✅      |
-| `--update`       |       | Check for newer release and re-run `install.sh`               | ✅      |
+| `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                            | ✅      |
+| `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                               | ✅      |
+| `--margin`       |       | Image margin in transparent pixels                                                                          | ✅      |
+| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)                                                        | ✅      |
+| `--no-svg-anim`  |       | Force static render for animated SVG                                                                        | ✅      |
+| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)                                                         | ✅      |
+| `--extract`      | `-x`  | Extract a single inner item from a container by key                                                         | ✅      |
+| `--output`       | `-o`  | Output path for `--extract` (or `-` for stdout)                                                             | ✅      |
+| `--extract-size` |       | Output pixel size for animation / SVG frame extract                                                         | ✅      |
+| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                | ✅      |
+| `--update`       |       | Check for newer release and re-run `install.sh`                                                             | ✅      |
 
 `--plain` is the single "sterile output" knob: it implies `--color plain` and additionally
 disables syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered

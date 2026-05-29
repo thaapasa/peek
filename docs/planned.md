@@ -8,10 +8,10 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 
 ### Markup / Documentation ◐
 
-| Format   | Extensions                                              | Status |
-|----------|---------------------------------------------------------|--------|
-| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn`  | ✅      |
-| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`                         | ◐      |
+| Format   | Extensions                                             | Status |
+|----------|--------------------------------------------------------|--------|
+| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` | ✅      |
+| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`                        | ◐      |
 
 Markdown rendered read mode (CommonMark + GFM, syntect-highlighted fenced code, box-drawing
 tables, task lists, footnotes, frontmatter strip) shipped — see
@@ -324,31 +324,17 @@ Stretch:
 
 Brotli would slot into the same transparent-decompress pipeline (`brotli` crate).
 
-### Databases ☐
-
-| Format | Extensions                   |
-|--------|------------------------------|
-| SQLite | `.db`, `.sqlite`, `.sqlite3` |
-
-Read-only schema-first viewer: list tables/views/indices/triggers with row counts, column
-definitions (name, type, NOT NULL, default, PK), foreign keys. Per-table preview (first N rows) as
-a Tab subview is a stretch; schema dump is the primary value.
-
-File info: SQLite version, page size/count, encoding, user_version, application_id.
-
-Crate: `rusqlite` (opens read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`).
-
 ### Certificates and Keys — DER / PKCS#12 / JWK ☐
 
 PEM ships (see [features.md](features.md#certificates-and-keys-) — X.509 cert / CSR / CRL /
 private + public keys / SSH pubkey, fingerprints, SANs, key usage, validity, days remaining).
 Still open:
 
-| Format        | Extensions       | Notes                                                                                                                                                                                                  |
-|---------------|------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| X.509 DER     | `.der`           | Today `.crt` / `.cer` carrying raw DER fall through to the hex viewer. Wire a magic-byte / leading `0x30 0x82` sniff and decode through the same `x509-parser` path the PEM viewer uses                |
-| PKCS#12 / PFX | `.p12`, `.pfx`   | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
-| JWK / JWKS    | `.jwk`, `.jwks`  | JSON form — the structured viewer already pretty-prints these. A cert sidecar would add key thumbprint (RFC 7638) and a normalised key-type / bits / curve row                                          |
+| Format        | Extensions      | Notes                                                                                                                                                                                                 |
+|---------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| X.509 DER     | `.der`          | Today `.crt` / `.cer` carrying raw DER fall through to the hex viewer. Wire a magic-byte / leading `0x30 0x82` sniff and decode through the same `x509-parser` path the PEM viewer uses               |
+| PKCS#12 / PFX | `.p12`, `.pfx`  | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
+| JWK / JWKS    | `.jwk`, `.jwks` | JSON form — the structured viewer already pretty-prints these. A cert sidecar would add key thumbprint (RFC 7638) and a normalised key-type / bits / curve row                                        |
 
 Crates: `der` / `cms` (DER + PKCS#7), `pkcs12` (encrypted bags). JWK can ride the existing
 `serde_json` dependency.
@@ -374,7 +360,8 @@ Symbols tables, universal-binary unwrapping (see [features.md](features.md)). St
 
 Exact-substring search with smart-case shipped for every text-rendering view — `ContentMode`,
 the rendered HTML view, the EPUB / DOCX / ODT / RTF read views, the PDF text view, the
-CSV / TSV table view (single-cell scope), and listings (leaf-name scope) — all on a shared
+CSV / TSV table view and the SQLite contents view that shares it (single-cell scope; SQLite
+scans only the buffered window today), and listings (leaf-name scope) — all on a shared
 `SearchState`. See [features.md → Text Search](features.md#text-search-). Still planned:
 
 - **Regex matching** — the "desirable" from the original spec. Plain substring is the shipped
