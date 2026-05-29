@@ -44,10 +44,12 @@ src/
                          .tmTheme data; StyleMode (truecolor/256/16/grayscale/plain); SGR
                          encoders + tokenizer + ActiveStyle; ThemeManager
   types/               — Per-file-type modules (each owns reader + info + view-mode):
-                         binary, text, markdown, sql, css, structured (JSON/YAML/TOML/XML),
-                         csv, image (+ ASCII pipeline + SVG anim), html, ebook (epub),
-                         document (docx/odt/rtf), pdf, comic (cbz), svg, audio, archive
-                         (zip/tar/7z/cpio/ar), directory, disk_image (iso/dmg), objfile, classfile,
+                         binary, text, markdown, sql, sqlite (read-only via bundled
+                         rusqlite — schema listing + streaming row viewer), css,
+                         structured (JSON/YAML/TOML/XML), csv, image (+ ASCII pipeline +
+                         SVG anim), html, ebook (epub), document (docx/odt/rtf), pdf,
+                         comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
+                         disk_image (iso/dmg), objfile, classfile,
                          cert (PEM X.509 / CSR / CRL / keys / SSH pubkey),
                          font (TTF/OTF/TTC — metadata + fontdue-rasterised specimen)
   viewer/              — Mode trait + ModeId + RenderCtx + ExtractTarget; compose_modes
@@ -59,8 +61,10 @@ src/
     modes/             — Shared modes: content (streamed text/syntax/structured/SVG),
                          pretty_view, gutter, hex, info, help, about, rendered_text<R> (generic
                          whole-document read mode for DOCX/ODT/RTF/HTML/Markdown/PDF text)
-    table/             — Generic aligned-table view (objfile + classfile) + TableMode (sticky
-                         header, search, pan). CsvTableMode is separate — streams differently
+    table/             — Two aligned-table flavours under one roof: TableMode (materialised:
+                         objfile / classfile) + RowsTableMode (streaming via the RowSource
+                         trait: CSV + SQLite contents). Shared visual shape, separate
+                         data models
     ui/                — alternate-screen / status line / term-size; ViewerState (mode stack +
                          extract dispatch + prompt slot); Prompt overlay; ScreenBuffer (diff
                          redraw); Action keybindings; help screen

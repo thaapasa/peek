@@ -13,6 +13,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Syntax highlighting** for 100+ languages via syntect
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
+- **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, PDF, DOCX, ODT, RTF, EPUB, CBZ
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
