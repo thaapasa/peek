@@ -35,11 +35,6 @@ const MAX_EXTRACT_BYTES: u64 = 256 * 1024 * 1024;
 /// syscalls.
 const SPOOL_THRESHOLD: u64 = 16 * 1024 * 1024;
 
-/// Sanity cap on an ar BSD long-name length (`#1/<len>` header). Real
-/// member names fit far under this; a bogus value would otherwise size a
-/// huge buffer from an untrusted field.
-const MAX_AR_NAME: u64 = 4096;
-
 pub fn extract(
     source: &InputSource,
     format: ArchiveFormat,
@@ -396,88 +391,24 @@ fn extract_7z(
     result.unwrap_or_else(|| Err(ExtractError::NotFound(raw_key.to_string())))
 }
 
-/// Extract a single ar entry. ar uses 60-byte ASCII headers; walk
-/// the chain, match the requested name, copy the payload bytes.
+/// Extract a single ar entry via the shared [`ArReader`] header walk —
+/// the same parser the listing path uses. Non-matching members are
+/// skipped by `next_entry`'s drain; the matched body streams to
+/// `materialise`.
 fn extract_ar(
     source: &InputSource,
     target: &Path,
     raw_key: &str,
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
-    const HEADER_LEN: usize = 60;
-    const GLOBAL_MAGIC: &[u8; 8] = b"!<arch>\n";
-
-    let mut reader =
-        crate::types::archive::reader::open_seekable(source).map_err(ExtractError::Other)?;
-    let mut magic = [0u8; 8];
-    reader
-        .read_exact(&mut magic)
-        .map_err(|e| ExtractError::Other(e.into()))?;
-    if &magic != GLOBAL_MAGIC {
-        return Err(ExtractError::Other(anyhow::anyhow!(
-            "not an ar archive: missing !<arch> magic"
-        )));
-    }
-
+    use crate::types::archive::backends::ar::ArReader;
+    let reader = open_seekable(source).map_err(ExtractError::Other)?;
+    let mut ar = ArReader::new(reader).map_err(ExtractError::Other)?;
     let target_str = forward_slash_key(target);
-    let mut header = [0u8; HEADER_LEN];
-    loop {
-        // `read_exact`, not a single `read`: a streaming source
-        // (`RangeReadSeek` for ar-in-archive) can short-read mid-stream,
-        // and treating that as end-of-archive would silently truncate the
-        // walk. A clean EOF at a header boundary ends the chain.
-        match reader.read_exact(&mut header) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(ExtractError::Other(e.into())),
-        }
-        let raw_name = std::str::from_utf8(&header[..16])
-            .unwrap_or("")
-            .trim_end_matches(' ')
-            .trim_end_matches('/')
-            .to_string();
-        let total_size: u64 = std::str::from_utf8(&header[48..58])
-            .ok()
-            .and_then(|s| s.trim().parse().ok())
-            .unwrap_or(0);
-        // BSD long name: `#1/<len>` header, name in payload prefix.
-        let (name, payload_size) = if let Some(rest) = raw_name.strip_prefix("#1/") {
-            let name_len: u64 = rest.trim().parse().unwrap_or(0);
-            // Reject an out-of-range name length before allocating: a real
-            // long name fits well under the cap; a bogus one would
-            // otherwise size a multi-GB buffer.
-            if name_len > total_size || name_len > MAX_AR_NAME {
-                ("?".to_string(), total_size)
-            } else {
-                let mut nbuf = vec![0u8; name_len as usize];
-                reader
-                    .read_exact(&mut nbuf)
-                    .map_err(|e| ExtractError::Other(e.into()))?;
-                let n = std::str::from_utf8(&nbuf)
-                    .unwrap_or("?")
-                    .trim_end_matches('\0')
-                    .to_string();
-                (n, total_size - name_len)
-            }
-        } else {
-            (raw_name, total_size)
-        };
-        let pad = total_size % 2;
-
-        if name == target_str {
-            let body = (&mut reader).take(payload_size);
-            return materialise(body, Some(payload_size), target, raw_key, opts);
-        }
-
-        // Skip the body + padding by streaming to the void — never
-        // allocate a buffer sized by an untrusted header field.
-        let to_skip = payload_size + pad;
-        let skipped = std::io::copy(&mut (&mut reader).take(to_skip), &mut std::io::sink())
-            .map_err(|e| ExtractError::Other(e.into()))?;
-        if skipped != to_skip {
-            return Err(ExtractError::Other(anyhow::anyhow!(
-                "truncated ar archive (expected {to_skip} more bytes, got {skipped})"
-            )));
+    while let Some(entry) = ar.next_entry().map_err(ExtractError::Other)? {
+        if entry.name == target_str {
+            let body = ar.body(entry.size);
+            return materialise(body, Some(entry.size), target, raw_key, opts);
         }
     }
     Err(ExtractError::NotFound(raw_key.to_string()))

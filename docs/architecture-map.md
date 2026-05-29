@@ -252,6 +252,7 @@ src/
         tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/xz/zst/lz4 all stream-decompress (xz via liblzma streaming reader)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
         cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
+        ar.rs          — ar(1) reader for `.deb`. ArReader header-chain state machine drives both list and extract (same split as CpioReader). Decodes BSD `#1/<len>` long names; GNU `//` string table unhandled (members shown lossily)
     directory/
       mod.rs           — Module wiring; re-exports DirectoryMode
       compose.rs       — compose(): DirectoryMode rooted at the source path; suppress `..` row at filesystem root

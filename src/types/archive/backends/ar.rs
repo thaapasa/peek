@@ -1,8 +1,8 @@
-//! ar(1) archive TOC reader. Used for `.deb` packages — Debian
-//! binary packages are an ar archive with three members:
-//! `debian-binary` (text), `control.tar.{gz|xz|zst}`, and
-//! `data.tar.{gz|xz|zst}`. Recursive peek over the data tarball walks
-//! the package's installed files via the existing tar backend.
+//! ar(1) archive reader. Used for `.deb` packages — Debian binary
+//! packages are an ar archive with three members: `debian-binary`
+//! (text), `control.tar.{gz|xz|zst}`, and `data.tar.{gz|xz|zst}`.
+//! Recursive peek over the data tarball walks the package's installed
+//! files via the existing tar backend.
 //!
 //! Format (System V / GNU variant most `.deb` files use):
 //!
@@ -17,15 +17,17 @@
 //!     - 2 bytes:  trailer `` `\n ``
 //! - Payload follows; padded to 2-byte boundary with `\n`.
 //!
-//! Extended naming: GNU-style long names live in a synthetic
-//! `//` member or are prefixed with `#1/<len>`. `.deb` uses short
-//! names exclusively, so we only handle the short-name path here
-//! and lossily display the rest.
+//! Extended naming: GNU-style long names live in a synthetic `//`
+//! member or are prefixed with `#1/<len>`. `.deb` uses short names
+//! exclusively; the BSD `#1/<len>` prefix is decoded, the GNU `//`
+//! string table is not (its members display lossily).
 //!
-//! No payload extraction at the listing layer — the shared archive
-//! `extract` impl reads bytes via the same offset map.
+//! [`ArReader`] is the single header-chain parser, shared by listing
+//! ([`list`]) and the entry [`extract`](crate::types::archive::extract)
+//! path — same split as [`CpioReader`](super::cpio) — so the format
+//! logic lives in exactly one place.
 
-use std::io::Read;
+use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 
@@ -36,49 +38,80 @@ const HEADER_LEN: usize = 60;
 const GLOBAL_MAGIC: &[u8; 8] = b"!<arch>\n";
 const ENTRY_TRAILER: &[u8; 2] = b"`\n";
 
-pub(crate) fn list(mut reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
-    let mut magic = [0u8; 8];
-    reader
-        .read_exact(&mut magic)
-        .context("ar: failed to read global magic")?;
-    if &magic != GLOBAL_MAGIC {
-        bail!("not an ar archive: missing !<arch> magic");
+/// Sanity cap on a BSD long-name length (`#1/<len>` header). Real member
+/// names fit far under this; a bogus value would otherwise size a huge
+/// buffer from an untrusted field.
+const MAX_AR_NAME: u64 = 4096;
+
+/// One ar member header. `size` is the payload size after any BSD
+/// long-name prefix has been stripped.
+pub(crate) struct ArEntry {
+    pub name: String,
+    pub size: u64,
+    pub mtime: Option<i64>,
+    pub mode: Option<u64>,
+}
+
+/// State machine over the ar header chain. Tracks the current entry's
+/// unconsumed payload + padding so the caller can either skip (default
+/// on the next [`Self::next_entry`]) or stream the body via
+/// [`Self::body`] before advancing.
+pub(crate) struct ArReader<R: Read> {
+    inner: R,
+    /// Body + alignment padding of the current entry still to consume
+    /// before the next header can be read.
+    pending: u64,
+}
+
+impl<R: Read> ArReader<R> {
+    /// Open over `inner`, validating the 8-byte global magic.
+    pub(crate) fn new(mut inner: R) -> Result<Self> {
+        let mut magic = [0u8; 8];
+        inner
+            .read_exact(&mut magic)
+            .context("ar: failed to read global magic")?;
+        if &magic != GLOBAL_MAGIC {
+            bail!("not an ar archive: missing !<arch> magic");
+        }
+        Ok(Self { inner, pending: 0 })
     }
 
-    let mut out = Vec::new();
-    let mut header = [0u8; HEADER_LEN];
-    loop {
-        match reader.read(&mut header)? {
-            0 => break,
-            n if n < HEADER_LEN => {
-                // Trailing pad byte; some archives end on an odd byte
-                // followed by a `\n` and nothing else. Bail cleanly.
-                break;
-            }
-            _ => {}
+    /// Advance to the next entry header, draining any unread payload +
+    /// padding of the previous entry first. Returns `Ok(None)` at a clean
+    /// EOF on a header boundary.
+    ///
+    /// Uses `read_exact`, not a single `read`: a streaming source
+    /// (`RangeReadSeek` for ar-in-archive) can short-read mid-stream, and
+    /// treating that as end-of-archive would silently truncate the walk.
+    pub(crate) fn next_entry(&mut self) -> Result<Option<ArEntry>> {
+        self.drain_pending()?;
+
+        let mut header = [0u8; HEADER_LEN];
+        match self.inner.read_exact(&mut header) {
+            Ok(()) => {}
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(e) => return Err(e.into()),
         }
         if &header[58..60] != ENTRY_TRAILER {
-            if header[0] == b'\n' {
-                continue;
-            }
             bail!("ar: malformed entry header (missing trailer)");
         }
+
         let raw_name = decode_name(&header[..16]);
-        let mtime_secs = decode_decimal(&header[16..28]);
+        let mtime = decode_decimal(&header[16..28]);
         let mode = decode_octal(&header[40..48]);
         let total_size: u64 = decode_decimal(&header[48..58]).unwrap_or(0).max(0) as u64;
 
-        // BSD `ar` (used by macOS) encodes names ≥ 16 chars OR
-        // containing spaces as `#1/<len>`, with the actual name
-        // prefixed onto the payload. Strip that prefix so the listing
-        // shows the real filename.
-        let (name, payload_size) = if let Some(rest) = raw_name.strip_prefix("#1/") {
+        // BSD `ar` (macOS) encodes names ≥ 16 chars or containing spaces
+        // as `#1/<len>`, with the real name prefixed onto the payload.
+        // Strip it so callers see the actual filename.
+        let (name, size) = if let Some(rest) = raw_name.strip_prefix("#1/") {
             let name_len: u64 = rest.trim().parse().unwrap_or(0);
-            if name_len > total_size {
+            // Reject an out-of-range length before allocating.
+            if name_len > total_size || name_len > MAX_AR_NAME {
                 ("?".to_string(), total_size)
             } else {
                 let mut nbuf = vec![0u8; name_len as usize];
-                reader
+                self.inner
                     .read_exact(&mut nbuf)
                     .context("ar: failed to read BSD long name")?;
                 let n = std::str::from_utf8(&nbuf)
@@ -91,26 +124,64 @@ pub(crate) fn list(mut reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
             (raw_name, total_size)
         };
 
-        let visible = !matches!(
-            name.as_str(),
+        // Payload + 2-byte alignment padding still ahead. `total_size`
+        // includes any BSD name prefix already read, so what's left is
+        // the remaining payload (`size`) plus the pad.
+        self.pending = size + total_size % 2;
+        Ok(Some(ArEntry {
+            name,
+            size,
+            mtime,
+            mode,
+        }))
+    }
+
+    /// Stream the current entry's body as a size-limited reader. Call
+    /// right after `next_entry` returned the matching entry; the trailing
+    /// padding is drained on the next `next_entry`.
+    pub(crate) fn body(&mut self, size: u64) -> io::Take<&mut R> {
+        // Leave only the alignment padding pending.
+        self.pending = self.pending.saturating_sub(size);
+        (&mut self.inner).take(size)
+    }
+
+    fn drain_pending(&mut self) -> Result<()> {
+        if self.pending == 0 {
+            return Ok(());
+        }
+        let want = self.pending;
+        let n = io::copy(&mut (&mut self.inner).take(want), &mut io::sink())?;
+        if n != want {
+            bail!("truncated ar archive (expected {want} more bytes)");
+        }
+        self.pending = 0;
+        Ok(())
+    }
+}
+
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+    let mut ar = ArReader::new(reader)?;
+    let mut out = Vec::new();
+    while let Some(entry) = ar.next_entry()? {
+        // Synthetic GNU members (long-name table, symbol index) aren't
+        // real files — hide them from the TOC.
+        let hidden = matches!(
+            entry.name.as_str(),
             "//" | "/" | "/SYM64/" | "__.SYMDEF SORTED" | "__.SYMDEF"
         );
-        if visible {
-            out.push(FlatEntry {
-                path: name,
-                size: payload_size,
-                mtime: mtime_secs
-                    .and_then(|s| time_from_epoch_secs(s as u64))
-                    .map(EntryMtime::Utc),
-                mode: mode.map(|m| m as u32),
-                is_dir: false,
-            });
+        if hidden {
+            continue;
         }
-
-        let pad = total_size % 2;
-        // total_size already accounts for the BSD name prefix, so skip
-        // exactly the payload bytes left after the name read above.
-        skip_bytes(&mut reader, payload_size + pad)?;
+        out.push(FlatEntry {
+            path: entry.name,
+            size: entry.size,
+            mtime: entry
+                .mtime
+                .and_then(|s| time_from_epoch_secs(s as u64))
+                .map(EntryMtime::Utc),
+            mode: entry.mode.map(|m| m as u32),
+            is_dir: false,
+        });
     }
     Ok(out)
 }
@@ -132,19 +203,6 @@ fn decode_octal(bytes: &[u8]) -> Option<u64> {
         return None;
     }
     u64::from_str_radix(s, 8).ok()
-}
-
-fn skip_bytes(reader: &mut Box<dyn ReadSeek>, mut count: u64) -> Result<()> {
-    let mut buf = [0u8; 4096];
-    while count > 0 {
-        let want = (count as usize).min(buf.len());
-        let n = reader.read(&mut buf[..want])?;
-        if n == 0 {
-            break;
-        }
-        count -= n as u64;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -196,5 +254,24 @@ mod tests {
     fn rejects_non_ar() {
         let reader: Box<dyn ReadSeek> = Box::new(Cursor::new(b"not an ar archive!".to_vec()));
         assert!(list(reader).is_err());
+    }
+
+    /// Two entries with an odd-size payload (forces a pad byte) — the
+    /// reader must drain payload + padding to land on the next header.
+    #[test]
+    fn walks_padded_multi_entry() {
+        let mut bytes = synth_ar("first", b"odd"); // 3 bytes → 1 pad
+        bytes.extend_from_slice(&synth_ar_no_magic("second", b"two\n"));
+        let reader: Box<dyn ReadSeek> = Box::new(Cursor::new(bytes));
+        let entries = list(reader).unwrap();
+        let names: Vec<&str> = entries.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(names, vec!["first", "second"]);
+        assert_eq!(entries[0].size, 3);
+        assert_eq!(entries[1].size, 4);
+    }
+
+    fn synth_ar_no_magic(entry_name: &str, payload: &[u8]) -> Vec<u8> {
+        let full = synth_ar(entry_name, payload);
+        full[GLOBAL_MAGIC.len()..].to_vec()
     }
 }
