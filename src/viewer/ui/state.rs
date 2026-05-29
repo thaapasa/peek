@@ -547,6 +547,19 @@ impl ViewerState {
             self.flash = Some(format!("peek stack at max depth ({MAX_STACK_DEPTH})"));
             return Ok(());
         }
+        // Mode-provided direct frame (e.g. SQLite table → row viewer)
+        // bypasses the extract pipeline entirely.
+        let frame_idx = self.active_frame_idx();
+        let active = self.frames[frame_idx].active;
+        if let Some(result) = self.frames[frame_idx].modes[active].build_descend_frame() {
+            return match result {
+                Ok(frame) => self.push_direct_frame(frame),
+                Err(e) => {
+                    self.flash = Some(format!("descend failed: {e:#}"));
+                    Ok(())
+                }
+            };
+        }
         let Some(key) = self.extract_target_key() else {
             self.flash = Some("nothing to descend into".to_string());
             return Ok(());
@@ -566,6 +579,35 @@ impl ViewerState {
             }
         };
         self.push_extracted(extracted)
+    }
+
+    /// Push a mode-supplied descend frame onto the session stack
+    /// without going through extract / re-detect. Used by modes that
+    /// already know the source, file type, and modes for the next
+    /// frame (SQLite contents → row viewer). Gathers `FileInfo` from
+    /// the supplied source + detected so the new frame's InfoMode has
+    /// a populated panel.
+    fn push_direct_frame(&mut self, frame: crate::viewer::modes::DescendFrame) -> Result<()> {
+        let crate::viewer::modes::DescendFrame {
+            source,
+            detected,
+            modes,
+        } = frame;
+        let file_info = match crate::info::gather(&source, &detected) {
+            Ok(info) => info,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e:#}"));
+                return Ok(());
+            }
+        };
+        let session = SessionFrame::new(source, detected, file_info, modes);
+        self.frames.push(session);
+        self.screen.invalidate();
+        Ok(())
+    }
+
+    fn active_frame_idx(&self) -> usize {
+        self.frames.len() - 1
     }
 
     fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {

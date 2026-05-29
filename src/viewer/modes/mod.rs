@@ -186,6 +186,17 @@ pub(crate) enum ExtractTarget {
     FrameIndex(usize),
 }
 
+/// Pre-built descend frame supplied by [`Mode::build_descend_frame`].
+/// `descend()` pushes this as a new session frame, skipping the
+/// extract → detect → compose pipeline. Use when the next frame is
+/// a synthetic view over the *current* source (e.g. browsing a single
+/// SQLite table) rather than a separate extracted file.
+pub(crate) struct DescendFrame {
+    pub source: InputSource,
+    pub detected: crate::input::detect::Detected,
+    pub modes: Vec<Box<dyn Mode>>,
+}
+
 /// One renderable + interactive view of a file.
 pub(crate) trait Mode {
     fn id(&self) -> ModeId;
@@ -351,6 +362,18 @@ pub(crate) trait Mode {
 
     /// Selection the extract key targets. `None` = no-op for this mode.
     fn extract_target(&self) -> Option<ExtractTarget> {
+        None
+    }
+
+    /// Optional override for `Action::Descend`. Returning `Some(frame)`
+    /// makes the viewer push the supplied frame directly, bypassing
+    /// the extract → detect → compose pipeline. Returning `None` (the
+    /// default) defers to the standard extract path keyed off
+    /// [`Self::extract_target`]. Use this when the next frame is a
+    /// synthetic view backed by the *current* source — e.g. a SQLite
+    /// table's rows — and you'd otherwise have to materialise the
+    /// whole thing to a temp file to fit the extract pipeline.
+    fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
         None
     }
 

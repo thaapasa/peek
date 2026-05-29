@@ -11,6 +11,7 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::format::SqliteFormat;
+use crate::types::sqlite::listing_mode::{CONTENTS_SUFFIX, SqliteListingMode};
 use crate::types::sqlite::reader::SqliteReader;
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
@@ -30,7 +31,7 @@ pub(crate) const KIND_TRIGGERS: &str = "triggers";
 
 pub fn compose(
     source: &InputSource,
-    _detected: &Detected,
+    detected: &Detected,
     _args: &Args,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
@@ -43,11 +44,11 @@ pub fn compose(
             vec![format!("Failed to read SQLite catalogue: {e:#}")],
         ),
     };
-    modes.push(Box::new(ListingMode::new(
-        fmt.label(),
-        "Schema",
-        entries,
-        warnings,
+    let listing = ListingMode::new(fmt.label(), "Schema", entries, warnings);
+    modes.push(Box::new(SqliteListingMode::new(
+        listing,
+        source.clone(),
+        detected.clone(),
     )));
     Ok(())
 }
@@ -60,18 +61,44 @@ fn build_entries(source: &InputSource) -> Result<Vec<Entry>> {
 
 fn catalog_to_entries(catalog: &SqliteCatalog) -> Vec<Entry> {
     let mut out = Vec::with_capacity(4);
-    push_group(&mut out, KIND_TABLES, &catalog.tables);
-    push_group(&mut out, KIND_VIEWS, &catalog.views);
-    push_group(&mut out, KIND_INDEXES, &catalog.indexes);
-    push_group(&mut out, KIND_TRIGGERS, &catalog.triggers);
+    push_group(
+        &mut out,
+        KIND_TABLES,
+        &catalog.tables,
+        /*row_bearing=*/ true,
+    );
+    push_group(
+        &mut out,
+        KIND_VIEWS,
+        &catalog.views,
+        /*row_bearing=*/ true,
+    );
+    push_group(
+        &mut out,
+        KIND_INDEXES,
+        &catalog.indexes,
+        /*row_bearing=*/ false,
+    );
+    push_group(
+        &mut out,
+        KIND_TRIGGERS,
+        &catalog.triggers,
+        /*row_bearing=*/ false,
+    );
     out
 }
 
-fn push_group(out: &mut Vec<Entry>, name: &str, entities: &[Entity]) {
+fn push_group(out: &mut Vec<Entry>, name: &str, entities: &[Entity], row_bearing: bool) {
     if entities.is_empty() {
         return;
     }
-    let children: Vec<Entry> = entities.iter().map(schema_entry).collect();
+    let mut children: Vec<Entry> = Vec::with_capacity(entities.len() * 2);
+    for entity in entities {
+        children.push(schema_entry(entity));
+        if row_bearing {
+            children.push(contents_entry(entity));
+        }
+    }
     out.push(Entry {
         name: name.to_string(),
         size: 0,
@@ -89,6 +116,21 @@ fn schema_entry(entity: &Entity) -> Entry {
     Entry {
         name: format!("{}{}", entity.name, SCHEMA_SUFFIX),
         size,
+        mtime: None,
+        mode: None,
+        kind: EntryKind::File,
+    }
+}
+
+fn contents_entry(entity: &Entity) -> Entry {
+    // `size` mirrors the row count for contents rows so users scanning
+    // the listing can compare table populations at a glance. Not the
+    // byte size, deliberately — bytes are uninteresting for a logical
+    // row view and we already surface the database's page count in
+    // InfoMode.
+    Entry {
+        name: format!("{}{}", entity.name, CONTENTS_SUFFIX),
+        size: entity.row_count,
         mtime: None,
         mode: None,
         kind: EntryKind::File,
