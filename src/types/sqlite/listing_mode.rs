@@ -28,12 +28,8 @@ use crate::viewer::modes::{
 use crate::viewer::search::SearchTarget;
 use crate::viewer::ui::{Action, HelpEntry};
 
-use super::compose::{KIND_TABLES, KIND_VIEWS};
+use super::compose::{CONTENTS_SUFFIX, KIND_TABLES, KIND_VIEWS};
 use super::table_mode::build as build_table_mode;
-
-/// Suffix the listing uses for contents rows. Mirrors what
-/// [`super::compose`] emits.
-pub(crate) const CONTENTS_SUFFIX: &str = ".csv";
 
 pub(crate) struct SqliteListingMode {
     inner: ListingMode,
@@ -190,16 +186,13 @@ impl Mode for SqliteListingMode {
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        // Schema rows: forward so the extract path runs. Contents
-        // rows: hide from the extract path so it can't try to extract
-        // them — `build_descend_frame` handles Enter, and the `e`
-        // extract command flashes "nothing selected" rather than
-        // emitting a malformed key.
-        let target = self.inner.extract_target()?;
-        match &target {
-            ExtractTarget::EntryPath(p) if p.ends_with(CONTENTS_SUFFIX) => None,
-            _ => Some(target),
-        }
+        // Forward unchanged for both `.sql` and `.csv` rows — the
+        // extract command (`e`) hands the path to `super::extract`,
+        // which dumps the DDL or streams the rows out as CSV. The
+        // `build_descend_frame` override above still wins for Enter on
+        // contents rows, so Descend opens the streaming row viewer
+        // instead of going through the temp-file extract path.
+        self.inner.extract_target()
     }
 
     fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {

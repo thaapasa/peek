@@ -11,7 +11,7 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::format::SqliteFormat;
-use crate::types::sqlite::listing_mode::{CONTENTS_SUFFIX, SqliteListingMode};
+use crate::types::sqlite::listing_mode::SqliteListingMode;
 use crate::types::sqlite::reader::SqliteReader;
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
@@ -21,6 +21,11 @@ use crate::viewer::modes::Mode;
 /// the user opens when the row is Enter'd — keeps the listing's leaf
 /// names self-describing (`books.sql` reads as "books' DDL").
 pub(crate) const SCHEMA_SUFFIX: &str = ".sql";
+
+/// File suffix used for contents-row inner_paths. Drilling in via Enter
+/// pushes a streaming row viewer; extracting via `e` dumps the rows
+/// to a CSV file on disk (see [`super::extract`]).
+pub(crate) const CONTENTS_SUFFIX: &str = ".csv";
 
 /// Top-level kind directory names used in inner_paths. Must match the
 /// arms in [`super::extract::extract`].

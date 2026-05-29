@@ -53,6 +53,15 @@ view. Press `Esc` to return to the listing.
 
 The schema leaf can also be **extracted** to disk with `e` — same as any archive entry.
 
+Contents leaves (`<name>.csv`) extract too: `e` (or `peek --extract tables/books.csv
+library.sqlite`) streams `SELECT * FROM "<entity>"` through a CSV writer into a
+tempfile and saves it where you point the prompt. Cell mapping in extracts:
+
+- `NULL` → empty cell (standard CSV convention; lossy vs empty string).
+- `INTEGER` / `REAL` / `TEXT` → their display form.
+- `BLOB` → SQL hex literal `X'68656c6c6f'`. Lossless and round-trippable into an
+  `INSERT` statement, at the cost of size for large blobs.
+
 ## Contents view (`<name>.csv`)
 
 Enter on a contents leaf opens a **streaming row view**:

@@ -627,7 +627,10 @@ Drill-down is split by leaf suffix:
   `RowSource` trait); BLOBs render as `<blob: N bytes>` (inline hex preview deferred).
   Per-column alignment is inferred from declared type affinity: `INT` / `REAL` /
   `NUMERIC` / `DECIMAL` right-align, everything text-shaped (`CHAR` / `CLOB` / `TEXT` /
-  `DATE` / `TIME` / `BOOL`) stays left.
+  `DATE` / `TIME` / `BOOL`) stays left. `e` extracts the rows to a CSV file on disk
+  by streaming `SELECT *` through a `csv::Writer` into a tempfile — NULL → empty,
+  numbers / text → display form, BLOB → SQL hex literal `X'…'` (lossless,
+  round-trippable into an `INSERT`).
 
 Sources without an on-disk path (stdin, in-memory, extracted from another container)
 spool to a `NamedTempFile` that lives for the connection's lifetime, so piped databases
