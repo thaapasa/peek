@@ -32,58 +32,14 @@ fn extract_iso(source: &InputSource, key: &str) -> Result<Extracted, ExtractErro
         .ok_or_else(|| ExtractError::NotFound(key.to_string()))?;
 
     let suggested_name = suggested_name(&target);
-    let extracted_source = build_extracted_source(source, offset, len, &suggested_name);
+    // Zero-copy view into the backing source. Tempfile-backed sources
+    // (recursive ISO inside a spooled archive entry) yield a guarded
+    // `FileRange` rather than buffering the range into memory.
+    let extracted_source = source.subrange(offset, len, &suggested_name);
     Ok(Extracted {
         suggested_name,
         source: extracted_source,
     })
-}
-
-fn build_extracted_source(
-    source: &InputSource,
-    offset: u64,
-    len: u64,
-    suggested_name: &str,
-) -> InputSource {
-    match source {
-        InputSource::File(path) => {
-            InputSource::file_range(path.clone(), offset, len, suggested_name.to_string())
-        }
-        InputSource::Memory { bytes, .. } => {
-            let start = offset as usize;
-            let end = (start + len as usize).min(bytes.len());
-            InputSource::memory(bytes.slice(start..end), suggested_name.to_string())
-        }
-        InputSource::FileRange {
-            base,
-            offset: base_off,
-            len: base_len,
-            ..
-        } => {
-            // Recursive: ISO inside another file's range. Collapse to
-            // a single range — never nest.
-            let abs_off = base_off.saturating_add(offset);
-            let max = base_off.saturating_add(*base_len);
-            let clamped_len = len.min(max.saturating_sub(abs_off));
-            InputSource::file_range(
-                base.clone(),
-                abs_off,
-                clamped_len,
-                suggested_name.to_string(),
-            )
-        }
-        InputSource::TempFile { .. } => {
-            // ISO sitting inside a spooled archive entry. Tempfile path
-            // can't outlive the source Arc, so building a FileRange
-            // against it would dangle. Materialise the requested range
-            // into memory — rare path (recursive ISO peek inside a
-            // large archive) doesn't pay for an Arc-aware FileRange.
-            let bytes = source.read_bytes().unwrap_or_default();
-            let start = (offset as usize).min(bytes.len());
-            let end = (start + len as usize).min(bytes.len());
-            InputSource::memory(bytes.slice(start..end), suggested_name.to_string())
-        }
-    }
 }
 
 fn suggested_name(target: &Path) -> String {
@@ -139,6 +95,31 @@ mod tests {
             matches!(extracted.source, InputSource::FileRange { .. }),
             "file-backed ISO extract should produce a FileRange (zero-copy)"
         );
+    }
+
+    /// Recursive ISO sitting inside a spooled archive entry: the source
+    /// is a `TempFile`. Pre-Arc-guard this buffered the range into memory;
+    /// now it yields a guarded `FileRange` that outlives the source it was
+    /// carved from.
+    #[test]
+    fn extract_iso_from_tempfile_source_returns_guarded_file_range() {
+        let iso = std::fs::read(fixture("sample.iso").disk_path().unwrap()).unwrap();
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(&mut tmp, &iso).unwrap();
+        std::io::Write::flush(&mut tmp).unwrap();
+        let src = InputSource::temp_file(tmp, "sample.iso".to_string());
+
+        let extracted = extract(&src, DiskImageFormat::Iso, "README.txt").unwrap();
+        match &extracted.source {
+            InputSource::FileRange { guard, .. } => {
+                assert!(guard.is_some(), "range over a spooled ISO must be guarded");
+            }
+            other => panic!("expected guarded FileRange, got {other:?}"),
+        }
+        // Guard keeps the spool linked after the originating source drops.
+        let view = extracted.source;
+        drop(src);
+        assert_eq!(view.read_bytes().unwrap().as_ref(), b"primary\n");
     }
 
     #[test]

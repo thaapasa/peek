@@ -994,14 +994,19 @@ showcase — cycling themes with `t` while on About previews how each theme pain
 Pull an inner item out of a container as a standalone file. Three sources currently:
 
 - **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst|.lz4]`, `.7z`, `.cpio[.gz]`, `.ar`):
-  extract a single file by its inner path. Entries ≥ 16 MiB spool to a `NamedTempFile` in
-  `$TMPDIR/peek-*` (random-access reads without holding the whole payload in RAM); smaller
-  entries stay in `Bytes`. The temp file unlinks automatically when the last reference to the
-  extracted `InputSource` drops (RAII via `Arc<NamedTempFile>`). The 256 MiB cap survives only
+  extract a single file by its inner path. Stored zip / uncompressed tar members are a verbatim
+  slice of the backing source, so they extract as a zero-copy `FileRange` view — no spool, no
+  copy. Other entries ≥ 16 MiB spool to a `NamedTempFile` in `$TMPDIR/peek-*` (random-access
+  reads without holding the whole payload in RAM); smaller entries stay in `Bytes`. The temp
+  file unlinks automatically when the last reference to the extracted `InputSource` drops (RAII
+  via `Arc<NamedTempFile>`) — including a `FileRange` carved from a spooled entry, which carries
+  the guard so a recursive view keeps its backing tempfile alive. The 256 MiB cap survives only
   on the in-memory fallback path. Pass `--no-tempfile` to force RAM-only behaviour (cap
   dropped — the user has opted in to OOM risk).
 - **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
-  backing image — no decompression, no buffering, multi-GB ISOs unaffected.
+  backing image — no decompression, no buffering, multi-GB ISOs unaffected. A recursive ISO
+  inside a spooled archive entry now also yields a guarded `FileRange` rather than buffering the
+  range into RAM.
 - **Animation frames** (`.gif`, `.webp`, animated SVG): extract a single composited frame as a
   PNG at the source's native pixel size (SVG sub-512px scales up to 512 on the longest axis;
   override with `--extract-size`).

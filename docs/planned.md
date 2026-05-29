@@ -168,14 +168,12 @@ off by default. Everything else is pure Rust or low-friction C bindings.
 #### Extract enhancements
 
 Extract from archive entries ships today via `--extract <KEY>` and `e` in the viewer (see
-[features.md → Extraction](features.md#extraction-)). Entries ≥ 16 MiB now spool to a
+[features.md → Extraction](features.md#extraction-)). Entries ≥ 16 MiB spool to a
 `NamedTempFile` (`InputSource::TempFile`), lifting the in-memory 256 MiB cap for the common
-case. Still planned:
+case; stored zip / uncompressed tar members now extract as zero-copy `FileRange` views (no
+spool, no copy) over the backing source — including ranges over a spooled tempfile, kept alive
+by an `Arc<NamedTempFile>` guard. Still planned:
 
-- **Stored zip / uncompressed tar → `FileRange`** — when the entry is stored as-is in the
-  archive, expose the entry as a zero-copy offset+limit view into the backing file rather than
-  spooling. Same path that ISO extracts already use. Saves the spool write for "tar of large
-  uncompressed binaries".
 - **Stream-walk tar/cpio off a `TempFile` source** — recursive descent into an archive entry
   that itself contains a tar/cpio re-buffers the outer entry via `source.read_bytes()`. Switch
   to a streaming walk over `open_byte_source()` so nested big-on-big stays disk-only.

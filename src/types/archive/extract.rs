@@ -208,6 +208,25 @@ fn extract_zip(
         .by_index(idx)
         .map_err(|e| ExtractError::Other(e.into()))?;
     let size = file.size();
+    // Stored (uncompressed) + unencrypted entries are a verbatim slice of
+    // the backing source: the stored bytes are the content. Hand back a
+    // zero-copy range instead of spooling. Anything compressed or
+    // encrypted falls through to `materialise`.
+    if file.compression() == zip::CompressionMethod::Stored
+        && !file.encrypted()
+        && let Some(data_start) = file.data_start()
+    {
+        let suggested_name = target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("extracted")
+            .to_string();
+        let src = source.subrange(data_start, size, &suggested_name);
+        return Ok(Extracted {
+            source: src,
+            suggested_name,
+        });
+    }
     materialise(file, Some(size), target, raw_key, opts)
 }
 
@@ -247,6 +266,22 @@ fn extract_tar(
             continue;
         }
         let size = entry.size();
+        // Uncompressed tar: the member is a verbatim slice of the backing
+        // source, so hand back a zero-copy range instead of spooling.
+        // `raw_file_position` is relative to the tar stream start, which
+        // equals the source start when no codec sits in between.
+        if matches!(compression, TarCompression::None) {
+            let suggested_name = target
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("extracted")
+                .to_string();
+            let src = source.subrange(entry.raw_file_position(), size, &suggested_name);
+            return Ok(Extracted {
+                source: src,
+                suggested_name,
+            });
+        }
         return materialise(entry, Some(size), target, raw_key, opts);
     }
     Err(ExtractError::NotFound(raw_key.to_string()))
@@ -487,6 +522,58 @@ mod tests {
         assert_eq!(bytes.len(), 2_250);
     }
 
+    /// Uncompressed tar over a real file: the member is a verbatim slice
+    /// of the archive, so extract returns a zero-copy `FileRange` (no
+    /// spool, no buffer copy) rather than a `Memory`/`TempFile`.
+    #[test]
+    fn extract_uncompressed_tar_returns_file_range() {
+        let extracted = extract(
+            &fixture("archive.tar"),
+            ArchiveFormat::Tar,
+            STABLE_ENTRY,
+            &opts(),
+        )
+        .expect("tar extract");
+        assert!(
+            matches!(extracted.source, InputSource::FileRange { .. }),
+            "uncompressed tar member should be a zero-copy FileRange, got {:?}",
+            extracted.source
+        );
+        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
+    }
+
+    /// Stored (uncompressed) zip entry over a real file likewise extracts
+    /// as a zero-copy `FileRange`. Deflated entries still spool/buffer.
+    #[test]
+    fn extract_stored_zip_returns_file_range() {
+        use std::io::Write;
+        use zip::CompressionMethod;
+        use zip::ZipWriter;
+        use zip::write::SimpleFileOptions;
+
+        let payload = b"stored entry contents, verbatim on disk";
+        let cursor = std::io::Cursor::new(Vec::<u8>::new());
+        let mut w = ZipWriter::new(cursor);
+        let zopts = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+        w.start_file("leaf.txt", zopts).unwrap();
+        w.write_all(payload).unwrap();
+        let zip_bytes = w.finish().unwrap().into_inner();
+
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        std::io::Write::write_all(&mut tmp, &zip_bytes).unwrap();
+        tmp.flush().unwrap();
+        let src = InputSource::File(tmp.path().to_path_buf());
+
+        let extracted =
+            extract(&src, ArchiveFormat::Zip, "leaf.txt", &opts()).expect("zip extract");
+        assert!(
+            matches!(extracted.source, InputSource::FileRange { .. }),
+            "stored zip entry should be a zero-copy FileRange, got {:?}",
+            extracted.source
+        );
+        assert_eq!(extracted.source.read_bytes().unwrap().as_ref(), payload);
+    }
+
     /// Extract a forward-slash subpath through every archive backend
     /// that exposes nested entries. Guards against the Windows-only
     /// regression where the sanitized lookup key carried backslashes
@@ -589,10 +676,10 @@ mod tests {
         use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
 
-        fn build_zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        fn build_zip(entries: &[(&str, &[u8])], method: CompressionMethod) -> Vec<u8> {
             let cursor = std::io::Cursor::new(Vec::<u8>::new());
             let mut w = ZipWriter::new(cursor);
-            let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Stored);
+            let opts = SimpleFileOptions::default().compression_method(method);
             for (name, data) in entries {
                 w.start_file(*name, opts).unwrap();
                 std::io::Write::write_all(&mut w, data).unwrap();
@@ -602,14 +689,21 @@ mod tests {
 
         let leaf = b"hello peek recursive".to_vec();
         // Pad inner.zip past SPOOL_THRESHOLD so extracting it from the
-        // outer zip lands on the tempfile path.
+        // outer zip lands on the tempfile path. `leaf.txt` is Stored so the
+        // recursive extract returns a zero-copy range over the spool.
         let pad = vec![0u8; SPOOL_THRESHOLD as usize];
-        let inner_zip = build_zip(&[("leaf.txt", &leaf), ("pad.bin", &pad)]);
+        let inner_zip = build_zip(
+            &[("leaf.txt", &leaf), ("pad.bin", &pad)],
+            CompressionMethod::Stored,
+        );
         assert!(
             inner_zip.len() as u64 >= SPOOL_THRESHOLD,
             "inner.zip must cross spool threshold"
         );
-        let outer_zip = build_zip(&[("nested.zip", &inner_zip)]);
+        // Outer stores nested.zip Deflated so extracting it spools to a
+        // TempFile (Stored would yield a zero-copy view and skip the spool
+        // path this test exercises).
+        let outer_zip = build_zip(&[("nested.zip", &inner_zip)], CompressionMethod::Deflated);
 
         let outer_src = InputSource::memory(Bytes::from(outer_zip), "outer.zip");
         let first =
@@ -621,12 +715,26 @@ mod tests {
         );
 
         // Recurse: extract `leaf.txt` from the spooled inner zip. This
-        // exercises `open_seekable` on the `TempFile` variant.
+        // exercises `open_seekable` on the `TempFile` variant. `leaf.txt`
+        // is Stored, so the result is a zero-copy range over the spooled
+        // inner zip — carrying the tempfile guard so it outlives `first`.
         let second = extract(&first.source, ArchiveFormat::Zip, "leaf.txt", &opts())
             .expect("nested extract through TempFile source");
         assert_eq!(second.suggested_name, "leaf.txt");
+        match &second.source {
+            InputSource::FileRange { guard, .. } => {
+                assert!(guard.is_some(), "range over a spooled zip must be guarded");
+            }
+            other => panic!("expected guarded FileRange, got {other:?}"),
+        }
         let bytes = second.source.read_bytes().unwrap();
         assert_eq!(bytes.as_ref(), leaf.as_slice());
+
+        // The guard keeps the spool alive even after the source it was
+        // carved from drops.
+        let leaf_view = second.source;
+        drop(first.source);
+        assert_eq!(leaf_view.read_bytes().unwrap().as_ref(), leaf.as_slice());
     }
 
     /// `--no-tempfile` keeps the buffer in `Vec<u8>` even when it

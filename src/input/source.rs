@@ -29,9 +29,13 @@ use tempfile::NamedTempFile;
 /// drops.
 ///
 /// **Invariants for `FileRange`:** `base` always points at a disk file
-/// (never an in-memory blob — that case stays in `Memory`). Nested
-/// ranges collapse at construction; you should not have a `FileRange`
-/// whose `base` ever resolves to another `FileRange`.
+/// (never an in-memory blob — that case stays in `Memory`). The file is
+/// either a user-named path (`guard: None`) or a spooled tempfile
+/// (`guard: Some` — the `Arc<NamedTempFile>` pins it so the range
+/// outlives the source it was carved from). Nested ranges collapse at
+/// construction (see [`InputSource::subrange`]): a `FileRange`'s `base`
+/// never resolves to another `FileRange`, and the collapse inherits the
+/// parent's `guard`.
 #[derive(Clone, Debug)]
 pub enum InputSource {
     File(PathBuf),
@@ -44,6 +48,11 @@ pub enum InputSource {
         offset: u64,
         len: u64,
         name: String,
+        /// Liveness guard when `base` is a spooled tempfile path. `None`
+        /// for ranges over a user-named file (those live as long as the
+        /// disk file). Keeps the `NamedTempFile` linked until every clone
+        /// of this source drops.
+        guard: Option<Arc<NamedTempFile>>,
     },
     TempFile {
         file: Arc<NamedTempFile>,
@@ -68,15 +77,60 @@ impl InputSource {
         }
     }
 
-    /// Construct an offset+limit view into a disk file. Used by
-    /// extractors that can map their inner item to a byte range of the
-    /// backing file without copying.
-    pub fn file_range(base: PathBuf, offset: u64, len: u64, name: impl Into<String>) -> Self {
-        Self::FileRange {
-            base,
-            offset,
-            len,
-            name: name.into(),
+    /// Refcount-cheap sub-view of `len` bytes starting at `offset` within
+    /// this source, named `name`. The single place inner-item views are
+    /// carved (ISO entries, stored/uncompressed archive members):
+    ///
+    /// - `File` / `TempFile` → [`Self::FileRange`] over the backing path.
+    ///   A tempfile-backed range inherits the `Arc<NamedTempFile>` guard so
+    ///   it outlives the source it was carved from.
+    /// - `FileRange` → offsets collapse onto the same `base` (never nests)
+    ///   and the parent's guard is inherited.
+    /// - `Memory` → `Bytes::slice`, staying in `Memory`.
+    ///
+    /// Offsets and lengths are clamped to the parent's extent.
+    pub fn subrange(&self, offset: u64, len: u64, name: impl Into<String>) -> Self {
+        match self {
+            Self::File(path) => Self::FileRange {
+                base: path.clone(),
+                offset,
+                len,
+                name: name.into(),
+                guard: None,
+            },
+            Self::TempFile { file, .. } => Self::FileRange {
+                base: file.path().to_path_buf(),
+                offset,
+                len,
+                name: name.into(),
+                guard: Some(file.clone()),
+            },
+            Self::FileRange {
+                base,
+                offset: base_off,
+                len: base_len,
+                guard,
+                ..
+            } => {
+                let abs_off = base_off.saturating_add(offset);
+                let max = base_off.saturating_add(*base_len);
+                let clamped_len = len.min(max.saturating_sub(abs_off));
+                Self::FileRange {
+                    base: base.clone(),
+                    offset: abs_off,
+                    len: clamped_len,
+                    name: name.into(),
+                    guard: guard.clone(),
+                }
+            }
+            Self::Memory { bytes, .. } => {
+                let start = (offset as usize).min(bytes.len());
+                let end = start.saturating_add(len as usize).min(bytes.len());
+                Self::Memory {
+                    bytes: bytes.slice(start..end),
+                    name: name.into(),
+                }
+            }
         }
     }
 
@@ -236,10 +290,25 @@ impl InputSource {
             Self::File(path) => Ok(Box::new(FileByteSource::open(path)?)),
             Self::Memory { bytes, .. } => Ok(Box::new(BytesByteSource::new(bytes.clone()))),
             Self::FileRange {
-                base, offset, len, ..
+                base,
+                offset,
+                len,
+                guard,
+                ..
             } => {
                 let f = FileByteSource::open(base)?;
-                Ok(Box::new(RangeByteSource::new(Box::new(f), *offset, *len)))
+                // A range carved from a tempfile must keep the temp linked
+                // even if the originating `InputSource` drops while this
+                // `ByteSource` is still in use — same guarantee the
+                // `TempFile` arm gives.
+                let inner: Box<dyn ByteSource> = match guard {
+                    Some(g) => Box::new(TempFileByteSource {
+                        inner: f,
+                        _temp: g.clone(),
+                    }),
+                    None => Box::new(f),
+                };
+                Ok(Box::new(RangeByteSource::new(inner, *offset, *len)))
             }
             Self::TempFile { file, .. } => {
                 let inner = FileByteSource::open(file.path())?;
@@ -544,7 +613,7 @@ mod tests {
     #[test]
     fn input_source_file_range_round_trip() {
         let path = write_temp("range", b"AAAAhelloBBBB");
-        let src = InputSource::file_range(path.clone(), 4, 5, "hello".to_string());
+        let src = InputSource::File(path.clone()).subrange(4, 5, "hello");
         assert_eq!(src.read_bytes().unwrap().as_ref(), b"hello");
         assert_eq!(src.read_text().unwrap(), "hello");
         assert_eq!(src.name(), "hello");
@@ -553,6 +622,70 @@ mod tests {
         assert_eq!(bs.len(), 5);
         assert_eq!(bs.read_range(1, 3).unwrap().as_ref(), b"ell");
         let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn subrange_of_memory_slices_in_place() {
+        let src = InputSource::memory(Bytes::from_static(b"AAAAhelloBBBB"), "blob");
+        let view = src.subrange(4, 5, "hello");
+        assert!(matches!(view, InputSource::Memory { .. }));
+        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+        assert_eq!(view.name(), "hello");
+    }
+
+    #[test]
+    fn subrange_of_file_range_collapses() {
+        let path = write_temp("collapse", b"....AAAAhelloBBBB....");
+        // Outer view: bytes 4..20 = "AAAAhelloBBBB....".
+        let outer = InputSource::File(path.clone()).subrange(4, 16, "outer");
+        // Inner view within the outer: skip "AAAA" (4), take "hello" (5).
+        let inner = outer.subrange(4, 5, "hello");
+        match &inner {
+            InputSource::FileRange {
+                base, offset, len, ..
+            } => {
+                assert_eq!(base, &path, "collapsed onto the same backing path");
+                assert_eq!(*offset, 8, "absolute offset = 4 + 4");
+                assert_eq!(*len, 5);
+            }
+            other => panic!("expected collapsed FileRange, got {other:?}"),
+        }
+        assert_eq!(inner.read_bytes().unwrap().as_ref(), b"hello");
+        let _ = fs::remove_file(&path);
+    }
+
+    fn temp_source(data: &[u8], name: &str) -> InputSource {
+        let mut tmp = NamedTempFile::new().unwrap();
+        tmp.write_all(data).unwrap();
+        tmp.flush().unwrap();
+        InputSource::temp_file(tmp, name.to_string())
+    }
+
+    #[test]
+    fn subrange_of_tempfile_yields_guarded_range() {
+        let src = temp_source(b"AAAAhelloBBBB", "spool.bin");
+        let view = src.subrange(4, 5, "hello");
+        match &view {
+            InputSource::FileRange { guard, .. } => {
+                assert!(guard.is_some(), "tempfile-backed range must carry a guard");
+            }
+            other => panic!("expected guarded FileRange, got {other:?}"),
+        }
+        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+    }
+
+    #[test]
+    fn tempfile_range_survives_source_drop() {
+        let view = {
+            let src = temp_source(b"AAAAhelloBBBB", "spool.bin");
+            let view = src.subrange(4, 5, "hello");
+            // `src` (the original TempFile source) drops here. The guard the
+            // range inherited must keep the spooled file linked.
+            view
+        };
+        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+        let bs = view.open_byte_source().unwrap();
+        assert_eq!(bs.read_range(0, 5).unwrap().as_ref(), b"hello");
     }
 
     fn stdin_source(text: &str) -> InputSource {
