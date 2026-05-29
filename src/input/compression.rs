@@ -1,13 +1,14 @@
 //! Bare single-stream codec helpers. Used by `compose_modes` to
 //! transparently decompress `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4`
-//! files into their inner content, and (re-exported via
-//! `archive::extract::decompress_tar`) by tar extraction so the codec
-//! dispatch lives in one place.
+//! files into their inner content. (Tar extraction has its own seekable,
+//! per-entry streaming decoder in `backends::tar::decode_compressed` and
+//! does not go through here.)
 //!
-//! Decompression is batch (reads the whole stream into a buffer).
-//! Streaming inner-content rendering would need a different shape
-//! since most viewers — pretty-print, syntax highlight, image decode —
-//! want the full buffer upfront. The output is capped at
+//! Decompression here is batch — the whole stream is read into a buffer —
+//! because the transparent path feeds viewers (pretty-print, syntax
+//! highlight, image decode) that want the full inner content upfront.
+//! Every codec, xz included, runs through a streaming `Read` wrapper, but
+//! the output is collected in one shot and capped at
 //! [`MAX_DECOMPRESS_BYTES`] so a pathological compression ratio can't
 //! force a runaway allocation.
 //!
