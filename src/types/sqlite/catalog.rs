@@ -15,14 +15,14 @@ use super::sql::quote_ident;
 pub struct Entity {
     pub name: String,
     /// Table this entity belongs to. For tables/views it equals `name`;
-    /// for indexes / triggers it's the parent table. Consumed by the
-    /// listing view (later patches); not read by the info path.
+    /// for indexes / triggers it's the parent table. Captured from
+    /// `sqlite_master` but not yet surfaced — reserved for showing an
+    /// index/trigger's parent table in the listing.
     #[allow(dead_code)]
     pub tbl_name: String,
     /// Original `CREATE …` DDL as stored in `sqlite_master.sql`. `None`
     /// for entities SQLite synthesised internally without a SQL form.
-    /// Consumed by the schema-row extract (later patches).
-    #[allow(dead_code)]
+    /// Drives the listing's `.sql`-leaf size column.
     pub sql: Option<String>,
     /// Row count from `SELECT COUNT(*) FROM <entity>`. Always 0 for
     /// indexes and triggers — they're not row-bearing on their own.
