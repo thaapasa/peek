@@ -172,6 +172,11 @@ insta = "1"
 # only — runtime probe path goes through symphonia.
 id3 = "1"
 
+# 7z writer (compress feature) for the multi-block extract test only.
+# The runtime dep keeps `default-features = false` (decode-only); this
+# enables the encoder solely for test builds via feature unification.
+sevenz-rust2 = { version = "0.21", default-features = false, features = ["compress"] }
+
 # Optimize image processing dependencies even in dev builds —
 # these are unusably slow without at least -O2
 [profile.dev.package.image]

@@ -285,8 +285,8 @@ fn extract_tar(
         // Plain tar: walk the seekable reader directly so non-matching
         // entry bodies are skipped via seek, not read.
         None => walk_tar(reader, source, &target_str, target, true, raw_key, opts),
-        // Compressed: stream through the decoder; only the bytes up to the
-        // matched entry get inflated (xz batches — see `decode_compressed`).
+        // Compressed: stream through the decoder; every codec (xz included)
+        // streams, so only the bytes up to the matched entry get inflated.
         Some(fmt) => {
             let dec = crate::types::archive::backends::tar::decode_compressed(reader, fmt)
                 .map_err(ExtractError::Other)?;
@@ -366,6 +366,11 @@ fn extract_7z(
     let mut found = false;
     archive
         .for_each_entries(|entry, reader| {
+            // `ArchiveReader::for_each_entries` ignores the per-block stop
+            // and keeps iterating later blocks, so this guard is reached
+            // for entries in blocks after the match — skip them cheaply
+            // (no drain, no decode) instead of returning `Ok(false)`,
+            // which would only stop the current block.
             if found {
                 return Ok(true);
             }
@@ -417,11 +422,14 @@ fn extract_ar(
     let target_str = forward_slash_key(target);
     let mut header = [0u8; HEADER_LEN];
     loop {
-        let n = reader
-            .read(&mut header)
-            .map_err(|e| ExtractError::Other(e.into()))?;
-        if n == 0 || n < HEADER_LEN {
-            break;
+        // `read_exact`, not a single `read`: a streaming source
+        // (`RangeReadSeek` for ar-in-archive) can short-read mid-stream,
+        // and treating that as end-of-archive would silently truncate the
+        // walk. A clean EOF at a header boundary ends the chain.
+        match reader.read_exact(&mut header) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(ExtractError::Other(e.into())),
         }
         let raw_name = std::str::from_utf8(&header[..16])
             .unwrap_or("")
@@ -588,6 +596,83 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted.source.read_bytes().unwrap();
         assert_eq!(bytes.len(), 2_250);
+    }
+
+    /// Multi-block 7z: `push_archive_entry` is non-solid, so each entry
+    /// lands in its own block. Extracting an entry past the first block
+    /// exercises the cross-block path — the outer walk decodes/drains
+    /// earlier blocks to reach it, and the `found` guard skips blocks
+    /// after the match (which `for_each_entries` still iterates). A wrong
+    /// block index or a missing drain would return the wrong member.
+    #[test]
+    fn extract_7z_multi_block_target_in_later_block() {
+        use sevenz_rust2::{ArchiveEntry, ArchiveWriter};
+
+        let payloads: [(&str, &[u8]); 3] = [
+            ("a.txt", b"first block contents AAAA"),
+            ("b.txt", b"second block contents BBBB"),
+            ("c.txt", b"third block contents CCCC"),
+        ];
+        let mut w = ArchiveWriter::new(Cursor::new(Vec::<u8>::new())).unwrap();
+        for (name, data) in payloads {
+            w.push_archive_entry(ArchiveEntry::new_file(name), Some(data))
+                .unwrap();
+        }
+        let archive = w.finish().unwrap().into_inner();
+        let src = InputSource::memory(bytes::Bytes::from(archive), "multi.7z");
+
+        // Last, middle, then first — covers a target in a trailing block,
+        // an interior block, and block 0 (later blocks then skipped).
+        for (name, want) in [
+            ("c.txt", &payloads[2].1),
+            ("b.txt", &payloads[1].1),
+            ("a.txt", &payloads[0].1),
+        ] {
+            let got = extract(&src, ArchiveFormat::SevenZ, name, &opts())
+                .unwrap_or_else(|e| panic!("{name}: {e}"))
+                .source
+                .read_bytes()
+                .unwrap();
+            assert_eq!(
+                got.as_ref(),
+                *want,
+                "{name} returned the wrong block's bytes"
+            );
+        }
+    }
+
+    /// ar extraction over a `FileRange` source (recursive ar-in-archive):
+    /// the header walk runs over `RangeReadSeek`, which can short-read, so
+    /// it must use `read_exact`. Extract a trailing member (preceded by
+    /// others that get skipped) and cross-check against the File-source
+    /// extract.
+    #[test]
+    fn extract_ar_over_file_range_source() {
+        let InputSource::File(path) = fixture("hello.deb") else {
+            unreachable!("fixture is a File source");
+        };
+        let len = std::fs::metadata(&path).unwrap().len();
+
+        let want = extract(
+            &InputSource::File(path.clone()),
+            ArchiveFormat::Ar,
+            "data.tar.gz",
+            &opts(),
+        )
+        .expect("ar over File")
+        .source
+        .read_bytes()
+        .unwrap();
+
+        let ranged = InputSource::File(path).subrange(0, len, "hello.deb");
+        let got = extract(&ranged, ArchiveFormat::Ar, "data.tar.gz", &opts())
+            .expect("ar over FileRange")
+            .source
+            .read_bytes()
+            .unwrap();
+
+        assert!(!got.is_empty());
+        assert_eq!(got, want, "FileRange ar extract must match File extract");
     }
 
     /// Tar extraction over a `FileRange` source must walk the archive
