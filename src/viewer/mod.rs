@@ -143,11 +143,10 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
-            FileType::Sqlite(_) => {
-                // No listing / table view yet — the Info tail below
-                // renders the SQLite metadata section, body falls
-                // through to Hex. Step 3 of the SQLite plan adds the
-                // schema listing; step 4 adds the contents table view.
+            FileType::Sqlite(fmt) => {
+                crate::types::sqlite::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
             }
             FileType::Cert(_) => {
                 crate::types::cert::compose::compose(source, detected, args, &ctx, &mut modes)?;

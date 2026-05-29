@@ -8,7 +8,9 @@
 //! body falls through to the universal Hex view.
 
 pub mod catalog;
+pub mod compose;
 pub mod detect;
+pub mod extract;
 pub mod format;
 pub mod info;
 pub mod info_gather;
