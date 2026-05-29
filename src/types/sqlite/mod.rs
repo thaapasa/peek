@@ -18,4 +18,5 @@ pub mod info_render;
 pub mod listing_mode;
 pub mod reader;
 pub mod row_set;
+pub mod sql;
 pub mod table_mode;

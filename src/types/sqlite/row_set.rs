@@ -24,6 +24,7 @@ use rusqlite::types::ValueRef;
 
 use crate::input::InputSource;
 use crate::types::sqlite::reader::SqliteReader;
+use crate::types::sqlite::sql::quote_ident;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
 
@@ -254,10 +255,6 @@ fn value_to_cell(v: ValueRef<'_>) -> Option<String> {
     }
 }
 
-fn quote_ident(s: &str) -> String {
-    format!("\"{}\"", s.replace('"', "\"\""))
-}
-
 /// Whether a declared column type should render right-aligned (i.e.
 /// it stores numbers users want to scan as digit columns). Looser
 /// than SQLite's storage affinity — we look at *display* shape:
@@ -309,12 +306,6 @@ mod tests {
         assert!(!is_numeric_type("BLOB"));
         assert!(!is_numeric_type(""));
         assert!(!is_numeric_type("DATETIME"));
-    }
-
-    #[test]
-    fn quote_ident_doubles_internal_quotes() {
-        assert_eq!(quote_ident("books"), "\"books\"");
-        assert_eq!(quote_ident("my\"tbl"), "\"my\"\"tbl\"");
     }
 
     #[test]

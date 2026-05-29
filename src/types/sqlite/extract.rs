@@ -30,6 +30,7 @@ use crate::types::sqlite::compose::{
     CONTENTS_SUFFIX, KIND_INDEXES, KIND_TABLES, KIND_TRIGGERS, KIND_VIEWS, SCHEMA_SUFFIX,
 };
 use crate::types::sqlite::reader::SqliteReader;
+use crate::types::sqlite::sql::quote_ident;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parsed = parse_key(key).ok_or_else(|| ExtractError::InvalidKey(key.to_string()))?;
@@ -205,10 +206,6 @@ fn list_columns(conn: &Connection, entity: &str) -> Result<Vec<String>> {
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
     Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
-}
-
-fn quote_ident(s: &str) -> String {
-    format!("\"{}\"", s.replace('"', "\"\""))
 }
 
 /// Build the dumped SQL text. SQLite stores the original `CREATE …`

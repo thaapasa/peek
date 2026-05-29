@@ -8,6 +8,8 @@
 use anyhow::{Context, Result};
 use rusqlite::Connection;
 
+use super::sql::quote_ident;
+
 /// One schema entity (table, view, index, or trigger).
 #[derive(Debug, Clone)]
 pub struct Entity {
@@ -90,8 +92,7 @@ struct SqliteMasterRow {
 /// SQL spec. Errors fold into `None` at the call site so a single
 /// broken table doesn't fail the catalogue scan.
 fn count_rows(conn: &Connection, name: &str) -> Result<u64> {
-    let quoted = format!("\"{}\"", name.replace('"', "\"\""));
-    let sql = format!("SELECT COUNT(*) FROM {quoted}");
+    let sql = format!("SELECT COUNT(*) FROM {}", quote_ident(name));
     let count: i64 = conn
         .query_row(&sql, [], |row| row.get(0))
         .with_context(|| format!("COUNT(*) on {name}"))?;
