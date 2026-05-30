@@ -452,10 +452,7 @@ fn xml_stats(s: &str) -> Option<StructuredStats> {
             for attr in e.attributes().with_checks(false).flatten() {
                 let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
                 if key == "xmlns" || key.starts_with("xmlns:") {
-                    let val = attr
-                        .unescape_value()
-                        .map(|v| v.into_owned())
-                        .unwrap_or_default();
+                    let val = crate::xml::unescape_attr_value(&attr).unwrap_or_default();
                     let entry = if key == "xmlns" {
                         val
                     } else {

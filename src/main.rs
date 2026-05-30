@@ -13,6 +13,7 @@ mod theme;
 mod types;
 mod update;
 mod viewer;
+mod xml;
 
 pub use cli::Args;
 
