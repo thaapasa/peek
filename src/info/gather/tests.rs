@@ -9,7 +9,9 @@ use super::super::FileExtras;
 use super::gather;
 use crate::input::InputSource;
 use crate::input::detect;
-use crate::input::detect::FileType;
+use crate::input::detect::{FileType, PdfFlavor, PostScriptFormat};
+use crate::types::eps::dos_eps::PreviewKind;
+use crate::types::eps::gs;
 use crate::types::image::info::{AnimationStats, LoopCount};
 use crate::types::structured::info::TopLevelKind;
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings};
@@ -366,4 +368,120 @@ fn java_classfile_sample_metadata() {
     assert_eq!(meta.field_count, 4);
     // 6 declared methods + the synthetic compareTo(Object) bridge.
     assert!(meta.method_count >= 6);
+}
+
+// ---------------------------------------------------------------------------
+// EPS / PostScript / Illustrator fixtures
+//
+// These exercise detection + DSC parse + embedded-preview decode, none of
+// which need Ghostscript. The only gs-dependent fact — whether the Render
+// view is offered — is asserted against `gs::find()` so the suite passes
+// identically with or without an interpreter installed.
+// ---------------------------------------------------------------------------
+
+/// Plain multi-page `.ps`: detects as PostScript, parses the full DSC
+/// header, and carries no embedded preview.
+#[test]
+fn postscript_sample_ps_dsc_and_no_preview() {
+    let path = fixture("test-images/postscript-sample.ps");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(
+        detected.file_type,
+        FileType::PostScript(PostScriptFormat::Ps),
+        "expected plain PostScript",
+    );
+
+    let info = gather(&source, &detected).expect("gather");
+    let FileExtras::Eps(eps) = &info.extras else {
+        panic!("expected Eps extras");
+    };
+    assert_eq!(eps.format, PostScriptFormat::Ps);
+    assert_eq!(eps.dsc.title.as_deref(), Some("peek PostScript sample"));
+    assert_eq!(eps.dsc.creator.as_deref(), Some("peek test suite"));
+    assert_eq!(eps.dsc.pages.as_deref(), Some("2"));
+    assert_eq!(eps.dsc.language_level.as_deref(), Some("2"));
+    assert_eq!(eps.dsc.bounding_box.as_deref(), Some("0 0 612 792"));
+    assert!(eps.preview.is_none(), "plain .ps has no embedded preview");
+    // gs availability is environment-dependent — only assert it tracks
+    // what the bridge actually finds, never that it's present.
+    assert_eq!(eps.gs_available, gs::find().is_some());
+}
+
+/// Binary DOS-EPS whose embedded preview is a palette TIFF the image
+/// crate can't decode: detected as EPS, preview present but undecodable
+/// (recorded, dimensions `None`), DSC fully parsed.
+#[test]
+fn tropical_jungle_eps_has_undecodable_tiff_preview() {
+    let info = gather_fixture("test-images/tropical-jungle.eps");
+    let FileExtras::Eps(eps) = &info.extras else {
+        panic!("expected Eps extras");
+    };
+    assert_eq!(eps.format, PostScriptFormat::Eps);
+    assert_eq!(eps.dsc.creator.as_deref(), Some("Adobe Illustrator(R) 12"));
+    // The bare-`\r` line ending bug used to swallow `%%For` — guard it.
+    assert_eq!(eps.dsc.for_whom.as_deref(), Some("Mili Skobic"));
+    assert_eq!(eps.dsc.pages.as_deref(), Some("1"));
+    let preview = eps.preview.as_ref().expect("DOS-EPS preview present");
+    assert_eq!(preview.kind, PreviewKind::Tiff);
+    assert!(preview.bytes > 0);
+    assert!(
+        preview.dimensions.is_none(),
+        "palette TIFF isn't decodable by the image crate",
+    );
+}
+
+/// DOS-EPS with a re-encoded RGB TIFF preview the image crate *can*
+/// decode: preview present with real pixel dimensions.
+#[test]
+fn tropical_jungle_rgbpreview_eps_decodes_preview() {
+    let info = gather_fixture("test-images/tropical-jungle-rgbpreview.eps");
+    let FileExtras::Eps(eps) = &info.extras else {
+        panic!("expected Eps extras");
+    };
+    assert_eq!(eps.format, PostScriptFormat::Eps);
+    let preview = eps.preview.as_ref().expect("preview present");
+    assert_eq!(preview.kind, PreviewKind::Tiff);
+    assert_eq!(preview.dimensions, Some((222, 256)));
+}
+
+/// EPS reduced to its PostScript section: detected as EPS via extension,
+/// DSC intact, no preview.
+#[test]
+fn tropical_jungle_nopreview_eps_has_no_preview() {
+    let info = gather_fixture("test-images/tropical-jungle-nopreview.eps");
+    let FileExtras::Eps(eps) = &info.extras else {
+        panic!("expected Eps extras");
+    };
+    assert_eq!(eps.format, PostScriptFormat::Eps);
+    assert_eq!(eps.dsc.title.as_deref(), Some("tropical-jungle.eps"));
+    assert!(eps.preview.is_none());
+}
+
+/// Modern Illustrator `.ai` is a PDF: detected as the Illustrator PDF
+/// flavour, no extension-mismatch warning, real page/version stats.
+/// Pure PDF metadata — no Ghostscript involved.
+#[test]
+fn bonfire_nature_ai_is_illustrator_pdf() {
+    let path = fixture("test-images/bonfire-nature.ai");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(
+        detected.file_type,
+        FileType::Pdf(PdfFlavor::Illustrator),
+        "expected Illustrator PDF flavour",
+    );
+
+    let info = gather(&source, &detected).expect("gather");
+    assert!(
+        !info.warnings.iter().any(|w| w.contains("extension")),
+        "`.ai` over %PDF magic must not warn, got {:?}",
+        info.warnings,
+    );
+    let FileExtras::Pdf(pdf) = &info.extras else {
+        panic!("expected Pdf extras");
+    };
+    assert_eq!(pdf.flavor, PdfFlavor::Illustrator);
+    assert_eq!(pdf.page_count, 1);
+    assert_eq!(pdf.pdf_version, "1.4");
 }

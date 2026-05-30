@@ -1,0 +1,32 @@
+%!PS-Adobe-3.0
+%%Title: peek PostScript sample
+%%Creator: peek test suite
+%%For: peek
+%%CreationDate: 2026-05-30
+%%LanguageLevel: 2
+%%BoundingBox: 0 0 612 792
+%%Pages: 2
+%%EndComments
+%%Page: 1 1
+% --- Page 1: title, a filled rectangle, and a circle ---
+/Helvetica-Bold findfont 34 scalefont setfont
+0.10 0.20 0.55 setrgbcolor
+72 700 moveto (peek - PostScript page 1) show
+
+0.90 0.45 0.10 setrgbcolor
+72 480 200 140 rectfill
+
+0.05 0.55 0.30 setrgbcolor
+380 360 90 0 360 arc fill
+
+0 0 0 setrgbcolor
+4 setlinewidth
+72 120 moveto 540 120 lineto stroke
+showpage
+%%Page: 2 2
+% --- Page 2: peek renders only page 1, so this is here to prove it ---
+/Helvetica findfont 26 scalefont setfont
+0 0 0 setrgbcolor
+72 700 moveto (page 2 - not the default render) show
+showpage
+%%EOF
