@@ -14,8 +14,9 @@ use anyhow::Result;
 use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
-use crate::types::notebook::NotebookRenderer;
+use crate::types::notebook::{NotebookRenderer, listing};
 use crate::viewer::ComposeCtx;
+use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
@@ -46,6 +47,21 @@ pub fn compose(
         (None, _) => {
             modes.push(source_mode);
         }
+    }
+
+    // Blocks TOC: code cells + image outputs as an extractable / descendable
+    // listing. Skipped when the notebook has none (e.g. all-markdown).
+    let entries = match source.read_text() {
+        Ok(text) => listing::block_entries(&text),
+        Err(_) => Vec::new(),
+    };
+    if !entries.is_empty() {
+        modes.push(Box::new(ListingMode::new(
+            "ipynb",
+            "Blocks",
+            entries,
+            Vec::new(),
+        )));
     }
     Ok(())
 }

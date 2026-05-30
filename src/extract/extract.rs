@@ -110,11 +110,11 @@ pub fn extract(
         FileType::Directory => crate::types::directory::extract::extract(source, key),
         FileType::Audio(fmt) => audio_extract(source, *fmt, key),
         FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),
+        FileType::Notebook => crate::types::notebook::extract::extract(source, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html
         | FileType::Markdown
-        | FileType::Notebook
         | FileType::Compressed(_)
         | FileType::Csv(_)
         | FileType::Cert(_)

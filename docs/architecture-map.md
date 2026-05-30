@@ -7,6 +7,7 @@ CLAUDE.md keeps a condensed top-level version; this is the detailed reference.
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
+  base64.rs            — shared crate-wide standard-alphabet base64 decoder (decode + decoded_len); hand-rolled, no crate dep; first consumer is the notebook image extractor
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/
     mod.rs             — re-exports InputSource, ByteSource, LineSource, ByteStream
@@ -67,7 +68,9 @@ src/
       mod.rs           — Module wiring + NotebookRenderer / NotebookInfo re-exports
       model.rs         — serde_json::Value walker → Notebook { nbformat, language, kernel, cells }; tolerant of nbformat 3 (worksheets/input) vs 4; collapses output mime bundles to one Output (Stream/Text/Image/Html/Error); strip_ansi for tracebacks
       renderer.rs      — NotebookRenderer: TextRenderer that translates the notebook to one Markdown doc (code cells → fenced blocks in kernel lang, outputs → fenced text / notes) then reuses markdown::render_markdown for highlight + wrap
-      compose.rs       — Compose: RenderedTextMode (default, --raw inverts) + structured-JSON ContentMode source view
+      listing.rs       — Raw-JSON walk → flat Blocks TOC entries (code-N.<ext> / image-N.<ext>) + extract_block resolution (decodes base64 images via crate::base64, code/SVG verbatim). Off the model/render path so image bytes never load during render
+      extract.rs       — Resolve a Blocks key to an in-memory source named after the block; outer re-detect renders it (code highlighted / image drawn), so descend needs no notebook-specific frame logic
+      compose.rs       — Compose: RenderedTextMode (default, --raw inverts) + structured-JSON ContentMode source view + Blocks ListingMode (when code/images present)
       info.rs          — NotebookInfo (nbformat, kernel/language, cell + output tallies, max execution count) built from a parsed Notebook
       info_gather.rs   — Parse notebook → NotebookInfo (None falls back to text/binary gather)
       info_render.rs   — Render Notebook info section

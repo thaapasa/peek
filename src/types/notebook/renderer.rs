@@ -78,16 +78,19 @@ impl TextRenderer for NotebookRenderer {
 fn to_markdown(nb: &Notebook) -> String {
     let lang = nb.language.as_deref().unwrap_or("");
     let mut md = String::new();
+    // Image outputs are numbered in document order to match the Blocks
+    // listing, so a `🖼 image-1.png` note maps to the `image-1.png` row.
+    let mut image_seq = 0;
     for (i, cell) in nb.cells.iter().enumerate() {
         if i > 0 {
             md.push_str("\n---\n\n");
         }
-        emit_cell(&mut md, cell, lang);
+        emit_cell(&mut md, cell, lang, &mut image_seq);
     }
     md
 }
 
-fn emit_cell(md: &mut String, cell: &Cell, lang: &str) {
+fn emit_cell(md: &mut String, cell: &Cell, lang: &str, image_seq: &mut usize) {
     match cell.kind {
         CellKind::Markdown => {
             md.push_str(cell.source.trim_end());
@@ -104,13 +107,13 @@ fn emit_cell(md: &mut String, cell: &Cell, lang: &str) {
             md.push_str(&label);
             push_fence(md, &cell.source, lang);
             for out in &cell.outputs {
-                emit_output(md, out);
+                emit_output(md, out, image_seq);
             }
         }
     }
 }
 
-fn emit_output(md: &mut String, out: &Output) {
+fn emit_output(md: &mut String, out: &Output, image_seq: &mut usize) {
     match out {
         Output::Stream { stderr, text } => {
             md.push_str(if *stderr { "\n*stderr:*\n\n" } else { "\n" });
@@ -134,7 +137,14 @@ fn emit_output(md: &mut String, out: &Output) {
             push_fence(md, &body, "");
         }
         Output::Image { mime } => {
-            md.push_str(&format!("\n> 🖼 *{mime} output*\n"));
+            *image_seq += 1;
+            let name = super::listing::image_name(*image_seq, mime);
+            // NBSP (U+00A0) + space: the Markdown renderer collapses runs
+            // of ASCII whitespace to one (HTML text semantics) and the wide
+            // image glyph visually swallows the survivor. NBSP is not
+            // collapsed, so the gap holds; the trailing space widens it to
+            // a clear separation before the name.
+            md.push_str(&format!("\n> 🖼\u{00a0} *{name}*\n"));
         }
         Output::Html => {
             md.push_str("\n> *text/html output*\n");
@@ -155,4 +165,30 @@ fn push_fence(md: &mut String, body: &str, lang: &str) {
     md.push('\n');
     md.push_str(&fence);
     md.push('\n');
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn image_notes_use_listing_names_in_order() {
+        let nb = Notebook::parse(
+            r#"{
+              "cells": [
+                {"cell_type":"code","source":["a"],
+                 "outputs":[{"output_type":"display_data","data":{"image/png":"AAA="}}]},
+                {"cell_type":"code","source":["b"],
+                 "outputs":[{"output_type":"display_data","data":{"image/jpeg":"AAA="}}]}
+              ],
+              "metadata":{"kernelspec":{"language":"python"}},
+              "nbformat":4,"nbformat_minor":5
+            }"#,
+        )
+        .expect("parses");
+        let md = to_markdown(&nb);
+        // Inline notes carry the same names the Blocks listing assigns.
+        assert!(md.contains("🖼\u{00a0} *image-1.png*"), "got: {md}");
+        assert!(md.contains("🖼\u{00a0} *image-2.jpg*"), "got: {md}");
+    }
 }

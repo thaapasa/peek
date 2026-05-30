@@ -13,13 +13,23 @@ with a dual view like Markdown:
     colour stripped), and image outputs (`image/png`, …) noted with their MIME type.
 - **Source** — the raw notebook JSON, pretty-printed via the structured content mode. Reachable
   with Tab; `r` toggles the raw (unformatted) JSON. Becomes the entry view with `--raw`.
+- **Blocks** — a flat table of contents listing every code cell and image output as an ordered
+  sequence with readable names (`code-1.py`, `image-1.png`, …) rather than the notebook's opaque
+  cell ids. From this view you can:
+  - **Extract** (`x`) the selected block — a code cell saves as its `.py` (or kernel-language)
+    source, an image saves as the decoded `.png` / `.jpg` / `.svg`. Same as `peek --extract
+    code-1.py notebook.ipynb`.
+  - **Descend** (Enter) into the block — peek recurses over an in-memory copy: code opens
+    syntax-highlighted, images render as ASCII art. `Esc` returns to the notebook.
+  - `peek --list notebook.ipynb` prints the block names and sizes to stdout.
 
 `--plain` drops the rendered view entirely.
 
 Both nbformat 4 and the older nbformat-3 `worksheets` layout parse.
 
-> Inline ASCII rendering of image outputs is a planned follow-up — for now they are noted, not
-> drawn.
+> In the rendered view, image outputs are noted (`🖼 image/png output`), not drawn inline —
+> drawing them inside the scrolling text is a planned follow-up. To see an image now, open the
+> **Blocks** view and descend (Enter) into it.
 
 The Info view adds a Notebook section:
 

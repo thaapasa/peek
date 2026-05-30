@@ -132,7 +132,7 @@ TOML), prose word count (excludes fenced code), and reading-time estimate at 230
 
 #### Jupyter Notebook ✅
 
-`.ipynb` files (JSON of cells) get a dual view:
+`.ipynb` files (JSON of cells) get three views:
 
 - **Rendered** (default) — the notebook is translated to one Markdown document and rendered
   through the shared Markdown pipeline: markdown cells as prose, code cells as `In [n]:`-labelled
@@ -143,6 +143,13 @@ TOML), prose word count (excludes fenced code), and reading-time estimate at 230
 - **Source** — the raw notebook JSON via the generic structured content mode (pretty-printed, `r`
   toggles raw). Reachable with Tab; becomes the entry view with `--raw`. `--plain` drops the
   rendered view.
+- **Blocks** — a flat listing TOC of every code cell and image output, numbered in document order
+  with readable synthetic names (`code-1.py`, `image-1.png`, …) instead of the notebook's opaque
+  cell ids. Each row is extractable (`x`, or `--extract code-1.py`, writes the Python source or the
+  decoded image bytes) and descendable (Enter recurses into peek over an in-memory copy — code
+  opens syntax-highlighted, images render as ASCII). `--list` prints the block names + sizes. Image
+  outputs are base64 in the file; peek decodes them (via the hand-rolled `crate::base64`) only at
+  extract / descend time, so the render path never materialises image bytes.
 
 The Info view adds a Notebook section: nbformat version, kernel display name, language + version,
 cell count (code / markdown / raw split), output count (with image / error sub-counts), and the

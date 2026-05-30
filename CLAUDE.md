@@ -29,6 +29,7 @@ read when adding files, modifying a module, or unsure where logic lives.
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
+  base64.rs            — shared standard-alphabet base64 decoder (crate-wide; notebook image extract is first user)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   input/               — InputSource (File / Memory / FileRange / TempFile) + ByteSource +
                          LineSource (streaming, anchor-indexed); detect (magic-byte / extension /
