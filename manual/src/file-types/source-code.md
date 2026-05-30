@@ -11,6 +11,15 @@ cat script | peek -L bash
 peek -L rust unknown_file
 ```
 
+## Config files
+
+Config files highlight through the same path — `.ini`, `.cfg`, `.conf`, `.properties`, `.env`,
+`.hcl`, `.tf`, and by-name matches like `Makefile`, `Dockerfile`, `.gitignore`, and
+`.editorconfig`. A few filename special cases cover gaps where the extension misleads or is
+absent: `.env.local` / `.env.production` / `.envrc` highlight as `.env`, `justfile` uses the
+Makefile grammar, and `.dockerignore` uses the gitignore grammar. Formats with no grammar
+(`.dhall`, `.cue`) show as plain text.
+
 ## Line numbers
 
 Off by default. Enable at startup with `-n` / `--line-numbers`, or toggle with `l` in the viewer.

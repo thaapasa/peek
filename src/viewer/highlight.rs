@@ -203,16 +203,20 @@ pub(crate) fn syntax_token_for(
     file_type: &FileType,
 ) -> Option<String> {
     match file_type {
-        FileType::SourceCode { syntax } => forced_language
-            .map(String::from)
-            .or_else(|| syntax.clone())
-            .or_else(|| {
-                source
-                    .disk_path()
-                    .and_then(|p| p.file_name())
-                    .and_then(|n| n.to_str())
-                    .map(String::from)
-            }),
+        FileType::SourceCode { syntax } => {
+            let file_name = source
+                .disk_path()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str());
+            forced_language
+                .map(String::from)
+                // Filename-keyed config grammars must win over the extension:
+                // `.env.local` has a misleading `local` extension, and
+                // `justfile` has no extension at all.
+                .or_else(|| file_name.and_then(config_name_syntax).map(String::from))
+                .or_else(|| syntax.clone())
+                .or_else(|| file_name.map(String::from))
+        }
         FileType::Structured(fmt) => Some(
             match fmt {
                 StructuredFormat::Json
@@ -228,6 +232,26 @@ pub(crate) fn syntax_token_for(
         FileType::Svg => Some("XML".to_string()),
         FileType::Html => Some("HTML".to_string()),
         FileType::Markdown => Some("Markdown".to_string()),
+        _ => None,
+    }
+}
+
+/// Map config filenames to a syntax name when the extension is misleading
+/// (`.env.local` → `local`) or absent (`justfile`), or when no dedicated
+/// grammar exists and a same-format one is close enough. Returns `None` for
+/// names that resolve fine via extension / bare-name lookup.
+fn config_name_syntax(file_name: &str) -> Option<&'static str> {
+    let lower = file_name.to_ascii_lowercase();
+    // `.env`, `.env.local`, `.env.production`, … (and `.envrc`).
+    if lower.starts_with(".env") {
+        return Some("DotENV");
+    }
+    match lower.as_str() {
+        // No Just grammar in two-face; Makefile is the closest fit (recipes,
+        // `#` comments, `:=` assignment).
+        "justfile" | ".justfile" => Some("Makefile"),
+        // Same line-glob format as .gitignore, which two-face does carry.
+        ".dockerignore" => Some("Git Ignore"),
         _ => None,
     }
 }
@@ -253,6 +277,30 @@ mod tests {
             PeekThemeName::IdeaDark,
             StyleMode::TrueColor,
         ))
+    }
+
+    /// Config filenames whose extension is misleading or absent must resolve
+    /// to a real grammar, not plain text.
+    #[test]
+    fn config_name_syntax_resolves() {
+        let tm = tm();
+        let cases = [
+            (".env", "DotENV"),
+            (".env.local", "DotENV"),
+            (".env.production", "DotENV"),
+            (".envrc", "DotENV"),
+            ("justfile", "Makefile"),
+            ("Justfile", "Makefile"),
+            (".dockerignore", "Git Ignore"),
+        ];
+        for (name, expected) in cases {
+            let token = config_name_syntax(name).expect("mapped");
+            assert_eq!(token, expected, "{name}");
+            assert_eq!(resolve_syntax(&tm, token).name, expected, "{name} resolves");
+        }
+        // A real extension must still win / pass through untouched.
+        assert_eq!(config_name_syntax("config.toml"), None);
+        assert_eq!(config_name_syntax("main.rs"), None);
     }
 
     /// Feeding `LineStreamHighlighter` line-by-line must produce the same

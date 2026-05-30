@@ -192,22 +192,19 @@ Still planned:
 
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 
-### Config Files ☐
+### Config Files ◐
 
-| Format     | Extensions              |
-|------------|-------------------------|
-| INI / CFG  | `.ini`, `.cfg`, `.conf` |
-| .env       | `.env`                  |
-| Java Props | `.properties`           |
-| HCL        | `.hcl`, `.tf`           |
-| Dhall      | `.dhall`                |
-| CUE        | `.cue`                  |
+Syntax highlighting ships — see [features.md → Source Code](features.md#source-code-). INI / CFG /
+CONF / `.properties` / `.env` (incl. `.env.local` etc.) / HCL / TF and by-name matches (`Makefile`,
+`Dockerfile`, `.gitignore`, `justfile`, …) all resolve to a syntect grammar through the standard
+text path; no dedicated mode. `.dhall` / `.cue` have no grammar in two-face and fall to plain text.
 
-Most route through syntect for highlighting (already present for some). INI/properties have native
-parsers if structured pretty-print + section folding ever wanted. HCL/Dhall/CUE: highlighting only
-unless the parser ecosystems mature.
+Still open (only if a use case appears):
 
-Crates (where pretty-print is wanted): `rust-ini`, `java-properties`, `hcl-rs`.
+- **Structured pretty-print + section folding** for INI / properties via native parsers
+  (`rust-ini`, `java-properties`) — would need the folding infrastructure (see
+  [Block Collapsing](#block-collapsing--folding-)), so deferred with it.
+- **HCL / Dhall / CUE** beyond highlighting — typed parsing only if those ecosystems mature.
 
 ### Email ☐
 

@@ -105,6 +105,14 @@ All standard languages supported by syntect with `two-face`/bat extended definit
 languages including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML,
 Dockerfile.
 
+Config files highlight through the same path — no dedicated mode. `.ini` / `.cfg` / `.conf` /
+`.properties` / `.env` / `.hcl` / `.tf`, plus by-name matches (`Makefile`, `Dockerfile`,
+`.gitignore`, `.editorconfig`, …) resolve to their grammar via syntect's extension/name lookup.
+Filename-keyed special cases fill the gaps where the extension misleads or is absent:
+`.env.local` / `.env.production` / `.envrc` → DotENV, `justfile` → Makefile (closest grammar; no
+Just definition exists), `.dockerignore` → Git Ignore. Names with no grammar (`.dhall`, `.cue`)
+fall back to plain text.
+
 Features: syntax-colored source with theme support; toggleable line numbers (✅, `--line-numbers` /
 `-n` / `l`).
 
