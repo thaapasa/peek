@@ -101,10 +101,12 @@ impl Notebook {
 }
 
 /// nbformat 4 keeps cells at the top level; nbformat 3 nested them under
-/// `worksheets[].cells`. Handle both so old notebooks still render.
-fn collect_cells(root: &Value) -> Vec<Cell> {
+/// `worksheets[].cells`. Yields the raw cell `Value`s in document order so
+/// both the parse model here and the blocks listing share one definition
+/// of "where the cells live" — the nbformat-3-vs-4 rule can't drift.
+pub(super) fn cells(root: &Value) -> Vec<&Value> {
     if let Some(cells) = root.get("cells").and_then(Value::as_array) {
-        return cells.iter().filter_map(parse_cell).collect();
+        return cells.iter().collect();
     }
     root.get("worksheets")
         .and_then(Value::as_array)
@@ -112,8 +114,11 @@ fn collect_cells(root: &Value) -> Vec<Cell> {
         .flatten()
         .filter_map(|ws| ws.get("cells").and_then(Value::as_array))
         .flatten()
-        .filter_map(parse_cell)
         .collect()
+}
+
+fn collect_cells(root: &Value) -> Vec<Cell> {
+    cells(root).into_iter().filter_map(parse_cell).collect()
 }
 
 fn parse_cell(cell: &Value) -> Option<Cell> {
@@ -188,11 +193,18 @@ fn parse_data_bundle(data: &Value) -> Output {
 
 /// Notebook string fields are stored either as a single string or as an
 /// array of line-strings (each usually carrying its own trailing `\n`).
-/// Join both shapes to one string.
-fn join_text(v: Option<&Value>) -> String {
+/// Join both shapes to one string. The `Option` form is convenience over
+/// [`value_text`] for the common `v.get("field")` call site.
+pub(super) fn join_text(v: Option<&Value>) -> String {
+    value_text(v.unwrap_or(&Value::Null))
+}
+
+/// Join a notebook string field (single string or array of line-strings)
+/// to one owned string. Shared with the blocks listing.
+pub(super) fn value_text(v: &Value) -> String {
     match v {
-        Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(parts)) => parts.iter().filter_map(Value::as_str).collect(),
+        Value::String(s) => s.clone(),
+        Value::Array(parts) => parts.iter().filter_map(Value::as_str).collect(),
         _ => String::new(),
     }
 }

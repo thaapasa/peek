@@ -10,7 +10,8 @@ with a dual view like Markdown:
     the kernel language.
   - **Outputs** appear under each code cell: `stdout` / `stderr` streams and `text/plain` results
     as fenced text, `error` outputs as a bold `ename: evalue` line followed by the traceback (ANSI
-    colour stripped), and image outputs (`image/png`, …) noted with their MIME type.
+    colour stripped), and image outputs noted by name (matching the Blocks listing, e.g.
+    `image-1.png`).
 - **Source** — the raw notebook JSON, pretty-printed via the structured content mode. Reachable
   with Tab; `r` toggles the raw (unformatted) JSON. Becomes the entry view with `--raw`.
 - **Blocks** — a flat table of contents listing every code cell and image output as an ordered
@@ -27,7 +28,7 @@ with a dual view like Markdown:
 
 Both nbformat 4 and the older nbformat-3 `worksheets` layout parse.
 
-> In the rendered view, image outputs are noted (`🖼 image/png output`), not drawn inline —
+> In the rendered view, image outputs are noted by name (`🖼 image-1.png`), not drawn inline —
 > drawing them inside the scrolling text is a planned follow-up. To see an image now, open the
 > **Blocks** view and descend (Enter) into it.
 

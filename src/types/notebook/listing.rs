@@ -19,6 +19,8 @@ use serde_json::Value;
 use crate::base64;
 use crate::viewer::listing::{Entry, EntryKind};
 
+use super::model::{cells, join_text, value_text};
+
 /// One extractable block, named in document order. `payload` borrows the
 /// parsed JSON so byte materialisation stays lazy until extract time.
 struct Block<'a> {
@@ -116,7 +118,7 @@ fn walk_blocks(root: &Value) -> Vec<Block<'_>> {
         if cell.get("cell_type").and_then(Value::as_str) != Some("code") {
             continue;
         }
-        let source = join_value(cell.get("source").or_else(|| cell.get("input")));
+        let source = join_text(cell.get("source").or_else(|| cell.get("input")));
         if !source.trim().is_empty() {
             code_n += 1;
             blocks.push(Block {
@@ -144,21 +146,6 @@ fn walk_blocks(root: &Value) -> Vec<Block<'_>> {
         }
     }
     blocks
-}
-
-/// nbformat 4 cells live at the top level; nbformat 3 nested them under
-/// `worksheets[].cells`.
-fn cells(root: &Value) -> Vec<&Value> {
-    if let Some(cells) = root.get("cells").and_then(Value::as_array) {
-        return cells.iter().collect();
-    }
-    root.get("worksheets")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|ws| ws.get("cells").and_then(Value::as_array))
-        .flatten()
-        .collect()
 }
 
 /// First `image/*` entry in an output's mime bundle, with its raw data
@@ -234,20 +221,6 @@ fn sanitise_ext(lang: &str) -> String {
         "txt".to_string()
     } else {
         cleaned
-    }
-}
-
-/// Notebook string fields are a single string or an array of line
-/// strings; join both to one owned string.
-fn join_value(v: Option<&Value>) -> String {
-    value_text(v.unwrap_or(&Value::Null))
-}
-
-fn value_text(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Array(parts) => parts.iter().filter_map(Value::as_str).collect(),
-        _ => String::new(),
     }
 }
 

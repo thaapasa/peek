@@ -191,4 +191,26 @@ mod tests {
         assert!(md.contains("🖼\u{00a0} *image-1.png*"), "got: {md}");
         assert!(md.contains("🖼\u{00a0} *image-2.jpg*"), "got: {md}");
     }
+
+    #[test]
+    fn push_fence_grows_past_backtick_runs() {
+        // No backticks: default 3-backtick fence.
+        let mut md = String::new();
+        push_fence(&mut md, "plain", "py");
+        assert!(md.starts_with("```py\n"), "got: {md}");
+        assert!(md.ends_with("```\n"), "got: {md}");
+
+        // Body holds a run of 3 backticks — fence must grow to 4 so the
+        // run cannot close the block.
+        let mut md = String::new();
+        push_fence(&mut md, "a```b", "");
+        assert!(md.starts_with("````\n"), "got: {md}");
+        assert!(md.ends_with("````\n"), "got: {md}");
+
+        // Longest run wins: 5 backticks inside → 6-backtick fence.
+        let mut md = String::new();
+        push_fence(&mut md, "x`````y```z", "");
+        assert!(md.starts_with("``````\n"), "got: {md}");
+        assert!(md.ends_with("``````\n"), "got: {md}");
+    }
 }
