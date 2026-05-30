@@ -44,7 +44,7 @@ use crate::viewer::search::{
     MAX_MATCHES, SearchTarget, find_matches, overlay_matches, smart_case_sensitive,
 };
 use crate::viewer::table::row_source::RowSource;
-use crate::viewer::ui::{Action, HelpEntry, take_cols};
+use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
 
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
@@ -621,12 +621,20 @@ impl Mode for RowsTableMode {
         let widths = self.widths.clone();
         let mut lines: Vec<String> = Vec::with_capacity(rows);
 
+        // Clip each row to the viewport width. Rows span every column
+        // from `h_col` to the last, which can sum past the terminal; the
+        // ScreenBuffer writes lines verbatim, so an over-wide line would
+        // soft-wrap onto the row below. Horizontal panning (`h_col`)
+        // brings off-screen-right columns into view — the clip is the
+        // right edge of that window.
+        let clip = |line: String| truncate_ansi(&line, ctx.term_cols);
+
         if self.has_header {
             let header_row = self.build_header_row(&widths, ctx.peek_theme);
             if !header_row.is_empty() {
-                lines.push(header_row);
+                lines.push(clip(header_row));
             }
-            lines.push(self.build_separator_row(&widths, ctx.peek_theme));
+            lines.push(clip(self.build_separator_row(&widths, ctx.peek_theme)));
         }
 
         let total_body = self.body_total();
@@ -634,7 +642,7 @@ impl Mode for RowsTableMode {
         let mut body_idx = self.top_record;
         while emitted < body_rows && body_idx < total_body {
             if let Some(row) = self.build_body_row(body_idx, &widths, ctx.peek_theme) {
-                lines.push(row);
+                lines.push(clip(row));
             }
             body_idx += 1;
             emitted += 1;
@@ -931,11 +939,13 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::input::InputSource;
+    use crate::info::RenderOptions;
+    use crate::input::{InputSource, detect};
     use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
     use crate::types::csv::compose::{build_csv_mode, infer_alignments};
     use crate::types::csv::format::CsvFormat;
     use crate::types::csv::parse::CsvData;
+    use crate::viewer::ui::strip_ansi_width;
     use bytes::Bytes;
 
     fn stdin(text: &str) -> InputSource {
@@ -1387,5 +1397,52 @@ mod tests {
         assert_eq!(s.matches.len(), 1);
         // It's in column 3 (description), not the title / author columns.
         assert_eq!(s.matches[0].col_idx, 3);
+    }
+
+    /// A table wider than the viewport must not emit a line wider than
+    /// the terminal — the ScreenBuffer writes lines verbatim, so an
+    /// over-wide line would soft-wrap onto the row below. Holds at the
+    /// left edge and after panning right.
+    #[test]
+    fn rendered_rows_never_exceed_viewport_width() {
+        // Four wide columns: the full row is far wider than 24 cols.
+        let text = "alpha,bravo,charlie,delta\n\
+                    wide_value_one,wide_value_two,wide_value_three,wide_value_four\n\
+                    another_long_a,another_long_b,another_long_c,another_long_d\n";
+        let src = stdin(text);
+        let detected = detect::detect(&src).unwrap();
+        let file_info = crate::info::gather(&src, &detected).unwrap();
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        let mut mode = build_csv_mode(data);
+
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let cols = 24;
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme: &theme,
+            render_opts: RenderOptions::default(),
+            term_cols: cols,
+            term_rows: 10,
+        };
+
+        let assert_within = |mode: &mut RowsTableMode| {
+            let win = mode.render_window(&ctx, 0, 10).unwrap();
+            for line in &win.lines {
+                assert!(
+                    strip_ansi_width(line) <= cols,
+                    "line wider than {cols} cols ({}): {line:?}",
+                    strip_ansi_width(line),
+                );
+            }
+        };
+
+        assert_within(&mut mode);
+        // Pan right twice — later columns become the left edge; the row
+        // from there to the last column still must not overflow.
+        mode.scroll(Action::ScrollRight);
+        mode.scroll(Action::ScrollRight);
+        assert_within(&mut mode);
     }
 }
