@@ -40,6 +40,7 @@ pub(crate) enum CellKind {
 /// One rendered cell output. The mime bundle on a `display_data` /
 /// `execute_result` is collapsed to a single best representation
 /// (image > text > html-note) at parse time so the renderer stays dumb.
+#[derive(Debug)]
 pub(crate) enum Output {
     /// `stream` output — stdout / stderr text.
     Stream { stderr: bool, text: String },
@@ -162,7 +163,7 @@ fn parse_output(out: &Value) -> Option<Output> {
                 .and_then(Value::as_str)
                 .unwrap_or("")
                 .to_string(),
-            traceback: strip_ansi(&join_text(out.get("traceback"))),
+            traceback: strip_ansi(&join_traceback(out.get("traceback"))),
         }),
         "execute_result" | "display_data" => Some(parse_data_bundle(out.get("data")?)),
         _ => None,
@@ -192,6 +193,21 @@ fn join_text(v: Option<&Value>) -> String {
     match v {
         Some(Value::String(s)) => s.clone(),
         Some(Value::Array(parts)) => parts.iter().filter_map(Value::as_str).collect(),
+        _ => String::new(),
+    }
+}
+
+/// Traceback frames are stored as an array of lines *without* trailing
+/// newlines (unlike `source` / `text`), so they must be joined with
+/// `\n` rather than concatenated — otherwise every frame runs together.
+fn join_traceback(v: Option<&Value>) -> String {
+    match v {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(parts)) => parts
+            .iter()
+            .filter_map(Value::as_str)
+            .collect::<Vec<_>>()
+            .join("\n"),
         _ => String::new(),
     }
 }
@@ -291,5 +307,66 @@ mod tests {
     fn strip_ansi_removes_csi() {
         assert_eq!(strip_ansi("\u{1b}[0;31mred\u{1b}[0m"), "red");
         assert_eq!(strip_ansi("plain"), "plain");
+    }
+
+    /// Parse the real `test-data/notebook.ipynb` fixture — a Jupyter
+    /// export with markdown / code / raw cells, stream + result + image
+    /// + error outputs, and an ANSI-coloured multi-line traceback.
+    #[test]
+    fn parses_real_fixture() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("test-data/notebook.ipynb");
+        let text = std::fs::read_to_string(&path).expect("fixture present");
+        let nb = Notebook::parse(&text).expect("fixture parses");
+
+        assert_eq!(nb.nbformat, (4, 5));
+        assert_eq!(nb.language.as_deref(), Some("python"));
+        assert_eq!(nb.language_version.as_deref(), Some("3.11.4"));
+        assert_eq!(nb.kernel.as_deref(), Some("Python 3 (ipykernel)"));
+
+        let kinds: Vec<_> = nb.cells.iter().map(|c| c.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                CellKind::Markdown,
+                CellKind::Code,
+                CellKind::Code,
+                CellKind::Code,
+                CellKind::Raw,
+            ]
+        );
+
+        // Cell 1: stdout stream + a text/plain result.
+        let c1 = &nb.cells[1];
+        assert_eq!(c1.exec_count, Some(1));
+        assert!(matches!(
+            &c1.outputs[0],
+            Output::Stream { stderr: false, text } if text == "loaded 8 points\n"
+        ));
+        assert!(matches!(&c1.outputs[1], Output::Text(t) if t == "np.float64(3.875)"));
+
+        // Cell 2: the plot — image preferred over the text/plain Figure repr.
+        let img = nb.cells[2]
+            .outputs
+            .iter()
+            .find(|o| matches!(o, Output::Image { .. }))
+            .expect("image output present");
+        assert!(matches!(img, Output::Image { mime } if mime == "image/png"));
+
+        // Cell 3: error — ANSI stripped, frames newline-joined (not run together).
+        match &nb.cells[3].outputs[0] {
+            Output::Error {
+                ename,
+                evalue,
+                traceback,
+            } => {
+                assert_eq!(ename, "ZeroDivisionError");
+                assert_eq!(evalue, "division by zero");
+                assert!(!traceback.contains('\u{1b}'), "ANSI not stripped");
+                assert!(traceback.contains('\n'), "frames not newline-joined");
+                assert!(traceback.contains("Traceback (most recent call last)"));
+            }
+            other => panic!("expected error output, got {other:?}"),
+        }
     }
 }
