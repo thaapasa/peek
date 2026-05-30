@@ -34,9 +34,11 @@ pub(crate) enum EpsImageSource {
 
 pub(crate) struct EpsImageRenderer {
     source: EpsImageSource,
-    /// Single-slot cache of the produced bitmap. The preview decode or
-    /// Ghostscript render runs once; pan / zoom / resize reuse it.
-    cached: RefCell<Option<Arc<DynamicImage>>>,
+    /// Single-slot cache of the render *outcome* — success or failure.
+    /// The Ghostscript render (a subprocess) or preview decode runs
+    /// exactly once; a failure is cached too so a broken Render tab
+    /// doesn't re-spawn `gs` on every pan / zoom / resize redraw.
+    cached: RefCell<Option<Result<Arc<DynamicImage>, String>>>,
 }
 
 impl EpsImageRenderer {
@@ -47,20 +49,22 @@ impl EpsImageRenderer {
         }
     }
 
-    fn bitmap(&self) -> Result<Arc<DynamicImage>> {
-        if let Some(img) = self.cached.borrow().as_ref() {
-            return Ok(Arc::clone(img));
+    fn bitmap(&self) -> Result<Arc<DynamicImage>, String> {
+        if let Some(cached) = self.cached.borrow().as_ref() {
+            return cached.clone();
         }
-        let img = match &self.source {
-            EpsImageSource::Preview(img) => Arc::clone(img),
+        let result = match &self.source {
+            EpsImageSource::Preview(img) => Ok(Arc::clone(img)),
             EpsImageSource::Ghostscript {
                 exe,
                 postscript,
                 crop_to_bbox,
-            } => Arc::new(super::gs::render(exe, postscript, *crop_to_bbox)?),
+            } => super::gs::render(exe, postscript, *crop_to_bbox)
+                .map(Arc::new)
+                .map_err(|e| format!("{e:#}")),
         };
-        *self.cached.borrow_mut() = Some(Arc::clone(&img));
-        Ok(img)
+        *self.cached.borrow_mut() = Some(result.clone());
+        result
     }
 }
 
@@ -79,7 +83,7 @@ impl PageRenderer for EpsImageRenderer {
         match self.bitmap() {
             Ok(img) => Ok(render_image_window(&img, config, args)),
             Err(e) => {
-                warnings.push(format!("render failed: {e:#}"));
+                warnings.push(format!("render failed: {e}"));
                 Ok(image_placeholder("[render unavailable]", args.term))
             }
         }

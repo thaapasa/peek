@@ -190,7 +190,7 @@ src/
       dsc.rs           — DSC comment parser: line-prefix scan to `%%EndComments`/body → DscInfo { title, creator, creation_date, for_whom, bounding_box, language_level, pages }
       format.rs        — PostScriptFormat { Eps, Ps } + label() + crop_to_bbox() (EPS → gs -dEPSCrop)
       gs.rs            — Optional Ghostscript bridge (never bundled): find() probes gs/gswin64c/gswin32c on PATH via `--version`; render(exe, postscript, crop_to_bbox) pipes PS on stdin → png16m on stdout (-dSAFER, page 1, 150 DPI), decodes via image crate
-      image_renderer.rs — EpsImageRenderer: PageRenderer (1 page) over EpsImageSource { Preview(Bytes) | Ghostscript { exe, postscript, crop_to_bbox } }; single-slot bitmap cache (decode / gs render once); defers to render_image_window. gs runs on first draw only
+      image_renderer.rs — EpsImageRenderer: PageRenderer (1 page) over EpsImageSource { Preview(Arc<DynamicImage>) decoded eagerly at compose (so an undecodable TIFF never becomes a dead tab) | Ghostscript { exe, postscript, crop_to_bbox } rendered lazily on first draw }; single-slot cache of the render *outcome* (Ok or Err) so a failing gs render runs exactly once, not per redraw; defers to render_image_window
       info.rs          — EpsInfo { format, dsc: DscInfo, preview: Option<PreviewMeta { kind, bytes, dimensions }>, gs_available }
       info_gather.rs   — Populate EpsInfo: parse DOS header → preview meta (+ best-effort TIFF dims), DSC from PS section, gs::find()
       info_render.rs   — Render section (header = format.label()): DSC fields + Preview (kind + dims / "none") + Render (Ghostscript / install hint)

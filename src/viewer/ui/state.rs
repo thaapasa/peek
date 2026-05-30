@@ -902,12 +902,21 @@ impl ViewerState {
             };
             f.modes[active].render_window(&ctx, scroll, rows)?
         };
+        // Append only warnings not already recorded. Paged renderers
+        // re-emit the same per-frame warning on every redraw when a page
+        // can't be rendered (e.g. a failed Ghostscript / image decode);
+        // deduping keeps `file_info.warnings` from growing without bound
+        // and avoids needless Info-view cache invalidation each frame.
         let new_warnings = f.modes[active].take_warnings();
-        if !new_warnings.is_empty() {
-            f.file_info.warnings.extend(new_warnings);
-            if let Some(idx) = f.mode_index(ModeId::Info) {
-                f.views[idx] = None;
+        let mut added_any = false;
+        for w in new_warnings {
+            if !f.file_info.warnings.contains(&w) {
+                f.file_info.warnings.push(w);
+                added_any = true;
             }
+        }
+        if added_any && let Some(idx) = f.mode_index(ModeId::Info) {
+            f.views[idx] = None;
         }
         Ok(RenderedView {
             lines: window.lines,
