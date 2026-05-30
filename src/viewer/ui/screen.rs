@@ -10,9 +10,13 @@ use crossterm::{
 ///
 /// Caches the previous frame's content rows + status string. On each
 /// `draw`, writes only rows that differ from the cache, using
-/// move-to-row + write + clear-to-EOL. This skips the full-screen
-/// clear (no flash gap during animation playback) and avoids
-/// rewriting unchanged regions (status-only changes touch one row).
+/// move-to-row + clear-to-EOL + write. Clearing the row *before* the
+/// write (not after) means a row that paints fewer cells than last
+/// frame — or a stray cursor-moving control char that skips cells
+/// without painting them — can never leave previous-frame content
+/// showing through. This skips the full-screen clear (no flash gap
+/// during animation playback) and avoids rewriting unchanged regions
+/// (status-only changes touch one row).
 ///
 /// On terminal width change the caller must `invalidate()` — a
 /// byte-equal cached row in a wider terminal would still leave stale
@@ -77,11 +81,17 @@ impl ScreenBuffer {
                 continue;
             }
             execute!(stdout, cursor::MoveTo(0, i as u16))?;
-            stdout.write_all(line.as_bytes())?;
-            // Reset before EL so clear-to-EOL paints with default bg,
-            // not the line's trailing color attribute.
+            // Clear the whole row to default bg before writing it. Reset
+            // first so the clear paints with default bg, not a leftover
+            // color attribute. Pre-clearing (rather than a trailing
+            // clear-to-EOL) guarantees no stale cell survives even if the
+            // new line is shorter or contains a cursor-jumping control.
             stdout.write_all(reset_bytes)?;
             execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
+            stdout.write_all(line.as_bytes())?;
+            // Trailing reset so the line's last color attribute doesn't
+            // bleed into the next row's pre-clear or the status line.
+            stdout.write_all(reset_bytes)?;
         }
         for i in end..blank_through {
             execute!(stdout, cursor::MoveTo(0, i as u16))?;

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io;
 
 use anyhow::Result;
@@ -97,11 +98,59 @@ fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
     }
 }
 
+/// Tab stop width, in columns. A TAB advances to the next multiple of this.
+/// 4, not the terminal default of 8 — finer indentation reads better for
+/// code/markup, and since tabs are fully expanded here no raw `\t` reaches
+/// the terminal, so there's no mismatch with its native 8-col stops.
+const TAB_WIDTH: usize = 4;
+
+/// Expand TAB (0x09) to spaces against [`TAB_WIDTH`]-column tab stops,
+/// measured in visible columns. SGR escape sequences are copied verbatim
+/// and counted as zero width, so a tab inside styled text lands on the
+/// same stop it would in the raw text. Returns `Cow::Borrowed` when the
+/// input has no tab — the overwhelmingly common case — so tab-free lines
+/// never allocate.
+///
+/// This is the single point where tabs become real, paintable cells. A
+/// terminal renders a raw `\t` as a cursor *jump* that skips cells without
+/// clearing them (exposing whatever was underneath) and that the
+/// width-counting helpers measure as zero columns (desyncing wrap / scroll
+/// geometry). Expanding here, in the shared width layer that every text
+/// pipeline routes through, keeps wrap counting, h-scroll slicing, and the
+/// final paint agreeing on where a tab's cells are — and guarantees no raw
+/// `\t` ever reaches the terminal.
+pub(crate) fn expand_tabs(s: &str) -> Cow<'_, str> {
+    if !s.contains('\t') {
+        return Cow::Borrowed(s);
+    }
+    let mut out = String::with_capacity(s.len() + TAB_WIDTH);
+    let mut col = 0usize;
+    for token in scan(s) {
+        match token {
+            Sgr::Esc(esc) => out.push_str(esc),
+            Sgr::Text(text) => {
+                for c in text.chars() {
+                    if c == '\t' {
+                        let n = TAB_WIDTH - (col % TAB_WIDTH);
+                        out.extend(std::iter::repeat_n(' ', n));
+                        col += n;
+                    } else {
+                        out.push(c);
+                        col += UnicodeWidthChar::width(c).unwrap_or(0);
+                    }
+                }
+            }
+        }
+    }
+    Cow::Owned(out)
+}
+
 /// Count the visible terminal-column width of a string, ignoring ANSI
 /// escape sequences. CJK and emoji are treated as 2 cols; combining marks
-/// as 0 cols (per `unicode-width`).
+/// as 0 cols (per `unicode-width`). Tabs are expanded ([`expand_tabs`]).
 pub(crate) fn strip_ansi_width(s: &str) -> usize {
-    scan(s)
+    let s = expand_tabs(s);
+    scan(&s)
         .filter_map(|t| match t {
             Sgr::Text(text) => Some(text),
             Sgr::Esc(_) => None,
@@ -128,6 +177,8 @@ pub(crate) fn wrap_styled(s: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![String::new()];
     }
+    let s = expand_tabs(s);
+    let s = s.as_ref();
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     let mut col = 0usize;
@@ -172,6 +223,8 @@ pub(crate) fn wrap_styled_words(s: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![String::new()];
     }
+    let s = expand_tabs(s);
+    let s = s.as_ref();
     struct Word {
         text: String,
         width: usize,
@@ -310,6 +363,8 @@ pub(crate) fn count_wrap_segments(s: &str, width: usize) -> usize {
     if width == 0 {
         return 1;
     }
+    let s = expand_tabs(s);
+    let s = s.as_ref();
     let mut count = 1usize;
     let mut col = 0usize;
     for token in scan(s) {
@@ -331,6 +386,7 @@ pub(crate) fn count_wrap_segments(s: &str, width: usize) -> usize {
 /// split. The caller appends its own truncation marker when needed —
 /// this is the bare column-clamp primitive shared by the table views.
 pub(crate) fn take_cols(s: &str, max_cols: usize) -> String {
+    let s = expand_tabs(s);
     let mut out = String::with_capacity(s.len());
     let mut taken = 0usize;
     for c in s.chars() {
@@ -357,6 +413,8 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
     if max_cols == 0 {
         return String::new();
     }
+    let s = expand_tabs(s);
+    let s = s.as_ref();
     let mut out = String::new();
     let mut col = 0usize;
     let mut taken = 0usize;
@@ -402,9 +460,10 @@ pub(crate) fn slice_styled_h(s: &str, start_col: usize, max_cols: usize) -> Stri
 /// visible terminal columns. A wide character (e.g. CJK) that wouldn't
 /// fit completely is dropped rather than split.
 pub(crate) fn truncate_ansi(s: &str, max_width: usize) -> String {
+    let s = expand_tabs(s);
     let mut result = String::with_capacity(s.len());
     let mut width = 0;
-    'outer: for token in scan(s) {
+    'outer: for token in scan(&s) {
         match token {
             Sgr::Esc(esc) => result.push_str(esc),
             Sgr::Text(text) => {
@@ -718,6 +777,70 @@ mod tests {
         // Skip 2, take 3 — the window starts mid-background-span.
         let out = slice_styled_h(&input, 2, 3);
         assert_eq!(out, format!("{bg}cde\x1b[0m"));
+    }
+
+    #[test]
+    fn expand_tabs_borrows_when_no_tab() {
+        // Hot path: a tab-free string must not allocate.
+        assert!(matches!(expand_tabs("no tabs here"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn expand_tabs_advances_to_next_stop() {
+        // Leading tab → 4 spaces (col 0 to stop 4).
+        assert_eq!(expand_tabs("\tx").as_ref(), "    x");
+        // Tab mid-line aligns to the next multiple of 4: "ab" at col 2,
+        // tab fills 2 to reach col 4.
+        assert_eq!(expand_tabs("ab\tc").as_ref(), "ab  c");
+        // A tab landing exactly on a stop still advances a full stop.
+        assert_eq!(expand_tabs("1234\tx").as_ref(), "1234    x");
+    }
+
+    #[test]
+    fn expand_tabs_counts_escapes_as_zero_width() {
+        // SGR escape is copied verbatim and does not move the tab stop —
+        // the tab still expands from visible col 0.
+        let red = "\x1b[31m";
+        let input = format!("{red}\tx");
+        let out = expand_tabs(&input);
+        assert_eq!(out.as_ref(), format!("{red}    x"));
+    }
+
+    #[test]
+    fn expand_tabs_counts_cjk_as_two_cols() {
+        // CJK char is width 2, so the following tab fills 2 to col 4.
+        assert_eq!(expand_tabs("你\tx").as_ref(), "你  x");
+    }
+
+    #[test]
+    fn wrap_styled_expands_tabs_before_wrapping() {
+        // Leading tab becomes 4 spaces; at width 2 that wraps into two
+        // full-space rows before "x" lands on a third.
+        assert_eq!(wrap_styled("\tx", 2), vec!["  ", "  ", "x"]);
+    }
+
+    #[test]
+    fn count_wrap_segments_matches_wrap_styled_with_tabs() {
+        // Geometry and paint must agree on tab-expanded width, or scroll
+        // desyncs. "\tabc" → 4 spaces + "abc" = 7 cols; at width 2 that
+        // is 4 segments.
+        let s = "\tabc";
+        assert_eq!(count_wrap_segments(s, 2), wrap_styled(s, 2).len());
+        assert_eq!(count_wrap_segments(s, 2), 4);
+    }
+
+    #[test]
+    fn slice_styled_h_expands_tabs_then_windows() {
+        // "\tx" → "    x"; skip 4, take 4 → "x".
+        assert_eq!(slice_styled_h("\tx", 4, 4), "x");
+        // Window entirely inside the expanded tab is blank spaces.
+        assert_eq!(slice_styled_h("\tx", 1, 2), "  ");
+    }
+
+    #[test]
+    fn strip_ansi_width_expands_tabs() {
+        // Leading tab counts as 4 visible columns, not 0.
+        assert_eq!(strip_ansi_width("\tx"), 5);
     }
 
     #[test]

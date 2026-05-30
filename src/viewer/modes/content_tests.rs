@@ -418,3 +418,32 @@ fn status_segments_show_search_position() {
             .any(|(s, _)| s == "no match")
     );
 }
+
+/// Regression: a leading TAB must reach the rendered line as spaces, not
+/// as a raw `\t`. A raw tab makes the terminal jump the cursor without
+/// painting the skipped cells, so stale content (e.g. a prior info
+/// screen) shows through the indentation, and the width helpers count it
+/// as zero columns, desyncing wrap / scroll geometry. ContentMode renders
+/// through those width helpers, which expand tabs to 4-col tab stops.
+#[test]
+fn tab_indented_line_expands_to_spaces_in_render() {
+    let source = InputSource::stdin(Bytes::from_static(b"\tindented\n"));
+    let file_info = crate::info::gather(&source, &detect::detect(&source).unwrap()).unwrap();
+    let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
+    let peek_theme = tm.peek_theme().clone();
+    let ctx = make_ctx(&file_info, &peek_theme);
+
+    let mut mode = plain_mode_from_bytes(b"\tindented\n");
+    mode.cached_cols = 80;
+    mode.cached_rows = 4;
+    let window = mode.render_window(&ctx, 0, 4).unwrap();
+    let first = &window.lines[0];
+    assert!(
+        !first.contains('\t'),
+        "rendered line must not contain a raw tab: {first:?}"
+    );
+    assert!(
+        first.starts_with("    indented"),
+        "leading tab should expand to 4 spaces: {first:?}"
+    );
+}
