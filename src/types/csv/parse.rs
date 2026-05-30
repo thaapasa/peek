@@ -32,12 +32,13 @@
 //! [`Record::malformed = true`] and the malformed counter bumped; the
 //! reader resyncs to the next newline automatically (csv crate does this).
 
-use std::io::{BufReader, Cursor, Read};
+use std::io::Cursor;
 
 use anyhow::{Context, Result};
 use csv::ReaderBuilder;
 
 use crate::input::InputSource;
+use crate::input::stream::{ByteStream, ReadSeek};
 use crate::viewer::table::row_source::RowSource;
 
 use super::format::CsvFormat;
@@ -127,14 +128,14 @@ pub struct CsvData {
     /// Last position reported by the csv reader, used to compute
     /// physical-line span between successive records.
     last_line: u64,
-    reader: csv::Reader<Box<dyn Read>>,
+    reader: csv::Reader<Box<dyn ReadSeek>>,
 }
 
 impl CsvData {
     pub fn open(source: &InputSource, fmt: CsvFormat) -> Result<Self> {
         let head = head_bytes(source)?;
         let (encoding, body_offset, has_bom) = sniff_encoding(&head);
-        let body_reader: Box<dyn Read> = build_body_reader(source, encoding, body_offset)?;
+        let body_reader: Box<dyn ReadSeek> = build_body_reader(source, encoding, body_offset)?;
         let delimiter = sniff_delimiter(&head[body_offset..], fmt);
 
         let mut reader = ReaderBuilder::new()
@@ -287,7 +288,7 @@ impl RowSource for CsvData {
 /// well-formed and malformed records. Errors are converted to
 /// `Record::error()` so the parser can resync without bubbling out.
 fn read_next(
-    reader: &mut csv::Reader<Box<dyn Read>>,
+    reader: &mut csv::Reader<Box<dyn ReadSeek>>,
     last_line: &mut u64,
 ) -> Result<Option<Record>> {
     let mut sr = csv::StringRecord::new();
@@ -335,22 +336,25 @@ fn sniff_encoding(head: &[u8]) -> (Encoding, usize, bool) {
     (Encoding::Utf8, 0, false)
 }
 
-/// Build the body reader passed to the csv crate. UTF-8: streaming
-/// `ByteStream` wrapped in a `BufReader`, BOM bytes consumed up front.
-/// UTF-16: read the full source, transcode to UTF-8, wrap in `Cursor`.
+/// Build the seekable body reader passed to the csv crate.
+///
+/// UTF-8: a `ByteStream` over the random-access byte source, ranged to
+/// start just past any BOM — so the csv reader's byte positions are
+/// 0-based over the body and `Reader::seek` can jump back to a recorded
+/// record position. UTF-16: the source is transcoded to a UTF-8 `Vec`
+/// up front and served from a `Cursor`. That fully materialises the
+/// file in memory; UTF-16 CSV is rare and the windowing memory bound
+/// doesn't apply to it (documented limitation).
 fn build_body_reader(
     source: &InputSource,
     encoding: Encoding,
     body_offset: usize,
-) -> Result<Box<dyn Read>> {
+) -> Result<Box<dyn ReadSeek>> {
     match encoding {
         Encoding::Utf8 => {
-            let mut stream = source.open_stream()?;
-            if body_offset > 0 {
-                let mut throw = vec![0u8; body_offset];
-                stream.read_exact(&mut throw)?;
-            }
-            Ok(Box::new(BufReader::new(stream)))
+            let bs = source.open_byte_source()?;
+            let len = bs.len();
+            Ok(Box::new(ByteStream::range(bs, body_offset as u64, len)))
         }
         Encoding::Utf16Le | Encoding::Utf16Be => {
             let raw = source.read_bytes()?;
