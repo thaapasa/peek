@@ -728,7 +728,9 @@ mod tests {
         // Top-of-file rows always resolve from the seed.
         assert_eq!(id(&data, 1), "100001");
 
-        // Count pass settles the total (header + 10 000 rows).
+        // Count pass settles the total. This is the raw CSV record
+        // count — the header row plus 10 000 data rows; the table body
+        // excludes the header and shows 10 000 transactions.
         data.ensure_all().unwrap();
         assert_eq!(data.total_records(), Some(10_001));
         assert_eq!(data.loaded(), 10_001);
