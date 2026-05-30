@@ -14,6 +14,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
+- **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV extract, workbook metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT, RTF, EPUB, CBZ
 - **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata

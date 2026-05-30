@@ -11,6 +11,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Structured data   | JSON / JSONC / JSON5 / JSONL, YAML, TOML, XML               |
 | Tabular data      | CSV, TSV (aligned table view)                               |
 | Databases         | SQLite (schema listing + streaming row viewer)              |
+| Spreadsheets      | `.xlsx`, `.xlsm`, `.ods` (sheet listing → table per sheet)   |
 | Documents         | DOCX, ODT, RTF                                              |
 | PDF / Illustrator | `.pdf`, `.ai` (paged render + text + embeds)                |
 | EPS / PostScript  | `.eps`, `.ps` (embedded preview + Ghostscript render + DSC info) |

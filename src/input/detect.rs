@@ -21,6 +21,7 @@ pub use crate::types::ebook::format::EbookFormat;
 pub use crate::types::eps::format::PostScriptFormat;
 pub use crate::types::font::format::FontFormat;
 pub use crate::types::pdf::format::PdfFlavor;
+pub use crate::types::spreadsheet::format::SpreadsheetFormat;
 pub use crate::types::sqlite::format::SqliteFormat;
 pub use crate::types::structured::format::StructuredFormat;
 
@@ -34,6 +35,7 @@ use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
 use crate::types::eps::detect as eps_detect;
 use crate::types::font::detect as font_detect;
+use crate::types::spreadsheet::detect as spreadsheet_detect;
 use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
 
@@ -87,6 +89,10 @@ pub enum FileType {
     /// (when `gs` is on PATH), the PostScript source, and a DSC-metadata
     /// Info section.
     PostScript(PostScriptFormat),
+    /// Spreadsheet workbook (`.xlsx` / `.xlsm` / `.ods`). Drives a sheet
+    /// listing whose rows drill into a streaming table view, a raw
+    /// ZIP-entry listing, and a workbook Info section.
+    Spreadsheet(SpreadsheetFormat),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -417,6 +423,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     }
     if let Some(fmt) = eps_detect::format_from_mime(mime) {
         return Some(FileType::PostScript(fmt));
+    }
+    if let Some(fmt) = spreadsheet_detect::format_from_mime(mime) {
+        return Some(FileType::Spreadsheet(fmt));
     }
     if mime == "image/svg+xml" {
         return Some(FileType::Svg);
@@ -750,6 +759,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = eps_detect::format_from_ext(&ext) {
         return Some(FileType::PostScript(fmt));
+    }
+    if let Some(fmt) = spreadsheet_detect::format_from_ext(&ext) {
+        return Some(FileType::Spreadsheet(fmt));
     }
     if let Some(fmt) = document_detect::format_from_ext(&ext) {
         return Some(FileType::Document(fmt));

@@ -147,6 +147,7 @@ ttf-parser = "0.25"
 # Glyph rasterizer for font specimen render. Already used by the image
 # pipeline's glyph atlas; now also promoted to a runtime dep.
 fontdue = "0.9"
+calamine = "0.35.0"
 
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]

@@ -19,6 +19,7 @@
   - [Structured data](./file-types/structured-data.md)
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
+  - [Spreadsheets](./file-types/spreadsheets.md)
   - [Documents](./file-types/documents.md)
   - [PDF & Illustrator](./file-types/pdf.md)
   - [EPS & PostScript](./file-types/eps.md)

@@ -508,7 +508,7 @@ fn local_name(name: QName<'_>) -> Vec<u8> {
 fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
-            return attr.unescape_value().ok().map(|s| s.into_owned());
+            return crate::xml::unescape_attr_value(&attr);
         }
     }
     None
@@ -645,9 +645,9 @@ fn parse_image_rels(xml: &str) -> HashMap<String, String> {
                 let mut ty = None;
                 for attr in e.attributes().flatten() {
                     match attr.key.as_ref() {
-                        b"Id" => id = attr.unescape_value().ok().map(|s| s.into_owned()),
-                        b"Target" => target = attr.unescape_value().ok().map(|s| s.into_owned()),
-                        b"Type" => ty = attr.unescape_value().ok().map(|s| s.into_owned()),
+                        b"Id" => id = crate::xml::unescape_attr_value(&attr),
+                        b"Target" => target = crate::xml::unescape_attr_value(&attr),
+                        b"Type" => ty = crate::xml::unescape_attr_value(&attr),
                         _ => {}
                     }
                 }

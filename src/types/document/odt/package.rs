@@ -709,7 +709,7 @@ fn local_name(name: QName<'_>) -> Vec<u8> {
 fn attr_val_local(e: &BytesStart<'_>, want_local: &[u8]) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
-            return attr.unescape_value().ok().map(|s| s.into_owned());
+            return crate::xml::unescape_attr_value(&attr);
         }
     }
     None

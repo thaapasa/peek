@@ -88,8 +88,10 @@ fn read_container_opf_path(zip: &mut ZipArchive<Box<dyn ReadSeek>>) -> Result<St
         match reader.read_event_into(&mut buf)? {
             Event::Empty(e) | Event::Start(e) if e.name() == QName(b"rootfile") => {
                 for attr in e.attributes().flatten() {
-                    if attr.key == QName(b"full-path") {
-                        return Ok(attr.unescape_value()?.into_owned());
+                    if attr.key == QName(b"full-path")
+                        && let Some(v) = crate::xml::unescape_attr_value(&attr)
+                    {
+                        return Ok(v);
                     }
                 }
             }
@@ -165,10 +167,8 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
                         let mut href = None;
                         for attr in e.attributes().flatten() {
                             match attr.key.local_name().as_ref() {
-                                b"id" => id = attr.unescape_value().ok().map(|c| c.into_owned()),
-                                b"href" => {
-                                    href = attr.unescape_value().ok().map(|c| c.into_owned())
-                                }
+                                b"id" => id = crate::xml::unescape_attr_value(&attr),
+                                b"href" => href = crate::xml::unescape_attr_value(&attr),
                                 _ => {}
                             }
                         }
@@ -179,9 +179,9 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
                     b"itemref" => {
                         for attr in e.attributes().flatten() {
                             if attr.key.local_name().as_ref() == b"idref"
-                                && let Ok(v) = attr.unescape_value()
+                                && let Some(v) = crate::xml::unescape_attr_value(&attr)
                             {
-                                spine.push(v.into_owned());
+                                spine.push(v);
                             }
                         }
                     }

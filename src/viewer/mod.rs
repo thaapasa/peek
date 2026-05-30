@@ -118,6 +118,11 @@ impl Registry {
             FileType::PostScript(_) => {
                 crate::types::eps::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::Spreadsheet(fmt) => {
+                crate::types::spreadsheet::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
             FileType::Comic(ComicFormat::Cbz) => {
                 crate::types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }

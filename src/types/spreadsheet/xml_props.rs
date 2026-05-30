@@ -1,0 +1,121 @@
+//! Core document properties from the workbook container.
+//!
+//! OOXML stores them in `docProps/core.xml`, ODS in `meta.xml`. Both
+//! lean on Dublin Core (`dc:title`, `dc:creator`, …) with a few
+//! vocabulary differences for keywords / dates, so one parser keyed on
+//! the full prefixed element names covers both.
+
+use std::io::{Cursor, Read};
+
+use quick_xml::Reader;
+use quick_xml::events::Event;
+use zip::ZipArchive;
+
+use crate::input::InputSource;
+use crate::types::document::DocumentMetadata;
+
+use super::format::SpreadsheetFormat;
+
+/// Read + parse the container's metadata XML. `None` on any failure
+/// (unreadable zip, missing entry) — metadata is best-effort.
+pub(crate) fn read_metadata(
+    source: &InputSource,
+    fmt: SpreadsheetFormat,
+) -> Option<DocumentMetadata> {
+    let bytes = source.read_bytes().ok()?;
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).ok()?;
+    let entry = if fmt.is_ooxml() {
+        "docProps/core.xml"
+    } else {
+        "meta.xml"
+    };
+    let xml = read_entry(&mut zip, entry)?;
+    Some(parse_props(&xml))
+}
+
+fn read_entry<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>, name: &str) -> Option<String> {
+    let mut f = zip.by_name(name).ok()?;
+    let mut s = String::new();
+    f.read_to_string(&mut s).ok()?;
+    Some(s)
+}
+
+#[derive(Clone, Copy)]
+enum Field {
+    Title,
+    Creator,
+    Subject,
+    Description,
+    Keywords,
+    Created,
+    Modified,
+}
+
+/// Map a prefixed element name to the metadata field it feeds. Covers
+/// both the OOXML core-properties vocabulary and the ODS `meta.xml` one.
+fn field_for(name: &[u8]) -> Option<Field> {
+    match name {
+        b"dc:title" => Some(Field::Title),
+        // OOXML uses `dc:creator`; ODS prefers `meta:initial-creator`
+        // but also carries `dc:creator` — first non-empty wins.
+        b"dc:creator" | b"meta:initial-creator" => Some(Field::Creator),
+        b"dc:subject" => Some(Field::Subject),
+        b"dc:description" => Some(Field::Description),
+        b"cp:keywords" | b"meta:keyword" => Some(Field::Keywords),
+        b"dcterms:created" | b"meta:creation-date" => Some(Field::Created),
+        // OOXML modified = `dcterms:modified`; ODS = `dc:date`.
+        b"dcterms:modified" | b"dc:date" => Some(Field::Modified),
+        _ => None,
+    }
+}
+
+fn parse_props(xml: &str) -> DocumentMetadata {
+    let mut reader = Reader::from_str(xml);
+    reader.config_mut().trim_text(true);
+    let mut meta = DocumentMetadata::default();
+    let mut current: Option<Field> = None;
+    let mut text = String::new();
+
+    loop {
+        match reader.read_event() {
+            Ok(Event::Start(e)) => {
+                current = field_for(e.name().as_ref());
+                text.clear();
+            }
+            Ok(Event::Text(t)) if current.is_some() => {
+                if let Ok(decoded) = t.xml_content() {
+                    text.push_str(&decoded);
+                }
+            }
+            Ok(Event::End(_)) => {
+                if let Some(field) = current.take() {
+                    let value = text.trim();
+                    if !value.is_empty() {
+                        assign(&mut meta, field, value);
+                    }
+                    text.clear();
+                }
+            }
+            Ok(Event::Eof) | Err(_) => break,
+            _ => {}
+        }
+    }
+    meta
+}
+
+/// First non-empty value wins (handles ODS carrying both
+/// `meta:initial-creator` and `dc:creator`).
+fn assign(meta: &mut DocumentMetadata, field: Field, value: &str) {
+    let slot = match field {
+        Field::Title => &mut meta.title,
+        Field::Creator => &mut meta.creator,
+        Field::Subject => &mut meta.subject,
+        Field::Description => &mut meta.description,
+        Field::Keywords => &mut meta.keywords,
+        Field::Created => &mut meta.created,
+        Field::Modified => &mut meta.modified,
+    };
+    if slot.is_none() {
+        *slot = Some(value.to_string());
+    }
+}
