@@ -400,7 +400,7 @@ search (substring, smart-case) that spans the whole file — it pages the window
 record rather than holding them all, so it stays exhaustive at bounded memory; `n` / `p`
 step matches, panning columns and scrolling rows to bring each match into view. The exact
 total record count (and jump-to-end) is settled by a one-time streaming count pass that
-discards cells; until then the info view shows `≥ N`. Malformed records (over 4 MiB raw, over 10 000 physical
+discards cells; until then the info view shows `N (partial)`. Malformed records (over 4 MiB raw, over 10 000 physical
 lines, or rejected by the csv crate) render as a single `<error>` row in `theme.warning`
 and bump the status-bar counter. Print mode renders the seed widths only (no auto-widen)
 and allows long cells to overflow rightward for that one row — alignment resumes on the
