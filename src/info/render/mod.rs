@@ -91,6 +91,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Eps(info) => {
             crate::types::eps::info_render::render_section(lines, info, theme);
         }
+        FileExtras::Spreadsheet(info) => {
+            crate::types::spreadsheet::info_render::render_section(lines, info, theme);
+        }
         FileExtras::Audio(stats) => {
             crate::types::audio::info_render::render_section(lines, stats, theme);
         }

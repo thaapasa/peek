@@ -24,6 +24,7 @@ pub mod markdown;
 pub mod notebook;
 pub mod objfile;
 pub mod pdf;
+pub mod spreadsheet;
 pub mod sql;
 pub mod sqlite;
 pub mod structured;

@@ -34,6 +34,7 @@ pub use crate::types::markdown::info::MarkdownInfo;
 pub use crate::types::notebook::NotebookInfo;
 pub use crate::types::objfile::info::ObjectInfo;
 pub use crate::types::pdf::PdfStats;
+pub use crate::types::spreadsheet::SpreadsheetInfo;
 pub use crate::types::sql::info::SqlInfo;
 pub use crate::types::sqlite::info::SqliteInfo;
 pub use crate::types::structured::info::StructuredInfo;
@@ -101,6 +102,7 @@ pub enum FileExtras {
     Document(DocumentStats),
     Pdf(PdfStats),
     Eps(EpsInfo),
+    Spreadsheet(SpreadsheetInfo),
     Audio(AudioStats),
     Csv(CsvStats),
     Sqlite(SqliteInfo),

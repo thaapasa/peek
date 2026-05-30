@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::input::detect::{
     ArchiveFormat, AudioFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat,
-    EbookFormat, FileType, PdfFlavor, PostScriptFormat, StructuredFormat,
+    EbookFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat, StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -187,6 +187,15 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Document(DocumentFormat::Rtf) => "application/rtf",
         FileType::Pdf(_) => "application/pdf",
         FileType::PostScript(_) => "application/postscript",
+        FileType::Spreadsheet(SpreadsheetFormat::Xlsx) => {
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        }
+        FileType::Spreadsheet(SpreadsheetFormat::Xlsm) => {
+            "application/vnd.ms-excel.sheet.macroenabled.12"
+        }
+        FileType::Spreadsheet(SpreadsheetFormat::Ods) => {
+            "application/vnd.oasis.opendocument.spreadsheet"
+        }
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",
@@ -295,6 +304,11 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Pdf(PdfFlavor::Illustrator) => &["ai"],
         FileType::PostScript(PostScriptFormat::Eps) => &["eps", "epsf", "epsi"],
         FileType::PostScript(PostScriptFormat::Ps) => &["ps"],
+        // Workbooks magic-detect as application/zip; accept the real
+        // extension so the mismatch warning stays quiet.
+        FileType::Spreadsheet(SpreadsheetFormat::Xlsx) => &["xlsx"],
+        FileType::Spreadsheet(SpreadsheetFormat::Xlsm) => &["xlsm"],
+        FileType::Spreadsheet(SpreadsheetFormat::Ods) => &["ods"],
         FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
         FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
         FileType::Compressed(CompressionFormat::Gz) => &["gz", "tgz"],
