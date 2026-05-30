@@ -5,6 +5,7 @@
 //! the current one when both are directories), so this mode owns no
 //! navigation state of its own.
 
+use std::ops::Range;
 use std::time::SystemTime;
 
 use anyhow::Result;
@@ -15,7 +16,10 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
-use crate::viewer::modes::{ExtractTarget, Mode, ModeId, Position, RenderCtx, Window};
+use crate::viewer::modes::{
+    ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window,
+};
+use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry};
 
 use super::read::{DirEntry, DirEntryKind};
@@ -35,6 +39,11 @@ pub struct DirectoryMode {
     /// Top of viewport (row index).
     top: usize,
     viewport_rows: usize,
+    /// Active leaf-name search, if any. Scans every entry's name; the
+    /// `line` field on each match is the index into `self.entries`.
+    /// Every row is selectable here (flat listing), so navigation just
+    /// moves the selection onto the match.
+    search: Option<SearchState>,
 }
 
 impl DirectoryMode {
@@ -55,7 +64,31 @@ impl DirectoryMode {
             selected,
             top: 0,
             viewport_rows: 0,
+            search: None,
         }
+    }
+
+    /// Match ranges (in the row's name bytes) and which one is the
+    /// active cursor, for `paint_row`. Empty when no search is active
+    /// or the row carries no hits.
+    fn name_match_ranges(&self, row: usize) -> (Vec<Range<usize>>, Option<usize>) {
+        self.search
+            .as_ref()
+            .and_then(|s| s.line_overlay(row))
+            .unwrap_or_default()
+    }
+
+    /// Move the selection onto `row` and scroll it into view.
+    fn reveal_match(&mut self, row: usize) {
+        self.selected = Some(row);
+        self.reconcile();
+    }
+
+    fn step_match(&mut self, delta: isize) {
+        let Some(row) = self.search.as_mut().and_then(|s| s.step(delta)) else {
+            return;
+        };
+        self.reveal_match(row);
     }
 
     fn max_top(&self) -> usize {
@@ -106,6 +139,7 @@ impl DirectoryMode {
 
     fn paint_row(
         &self,
+        row: usize,
         entry: &DirEntry,
         theme: &PeekTheme,
         opts: RenderOptions,
@@ -117,7 +151,8 @@ impl DirectoryMode {
         let painted_perms = row::paint_perms(&perms, theme);
         let painted_size =
             row::paint_size(&size, entry.size, entry.kind == DirEntryKind::Dir, theme);
-        let painted_name = paint_name(entry, theme, selected);
+        let (ranges, current) = self.name_match_ranges(row);
+        let painted_name = paint_name(entry, theme, selected, &ranges, current);
         let painted_mtime = mtime_width
             .map(|width| row::paint_mtime(&format_mtime(entry.mtime, opts.utc), width, theme));
         let core = row::compose_row(
@@ -153,7 +188,14 @@ impl Mode for DirectoryMode {
             .map(|(i, e)| {
                 let row = self.top + i;
                 let selected = self.selected == Some(row);
-                self.paint_row(e, ctx.peek_theme, ctx.render_opts, mtime_width, selected)
+                self.paint_row(
+                    row,
+                    e,
+                    ctx.peek_theme,
+                    ctx.render_opts,
+                    mtime_width,
+                    selected,
+                )
             })
             .collect();
         Ok(Window {
@@ -165,8 +207,15 @@ impl Mode for DirectoryMode {
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
         let mtime_width = mtime_width_for(&self.entries, show_mtime, ctx.render_opts.utc);
-        for entry in &self.entries {
-            let line = self.paint_row(entry, ctx.peek_theme, ctx.render_opts, mtime_width, false);
+        for (row, entry) in self.entries.iter().enumerate() {
+            let line = self.paint_row(
+                row,
+                entry,
+                ctx.peek_theme,
+                ctx.render_opts,
+                mtime_width,
+                false,
+            );
             out.write_line(&line)?;
         }
         Ok(())
@@ -248,13 +297,56 @@ impl Mode for DirectoryMode {
             Some(i) => format!("{}/{} (directory)", i + 1, total),
             None => "empty".to_string(),
         };
-        vec![(s, theme.muted)]
+        let mut segs = vec![(s, theme.muted)];
+        if let Some(search) = &self.search {
+            segs.push(search.status_segment(theme));
+        }
+        segs
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
         // Enter (Descend) is global; surface it here so the help screen
-        // shows it under this mode too. No mode-private actions.
-        &[]
+        // shows it under this mode too.
+        const ACTIONS: &[HelpEntry] = &[
+            (&[Action::OpenSearch], "Search names"),
+            NEXT_PREV_MATCH_HELP,
+        ];
+        ACTIONS
+    }
+
+    fn handle(&mut self, action: Action) -> Handled {
+        match action {
+            Action::NextMatch => {
+                self.step_match(1);
+                Handled::Yes
+            }
+            Action::PrevMatch => {
+                self.step_match(-1);
+                Handled::Yes
+            }
+            Action::Back if self.search.is_some() => {
+                self.search = None;
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
+    }
+
+    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+        let query = match query {
+            Some(q) if !q.is_empty() => q,
+            _ => {
+                self.search = None;
+                return SearchTarget::Owned;
+            }
+        };
+        let search = SearchState::scan(self.entries.iter().map(|e| e.name.as_str()), query);
+        let first = search.first_line();
+        self.search = Some(search);
+        if let Some(row) = first {
+            self.reveal_match(row);
+        }
+        SearchTarget::Owned
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
@@ -321,7 +413,18 @@ fn mtime_width_for(entries: &[DirEntry], show_mtime: bool, utc: bool) -> Option<
     ))
 }
 
-fn paint_name(entry: &DirEntry, theme: &PeekTheme, selected: bool) -> String {
+/// Paint the entry name (accent for dirs, foreground for files) with a
+/// trailing `/` on directories. `match_ranges` (with optional
+/// `current_match`) overlays the search-match background on the matched
+/// bytes of the name; when the row is also selected the selection bg is
+/// laid down last so it reads as the active row.
+fn paint_name(
+    entry: &DirEntry,
+    theme: &PeekTheme,
+    selected: bool,
+    match_ranges: &[Range<usize>],
+    current_match: Option<usize>,
+) -> String {
     let leaf_color = if entry.kind == DirEntryKind::Dir {
         theme.accent
     } else {
@@ -332,18 +435,143 @@ fn paint_name(entry: &DirEntry, theme: &PeekTheme, selected: bool) -> String {
     } else {
         ""
     };
+    // Paint the name, then overlay search-match backgrounds. overlay_matches
+    // skips SGR escapes, so the foreground colour survives outside hits.
+    let mut buf = theme.paint(&entry.name, leaf_color);
+    if !match_ranges.is_empty() {
+        buf = overlay_matches(&buf, match_ranges, current_match, theme);
+    }
+    if !trailing.is_empty() {
+        buf.push_str(&theme.paint(trailing, theme.muted));
+    }
     if selected {
-        let mut buf = String::new();
-        theme.paint_into(&mut buf, &entry.name, leaf_color);
-        if !trailing.is_empty() {
-            theme.paint_into(&mut buf, trailing, theme.muted);
+        buf = theme.paint_bg(&buf, theme.selection);
+    }
+    buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(name: &str) -> DirEntry {
+        DirEntry {
+            name: name.to_string(),
+            kind: DirEntryKind::File,
+            size: 0,
+            mtime: None,
+            mode: None,
+            is_symlink: false,
+            stat_error: false,
         }
-        theme.paint_bg(&buf, theme.selection)
-    } else {
-        let mut buf = theme.paint(&entry.name, leaf_color);
-        if !trailing.is_empty() {
-            buf.push_str(&theme.paint(trailing, theme.muted));
+    }
+
+    fn dir(name: &str) -> DirEntry {
+        DirEntry {
+            kind: DirEntryKind::Dir,
+            ..file(name)
         }
-        buf
+    }
+
+    /// Three entries, no parent link:
+    ///   src/        (row 0)
+    ///   main.rs     (row 1)
+    ///   README.md   (row 2)
+    fn sample() -> DirectoryMode {
+        let mut m = DirectoryMode::new(
+            vec![dir("src"), file("main.rs"), file("README.md")],
+            Vec::new(),
+            false,
+        );
+        m.viewport_rows = 10;
+        m
+    }
+
+    fn plain_theme() -> crate::theme::ThemeManager {
+        crate::theme::ThemeManager::new(
+            crate::theme::PeekThemeName::IdeaDark,
+            crate::theme::StyleMode::Plain,
+        )
+    }
+
+    #[test]
+    fn search_moves_selection_to_match() {
+        let mut m = sample();
+        m.set_search(Some("main"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 1);
+        assert_eq!(m.selected, Some(1));
+    }
+
+    #[test]
+    fn search_includes_directories() {
+        let mut m = sample();
+        m.set_search(Some("src"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 1);
+        assert_eq!(m.selected, Some(0));
+    }
+
+    #[test]
+    fn search_step_cycles_with_wrap() {
+        let mut m = sample();
+        // "r" hits src, main.rs, README.md.
+        m.set_search(Some("r"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 3);
+        let first = m.selected;
+        m.handle(Action::NextMatch);
+        assert_ne!(m.selected, first);
+        m.handle(Action::NextMatch);
+        m.handle(Action::NextMatch);
+        assert_eq!(m.selected, first, "wraps back to first match");
+        m.handle(Action::PrevMatch);
+        assert_ne!(m.selected, first);
+    }
+
+    #[test]
+    fn search_smart_case() {
+        let mut m = sample();
+        m.set_search(Some("readme"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 1);
+        m.set_search(Some("README"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 1);
+        m.set_search(Some("Readme"));
+        assert_eq!(m.search.as_ref().unwrap().match_count(), 0);
+    }
+
+    #[test]
+    fn back_clears_search() {
+        let mut m = sample();
+        m.set_search(Some("main"));
+        assert!(m.search.is_some());
+        assert_eq!(m.handle(Action::Back), Handled::Yes);
+        assert!(m.search.is_none());
+        assert_eq!(m.handle(Action::Back), Handled::No);
+    }
+
+    #[test]
+    fn empty_query_clears() {
+        let mut m = sample();
+        m.set_search(Some("main"));
+        assert!(m.search.is_some());
+        m.set_search(Some(""));
+        assert!(m.search.is_none());
+        m.set_search(Some("main"));
+        m.set_search(None);
+        assert!(m.search.is_none());
+    }
+
+    #[test]
+    fn status_segment_shows_search_position() {
+        let mut m = sample();
+        let tm = plain_theme();
+        let theme = tm.peek_theme();
+        m.set_search(Some("r"));
+        let segs = m.status_segments(theme);
+        assert!(segs.iter().any(|(s, _)| s == "1/3"));
+        m.set_search(Some("zzz"));
+        let segs = m.status_segments(theme);
+        assert!(segs.iter().any(|(s, _)| s == "no match"));
+        m.set_search(None);
+        let segs = m.status_segments(theme);
+        assert!(!segs.iter().any(|(s, _)| s == "1/3" || s == "no match"));
     }
 }

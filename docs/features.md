@@ -949,7 +949,8 @@ walk back up — selecting it canonicalizes the current path and re-targets to i
 **Enter** descends: file → push (Esc returns to the listing); directory → re-target the current
 frame (no stack of dirs to back out of). **Esc** at any directory listing exits peek. Hidden
 entries are included; symlinks are followed for kind classification, with broken links shown as
-`?`. `--print` and `--list` both render the listing.
+`?`. `--print` and `--list` both render the listing. `/` searches entry names (same leaf-name
+search as the archive TOC); `n` / `p` step matches with wrap, moving the selection onto each hit.
 
 #### Hex Dump Mode ✅
 
