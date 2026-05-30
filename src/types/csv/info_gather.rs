@@ -35,7 +35,7 @@ pub fn gather(data: &CsvData, fmt: CsvFormat) -> CsvStats {
 
     // Capture header cells when the heuristic flagged row 0 as a header.
     if data.header_heuristic
-        && let Some(first) = data.records.first()
+        && let Some(first) = data.seed.first()
     {
         for (i, cell) in first.cells.iter().enumerate() {
             let text = cell.as_deref().unwrap_or("");
@@ -48,7 +48,7 @@ pub fn gather(data: &CsvData, fmt: CsvFormat) -> CsvStats {
 
     // Walk body rows from the seed.
     let mut col_type: Vec<Option<ColumnType>> = vec![None; col_count];
-    for record in data.records.iter().skip(body_start) {
+    for record in data.seed.iter().skip(body_start) {
         if record.malformed {
             continue;
         }
@@ -77,7 +77,7 @@ pub fn gather(data: &CsvData, fmt: CsvFormat) -> CsvStats {
         col.inferred_type = col_type[i].unwrap_or(ColumnType::String);
     }
 
-    let sampled = data.total_records().is_none() && data.records.len() >= SEED_RECORD_LIMIT;
+    let sampled = data.total_records().is_none() && data.seed.len() >= SEED_RECORD_LIMIT;
 
     CsvStats {
         format: fmt,

@@ -25,11 +25,28 @@ use super::source::ByteSource;
 /// refill (64 KiB).
 pub const DEFAULT_CHUNK: usize = 64 * 1024;
 
+/// `io::Read + io::Seek` in one object-safe trait, so a reader can carry
+/// either a seekable [`ByteStream`] or a `Cursor` behind one `Box`. The
+/// csv reader needs `Read + Seek` to seek back to recorded record
+/// positions; a plain `Box<dyn Read>` erases the `Seek` bound.
+// `Box<dyn ReadSeek>` satisfies `Read + Seek` via std's blanket
+// `impl<R: Read + ?Sized> Read for Box<R>` (and the `Seek` equivalent),
+// so it works directly as a `csv::Reader` inner reader.
+pub trait ReadSeek: io::Read + io::Seek {}
+impl<T: io::Read + io::Seek> ReadSeek for T {}
+
 /// Sequential byte stream over a sub-range of a `ByteSource`. Implements
-/// `io::Read`. `len()` reports the total bytes the stream will yield
-/// before EOF.
+/// `io::Read`, `io::BufRead`, and `io::Seek`. `len()` reports the total
+/// bytes the stream will yield before EOF.
+///
+/// Seek positions are relative to the stream's logical start (the range
+/// `offset`), so a `ByteStream::range(bs, body_offset, …)` exposes the
+/// post-BOM body as a clean 0-based seekable stream — which is exactly
+/// the coordinate space the csv reader's `Position::byte` lives in.
 pub struct ByteStream {
     bs: Box<dyn ByteSource>,
+    /// Absolute offset of logical position 0 (the range start).
+    start: u64,
     /// Next absolute offset to pull from the underlying source.
     offset: u64,
     /// Absolute offset one past the last byte the stream is allowed to yield.
@@ -54,10 +71,28 @@ impl ByteStream {
         let end = start.saturating_add(len.min(source_len.saturating_sub(start)));
         Self {
             bs,
+            start,
             offset: start,
             end,
             buf: Bytes::new(),
         }
+    }
+}
+
+impl io::Seek for ByteStream {
+    fn seek(&mut self, pos: io::SeekFrom) -> io::Result<u64> {
+        // Logical coordinates: 0 == `start`, len == `end - start`.
+        let len = self.end - self.start;
+        let logical = match pos {
+            io::SeekFrom::Start(n) => n,
+            io::SeekFrom::End(n) => len.saturating_add_signed(n),
+            io::SeekFrom::Current(n) => (self.offset - self.start).saturating_add_signed(n),
+        };
+        let logical = logical.min(len);
+        self.offset = self.start + logical;
+        // Drop the buffered chunk — it belonged to the old position.
+        self.buf = Bytes::new();
+        Ok(logical)
     }
 }
 
@@ -143,6 +178,27 @@ mod tests {
             lines,
             vec![b"alpha\n".to_vec(), b"beta\n".to_vec(), b"gamma\n".to_vec()]
         );
+    }
+
+    #[test]
+    fn seek_is_relative_to_range_start() {
+        use std::io::{Seek, SeekFrom};
+        // Range starts at byte 7 ("body-suffix"); logical 0 == byte 7.
+        let mut s = ByteStream::range(source(b"prefix-body-suffix"), 7, 11);
+        let mut buf = [0u8; 4];
+        s.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"body");
+        // Seek back to logical 0 re-reads from the range start.
+        assert_eq!(s.seek(SeekFrom::Start(0)).unwrap(), 0);
+        s.read_exact(&mut buf).unwrap();
+        assert_eq!(&buf, b"body");
+        // Seek to logical 5 ("suffix").
+        assert_eq!(s.seek(SeekFrom::Start(5)).unwrap(), 5);
+        let mut rest = Vec::new();
+        s.read_to_end(&mut rest).unwrap();
+        assert_eq!(rest, b"suffix");
+        // Seek past the logical end clamps to len.
+        assert_eq!(s.seek(SeekFrom::Start(999)).unwrap(), 11);
     }
 
     #[test]

@@ -30,7 +30,8 @@ pub fn render_section(lines: &mut Vec<String>, stats: &CsvStats, theme: &PeekThe
         theme,
     );
 
-    // Record count: `≥ N (sampled)` while partial, exact otherwise.
+    // Record count: `N (partial)` while still seed-sampled, exact once
+    // a count pass has reached EOF.
     let record_label = match stats.total_records {
         Some(n) => paint_count(n, theme),
         None => format!(

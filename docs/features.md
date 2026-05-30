@@ -379,8 +379,12 @@ when needed. JSON Lines defaults to pretty: each non-empty line round-trips thro
 and is separated by a blank line.
 
 CSV / TSV open in an aligned table view: sticky header row + separator under it, body rows
-streamed lazily through a `csv` crate record reader. Column widths are seeded from the first
-1000 records, auto-widen monotonically as wider cells scroll into view (the sticky header
+served from a bounded sliding window over a seekable `csv` reader — a retained 1000-record
+seed (top of file) plus a window that refills by seeking back to a sparse record-position
+anchor, so resident memory stays flat regardless of file size or how far the user scrolls
+(multi-GB files no longer materialise to the deepest row viewed). Column widths are seeded
+from the first 1000 records, auto-widen monotonically as wider cells scroll into view (the
+sticky header
 repaints on every width change), and shrink only when the user presses `Shift+R` (reflow from
 viewport). `Shift+H` toggles the header on/off, overriding the heuristic (row 0 all-text →
 header on; row 0 has a typed cell → header off). `Left` / `Right` pan one column at a time
@@ -392,8 +396,11 @@ column stats. Encoding is UTF-8 native, with transparent UTF-16 LE/BE → UTF-8 
 the byte-source boundary. Multi-line cells (embedded `\n` from a quoted record) collapse to
 one visual row with a muted `↵` glyph marking the line break; `\t` becomes a space and
 `\r` is dropped so nothing can break the terminal cursor. `/` opens a single-cell-scoped
-search (substring, smart-case); `n` / `p` step matches, panning columns and scrolling rows
-to bring each match into view. Malformed records (over 4 MiB raw, over 10 000 physical
+search (substring, smart-case) that spans the whole file — it pages the window across every
+record rather than holding them all, so it stays exhaustive at bounded memory; `n` / `p`
+step matches, panning columns and scrolling rows to bring each match into view. The exact
+total record count (and jump-to-end) is settled by a one-time streaming count pass that
+discards cells; until then the info view shows `N (partial)`. Malformed records (over 4 MiB raw, over 10 000 physical
 lines, or rejected by the csv crate) render as a single `<error>` row in `theme.warning`
 and bump the status-bar counter. Print mode renders the seed widths only (no auto-widen)
 and allows long cells to overflow rightward for that one row — alignment resumes on the
@@ -715,10 +722,11 @@ spool to a `NamedTempFile` that lives for the connection's lifetime, so piped da
 work too. peek never writes to the database — connections open with
 `SQLITE_OPEN_READ_ONLY`.
 
-Cell-scoped search currently only covers the buffered window. Predicate-pushdown
-LIKE / GLOB queries and incremental full-scan search are deferred. WAL / `-journal`
-sidecar inspection, SQLCipher-encrypted DBs, and a custom-query prompt are also
-deferred.
+Cell-scoped search spans the whole table — it pages the sliding window across every row
+(repeated `ensure_row`), so it's exhaustive without materialising the table. Predicate-
+pushdown LIKE / GLOB queries (running the match in SQL instead of row-by-row) are deferred.
+WAL / `-journal` sidecar inspection, SQLCipher-encrypted DBs, and a custom-query prompt are
+also deferred.
 
 ### Certificates and Keys ◐
 

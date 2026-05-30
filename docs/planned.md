@@ -350,7 +350,6 @@ file:line citations as starting points to re-find.
 
 | Priority | Site                                 | Fix                                                                                                                                        |
 |----------|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| High     | CSV `records` Vec                    | Sliding window / ring around viewport; drop records far from current scroll. Alternative: hard ceiling + "showing first N records" notice. |
 | High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".                                           |
 | Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                                                                |
 | Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                                                     |

@@ -81,9 +81,12 @@ the status bar shows the running malformed count.
 `/` opens the search prompt. Matches are scoped to a single cell — a
 query that would span the comma between two columns yields nothing.
 Substring scan, smart-case (all-lowercase query → case-insensitive; any
-uppercase → case-sensitive). `n` / `p` step through matches, wrapping at
-the ends; the viewport scrolls vertically and pans horizontally to
-bring each match's cell into view. `Esc` clears the search.
+uppercase → case-sensitive). Search spans the whole file, not just the
+loaded rows — even on a multi-gigabyte CSV peek pages through every
+record without loading it all into memory. `n` / `p` step through
+matches, wrapping at the ends; the viewport scrolls vertically and pans
+horizontally to bring each match's cell into view. `Esc` clears the
+search.
 
 ## Print mode
 
