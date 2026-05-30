@@ -14,6 +14,7 @@
 - [Overview](./file-types/index.md)
   - [Source code](./file-types/source-code.md)
   - [Markdown](./file-types/markdown.md)
+  - [Jupyter notebooks](./file-types/notebooks.md)
   - [HTML](./file-types/html.md)
   - [Structured data](./file-types/structured-data.md)
   - [CSV / TSV](./file-types/csv.md)

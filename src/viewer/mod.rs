@@ -95,6 +95,9 @@ impl Registry {
             FileType::Markdown => {
                 crate::types::markdown::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::Notebook => {
+                crate::types::notebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
             FileType::Image => {
                 crate::types::image::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }

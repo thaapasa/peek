@@ -44,8 +44,10 @@ src/
                          .tmTheme data; StyleMode (truecolor/256/16/grayscale/plain); SGR
                          encoders + tokenizer + ActiveStyle; ThemeManager
   types/               — Per-file-type modules (each owns reader + info + view-mode):
-                         binary, text, markdown, sql, sqlite (read-only via bundled
-                         rusqlite — schema listing + streaming row viewer), css,
+                         binary, text, markdown, notebook (ipynb — cells rendered
+                         via the markdown pipeline + JSON source), sql, sqlite
+                         (read-only via bundled rusqlite — schema listing +
+                         streaming row viewer), css,
                          structured (JSON/YAML/TOML/XML), csv, image (+ ASCII pipeline +
                          SVG anim), html, ebook (epub), document (docx/odt/rtf), pdf,
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,

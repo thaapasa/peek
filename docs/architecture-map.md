@@ -63,6 +63,14 @@ src/
         walker.rs      — Event-stream walker: container stack (List/Item/Blockquote) + leaf block (Paragraph/Heading/CodeBlock) + table builder. Inline styling for emph/strong/strike/code/links/images, task-list marker swap, footnote ref + def, frontmatter dim block, tight-vs-loose list spacing
         table.rs       — GFM tables → box-drawing. Column widths sized to widest cell then proportional shrink to fit available width; per-column alignment from header separator; cell wrap with SGR preserved
         wrap.rs        — wrap_with_prefix (rebuild prefix on each wrapped row) + display_width (counts text tokens, ignores SGR)
+    notebook/
+      mod.rs           — Module wiring + NotebookRenderer / NotebookInfo re-exports
+      model.rs         — serde_json::Value walker → Notebook { nbformat, language, kernel, cells }; tolerant of nbformat 3 (worksheets/input) vs 4; collapses output mime bundles to one Output (Stream/Text/Image/Html/Error); strip_ansi for tracebacks
+      renderer.rs      — NotebookRenderer: TextRenderer that translates the notebook to one Markdown doc (code cells → fenced blocks in kernel lang, outputs → fenced text / notes) then reuses markdown::render_markdown for highlight + wrap
+      compose.rs       — Compose: RenderedTextMode (default, --raw inverts) + structured-JSON ContentMode source view
+      info.rs          — NotebookInfo (nbformat, kernel/language, cell + output tallies, max execution count) built from a parsed Notebook
+      info_gather.rs   — Parse notebook → NotebookInfo (None falls back to text/binary gather)
+      info_render.rs   — Render Notebook info section
     sql/
       mod.rs           — Module wiring
       info.rs          — SqlInfo { text: TextStats, stats: SqlStats } + SqlStats + SqlDialect

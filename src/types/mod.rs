@@ -20,6 +20,7 @@ pub mod font;
 pub mod html;
 pub mod image;
 pub mod markdown;
+pub mod notebook;
 pub mod objfile;
 pub mod pdf;
 pub mod sql;

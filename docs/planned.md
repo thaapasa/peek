@@ -216,18 +216,6 @@ Still planned:
 
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 
-### Notebooks ☐
-
-| Format           | Extensions |
-|------------------|------------|
-| Jupyter Notebook | `.ipynb`   |
-
-`.ipynb` is JSON under the hood. Default content view should render the notebook as a sequence of
-cells (markdown text + syntax-highlighted source + outputs) rather than dumping raw JSON. Raw JSON
-view stays available via `r` (raw toggle).
-
-File info: kernel/language, cell count (markdown vs code), output count, notebook metadata.
-
 ### Config Files ☐
 
 | Format     | Extensions              |

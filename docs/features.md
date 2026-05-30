@@ -130,6 +130,27 @@ declared languages, inline-code / link / image / table / list-item counts, task-
 (`done / total + percent`), blockquote lines, footnote definitions, frontmatter detection (YAML /
 TOML), prose word count (excludes fenced code), and reading-time estimate at 230 wpm.
 
+#### Jupyter Notebook ✅
+
+`.ipynb` files (JSON of cells) get a dual view:
+
+- **Rendered** (default) — the notebook is translated to one Markdown document and rendered
+  through the shared Markdown pipeline: markdown cells as prose, code cells as `In [n]:`-labelled
+  fenced blocks syntect-highlighted in the kernel language, and outputs below each code cell —
+  stream / `text/plain` results as fenced text, `error` outputs as a bold `ename: evalue` header
+  plus the ANSI-stripped traceback, image outputs (`image/png` etc.) noted (inline ASCII rendering
+  is a follow-up). nbformat 4 and the older nbformat-3 `worksheets` layout both parse.
+- **Source** — the raw notebook JSON via the generic structured content mode (pretty-printed, `r`
+  toggles raw). Reachable with Tab; becomes the entry view with `--raw`. `--plain` drops the
+  rendered view.
+
+The Info view adds a Notebook section: nbformat version, kernel display name, language + version,
+cell count (code / markdown / raw split), output count (with image / error sub-counts), and the
+highest execution count.
+
+Detection is by `.ipynb` extension or by JSON carrying both `nbformat` and `cells` keys (so
+notebooks piped via stdin route to the cell viewer rather than the generic JSON pretty-printer).
+
 #### HTML ✅
 
 `.html` / `.htm` / `.xhtml` files (and stdin streams that start with `<!DOCTYPE html>` or

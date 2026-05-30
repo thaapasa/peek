@@ -59,6 +59,10 @@ pub enum FileType {
     /// code with syntect highlight), paired with a syntax-highlighted
     /// source view.
     Markdown,
+    /// Jupyter notebook (`.ipynb` — JSON document of cells). Renders the
+    /// cells (markdown prose + syntax-highlighted code + textual output)
+    /// as a styled read view, paired with the raw notebook JSON source.
+    Notebook,
     /// E-book (EPUB = ZIP container with HTML chapters + OPF
     /// metadata). Drives a per-chapter rendered read mode plus the
     /// container's listing TOC.
@@ -580,7 +584,13 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     #[allow(clippy::collapsible_match)]
     match first {
         Some(b'{') | Some(b'[') => {
-            if serde_json::from_str::<serde_json::Value>(text).is_ok() {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
+                // A JSON object carrying `nbformat` + `cells` is a
+                // Jupyter notebook — route it to the cell viewer rather
+                // than the generic JSON pretty-printer.
+                if value.get("nbformat").is_some() && value.get("cells").is_some() {
+                    return Some((FileType::Notebook, "application/x-ipynb+json"));
+                }
                 return Some((
                     FileType::Structured(StructuredFormat::Json),
                     "application/json",
@@ -724,6 +734,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "pdf" => FileType::Pdf,
         "class" => FileType::Classfile,
         "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn" => FileType::Markdown,
+        "ipynb" => FileType::Notebook,
         _ => return None,
     })
 }

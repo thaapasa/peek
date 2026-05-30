@@ -177,6 +177,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Svg => "image/svg+xml",
         FileType::Html => "text/html",
         FileType::Markdown => "text/markdown",
+        FileType::Notebook => "application/x-ipynb+json",
         FileType::Ebook(EbookFormat::Epub) => "application/epub+zip",
         FileType::Comic(ComicFormat::Cbz) => "application/vnd.comicbook+zip",
         FileType::Document(DocumentFormat::Docx) => {
@@ -280,6 +281,7 @@ pub fn extension_mismatch(
 fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
     match file_type {
         FileType::Markdown => &["md", "markdown", "mdown", "mkd", "mkdn", "mdwn"],
+        FileType::Notebook => &["ipynb"],
         FileType::Cert(_) => &[
             "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub",
         ],

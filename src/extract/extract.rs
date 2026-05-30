@@ -114,6 +114,7 @@ pub fn extract(
         | FileType::Structured(_)
         | FileType::Html
         | FileType::Markdown
+        | FileType::Notebook
         | FileType::Compressed(_)
         | FileType::Csv(_)
         | FileType::Cert(_)

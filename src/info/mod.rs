@@ -30,6 +30,7 @@ pub use crate::types::ebook::EbookStats;
 pub use crate::types::font::info::FontInfo;
 pub use crate::types::image::info::ImageStats;
 pub use crate::types::markdown::info::MarkdownInfo;
+pub use crate::types::notebook::NotebookInfo;
 pub use crate::types::objfile::info::ObjectInfo;
 pub use crate::types::pdf::PdfStats;
 pub use crate::types::sql::info::SqlInfo;
@@ -85,6 +86,7 @@ pub enum FileExtras {
     Svg(SvgStats),
     Structured(StructuredInfo),
     Markdown(MarkdownInfo),
+    Notebook(NotebookInfo),
     Sql(SqlInfo),
     Css(CssInfo),
     Binary(BinaryInfo),

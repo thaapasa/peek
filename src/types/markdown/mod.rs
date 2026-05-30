@@ -17,4 +17,5 @@ pub mod info_render;
 mod render;
 mod renderer;
 
+pub(crate) use render::render as render_markdown;
 pub(crate) use renderer::MarkdownRenderer;

@@ -249,6 +249,13 @@ fn gather_extras(
                 None => crate::types::binary::info::gather_extras(magic_mime),
             },
         },
+        FileType::Notebook => match crate::types::notebook::info_gather::gather_extras(source) {
+            Some(extras) => extras,
+            None => match gather_text_stats(source) {
+                Some(stats) => FileExtras::Text(stats),
+                None => crate::types::binary::info::gather_extras(magic_mime),
+            },
+        },
         FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
             (Some(stats), Ok(bytes)) => {
                 crate::types::svg::info_gather::gather_extras(stats, &bytes)

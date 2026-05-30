@@ -50,6 +50,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Markdown(info) => {
             crate::types::markdown::info_render::render_section(lines, info, theme);
         }
+        FileExtras::Notebook(info) => {
+            crate::types::notebook::info_render::render_section(lines, info, theme);
+        }
         FileExtras::Sql(info) => {
             crate::types::sql::info_render::render_section(lines, info, theme);
         }
