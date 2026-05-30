@@ -8,7 +8,7 @@ use super::info::PdfStats;
 
 pub fn render_section(lines: &mut Vec<String>, stats: &PdfStats, theme: &PeekTheme) {
     lines.push(String::new());
-    push_section_header(lines, "PDF", theme);
+    push_section_header(lines, stats.flavor.label(), theme);
 
     if let Some(err) = &stats.error {
         push_field(lines, "Error", &theme.paint_warning(err), theme);

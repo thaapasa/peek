@@ -9,7 +9,7 @@ Features at a glance:
 - Pretty-printed structured data (JSON, YAML, TOML, XML)
 - ASCII-art image rendering with 24-bit color
 - Animated GIF / WebP / animated SVG playback
-- Office documents (DOCX, ODT, RTF), PDF, EPUB
+- Office documents (DOCX, ODT, RTF), PDF, Adobe Illustrator (`.ai`), EPUB
 - Audio metadata + embedded cover art
 - Archive browsing (ZIP, tar, 7-Zip, cpio) and disk images (ISO, DMG)
 - PEM certificates and keys — subject, validity, SANs, fingerprints

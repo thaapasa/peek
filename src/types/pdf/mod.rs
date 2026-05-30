@@ -13,6 +13,7 @@
 
 pub mod compose;
 pub mod extract;
+pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;

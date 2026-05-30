@@ -12,7 +12,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Tabular data      | CSV, TSV (aligned table view)                               |
 | Databases         | SQLite (schema listing + streaming row viewer)              |
 | Documents         | DOCX, ODT, RTF                                              |
-| PDF               | `.pdf` (paged render + text + embeds)                       |
+| PDF / Illustrator | `.pdf`, `.ai` (paged render + text + embeds)                |
 | Ebooks            | EPUB                                                        |
 | Images            | PNG, JPEG, GIF, WebP, BMP, TIFF, ICO, AVIF, PNM, TGA, EXR, QOI, DDS |
 | Vector            | SVG (incl. CSS `@keyframes` animation)                      |

@@ -106,7 +106,7 @@ pub fn extract(
         FileType::Document(DocumentFormat::Rtf) => {
             crate::types::document::rtf::extract::extract(source, key)
         }
-        FileType::Pdf => crate::types::pdf::extract::extract(source, key),
+        FileType::Pdf(_) => crate::types::pdf::extract::extract(source, key),
         FileType::Directory => crate::types::directory::extract::extract(source, key),
         FileType::Audio(fmt) => audio_extract(source, *fmt, key),
         FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),

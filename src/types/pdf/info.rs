@@ -4,9 +4,12 @@
 //! DOCX and RTF.
 
 use crate::types::document::DocumentMetadata;
+use crate::types::pdf::format::PdfFlavor;
 
 #[derive(Debug, Clone)]
 pub struct PdfStats {
+    /// Plain PDF vs PDF-compatible Illustrator — drives the section label.
+    pub flavor: PdfFlavor,
     pub metadata: DocumentMetadata,
     pub page_count: usize,
     /// Count of `/EmbeddedFiles` attachments (file streams attached
@@ -31,6 +34,7 @@ pub struct PdfStats {
 impl PdfStats {
     pub fn empty() -> Self {
         Self {
+            flavor: PdfFlavor::Pdf,
             metadata: DocumentMetadata::default(),
             page_count: 0,
             attachment_count: 0,

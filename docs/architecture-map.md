@@ -210,14 +210,15 @@ src/
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
       mod.rs           — Module wiring; re-exports PdfStats, PdfPageRenderer, PdfTextRenderer
-      compose.rs       — compose(): PagedImageMode<PdfPageRenderer> (fit forced to FitWidth) + RenderedTextMode<PdfTextRenderer> + /EmbeddedFiles ListingMode
-      package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
+      format.rs        — PdfFlavor { Pdf, Illustrator }: `.ai` is PDF-compatible Illustrator (same render path); flavour drives the Info section label (`label()`) + extension-mismatch allow-list only
+      compose.rs       — compose(): PagedImageMode<PdfPageRenderer> (fit forced to FitWidth) + RenderedTextMode<PdfTextRenderer> (only when Doc::has_extractable_text — skipped for scans / outlined `.ai`) + /EmbeddedFiles ListingMode
+      package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / has_extractable_text (probes first 8 pages) / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
       page_renderer.rs — PdfPageRenderer: PageRenderer impl — rasterizes a page via Pdfium (~16 px/col) and ASCII-renders it through `pipeline::render::{prepare_decoded, render_prepared}`. Wrapped in the generic `viewer::paged::PagedImageMode`
       text_renderer.rs — PdfTextRenderer: TextRenderer impl over `Doc::page_text`; pages joined with muted `--- Page N ---` separator; greedy word-wrap with hard-break for over-width tokens. Per-page extract failures degrade to a placeholder line + warning
       extract.rs       — Extract `/EmbeddedFiles` attachment by name → InputSource::Memory; reuses `extract::sanitize_entry_path`
-      info.rs          — PdfStats { metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
-      info_gather.rs   — Populate PdfStats via package::open_doc; failures land as `error` field rendered as warning row
-      info_render.rs   — Render PDF info section (Version / Title / Author / Subject / Keywords / Created / Modified / Pages / Attachments). On error, render only `Error: ...` and stop
+      info.rs          — PdfStats { flavor: PdfFlavor, metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
+      info_gather.rs   — Populate PdfStats via package::open_doc; takes the PdfFlavor (carried on both success + error paths); failures land as `error` field rendered as warning row
+      info_render.rs   — Render info section, header from `flavor.label()` ("PDF" / "Adobe Illustrator") (Version / Title / Author / Subject / Keywords / Created / Modified / Pages / Attachments). On error, render only `Error: ...` and stop
     comic/
       mod.rs           — Module wiring; re-exports ComicStats / CbzPageRenderer
       compose.rs       — compose(): PagedImageMode<CbzPageRenderer> (paged images) + ZIP TOC ListingMode

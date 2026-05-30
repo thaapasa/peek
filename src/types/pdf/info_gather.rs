@@ -7,10 +7,11 @@
 use crate::info::FileExtras;
 use crate::input::InputSource;
 
+use super::format::PdfFlavor;
 use super::info::PdfStats;
 use super::package;
 
-pub fn gather_extras(source: &InputSource) -> FileExtras {
+pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> FileExtras {
     match package::open_doc(source) {
         Ok(doc) => {
             let embeds = doc.list_embeds();
@@ -23,6 +24,7 @@ pub fn gather_extras(source: &InputSource) -> FileExtras {
                 .filter(|e| e.path.starts_with("pages/"))
                 .count();
             let stats = PdfStats {
+                flavor,
                 metadata: doc.metadata(),
                 page_count: doc.page_count(),
                 attachment_count,
@@ -35,6 +37,7 @@ pub fn gather_extras(source: &InputSource) -> FileExtras {
         }
         Err(e) => {
             let mut stats = PdfStats::empty();
+            stats.flavor = flavor;
             stats.error = Some(format!("{e:#}"));
             FileExtras::Pdf(stats)
         }

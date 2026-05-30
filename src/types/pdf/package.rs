@@ -134,6 +134,23 @@ impl Doc {
         bitmap.as_image().context("pdfium bitmap → image failed")
     }
 
+    /// Whether the document has any extractable text in its first few
+    /// pages. Image-only PDFs (scans) and outlined-vector artwork
+    /// (Illustrator `.ai`) carry no text layer, so the text view would
+    /// be a dead, empty tab — compose skips it when this returns false.
+    /// Probes only the leading pages so the check stays cheap on
+    /// thousand-page documents; a cover image on page 1 is covered by
+    /// the small window.
+    pub fn has_extractable_text(&self) -> bool {
+        const PROBE_PAGES: usize = 8;
+        let limit = self.page_count().min(PROBE_PAGES);
+        (0..limit).any(|i| {
+            self.page_text(i)
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false)
+        })
+    }
+
     /// Extract page `idx`'s text content. Layout heuristics use Pdfium's
     /// own text iterator (whitespace + character ordering reflect
     /// in-document order, not visual layout).

@@ -112,7 +112,7 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
-            FileType::Pdf => {
+            FileType::Pdf(_) => {
                 crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Comic(ComicFormat::Cbz) => {

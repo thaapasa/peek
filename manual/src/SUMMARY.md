@@ -20,7 +20,7 @@
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
   - [Documents](./file-types/documents.md)
-  - [PDF](./file-types/pdf.md)
+  - [PDF & Illustrator](./file-types/pdf.md)
   - [Ebooks](./file-types/ebooks.md)
   - [Images](./file-types/images.md)
   - [SVG](./file-types/svg.md)

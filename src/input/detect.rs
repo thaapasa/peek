@@ -19,6 +19,7 @@ pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
 pub use crate::types::font::format::FontFormat;
+pub use crate::types::pdf::format::PdfFlavor;
 pub use crate::types::sqlite::format::SqliteFormat;
 pub use crate::types::structured::format::StructuredFormat;
 
@@ -75,8 +76,10 @@ pub enum FileType {
     /// exposes the ZIP listing TOC and per-entry extract.
     Document(DocumentFormat),
     /// PDF document. Drives a paged-image render mode + text-extraction
-    /// view + embedded-files listing.
-    Pdf,
+    /// view + embedded-files listing. The flavour distinguishes plain
+    /// PDF from PDF-compatible Adobe Illustrator (`.ai`) — same render
+    /// path, different Info label.
+    Pdf(PdfFlavor),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -396,7 +399,10 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         return Some(FileType::Document(fmt));
     }
     if mime == "application/pdf" {
-        return Some(FileType::Pdf);
+        // Magic alone can't tell a `.ai` from a `.pdf` (both lead with
+        // `%PDF`); the Illustrator flavour comes from the extension path
+        // upstream. A magic-only hit defaults to plain PDF.
+        return Some(FileType::Pdf(PdfFlavor::Pdf));
     }
     if mime == "image/svg+xml" {
         return Some(FileType::Svg);
@@ -731,7 +737,8 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     Some(match ext.as_str() {
         "svg" => FileType::Svg,
         "html" | "htm" | "xhtml" => FileType::Html,
-        "pdf" => FileType::Pdf,
+        "pdf" => FileType::Pdf(PdfFlavor::Pdf),
+        "ai" => FileType::Pdf(PdfFlavor::Illustrator),
         "class" => FileType::Classfile,
         "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn" => FileType::Markdown,
         "ipynb" => FileType::Notebook,

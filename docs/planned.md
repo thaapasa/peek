@@ -79,19 +79,23 @@ The release tarball already bundles the matching Pdfium build next to the binary
 - **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size down for
   embedded targets.
 
-### Vector / PostScript Files ☐
+### Vector / PostScript Files ◐
 
-| Format                  | Extensions |
-|-------------------------|------------|
-| Adobe Illustrator       | `.ai`      |
-| Encapsulated PostScript | `.eps`     |
-| PostScript              | `.ps`      |
+| Format                  | Extensions | Status |
+|-------------------------|------------|--------|
+| Adobe Illustrator (PDF) | `.ai`      | ✅      |
+| Encapsulated PostScript | `.eps`     | ☐      |
+| PostScript              | `.ps`      | ☐      |
 
 Modern `.ai` files (CS2 / 2005 onwards) are PDF 1.x internally — Illustrator saves a
-PDF-compatible stream by default. Detect the `%PDF-` magic in the first bytes and route to
-`pdfium-render` (already planned for PDF). Free win: the same library covers modern AI.
+PDF-compatible stream by default. **Shipped:** `.ai` routes through the existing Pdfium PDF
+stack via a `PdfFlavor::Illustrator` flavour (Info labels it "Adobe Illustrator", no
+extension-mismatch warning). Free win — the same library covers modern AI, zero binary growth.
 
-Legacy AI (pre-CS2) is pure PostScript and follows the EPS path below.
+Legacy AI (pre-CS2) is pure PostScript and follows the EPS path below. (Note: a PDF-compatible
+`.ai` can still render blank if the artwork lives only in Illustrator's private streams and the
+visible PDF content is empty — no bundleable renderer recovers that; only Ghostscript or
+Illustrator would.)
 
 **EPS modes (cyclable with Tab):**
 

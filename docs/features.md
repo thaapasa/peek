@@ -261,10 +261,16 @@ RTF opens to a single Read view by default. When the file embeds images as `\pic
 a synthetic TOC of those embeds is pushed alongside Read; `e` / `--extract` pulls one out
 through the recursive-peek pipeline. Plain RTFs without embeds stay single-view.
 
-#### PDF ✅
+#### PDF / Adobe Illustrator ✅
 
 `.pdf` files (Portable Document Format — binary container with paged content, optional
-attachments, and a metadata dict) get a multi-mode view powered by Pdfium:
+attachments, and a metadata dict) get a multi-mode view powered by Pdfium. `.ai` files
+(Adobe Illustrator, CS2/2005 onwards) are PDF 1.x internally — the default "Create PDF
+Compatible File" save embeds a full PDF rendering — so they route through the same Pdfium
+stack. The `.ai` extension selects an Illustrator flavour that labels the Info section
+"Adobe Illustrator" and accepts `.ai` over `%PDF` magic without an extension-mismatch
+warning; the render path is identical. (Legacy pre-CS2 `.ai` is pure PostScript and is not
+yet supported — see [planned.md](planned.md).)
 
 - **Read** (default) — paged image render. Each page is rasterized via Pdfium and ASCII-rendered
   through the shared image pipeline (same `prepare_decoded` / `render_prepared` path the
@@ -273,7 +279,9 @@ attachments, and a metadata dict) get a multi-mode view powered by Pdfium:
   background / image mode / fit re-renders only the visible page.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers. Same caching shape as DOCX / RTF (single `(width, style_mode)`
-  cache rebuilt on resize). Reachable via Tab.
+  cache rebuilt on resize). Reachable via Tab. Only present when the document actually carries
+  a text layer — image-only scans and outlined-vector artwork (`.ai`) extract nothing, so the
+  tab is skipped rather than shown empty (the first few pages are probed at compose time).
 - **Embeds** — when the PDF carries `/EmbeddedFiles` attachments, a `ListingMode` of those
   attachments. `e` / Enter extracts the selected attachment as an `InputSource::Memory` that
   re-detects through the recursive-peek pipeline (an attached CSV opens in a CSV view, an
@@ -283,7 +291,8 @@ attachments, and a metadata dict) get a multi-mode view powered by Pdfium:
   / `±HH:MM`), page count, attachment count.
 
 Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
-detects the `%PDF-` magic and routes to the PDF mode stack.
+detects the `%PDF-` magic and routes to the PDF mode stack (a piped `.ai` lands here too,
+labelled as plain PDF — the Illustrator flavour is only recovered from the `.ai` extension).
 
 Pdfium is loaded dynamically from `libpdfium.dylib` / `.so` / `.dll` shipped alongside the
 peek binary in the release tarball — no system install required at runtime. Encrypted /

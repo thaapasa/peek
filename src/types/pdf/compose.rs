@@ -38,9 +38,15 @@ pub fn compose(
                 cfg,
             )));
         }
-        modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(
-            doc.clone(),
-        ))));
+        // Only offer the text view when the document actually carries a
+        // text layer. Image-only scans and outlined-vector artwork
+        // (`.ai`) extract nothing, so the tab would render a wall of
+        // "[text unavailable]" — skip it instead.
+        if doc.has_extractable_text() {
+            modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(
+                doc.clone(),
+            ))));
+        }
         let embeds = doc.list_embeds();
         if !embeds.is_empty() {
             let entries = from_flat_paths(embeds);

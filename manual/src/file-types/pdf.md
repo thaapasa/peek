@@ -1,7 +1,13 @@
-# PDF
+# PDF & Adobe Illustrator
 
 `.pdf` files use [Pdfium](https://pdfium.googlesource.com/pdfium/) (Google's PDF library,
 dynamically loaded from `libpdfium.*` shipped alongside peek — no system install needed).
+
+`.ai` files (Adobe Illustrator, 2005 onwards) are PDF documents internally, so they open
+through the same modes — the Info section just labels them "Adobe Illustrator". Older
+PostScript-only Illustrator files are not supported. A few `.ai` files keep their artwork
+only in Illustrator-private data behind a blank visible PDF page; those render empty (Preview
+and QuickLook show them blank too).
 
 ## Modes
 
@@ -12,7 +18,8 @@ Cycled with Tab:
   Zoom / pan via the standard keys ([Zoom & pan](../viewer/zoom-pan.md)). Per-page cache keyed
   by terminal size + render settings; resize or mode cycling re-renders only the visible page.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
-  `--- Page N ---` markers.
+  `--- Page N ---` markers. Present only when the document has a text layer; image-only scans
+  and outlined-vector artwork (`.ai`) have none, so the tab is omitted rather than shown empty.
 - **Embeds** — listing of every extractable inner item. Covers `/EmbeddedFiles` attachments
   (`attachments/<name>`) and per-page inline image XObjects (`pages/page{N}/image{M}.{ext}`).
   `Enter` / `e` extracts the selected entry as a memory-backed source that re-enters peek (an
