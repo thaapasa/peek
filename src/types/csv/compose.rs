@@ -60,7 +60,7 @@ pub fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
     let cols = data.column_count();
     let mut numeric = vec![true; cols];
     let mut any_typed = vec![false; cols];
-    for rec in data.records.iter().skip(body_start) {
+    for rec in data.seed.iter().skip(body_start) {
         if rec.malformed {
             continue;
         }

@@ -268,9 +268,11 @@ impl RowsTableMode {
         (ranges, current)
     }
 
-    /// Build a [`CellSearch`] from the loaded records. Drives the source
-    /// to EOF first so search is exhaustive — the user expects a search
-    /// to span the whole file.
+    /// Build a [`CellSearch`] spanning the whole file. `ensure_all`
+    /// makes the total definite; then each record is pulled into the
+    /// source's sliding window via `ensure_row` just before it's read,
+    /// so the scan stays exhaustive without ever holding more than one
+    /// window in memory — the window slides forward as the scan walks.
     fn build_search(&mut self, query: &str) -> CellSearch {
         let _ = self.source.ensure_all();
         let sensitive = smart_case_sensitive(query);
@@ -278,6 +280,7 @@ impl RowsTableMode {
         let cols = self.widths.len();
         let loaded = self.source.loaded();
         'records: for record_idx in 0..loaded {
+            let _ = self.source.ensure_row(record_idx);
             if self.source.row_is_malformed(record_idx) {
                 continue;
             }
@@ -1129,7 +1132,7 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         // Sanity: fixture still carries embedded newlines.
         let multi = data
-            .records
+            .seed
             .iter()
             .filter(|r| !r.malformed)
             .filter(|r| {
@@ -1143,7 +1146,7 @@ mod tests {
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         // Render every record; no rendered line may contain a literal `\n`.
-        for rec in &data.records {
+        for rec in &data.seed {
             if rec.malformed {
                 continue;
             }
@@ -1170,7 +1173,7 @@ mod tests {
         let src = fixture("test-data/books.csv");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         let multi = data
-            .records
+            .seed
             .iter()
             .find(|r| {
                 !r.malformed

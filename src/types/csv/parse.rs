@@ -1,25 +1,28 @@
-//! Streaming CSV record reader.
+//! Streaming, bounded-memory CSV record reader.
 //!
-//! Builds the source into a [`CsvData`] holding:
+//! Builds the source into a [`CsvData`] backed by a seekable
+//! [`csv::Reader`]. Two tiers of resident records keep memory flat
+//! regardless of file size or scroll depth:
 //!
-//! * the active delimiter (extension default + content sniff override)
-//! * a seed scan of the first [`SEED_RECORD_LIMIT`] records, captured into
-//!   memory at open time — feeds initial column widths, header heuristic,
-//!   and the type-inference sample
-//! * an ongoing [`csv::Reader`] over the same byte source, paused at the
-//!   record after the seed; the table mode pulls more records on demand
-//!   as the user scrolls past the seed window
+//! * a **seed** of the first [`SEED_RECORD_LIMIT`] records, captured at
+//!   open and retained — feeds initial column widths, the header
+//!   heuristic, the type-inference sample, and serves `row()` for the
+//!   common top-of-file case
+//! * a sliding **window** of [`WINDOW_SIZE`] records covering wherever
+//!   the user scrolled past the seed, refilled by seeking the reader
+//!   back to a sparse [`csv::Position`] **anchor** (recorded every
+//!   [`ANCHOR_STRIDE`] records) and re-parsing forward to the target
 //!
-//! Records are kept in [`CsvData::records`] (grown lazily). Past
-//! [`SEED_RECORD_LIMIT`] we keep extending until the reader hits EOF.
-//! Memory grows linearly with the deepest record index the user has
-//! scrolled to — multi-GB files only materialise as far as they're
-//! viewed.
+//! The total record count is unknown until a streaming count pass
+//! (`ensure_all`) reaches EOF — that pass discards cells, so it stays
+//! O(1) in memory. Reaching a deep record the first time re-parses from
+//! the nearest anchor (≤ `ANCHOR_STRIDE` records); revisits are cheap.
 //!
-//! Encoding: UTF-8 native (BOM stripped). UTF-16 LE / BE inputs are
-//! BOM-detected and transcoded eagerly to a UTF-8 byte buffer fed into
-//! the csv reader. UTF-16 is rare in CSV and the transcode is a one-pass
-//! byte walk, so a full-file read on UTF-16 is acceptable.
+//! Encoding: UTF-8 native (BOM stripped, streamed + seekable). UTF-16
+//! LE / BE inputs are BOM-detected and transcoded eagerly to a UTF-8
+//! buffer served from a `Cursor`; that fully materialises the file, so
+//! the windowing memory bound does **not** apply to UTF-16 CSV (rare;
+//! accepted).
 //!
 //! Malformed-record guard:
 //! * single record over [`MAX_RECORD_BYTES`] of raw cell bytes → error row
@@ -28,17 +31,18 @@
 //! * csv crate per-record errors (UTF-8, ragged columns at strict mode,
 //!   bad quoting) → error row
 //!
-//! Error rows are recorded in [`CsvData::records`] with
-//! [`Record::malformed = true`] and the malformed counter bumped; the
-//! reader resyncs to the next newline automatically (csv crate does this).
+//! Error rows carry [`Record::malformed = true`] and bump the malformed
+//! counter (once per record, even across window re-reads); the reader
+//! resyncs to the next newline automatically (csv crate does this).
 
 use std::io::Cursor;
 
 use anyhow::{Context, Result};
-use csv::ReaderBuilder;
+use csv::{Position, ReaderBuilder};
 
 use crate::input::InputSource;
 use crate::input::stream::{ByteStream, ReadSeek};
+use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 
 use super::format::CsvFormat;
@@ -105,28 +109,58 @@ impl Record {
     }
 }
 
-/// Streaming record-keyed view over the source. Records are pulled on
-/// demand by [`CsvData::ensure_record`] until the underlying reader
-/// reaches EOF; the seed pass at open time materialises the first
-/// [`SEED_RECORD_LIMIT`] records up front.
+/// Seek-anchor spacing in records past the seed. `anchors[j]` marks the
+/// start of record `SEED_RECORD_LIMIT + j * ANCHOR_STRIDE`. Smaller =
+/// faster backward seeks, larger index; larger = the opposite. 256
+/// bounds a backward seek to ≤256 record re-parses while keeping the
+/// index tiny (≈ a few MB even for 100M-record files).
+const ANCHOR_STRIDE: usize = 256;
+
+/// Streaming, bounded-memory view over the source.
+///
+/// Two tiers of resident records:
+/// * [`CsvData::seed`] — the first ≤[`SEED_RECORD_LIMIT`] records, kept
+///   for the lifetime. Feeds column widths, the header heuristic,
+///   alignment + type inference, and serves `row()` directly for the
+///   common top-of-file case.
+/// * a sliding [`CsvData::window`] of [`WINDOW_SIZE`] records covering
+///   wherever the user has scrolled *past* the seed, refilled by seeking
+///   the reader back to a recorded [`Position`] anchor.
+///
+/// Memory stays flat (seed + one window) regardless of file size or
+/// scroll depth — the prior implementation grew a single `Vec` to the
+/// deepest record viewed.
 pub struct CsvData {
     pub delimiter: u8,
     pub encoding: Encoding,
-    pub records: Vec<Record>,
-    /// Set when the reader has been driven to EOF — no more records
-    /// will ever materialise. `total_records` then equals `records.len()`.
-    pub fully_consumed: bool,
-    /// Count of malformed rows encountered across the scan so far.
-    pub malformed_count: usize,
     /// True when the file began with a UTF-8 / UTF-16 BOM. Drives the
     /// info row.
     pub has_bom: bool,
-    /// Header-row heuristic decision from the seed scan: true when row
-    /// 0 looks like a header (all-text) and at least one later seed row
-    /// carries a typed cell. `Shift+H` can override this at runtime.
+    /// Header-row heuristic decision from the seed scan. `Shift+H` can
+    /// override this at runtime.
     pub header_heuristic: bool,
-    /// Last position reported by the csv reader, used to compute
-    /// physical-line span between successive records.
+    /// First ≤[`SEED_RECORD_LIMIT`] records, retained for the lifetime.
+    pub seed: Vec<Record>,
+    /// Column count, from the first well-formed seed record.
+    columns: usize,
+    /// Sliding window of records *past* the seed. `window[i]` is record
+    /// `window_start + i`; `window_start >= seed.len()`.
+    window: Vec<Record>,
+    window_start: usize,
+    /// Sparse seek index past the seed (empty when the file fit the
+    /// seed). `anchors[j]` is the reader position at the start of record
+    /// `SEED_RECORD_LIMIT + j * ANCHOR_STRIDE`.
+    anchors: Vec<Position>,
+    /// Highest record count confirmed by forward scanning so far.
+    discovered: usize,
+    /// Total record count once a full pass has reached EOF.
+    total: Option<usize>,
+    /// Count of malformed rows seen — only incremented the first time a
+    /// record index is discovered, so window refills / count passes
+    /// re-reading the same records don't double-count.
+    pub malformed_count: usize,
+    /// Last physical line reported by the reader, for the per-record
+    /// line-span guard. Reset on every seek to the anchor's line.
     last_line: u64,
     reader: csv::Reader<Box<dyn ReadSeek>>,
 }
@@ -145,114 +179,212 @@ impl CsvData {
             .from_reader(body_reader);
 
         // Seed: pull up to SEED_RECORD_LIMIT records to feed widths,
-        // header heuristic, and type inference.
-        let mut records: Vec<Record> = Vec::with_capacity(SEED_RECORD_LIMIT.min(64));
+        // header heuristic, type inference, and the top-of-file rows.
+        let mut seed: Vec<Record> = Vec::with_capacity(SEED_RECORD_LIMIT.min(64));
         let mut last_line: u64 = 0;
         let mut malformed_count = 0usize;
-        let mut fully_consumed = false;
+        let mut eof = false;
         for _ in 0..SEED_RECORD_LIMIT {
             match read_next(&mut reader, &mut last_line) {
                 Ok(Some(rec)) => {
                     if rec.malformed {
                         malformed_count += 1;
                     }
-                    records.push(rec);
+                    seed.push(rec);
                 }
                 Ok(None) => {
-                    fully_consumed = true;
+                    eof = true;
                     break;
                 }
-                Err(e) => {
-                    return Err(e).context("csv seed scan failed");
-                }
+                Err(e) => return Err(e).context("csv seed scan failed"),
             }
         }
 
-        let header_heuristic = detect_header(&records);
+        let columns = seed
+            .iter()
+            .find(|r| !r.malformed)
+            .map(|r| r.cells.len())
+            .unwrap_or(0);
+        let header_heuristic = detect_header(&seed);
+
+        // If the file fit in the seed, the total is already known and no
+        // window / anchors are needed. Otherwise anchor record
+        // SEED_RECORD_LIMIT (where the reader now sits) as anchors[0].
+        let (anchors, discovered, total) = if eof {
+            (Vec::new(), seed.len(), Some(seed.len()))
+        } else {
+            (vec![reader.position().clone()], SEED_RECORD_LIMIT, None)
+        };
 
         Ok(Self {
             delimiter,
             encoding,
-            records,
-            fully_consumed,
-            malformed_count,
             has_bom,
             header_heuristic,
+            seed,
+            columns,
+            window: Vec::new(),
+            window_start: SEED_RECORD_LIMIT,
+            anchors,
+            discovered,
+            total,
+            malformed_count,
             last_line,
             reader,
         })
     }
 
-    /// Ensure records up to `idx` (inclusive) are loaded. Pulls records
-    /// from the underlying reader as needed; no-op if already loaded or
-    /// past EOF. Returns the number of records currently materialised,
-    /// which is `min(idx + 1, total)` on success.
-    pub fn ensure_record(&mut self, idx: usize) -> Result<usize> {
-        while !self.fully_consumed && self.records.len() <= idx {
-            match read_next(&mut self.reader, &mut self.last_line)? {
-                Some(rec) => {
-                    if rec.malformed {
-                        self.malformed_count += 1;
-                    }
-                    self.records.push(rec);
-                }
-                None => {
-                    self.fully_consumed = true;
-                    break;
-                }
-            }
+    /// Record a seek anchor at record `cur` if it's a stride boundary
+    /// and the next anchor slot is exactly the one being extended. Must
+    /// be called with the reader positioned at the start of record
+    /// `cur` (before reading it). Monotonic: never overwrites or gaps.
+    fn maybe_record_anchor(&mut self, cur: usize) {
+        if cur < SEED_RECORD_LIMIT {
+            return;
         }
-        Ok(self.records.len())
+        let rel = cur - SEED_RECORD_LIMIT;
+        if rel.is_multiple_of(ANCHOR_STRIDE) && rel / ANCHOR_STRIDE == self.anchors.len() {
+            self.anchors.push(self.reader.position().clone());
+        }
     }
 
-    /// Drive the reader to EOF, materialising every remaining record.
-    /// Used by the info path so the record-count field can stop showing
-    /// the `≥ N` qualifier.
-    pub fn ensure_all(&mut self) -> Result<()> {
-        while !self.fully_consumed {
-            match read_next(&mut self.reader, &mut self.last_line)? {
-                Some(rec) => {
-                    if rec.malformed {
-                        self.malformed_count += 1;
-                    }
-                    self.records.push(rec);
+    /// Read one record during a forward scan at logical index `cur`,
+    /// updating malformed count / discovered frontier / total. Cells are
+    /// returned to the caller (a counting pass simply drops them).
+    /// `None` at EOF.
+    fn scan_one(&mut self, cur: usize) -> Result<Option<Record>> {
+        self.maybe_record_anchor(cur);
+        match read_next(&mut self.reader, &mut self.last_line)? {
+            Some(rec) => {
+                let first_seen = cur >= self.discovered;
+                if rec.malformed && first_seen {
+                    self.malformed_count += 1;
                 }
-                None => {
-                    self.fully_consumed = true;
+                if cur + 1 > self.discovered {
+                    self.discovered = cur + 1;
                 }
+                Ok(Some(rec))
             }
+            None => {
+                self.total = Some(cur);
+                self.discovered = self.discovered.max(cur);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Seek the reader to the start of record `target` (≥ seed length),
+    /// via the nearest anchor at or before it plus a forward skip.
+    /// `Ok(true)` if positioned at `target`, `Ok(false)` if EOF was hit
+    /// first (target past end).
+    fn seek_to_record(&mut self, target: usize) -> Result<bool> {
+        let rel = target - SEED_RECORD_LIMIT;
+        let anchor_idx = (rel / ANCHOR_STRIDE).min(self.anchors.len().saturating_sub(1));
+        let pos = self.anchors[anchor_idx].clone();
+        let mut cur = SEED_RECORD_LIMIT + anchor_idx * ANCHOR_STRIDE;
+        self.reader.seek(pos.clone())?;
+        self.last_line = pos.line();
+        while cur < target {
+            if self.scan_one(cur)?.is_none() {
+                return Ok(false);
+            }
+            cur += 1;
+        }
+        Ok(true)
+    }
+
+    /// Refill the window so it covers record `target`, centred on it.
+    fn refill_window(&mut self, target: usize) -> Result<()> {
+        let seed_len = self.seed.len();
+        let half = WINDOW_SIZE / 2;
+        let mut start = target.saturating_sub(half).max(seed_len);
+        if let Some(t) = self.total {
+            let max_start = t.saturating_sub(WINDOW_SIZE).max(seed_len);
+            start = start.min(max_start);
+            if start >= t {
+                self.window.clear();
+                self.window_start = seed_len;
+                return Ok(());
+            }
+        }
+        if !self.seek_to_record(start)? {
+            // `start` is past EOF — total now known; nothing to window.
+            self.window.clear();
+            self.window_start = seed_len;
+            return Ok(());
+        }
+        let mut win = Vec::with_capacity(WINDOW_SIZE);
+        let mut cur = start;
+        while win.len() < WINDOW_SIZE {
+            match self.scan_one(cur)? {
+                Some(rec) => {
+                    win.push(rec);
+                    cur += 1;
+                }
+                None => break,
+            }
+        }
+        self.window = win;
+        self.window_start = start;
+        Ok(())
+    }
+
+    /// Drive a count pass to EOF so [`Self::total`] becomes definite,
+    /// discarding cells — O(1) memory. No-op once total is known.
+    pub fn ensure_all(&mut self) -> Result<()> {
+        if self.total.is_some() {
+            return Ok(());
+        }
+        let last = self.anchors.len() - 1;
+        let pos = self.anchors[last].clone();
+        let mut cur = SEED_RECORD_LIMIT + last * ANCHOR_STRIDE;
+        self.reader.seek(pos.clone())?;
+        self.last_line = pos.line();
+        while self.scan_one(cur)?.is_some() {
+            cur += 1;
         }
         Ok(())
     }
 
-    /// Total record count if the reader has been driven to EOF, otherwise
-    /// `None` (caller renders as `≥ records.len()`).
+    /// Total record count if a full pass has reached EOF, else `None`.
     pub fn total_records(&self) -> Option<usize> {
-        if self.fully_consumed {
-            Some(self.records.len())
-        } else {
-            None
-        }
+        self.total
     }
 
-    /// Number of records currently loaded — same as `records.len()`.
+    /// Addressable record count: the exact total once known, otherwise
+    /// the current forward frontier (scrolling past it pulls more).
     pub fn loaded(&self) -> usize {
-        self.records.len()
+        self.total.unwrap_or(self.discovered)
     }
 
-    /// Column count from the first record (or zero if empty).
+    /// Column count from the seed.
     pub fn column_count(&self) -> usize {
-        self.records
-            .iter()
-            .find(|r| !r.malformed)
-            .map(|r| r.cells.len())
-            .unwrap_or(0)
+        self.columns
+    }
+
+    /// Resolve a record from the seed (idx < seed length) or the sliding
+    /// window. `None` when outside both — the caller should `ensure_row`
+    /// first.
+    fn record(&self, idx: usize) -> Option<&Record> {
+        if idx < self.seed.len() {
+            return self.seed.get(idx);
+        }
+        if idx >= self.window_start && idx < self.window_start + self.window.len() {
+            return self.window.get(idx - self.window_start);
+        }
+        None
     }
 }
 
 impl RowSource for CsvData {
     fn ensure_row(&mut self, idx: usize) -> Result<usize> {
-        self.ensure_record(idx)
+        if idx >= self.seed.len() {
+            let in_window = idx >= self.window_start && idx < self.window_start + self.window.len();
+            if !in_window {
+                self.refill_window(idx)?;
+            }
+        }
+        Ok(self.loaded())
     }
 
     fn ensure_all(&mut self) -> Result<()> {
@@ -260,11 +392,11 @@ impl RowSource for CsvData {
     }
 
     fn row(&self, idx: usize) -> Option<&[Option<String>]> {
-        self.records.get(idx).map(|r| r.cells.as_slice())
+        self.record(idx).map(|r| r.cells.as_slice())
     }
 
     fn row_is_malformed(&self, idx: usize) -> bool {
-        self.records.get(idx).map(|r| r.malformed).unwrap_or(false)
+        self.record(idx).map(|r| r.malformed).unwrap_or(false)
     }
 
     fn loaded(&self) -> usize {
@@ -561,14 +693,63 @@ mod tests {
         values.iter().map(|v| Some((*v).to_string())).collect()
     }
 
+    fn fixture(rel: &str) -> InputSource {
+        let mut p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push(rel);
+        InputSource::File(p)
+    }
+
+    /// transactions-10k.csv (header + 10 000 rows; record N's `id`
+    /// column is `100000 + N`) drives the windowing path: deep forward
+    /// + backward seeks land on the right rows, the resident set stays
+    /// bounded (seed + one window), and a count pass settles the total.
+    #[test]
+    fn windowed_seek_lands_on_correct_rows_and_stays_bounded() {
+        let src = fixture("test-data/transactions-10k.csv");
+        let mut data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+
+        // Big file: seed capped, total not yet known.
+        assert_eq!(data.seed.len(), SEED_RECORD_LIMIT);
+        assert_eq!(data.total_records(), None);
+
+        let id =
+            |data: &CsvData, idx: usize| -> String { data.row(idx).unwrap()[0].clone().unwrap() };
+
+        // Forward seek well past the seed.
+        data.ensure_row(5000).unwrap();
+        assert_eq!(id(&data, 5000), "105000");
+        assert!(data.window.len() <= WINDOW_SIZE);
+
+        // Backward seek to a different windowed region.
+        data.ensure_row(1200).unwrap();
+        assert_eq!(id(&data, 1200), "101200");
+        assert!(data.window.len() <= WINDOW_SIZE);
+
+        // Top-of-file rows always resolve from the seed.
+        assert_eq!(id(&data, 1), "100001");
+
+        // Count pass settles the total (header + 10 000 rows).
+        data.ensure_all().unwrap();
+        assert_eq!(data.total_records(), Some(10_001));
+        assert_eq!(data.loaded(), 10_001);
+
+        // Last row reachable after the total is known.
+        data.ensure_row(10_000).unwrap();
+        assert_eq!(id(&data, 10_000), "110000");
+
+        // Resident set stayed bounded throughout.
+        assert_eq!(data.seed.len(), SEED_RECORD_LIMIT);
+        assert!(data.window.len() <= WINDOW_SIZE);
+    }
+
     #[test]
     fn seed_parses_simple_csv() {
         let src = stdin("name,age\nalice,30\nbob,25\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.delimiter, b',');
-        assert_eq!(data.records.len(), 3);
-        assert_eq!(data.records[0].cells, some_cells(&["name", "age"]));
-        assert_eq!(data.records[1].cells, some_cells(&["alice", "30"]));
+        assert_eq!(data.seed.len(), 3);
+        assert_eq!(data.seed[0].cells, some_cells(&["name", "age"]));
+        assert_eq!(data.seed[1].cells, some_cells(&["alice", "30"]));
         assert!(data.header_heuristic);
         assert_eq!(data.column_count(), 2);
     }
@@ -578,7 +759,7 @@ mod tests {
         let src = stdin("a\tb\tc\n1\t2\t3\n");
         let data = CsvData::open(&src, CsvFormat::Tsv).unwrap();
         assert_eq!(data.delimiter, b'\t');
-        assert_eq!(data.records[0].cells, some_cells(&["a", "b", "c"]));
+        assert_eq!(data.seed[0].cells, some_cells(&["a", "b", "c"]));
     }
 
     #[test]
@@ -616,8 +797,8 @@ mod tests {
     fn quoted_newlines_keep_record_together() {
         let src = stdin("a,b\n\"one\ntwo\",x\nlast,y\n");
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        assert_eq!(data.records.len(), 3);
-        assert_eq!(data.records[1].cells, some_cells(&["one\ntwo", "x"]));
+        assert_eq!(data.seed.len(), 3);
+        assert_eq!(data.seed[1].cells, some_cells(&["one\ntwo", "x"]));
     }
 
     #[test]
@@ -629,7 +810,7 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.encoding, Encoding::Utf8);
         assert!(data.has_bom);
-        assert_eq!(data.records[0].cells, some_cells(&["name", "age"]));
+        assert_eq!(data.seed[0].cells, some_cells(&["name", "age"]));
     }
 
     #[test]
@@ -644,8 +825,8 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.encoding, Encoding::Utf16Le);
         assert!(data.has_bom);
-        assert_eq!(data.records[0].cells, some_cells(&["a", "b"]));
-        assert_eq!(data.records[1].cells, some_cells(&["1", "2"]));
+        assert_eq!(data.seed[0].cells, some_cells(&["a", "b"]));
+        assert_eq!(data.seed[1].cells, some_cells(&["1", "2"]));
     }
 
     #[test]

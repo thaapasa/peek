@@ -20,6 +20,13 @@ pub(crate) mod rows_mode;
 
 pub(crate) use mode::TableMode;
 
+/// Sliding-window size in rows, shared by every windowed [`RowSource`]
+/// (CSV streaming + SQLite contents). 1000 rows fit comfortably in
+/// memory for any realistic column count and keep window refills
+/// infrequent under normal scrolling (≈ 25 viewports of typical
+/// terminal height between refills).
+pub(crate) const WINDOW_SIZE: usize = 1000;
+
 /// One structured table: fixed column layout + rows of typed cells, plus
 /// an optional one-line notice shown above the body.
 pub(crate) struct Table {

@@ -25,14 +25,9 @@ use rusqlite::types::ValueRef;
 use crate::input::InputSource;
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::sql::quote_ident;
+use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
-
-/// Sliding-window size in body rows. 1000 fits comfortably in memory
-/// for any realistic column count and keeps OFFSET re-queries
-/// infrequent under normal scrolling (≈ 25 viewports of typical
-/// terminal height between refills).
-pub const WINDOW_SIZE: usize = 1000;
 
 pub struct SqliteRowSet {
     reader: SqliteReader,
@@ -154,10 +149,10 @@ impl RowSource for SqliteRowSet {
     }
 
     fn ensure_all(&mut self) -> Result<()> {
-        // Total is known up front; loaded() already reports it. No
-        // need to drive a cursor — cell-scoped search will only see
-        // the current window (a known step-4 limitation; full-scan
-        // search is deferred).
+        // Total is known up front from COUNT(*), so there's nothing to
+        // drive. Full-file search walks every row via repeated
+        // `ensure_row` (which pages the window with LIMIT/OFFSET), so it
+        // no longer sees only the current window.
         Ok(())
     }
 
