@@ -25,22 +25,52 @@ sites read directly. Then `ComposeCtx` shrinks to
 `theme_manager + theme_name`, which collapses into `&Rc<ThemeManager>`
 since `theme_name` is `tm.active_theme_name()`.
 
-### M6. `gather_extras` is the third major `match file_type` chain
+### M6. `gather_extras` is the third major `match file_type` chain — wontfix, kept as analysis record
 
-Already exists in `compose_modes` (clean wiring) and `extract::extract`.
-Now `info/gather/mod.rs:226-298` adds a third. Each new file type touches
-≥5 unrelated dispatch tables across 4 directories (detect, gather,
-render, compose, extract). Acceptable today; flag if a 6th wiring point
-ever appears — at that count a `trait FileTypeRegistry` registering all
-of them at one site beats the explicit dispatches.
+Original finding: adding a file type touches ≥5 dispatch tables (detect,
+gather, render, compose, extract); flag when a 6th wiring point appears,
+then a `trait FileTypeRegistry` registering all of them at one site
+beats the explicit dispatches.
 
-Concrete drift already present: `FileType::Compressed(_)` short-circuits
-to `binary::info::gather_extras` in `info/gather/mod.rs:293`, but
-`info/render/mod.rs:36-99` has no `Compressed` arm in the 20-arm match,
-and `compose_modes`' compressed block (`viewer/mod.rs:330-338`) is empty
-because the path is reached only after `resolve_transparent` fails. The
-inconsistency works today but the four dispatchers no longer enumerate
-the same set.
+**Trigger fired, remedy declined.** The `Notebook` type (2026-05-30) was
+the 6th-type proof. One new type touched six sites: `input/detect.rs`
+(variant + `classify_by_name` + content sniff), `input/mime.rs` (mime
+arm + extensions arm), `viewer/mod.rs` `compose_modes`, `extract/extract.rs`,
+`info/gather/mod.rs`, and `info/render/mod.rs` + the `FileExtras` enum in
+`info/mod.rs`. On inspection the registry does not pay:
+
+1. **Detection can't join.** `detect.rs` *produces* the `FileType` from
+   magic / extension / content sniff — there is no `FileType` value to
+   dispatch on yet. A `FileType → impl` registry can absorb at most
+   4–5 of the 6 sites, never detect.
+2. **Format sub-enums break a 1:1 type→impl map.** `Archive(fmt)`,
+   `Document(fmt)`, `Audio(fmt)`, `Cert(fmt)` dispatch on the inner
+   format too; a uniform per-type trait fits these awkwardly.
+3. **`render` dispatches on `FileExtras`, not `FileType`** — a different
+   axis. Folding it in needs `gather` to return a boxed trait object
+   instead of the `FileExtras` enum, losing that enum's exhaustiveness.
+4. **The explicit form's assets outweigh the typing cost.** The
+   non-exhaustive `match` in `compose`/`extract`/`gather` is
+   compiler-enforced completeness — the `extract.rs` arm was *forced* by
+   a compile error during the notebook work, not forgotten. A trait with
+   defaulted methods would silently no-op instead. `compose_modes` also
+   stays a single-file overview of the whole dispatch table; a wide
+   trait with no-op defaults (most types' extract = `Unsupported`)
+   trades that map for scattered impls + click-through.
+
+The cost the finding feared (touch 6 sites) is mechanical and
+compiler-guided — low cognitive load. The registry would *add* load.
+Revisit only if a dispatcher can silently fall through and ship a bug;
+today the compiler blocks that on `compose`/`extract`/`gather`, and a
+missing `mime`/`render` arm surfaces as a visible `?` / absent Info
+section, not a crash.
+
+**On the cited "drift" — not a defect.** `info/render` has no
+`Compressed` arm because it keys on `FileExtras`, and
+`Compressed → gather → binary::gather_extras → FileExtras::Binary`,
+which render *does* handle. `Compressed` is a transparent-resolve
+pseudo-type that degrades to Binary by design; the dispatchers
+enumerating different `FileType` sets is correct, not inconsistent.
 
 ### M12. `--plain` mutates `args.color` — wontfix, kept as analysis record
 
