@@ -21,6 +21,7 @@
   - [SQLite databases](./file-types/sqlite.md)
   - [Documents](./file-types/documents.md)
   - [PDF & Illustrator](./file-types/pdf.md)
+  - [EPS & PostScript](./file-types/eps.md)
   - [Ebooks](./file-types/ebooks.md)
   - [Images](./file-types/images.md)
   - [SVG](./file-types/svg.md)

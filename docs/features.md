@@ -298,6 +298,37 @@ Pdfium is loaded dynamically from `libpdfium.dylib` / `.so` / `.dll` shipped alo
 peek binary in the release tarball — no system install required at runtime. Encrypted /
 password-protected PDFs surface the open error in the Info section instead of crashing.
 
+#### EPS / PostScript ✅
+
+`.eps` / `.ps` files (Encapsulated PostScript and plain PostScript). PostScript is a *program*,
+not a data file, so peek offers up to two image views plus source + metadata, composed from
+whatever's available:
+
+- **Preview** (default when present) — binary "DOS-EPS" containers (magic `C5 D0 D3 C6`) carry
+  a 30-byte header pointing at an embedded TIFF/WMF preview the designer baked in. peek extracts
+  the TIFF preview and renders it through the shared image pipeline — instant, no interpreter.
+  (WMF previews are named in Info but not rendered; no pure-Rust WMF rasteriser.)
+- **Render** — true Ghostscript rasterisation, present only when a `gs` interpreter is found on
+  PATH. Renders page 1 (`-dEPSCrop` for EPS, full page for `.ps`) at 150 DPI through the image
+  pipeline. Lazy: the subprocess only spawns when the tab is actually viewed — opening a file
+  never blocks on Ghostscript. Ghostscript is **never bundled** (AGPL/GPL + large C dependency);
+  it's an optional runtime enhancement.
+- **Source** — the PostScript program text. For a binary DOS-EPS, the PostScript section is
+  sliced out of the container so the source view shows the program, not raw binary.
+- **Info** — DSC header fields (`%%Title`, `%%Creator`, `%%CreationDate`, `%%For`,
+  `%%BoundingBox`, `%%LanguageLevel`, `%%Pages`), the embedded-preview descriptor (kind +
+  decoded dimensions), and Ghostscript availability (with an install hint when absent).
+
+A preview-less `.eps` / `.ps` with no `gs` on PATH degrades cleanly to Source + Info. Detection
+covers the `.eps` / `.epsf` / `.epsi` / `.ps` extensions, the DOS-EPS magic, and a `%!PS…`
+content sniff (`EPSF` in the version line picks EPS over plain PostScript).
+
+The single-bitmap render path (decode → fit → window-crop → ASCII, with zoom/pan) is shared with
+the PDF and CBZ page renderers via `viewer::paged::render_image_window`.
+
+Not yet: legacy pre-CS2 Illustrator labelling, multi-page `.ps` paging, WMF / EPSI preview
+rendering — see [planned.md](planned.md).
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

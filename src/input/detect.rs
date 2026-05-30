@@ -18,6 +18,7 @@ pub use crate::types::csv::format::CsvFormat;
 pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
+pub use crate::types::eps::format::PostScriptFormat;
 pub use crate::types::font::format::FontFormat;
 pub use crate::types::pdf::format::PdfFlavor;
 pub use crate::types::sqlite::format::SqliteFormat;
@@ -31,6 +32,7 @@ use crate::types::csv::detect as csv_detect;
 use crate::types::disk_image::detect as disk_image_detect;
 use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
+use crate::types::eps::detect as eps_detect;
 use crate::types::font::detect as font_detect;
 use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
@@ -80,6 +82,11 @@ pub enum FileType {
     /// PDF from PDF-compatible Adobe Illustrator (`.ai`) — same render
     /// path, different Info label.
     Pdf(PdfFlavor),
+    /// EPS / PostScript (`.eps` / `.ps`). Drives an embedded-preview
+    /// image view (binary DOS-EPS), an optional Ghostscript render view
+    /// (when `gs` is on PATH), the PostScript source, and a DSC-metadata
+    /// Info section.
+    PostScript(PostScriptFormat),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -352,6 +359,10 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.starts_with(PDF_MAGIC) {
         return Some("application/pdf".to_string());
     }
+    // Binary DOS-EPS container (always Encapsulated PostScript).
+    if eps_detect::is_dos_eps(head) {
+        return Some("application/postscript".to_string());
+    }
     if head.len() >= 6
         && (&head[..6] == CPIO_NEWC_MAGIC
             || &head[..6] == CPIO_CRC_MAGIC
@@ -403,6 +414,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         // `%PDF`); the Illustrator flavour comes from the extension path
         // upstream. A magic-only hit defaults to plain PDF.
         return Some(FileType::Pdf(PdfFlavor::Pdf));
+    }
+    if let Some(fmt) = eps_detect::format_from_mime(mime) {
+        return Some(FileType::PostScript(fmt));
     }
     if mime == "image/svg+xml" {
         return Some(FileType::Svg);
@@ -631,6 +645,9 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     if cert_detect::sniff_pem(text) {
         return Some((FileType::Cert(CertFormat::Pem), "application/x-pem-file"));
     }
+    if let Some(fmt) = eps_detect::sniff_text(text) {
+        return Some((FileType::PostScript(fmt), "application/postscript"));
+    }
     None
 }
 
@@ -730,6 +747,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = ebook_detect::format_from_ext(&ext) {
         return Some(FileType::Ebook(fmt));
+    }
+    if let Some(fmt) = eps_detect::format_from_ext(&ext) {
+        return Some(FileType::PostScript(fmt));
     }
     if let Some(fmt) = document_detect::format_from_ext(&ext) {
         return Some(FileType::Document(fmt));

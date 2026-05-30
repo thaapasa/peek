@@ -295,6 +295,7 @@ fn gather_extras(
             crate::types::document::rtf::info_gather::gather_extras(source)
         }
         FileType::Pdf(flavor) => crate::types::pdf::info_gather::gather_extras(source, *flavor),
+        FileType::PostScript(fmt) => crate::types::eps::info_gather::gather_extras(source, *fmt),
         FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
         FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),

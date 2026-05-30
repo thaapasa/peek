@@ -175,7 +175,7 @@ fn format_size_display(bytes: u64) -> String {
     format!("{exact} bytes ({human})")
 }
 
-fn format_size_human(bytes: u64) -> String {
+pub(crate) fn format_size_human(bytes: u64) -> String {
     const UNITS: &[&str] = &["B", "KiB", "MiB", "GiB", "TiB"];
     let mut value = bytes as f64;
     for unit in UNITS {

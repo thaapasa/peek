@@ -5,6 +5,8 @@ use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
 
+pub(crate) use file::format_size_human;
+
 /// Per-render options for the Info view.
 #[derive(Clone, Copy, Default)]
 pub struct RenderOptions {
@@ -85,6 +87,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         }
         FileExtras::Pdf(stats) => {
             crate::types::pdf::info_render::render_section(lines, stats, theme);
+        }
+        FileExtras::Eps(info) => {
+            crate::types::eps::info_render::render_section(lines, info, theme);
         }
         FileExtras::Audio(stats) => {
             crate::types::audio::info_render::render_section(lines, stats, theme);

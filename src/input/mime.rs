@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::input::detect::{
     ArchiveFormat, AudioFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat,
-    EbookFormat, FileType, PdfFlavor, StructuredFormat,
+    EbookFormat, FileType, PdfFlavor, PostScriptFormat, StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -186,6 +186,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Document(DocumentFormat::Odt) => "application/vnd.oasis.opendocument.text",
         FileType::Document(DocumentFormat::Rtf) => "application/rtf",
         FileType::Pdf(_) => "application/pdf",
+        FileType::PostScript(_) => "application/postscript",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",
@@ -292,6 +293,8 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         // `.ai` is a PDF-compatible Illustrator file: `%PDF` magic,
         // `.ai` extension. Accept it so the mismatch warning stays quiet.
         FileType::Pdf(PdfFlavor::Illustrator) => &["ai"],
+        FileType::PostScript(PostScriptFormat::Eps) => &["eps", "epsf", "epsi"],
+        FileType::PostScript(PostScriptFormat::Ps) => &["ps"],
         FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
         FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
         FileType::Compressed(CompressionFormat::Gz) => &["gz", "tgz"],

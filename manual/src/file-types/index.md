@@ -13,6 +13,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Databases         | SQLite (schema listing + streaming row viewer)              |
 | Documents         | DOCX, ODT, RTF                                              |
 | PDF / Illustrator | `.pdf`, `.ai` (paged render + text + embeds)                |
+| EPS / PostScript  | `.eps`, `.ps` (embedded preview + Ghostscript render + DSC info) |
 | Ebooks            | EPUB                                                        |
 | Images            | PNG, JPEG, GIF, WebP, BMP, TIFF, ICO, AVIF, PNM, TGA, EXR, QOI, DDS |
 | Vector            | SVG (incl. CSS `@keyframes` animation)                      |

@@ -16,6 +16,7 @@ Modern terminal file viewer — preview any file, any format.
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT, RTF, EPUB, CBZ
+- **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
 - **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
 - **Java classfiles** — `.class` header, fields, methods with decoded signatures

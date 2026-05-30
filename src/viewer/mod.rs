@@ -115,6 +115,9 @@ impl Registry {
             FileType::Pdf(_) => {
                 crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::PostScript(_) => {
+                crate::types::eps::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
             FileType::Comic(ComicFormat::Cbz) => {
                 crate::types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
@@ -282,6 +285,7 @@ impl ComposeCtx {
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
             FileType::Svg | FileType::Html | FileType::Markdown => "Source",
+            FileType::PostScript(_) => "Source",
             _ => "Content",
         };
 

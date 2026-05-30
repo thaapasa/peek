@@ -10,6 +10,7 @@ Features at a glance:
 - ASCII-art image rendering with 24-bit color
 - Animated GIF / WebP / animated SVG playback
 - Office documents (DOCX, ODT, RTF), PDF, Adobe Illustrator (`.ai`), EPUB
+- EPS / PostScript (`.eps`, `.ps`) — embedded preview, optional Ghostscript render
 - Audio metadata + embedded cover art
 - Archive browsing (ZIP, tar, 7-Zip, cpio) and disk images (ISO, DMG)
 - PEM certificates and keys — subject, validity, SANs, fingerprints

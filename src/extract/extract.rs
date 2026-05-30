@@ -121,6 +121,7 @@ pub fn extract(
         | FileType::Font(_)
         | FileType::ObjectFile
         | FileType::Classfile
+        | FileType::PostScript(_)
         | FileType::Binary => Err(ExtractError::Unsupported(
             "this file type has no inner items",
         )),

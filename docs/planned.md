@@ -79,50 +79,22 @@ The release tarball already bundles the matching Pdfium build next to the binary
 - **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size down for
   embedded targets.
 
-### Vector / PostScript Files ◐
+### Vector / PostScript Files — remaining gaps ◐
 
-| Format                  | Extensions | Status |
-|-------------------------|------------|--------|
-| Adobe Illustrator (PDF) | `.ai`      | ✅      |
-| Encapsulated PostScript | `.eps`     | ☐      |
-| PostScript              | `.ps`      | ☐      |
+`.ai` (modern, PDF-internal), `.eps`, and `.ps` are shipped — see
+[features.md](features.md). What's still open:
 
-Modern `.ai` files (CS2 / 2005 onwards) are PDF 1.x internally — Illustrator saves a
-PDF-compatible stream by default. **Shipped:** `.ai` routes through the existing Pdfium PDF
-stack via a `PdfFlavor::Illustrator` flavour (Info labels it "Adobe Illustrator", no
-extension-mismatch warning). Free win — the same library covers modern AI, zero binary growth.
-
-Legacy AI (pre-CS2) is pure PostScript and follows the EPS path below. (Note: a PDF-compatible
-`.ai` can still render blank if the artwork lives only in Illustrator's private streams and the
-visible PDF content is empty — no bundleable renderer recovers that; only Ghostscript or
-Illustrator would.)
-
-**EPS modes (cyclable with Tab):**
-
-- **Embedded preview** (default when present) — DOS EPS Binary files start with `C5 D0 D3 C6`
-  followed by a 30-byte header that points to an embedded TIFF, JPEG, or WMF preview baked in by
-  the designer. Extract the preview and render through the existing image pipeline. Quality is
-  whatever was baked — fine for "is this the right file?" peeks.
-- **Source view** — syntax-highlighted PostScript (DSC-style comments + PS body).
-- **Info** — parsed DSC comments (`%%Title`, `%%Creator`, `%%CreationDate`, `%%BoundingBox`,
-  `%%For`, `%%LanguageLevel`) plus preview format / dimensions when present.
-
-Plain `.eps` / `.ps` without an embedded preview falls back to source view by default.
-
-**Optional Ghostscript path.** True PostScript rendering needs Ghostscript — AGPL/GPL, large C
-dependency. Don't bundle. Detect `gs` on PATH at runtime; if available, offer a "render via gs"
-mode for files without an embedded preview. Document the optional dependency in the README.
-Pure-Rust PostScript rendering does not exist at usable quality.
-
-#### Implementation Libraries
-
-| Concern             | Crate / approach                                                                          |
-|---------------------|-------------------------------------------------------------------------------------------|
-| Modern AI rendering | `pdfium-render` (already planned for PDF — same dep covers AI).                           |
-| EPS binary header   | Hand-parsed (30-byte struct, `C5 D0 D3 C6` magic, offset/length to PostScript + preview). |
-| Embedded preview    | `image` crate (TIFF / JPEG already supported).                                            |
-| DSC comment parse   | Hand-rolled (~50 lines; line-prefix scan up to `%%EndComments`).                          |
-| Real PS rendering   | `gs` subprocess (optional). No bundled dep.                                               |
+- **Legacy AI (pre-CS2)** — pure PostScript, no PDF wrapper. Routes through the EPS/PostScript
+  path today (source + DSC info + `gs` render when available), but isn't specifically detected
+  or labelled as Illustrator. Low priority — such files are rare now.
+- **Multi-page `.ps`** — the Ghostscript render view shows page 1 only. A paged render (gs
+  page-count probe + per-page rasterise, `n` / `p` to step) would cover multi-page PostScript
+  documents.
+- **WMF previews** — DOS-EPS files can carry a Windows Metafile preview instead of TIFF. The
+  Info view names it but there's no pure-Rust WMF rasteriser, so it's not rendered. `gs` covers
+  these files anyway when present.
+- **EPSI inline previews** — the rare hex-ASCII preview block in plain `%!PS` EPS isn't parsed
+  (only binary DOS-EPS TIFF previews are). `gs` covers these too.
 
 ### Video Files ❓
 

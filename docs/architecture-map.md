@@ -182,6 +182,18 @@ src/
         read_mode.rs   — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
+    eps/
+      mod.rs           — Module wiring; re-exports EpsInfo; `postscript_text(bytes, header)` helper (PS section slice for DOS-EPS, whole file otherwise; lossy UTF-8)
+      compose.rs       — compose(): [Preview: PagedImageMode<EpsImageRenderer> when a DOS-EPS TIFF preview exists] + [Render: PagedImageMode<EpsImageRenderer> when gs::find() succeeds, lazy] + Source (text_content_mode over the PS-section slice). `--plain` drops both image views. First-pushed = default, so Preview leads when present
+      detect.rs        — format_from_ext (eps/epsf/epsi → Eps, ps → Ps) + format_from_mime (application/postscript → Eps) + sniff_text (`%!PS…`, EPSF token → Eps else Ps) + is_dos_eps (magic check)
+      dos_eps.rs       — Binary DOS-EPS container parse: MAGIC `C5 D0 D3 C6`, 30-byte LE header → PostScript Section + optional preview (TIFF preferred over WMF); offsets clamped to file length
+      dsc.rs           — DSC comment parser: line-prefix scan to `%%EndComments`/body → DscInfo { title, creator, creation_date, for_whom, bounding_box, language_level, pages }
+      format.rs        — PostScriptFormat { Eps, Ps } + label() + crop_to_bbox() (EPS → gs -dEPSCrop)
+      gs.rs            — Optional Ghostscript bridge (never bundled): find() probes gs/gswin64c/gswin32c on PATH via `--version`; render(exe, postscript, crop_to_bbox) pipes PS on stdin → png16m on stdout (-dSAFER, page 1, 150 DPI), decodes via image crate
+      image_renderer.rs — EpsImageRenderer: PageRenderer (1 page) over EpsImageSource { Preview(Bytes) | Ghostscript { exe, postscript, crop_to_bbox } }; single-slot bitmap cache (decode / gs render once); defers to render_image_window. gs runs on first draw only
+      info.rs          — EpsInfo { format, dsc: DscInfo, preview: Option<PreviewMeta { kind, bytes, dimensions }>, gs_available }
+      info_gather.rs   — Populate EpsInfo: parse DOS header → preview meta (+ best-effort TIFF dims), DSC from PS section, gs::find()
+      info_render.rs   — Render section (header = format.label()): DSC fields + Preview (kind + dims / "none") + Render (Ghostscript / install hint)
     document/
       mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocRenderer
       compose.rs       — compose(): DOCX/ODT → RenderedTextMode<DocRenderer> + ZIP TOC ListingMode; RTF → RenderedTextMode<RtfRenderer> + inline-embed listing when any \pict groups parsed
@@ -213,7 +225,7 @@ src/
       format.rs        — PdfFlavor { Pdf, Illustrator }: `.ai` is PDF-compatible Illustrator (same render path); flavour drives the Info section label (`label()`) + extension-mismatch allow-list only
       compose.rs       — compose(): PagedImageMode<PdfPageRenderer> (fit forced to FitWidth) + RenderedTextMode<PdfTextRenderer> (only when Doc::has_extractable_text — skipped for scans / outlined `.ai`) + /EmbeddedFiles ListingMode
       package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / has_extractable_text (probes first 8 pages) / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
-      page_renderer.rs — PdfPageRenderer: PageRenderer impl — rasterizes a page via Pdfium (~16 px/col) and ASCII-renders it through `pipeline::render::{prepare_decoded, render_prepared}`. Wrapped in the generic `viewer::paged::PagedImageMode`
+      page_renderer.rs — PdfPageRenderer: PageRenderer impl — rasterizes a page via Pdfium (single-slot bitmap cache, ~4096px cap) then defers to `viewer::paged::render_image_window`. Wrapped in the generic `viewer::paged::PagedImageMode`
       text_renderer.rs — PdfTextRenderer: TextRenderer impl over `Doc::page_text`; pages joined with muted `--- Page N ---` separator; greedy word-wrap with hard-break for over-width tokens. Per-page extract failures degrade to a placeholder line + warning
       extract.rs       — Extract `/EmbeddedFiles` attachment by name → InputSource::Memory; reuses `extract::sanitize_entry_path`
       info.rs          — PdfStats { flavor: PdfFlavor, metadata: DocumentMetadata, page_count, attachment_count (/EmbeddedFiles), image_count (per-page XObjects), encrypted, pdf_version, error: Option<String> }
@@ -228,7 +240,7 @@ src/
       cbz/
         mod.rs         — Module wiring; re-exports CbzPageRenderer
         package.rs     — list_pages: walk ZIP central directory, filter image entries by extension (png/jpg/jpeg/webp/gif/bmp/tif/tiff), skip __MACOSX/, sort by name; open_zip + read_page for body fetch
-        page_renderer.rs — CbzPageRenderer: PageRenderer impl — decodes one ZIP image entry and ASCII-renders it via the image pipeline. Wrapped in the generic `viewer::paged::PagedImageMode`
+        page_renderer.rs — CbzPageRenderer: PageRenderer impl — decodes one ZIP image entry (per-page bitmap cache) then defers to `viewer::paged::render_image_window`. Wrapped in the generic `viewer::paged::PagedImageMode`
         info_gather.rs — Populate ComicStats (page count + uncompressed image bytes) from package::list_pages
         info_render.rs — Render comic info section from ComicStats
     svg/
@@ -307,7 +319,7 @@ src/
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + LineView enum (Raw(&LineSource) | Pretty(&[String])). ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineView
-    paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / pipe_rows. Image-config cycling: cycle_image_config handler + the CYCLE_BACKGROUND/IMAGE_MODE/FIT_HELP rows it dispatches, pinned together by a unit test so help and handling can't drift (shared by paged / image / animation / svg-anim / epub modes). Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); PDF / CBZ each supply a small PageRenderer impl. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
+    paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / pipe_rows. Image-config cycling: cycle_image_config handler + the CYCLE_BACKGROUND/IMAGE_MODE/FIT_HELP rows it dispatches, pinned together by a unit test so help and handling can't drift (shared by paged / image / animation / svg-anim / epub modes). Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); ::new defaults the tab label to "Read", ::with_label overrides it (EPS uses "Preview"/"Render"). PDF / CBZ / EPS each supply a small PageRenderer impl. `render_image_window(img, config, args)` is the shared decode→fit→window-crop→ASCII (zoom fast path + zoomed path) every single-bitmap renderer defers to; `image_placeholder` the shared failure line. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper

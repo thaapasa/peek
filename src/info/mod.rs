@@ -9,7 +9,7 @@ mod time;
 
 pub use gather::gather;
 pub use render::{RenderOptions, render, thousands_sep};
-pub(crate) use render::{paint_count, push_field, push_section_header};
+pub(crate) use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;
 
 // Re-exports of the per-type info shapes so the central `FileExtras`
@@ -27,6 +27,7 @@ pub use crate::types::directory::info::DirectoryStats;
 pub use crate::types::disk_image::info::DiskImageInfo;
 pub use crate::types::document::DocumentStats;
 pub use crate::types::ebook::EbookStats;
+pub use crate::types::eps::EpsInfo;
 pub use crate::types::font::info::FontInfo;
 pub use crate::types::image::info::ImageStats;
 pub use crate::types::markdown::info::MarkdownInfo;
@@ -99,6 +100,7 @@ pub enum FileExtras {
     Comic(ComicStats),
     Document(DocumentStats),
     Pdf(PdfStats),
+    Eps(EpsInfo),
     Audio(AudioStats),
     Csv(CsvStats),
     Sqlite(SqliteInfo),
