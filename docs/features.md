@@ -337,6 +337,33 @@ the PDF and CBZ page renderers via `viewer::paged::render_image_window`.
 Not yet: legacy pre-CS2 Illustrator labelling, multi-page `.ps` paging, WMF / EPSI preview
 rendering — see [planned.md](planned.md).
 
+#### Spreadsheets ✅
+
+`.xlsx` / `.xlsm` / `.ods` workbooks. A workbook is several named sheets, each a table, so the
+viewer mirrors the SQLite shape (entities → listing → drill into one → streaming table):
+
+- **Sheets** (default) — a listing of the workbook's sheets. Enter drills into a sheet's
+  **aligned table view** (the shared `RowsTableMode`: sticky header, horizontal pan, whole-file
+  cell `/` search); `e` extracts the sheet to a CSV file. Per-column alignment comes from
+  calamine's native cell types (Int / Float → right; String / Bool / Date → left), and the
+  header row is detected with the same all-text heuristic as the CSV viewer (`Shift+H`
+  overrides).
+- **Files** — the workbook's raw zip entries (it's an OOXML / ODF zip container), browsable and
+  extractable through the standard archive path.
+- **Info** — sheet count + names, plus core document properties (title / author / subject /
+  keywords / created / modified) from `docProps/core.xml` (OOXML) or `meta.xml` (ODS).
+
+Parsing is [`calamine`](https://docs.rs/calamine) — no spreadsheet engine, no formula
+evaluation (cached cell values are shown). Detection is extension-routed (`.xlsx` / `.xlsm` /
+`.ods`); like every OOXML / ODF container the magic bytes are `application/zip`, so an
+extension-less workbook falls through to the archive viewer.
+
+**Memory.** calamine has no streaming sheet API — a sheet is parsed whole into memory when you
+drill in. Resident memory is therefore one sheet at a time (switching sheets drops the prior),
+unlike the CSV viewer's sliding window. Sheets are bounded (Excel caps at ~1M rows) and the
+container is read into memory for calamine's random access, so this is the accepted trade; a
+truly streaming reader would need a custom parse of the sheet XML.
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

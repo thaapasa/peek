@@ -9,7 +9,7 @@ use super::super::FileExtras;
 use super::gather;
 use crate::input::InputSource;
 use crate::input::detect;
-use crate::input::detect::{FileType, PdfFlavor, PostScriptFormat};
+use crate::input::detect::{FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat};
 use crate::types::eps::dos_eps::PreviewKind;
 use crate::types::eps::gs;
 use crate::types::image::info::{AnimationStats, LoopCount};
@@ -484,4 +484,53 @@ fn bonfire_nature_ai_is_illustrator_pdf() {
     assert_eq!(pdf.flavor, PdfFlavor::Illustrator);
     assert_eq!(pdf.page_count, 1);
     assert_eq!(pdf.pdf_version, "1.4");
+}
+
+// ---------------------------------------------------------------------------
+// Spreadsheet fixtures (no Ghostscript / external tools needed)
+// ---------------------------------------------------------------------------
+
+/// `.xlsx` detects as the Excel spreadsheet flavour, lists its sheets,
+/// pulls core-properties metadata from `docProps/core.xml`, and doesn't
+/// warn on the zip-magic-vs-`.xlsx`-extension mismatch.
+#[test]
+fn xlsx_people_workbook_lists_sheets_and_metadata() {
+    let path = fixture("test-data/people.xlsx");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(
+        detected.file_type,
+        FileType::Spreadsheet(SpreadsheetFormat::Xlsx),
+    );
+
+    let info = gather(&source, &detected).expect("gather");
+    assert!(
+        !info.warnings.iter().any(|w| w.contains("extension")),
+        "`.xlsx` over application/zip magic must not warn, got {:?}",
+        info.warnings,
+    );
+    let FileExtras::Spreadsheet(wb) = &info.extras else {
+        panic!("expected Spreadsheet extras");
+    };
+    assert_eq!(wb.sheets, vec!["people".to_string(), "totals".to_string()]);
+    assert_eq!(wb.metadata.creator.as_deref(), Some("openpyxl"));
+}
+
+/// `.ods` detects as the OpenDocument spreadsheet flavour and lists its
+/// sheets.
+#[test]
+fn ods_people_workbook_lists_sheets() {
+    let path = fixture("test-data/people.ods");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(
+        detected.file_type,
+        FileType::Spreadsheet(SpreadsheetFormat::Ods),
+    );
+
+    let info = gather(&source, &detected).expect("gather");
+    let FileExtras::Spreadsheet(wb) = &info.extras else {
+        panic!("expected Spreadsheet extras");
+    };
+    assert_eq!(wb.sheets, vec!["people".to_string(), "totals".to_string()]);
 }

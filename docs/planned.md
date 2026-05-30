@@ -53,17 +53,9 @@ whole file into memory, which is fine for most logs but breaks down for very lar
 
 ### Document Files ☐
 
-DOCX, RTF, and PDF are shipped — see [features.md](features.md). What's still planned:
-
-| Format        | Extensions |
-|---------------|------------|
-| Excel (OOXML) | `.xlsx`    |
-
-Modern XML-based Office formats only — legacy `.doc` / `.xls` not planned.
-
-`.xlsx` should support text extraction (sheet → tab-separated rows or rendered table) and the
-existing OOXML-as-ZIP TOC browsing. `calamine` handles parsing without bringing a full
-spreadsheet engine.
+DOCX, RTF, PDF, and spreadsheets (`.xlsx` / `.xlsm` / `.ods`) are shipped — see
+[features.md](features.md). Nothing word-processing-side is currently planned; legacy binary
+`.doc` / `.xls` are out of scope (modern XML-based Office formats only).
 
 #### PDFium Distribution
 
