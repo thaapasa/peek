@@ -32,6 +32,19 @@ pub fn cell_aspect_h_over_w() -> f64 {
     *CACHE.get_or_init(detect_or_default)
 }
 
+/// Assemble a [`TermSize`] for a `cols × rows` character grid, filling
+/// `cell_h_over_w` from the detected terminal aspect. The single
+/// construction point for the aspect field, so a placeholder (e.g. a
+/// stray `1.0`) can't drift into it across the several call sites that
+/// build a `TermSize`.
+pub fn term_size(cols: u32, rows: u32) -> crate::types::image::pipeline::render::TermSize {
+    crate::types::image::pipeline::render::TermSize {
+        cols,
+        rows,
+        cell_h_over_w: cell_aspect_h_over_w(),
+    }
+}
+
 /// User-supplied override (CLI `--cell-aspect`). Must be called before
 /// the first `cell_aspect_h_over_w()` consumer. Out-of-range values
 /// are ignored so a typo can't render images at 0×∞.

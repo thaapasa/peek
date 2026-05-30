@@ -97,11 +97,10 @@ impl ImageView {
     /// top of `render_window` before preparing the image.
     pub fn prepare_term(&mut self, ctx: &RenderCtx) -> TermSize {
         self.config.style_mode = ctx.peek_theme.style_mode;
-        TermSize {
-            cols: ctx.term_cols.min(u32::MAX as usize) as u32,
-            rows: ctx.term_rows.min(u32::MAX as usize) as u32,
-            cell_h_over_w: cell_size::cell_aspect_h_over_w(),
-        }
+        cell_size::term_size(
+            ctx.term_cols.min(u32::MAX as usize) as u32,
+            ctx.term_rows.min(u32::MAX as usize) as u32,
+        )
     }
 
     /// Clamp the held pan offsets to the effective grid + viewport,

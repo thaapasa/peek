@@ -36,10 +36,8 @@ use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, StyleMode};
 use crate::types::image::pipeline::ImageConfig;
-use crate::types::image::pipeline::render::{
-    self as image_render, GridWindow, TermSize, prepare_decoded,
-};
-use crate::viewer::cell_size::cell_aspect_h_over_w;
+use crate::types::image::pipeline::render::{self as image_render, GridWindow, prepare_decoded};
+use crate::viewer::cell_size;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::paged::{
     self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, pipe_walk_pages,
@@ -565,11 +563,7 @@ fn render_inline_image(
     let img = image::load_from_memory(&bytes)?;
     let mut config = base_config;
     config.style_mode = style_mode;
-    let term = TermSize {
-        cols: term_cols,
-        rows: paged::pipe_rows(term_rows),
-        cell_h_over_w: cell_aspect_h_over_w(),
-    };
+    let term = cell_size::term_size(term_cols, paged::pipe_rows(term_rows));
     let prep = prepare_decoded(img, &config, term);
     let window = GridWindow::full(prep.cols, prep.rows);
     let lines = image_render::render_prepared(&prep, &config, window);

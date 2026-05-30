@@ -18,6 +18,7 @@ use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode}
 use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::view::ImageView;
 use crate::types::image::zoom::integer_bucket;
+use crate::viewer::cell_size;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -248,11 +249,7 @@ impl Mode for SpecimenMode {
         let Some(cache) = &self.cache else {
             return false;
         };
-        let term = TermSize {
-            cols: cache.key.term_cols,
-            rows: cache.key.term_rows,
-            cell_h_over_w: 1.0,
-        };
+        let term = cell_size::term_size(cache.key.term_cols, cache.key.term_rows);
         let bounds = self.view.view_bounds(&cache.prep, term);
         let page_y = bounds.viewport_rows.saturating_sub(1);
         self.view.scroll(
@@ -293,11 +290,7 @@ impl Mode for SpecimenMode {
             return h;
         }
         if let Some(cache) = &self.cache {
-            let term = TermSize {
-                cols: cache.key.term_cols,
-                rows: cache.key.term_rows,
-                cell_h_over_w: 1.0,
-            };
+            let term = cell_size::term_size(cache.key.term_cols, cache.key.term_rows);
             let bounds = self.view.view_bounds(&cache.prep, term);
             if let Some(h) = self.view.handle_zoom(action, bounds) {
                 return h;

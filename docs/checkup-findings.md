@@ -223,16 +223,6 @@ keep `paged/mod.rs` as primitives (`PageCacheKey`, `render_cached`,
 `step_paged`, `pipe_walk_pages`, `cycle_image_config`, help constants,
 `PageRenderer` trait).
 
-### L8. Three sites re-construct `TermSize`, one with a magic `1.0`
-
-`src/types/image/view.rs:109-116` (`ImageView::prepare_term`),
-`src/viewer/paged.rs:309-315` (`term_size_for`), and inline at
-`image/mode.rs:199-203` / `font/specimen_mode.rs:251-255` in `scroll()`.
-The `cell_h_over_w` source differs: one reads
-`cell_size::cell_aspect_h_over_w()`, one reads from a cache key, two
-hardcode `1.0`. One helper would collapse this and stop `1.0` from
-drifting into more places.
-
 ### L9. `Action::ZoomPreset(n)` help/handler pin test missing
 
 `src/viewer/paged.rs:620-644` has `image_config_help_pinned_to_handler`

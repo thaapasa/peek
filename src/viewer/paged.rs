@@ -34,7 +34,7 @@ use crate::types::image::pipeline::{Background, FitMode, ImageConfig, ImageMode}
 use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::zoom::ZoomLevel;
 use crate::types::image::zoom_pan::{ViewBounds, ZoomPanState};
-use crate::viewer::cell_size::cell_aspect_h_over_w;
+use crate::viewer::cell_size;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -308,11 +308,7 @@ pub(crate) trait PageRenderer {
 /// Build a [`TermSize`] for a paged renderer call from the live render
 /// context, capping unbounded pipe-mode rows.
 pub(crate) fn term_size_for(ctx_cols: usize, ctx_rows: usize) -> TermSize {
-    TermSize {
-        cols: ctx_cols.min(u32::MAX as usize) as u32,
-        rows: pipe_rows(ctx_rows),
-        cell_h_over_w: cell_aspect_h_over_w(),
-    }
+    cell_size::term_size(ctx_cols.min(u32::MAX as usize) as u32, pipe_rows(ctx_rows))
 }
 
 /// Paged-image read mode generic over its [`PageRenderer`].
