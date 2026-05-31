@@ -190,7 +190,11 @@ impl Registry {
             }
         }
 
-        append_universal_modes(&mut modes, source, file_type)?;
+        // Directories opt out of Hex: no byte stream to dump. (The Unix
+        // path tolerated `File::open` on a directory as a silent 0-byte
+        // file; Windows rejects directory handles outright.)
+        let hex_source = (!matches!(file_type, FileType::Directory)).then_some(source);
+        append_universal_modes(&mut modes, hex_source)?;
         Ok(modes)
     }
 
@@ -304,23 +308,23 @@ fn push_unique_mode(modes: &mut Vec<Box<dyn Mode>>, mode: Box<dyn Mode>) {
     modes.push(mode);
 }
 
-/// Append the universal view tail every frame gets: Hex (unless a
-/// directory), Info, About, then a Help screen sectioned per mode. Called
-/// at the end of `compose_modes` for top-level frames, and by descend
-/// builders (e.g. an mbox message) so synthetic frames don't drift from
-/// real ones — a descended message has the same Hex / Help / Info / About
-/// as a standalone file. Dedupes by `ModeId`, so a caller that pre-pushed
-/// Info/About doesn't double up.
+/// Append the universal view tail every frame gets: Hex (when a hexable
+/// byte stream is given), Info, About, then a Help screen sectioned per
+/// mode. Called at the end of `compose_modes` for top-level frames, and
+/// by descend builders so synthetic frames (mbox message, spreadsheet
+/// sheet, SQLite table) don't drift from real ones. Dedupes by `ModeId`,
+/// so a caller that pre-pushed Info/About doesn't double up.
+///
+/// `hex_source` is `None` when the frame has no byte stream worth dumping:
+/// a directory, or a synthetic frame whose `source` is the parent
+/// container (a sheet / table reuses the whole-workbook / whole-db
+/// source, so hexing it would dump the container, not the view). Pass
+/// `Some(src)` only when `src`'s bytes are exactly what the frame shows.
 pub(crate) fn append_universal_modes(
     modes: &mut Vec<Box<dyn Mode>>,
-    source: &InputSource,
-    file_type: &FileType,
+    hex_source: Option<&InputSource>,
 ) -> Result<()> {
-    // Directories opt out of Hex: they have no byte stream to hex-dump.
-    // The Unix path tolerated `File::open` on a directory (silent 0-byte
-    // file), so HexMode's constructor accidentally succeeded; Windows
-    // rejects directory handles outright (`Access is denied`).
-    if !matches!(file_type, FileType::Directory) {
+    if let Some(source) = hex_source {
         push_unique_mode(modes, Box::new(HexMode::new(source, 0)?));
     }
     push_unique_mode(modes, Box::new(InfoMode::new()));

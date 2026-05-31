@@ -15,7 +15,7 @@ use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::table_mode::build as build_table_mode;
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
-use crate::viewer::modes::{AboutMode, DescendFrame, ExtractTarget, InfoMode, Mode};
+use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 
 /// File suffix used for schema-row inner_paths. Mirrors the SQL viewer
 /// the user opens when the row is Enter'd — keeps the listing's leaf
@@ -105,11 +105,10 @@ fn build_contents_frame(
 ) -> Result<DescendFrame> {
     let table = build_table_mode(source, &target.entity)
         .map_err(|e| anyhow!("opening {}: {e:#}", target.entity))?;
-    let modes: Vec<Box<dyn Mode>> = vec![
-        Box::new(table),
-        Box::new(InfoMode::new()),
-        Box::new(AboutMode::new()),
-    ];
+    let mut modes: Vec<Box<dyn Mode>> = vec![Box::new(table)];
+    // No Hex: the frame reuses the whole-db source, so a hex dump would
+    // show the database file, not this table.
+    crate::viewer::append_universal_modes(&mut modes, None)?;
     Ok(DescendFrame {
         source: source.clone(),
         detected: detected.clone(),

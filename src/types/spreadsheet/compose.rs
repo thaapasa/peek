@@ -11,7 +11,7 @@ use crate::input::detect::{ArchiveFormat, Detected, SpreadsheetFormat};
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
-use crate::viewer::modes::{AboutMode, DescendFrame, ExtractTarget, InfoMode, Mode};
+use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 use crate::viewer::table::rows_mode::RowsTableMode;
 
 use super::workbook::Workbook;
@@ -95,11 +95,10 @@ fn build_sheet_frame(
     let aligns = data.alignments();
     let has_header = data.header_detected();
     let table = RowsTableMode::new(Box::new(data), aligns, has_header, "Sheet");
-    let modes: Vec<Box<dyn Mode>> = vec![
-        Box::new(table),
-        Box::new(InfoMode::new()),
-        Box::new(AboutMode::new()),
-    ];
+    let mut modes: Vec<Box<dyn Mode>> = vec![Box::new(table)];
+    // No Hex: the frame reuses the whole-workbook source, so a hex dump
+    // would show the container, not this sheet.
+    crate::viewer::append_universal_modes(&mut modes, None)?;
     Ok(DescendFrame {
         source: source.clone(),
         detected: detected.clone(),

@@ -177,7 +177,8 @@ pub(crate) fn build_message_frame(
     // The slice is a standalone single message regardless of the parent
     // detection, so the descended frame is a plain `.eml`.
     let msg_detected = Detected::new(FileType::Email(Fmt::Eml), detected.magic_mime.clone());
-    crate::viewer::append_universal_modes(&mut msg_modes, &msg_source, &msg_detected.file_type)?;
+    // The subrange source *is* this one message, so hexing it is correct.
+    crate::viewer::append_universal_modes(&mut msg_modes, Some(&msg_source))?;
 
     Ok(DescendFrame {
         source: msg_source,
