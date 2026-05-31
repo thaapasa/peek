@@ -699,10 +699,10 @@ mod tests {
         InputSource::File(p)
     }
 
-    /// transactions-10k.csv (header + 10 000 rows; record N's `id`
-    /// column is `100000 + N`) drives the windowing path: deep forward
-    /// + backward seeks land on the right rows, the resident set stays
-    /// bounded (seed + one window), and a count pass settles the total.
+    /// transactions-10k.csv (header + 10 000 rows; record N's `id` column is
+    /// `100000 + N`) drives the windowing path: deep forward + backward seeks
+    /// land on the right rows, the resident set stays bounded (seed + one window),
+    /// and a count pass settles the total.
     #[test]
     fn windowed_seek_lands_on_correct_rows_and_stays_bounded() {
         let src = fixture("test-data/transactions-10k.csv");
