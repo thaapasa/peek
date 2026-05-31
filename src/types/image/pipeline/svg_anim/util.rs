@@ -39,7 +39,9 @@ pub(super) fn parse_length(s: &str) -> Option<f64> {
         .find(|c: char| !(c == '-' || c == '+' || c == '.' || c.is_ascii_digit() || c == 'e'))
         .unwrap_or(t.len());
     let num = &t[..num_end];
-    num.parse::<f64>().ok()
+    // Reject non-finite (`inf`/`NaN`) so callers don't derive garbage
+    // dimensions (`inf as u32` saturates, `NaN as u32` is 0).
+    num.parse::<f64>().ok().filter(|n| n.is_finite())
 }
 
 pub(super) fn root_svg_dimensions(text: &str) -> Option<(u32, u32)> {

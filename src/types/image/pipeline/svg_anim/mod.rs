@@ -444,6 +444,42 @@ mod tests {
         );
     }
 
+    /// A `NaN%` keyframe stop must not panic the percent sort at file
+    /// open. The non-finite stop is dropped; the well-formed `50%` stop
+    /// still drives the animation.
+    #[test]
+    fn nan_percent_keyframe_does_not_panic() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">
+<style>@keyframes m{NaN%{transform:translateX(0)}50%{transform:translateX(-100px)}}</style>
+<g style="animation-name:m;animation-duration:2s;animation-iteration-count:infinite;animation-timing-function:steps(1,end)">
+<rect width="100" height="40" fill="red"/>
+</g>
+</svg>"#;
+        // The point is that this returns rather than panicking.
+        assert!(matches!(
+            parse_text(svg),
+            ParseOutcome::Animated(_) | ParseOutcome::Unsupported(_)
+        ));
+    }
+
+    /// An `inf` animation duration must not reach
+    /// `Duration::from_secs_f64` (which panics on non-finite). The time
+    /// token is rejected, leaving the target without a duration.
+    #[test]
+    fn infinite_duration_does_not_panic() {
+        let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40">
+<style>@keyframes m{0%{transform:translateX(0)}50%{transform:translateX(-100px)}}</style>
+<g style="animation-name:m;animation-duration:infs;animation-iteration-count:infinite">
+<rect width="100" height="40" fill="red"/>
+</g>
+</svg>"#;
+        // No parseable duration → no target spec; must not panic.
+        assert!(matches!(
+            parse_text(svg),
+            ParseOutcome::NotAnimated | ParseOutcome::Unsupported(_)
+        ));
+    }
+
     /// Diagnostic: probe loader-dots — print per-frame slot for each
     /// target so we can see whether `r` actually transitions.
     #[test]

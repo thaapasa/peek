@@ -164,6 +164,11 @@ fn parse_time(value: &str) -> Option<Duration> {
         return None;
     };
     let n: f64 = num_str.trim().parse().ok()?;
+    // Reject non-finite (`inf`/`NaN`): `Duration::from_secs_f64(inf)`
+    // panics, and `.max(0.0)` below only rescues NaN (→ 0.0), not inf.
+    if !n.is_finite() {
+        return None;
+    }
     // CSS allows negative animation-delay (start mid-cycle); peek
     // doesn't model that yet — clamp to zero so Duration::from_secs_f64
     // never panics.

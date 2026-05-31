@@ -142,7 +142,11 @@ fn parse_keyframe_stops(body: &str) -> Vec<KeyframeStop> {
         }
         cursor = close + 1;
     }
-    out.sort_by(|a, b| a.percent.partial_cmp(&b.percent).unwrap());
+    out.sort_by(|a, b| {
+        a.percent
+            .partial_cmp(&b.percent)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     out
 }
 
@@ -156,7 +160,9 @@ fn parse_percent_token(tok: &str) -> Option<f64> {
     if tok.eq_ignore_ascii_case("to") {
         return Some(100.0);
     }
-    tok.parse::<f64>().ok()
+    // Reject non-finite (`NaN`, `inf`) — a non-finite keyframe percent is
+    // meaningless and would poison the percent sort / timeline math.
+    tok.parse::<f64>().ok().filter(|p| p.is_finite())
 }
 
 /// Walk `prop:value;` pairs; pull `transform:` into a [`TransformValue`]

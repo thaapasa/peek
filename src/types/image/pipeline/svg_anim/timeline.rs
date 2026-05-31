@@ -71,7 +71,7 @@ pub(super) fn build_frames(targets: &[ResolvedTarget], total: Duration) -> Vec<F
             }
         }
     }
-    times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
     times.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
 
     // For each candidate time, compute per-target FrameTargets; coalesce
