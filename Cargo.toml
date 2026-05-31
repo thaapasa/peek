@@ -149,6 +149,12 @@ ttf-parser = "0.25"
 fontdue = "0.9"
 calamine = "0.35.0"
 
+# Email (.eml / .mbox) parsing. Pure Rust, no system deps. Parses one
+# RFC822/MIME message: headers, decoded text/HTML bodies, nested parts +
+# attachments. mbox splitting is hand-rolled (the crate parses single
+# messages) so we keep byte offsets for zero-copy `InputSource::subrange`.
+mail-parser = "0.11"
+
 # /dev/tty reopen after consuming piped stdin (Unix only)
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

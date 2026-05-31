@@ -50,7 +50,8 @@ src/
                          (read-only via bundled rusqlite — schema listing +
                          streaming row viewer), css,
                          structured (JSON/YAML/TOML/XML), csv, image (+ ASCII pipeline +
-                         SVG anim), html, ebook (epub), document (docx/odt/rtf), pdf,
+                         SVG anim), html, email (eml/mbox), ebook (epub),
+                         document (docx/odt/rtf), pdf,
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
                          disk_image (iso/dmg), objfile, classfile,
                          cert (PEM X.509 / CSR / CRL / keys / SSH pubkey),

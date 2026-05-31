@@ -198,22 +198,14 @@ Still open (only if a use case appears):
   [Block Collapsing](#block-collapsing--folding-)), so deferred with it.
 - **HCL / Dhall / CUE** beyond highlighting — typed parsing only if those ecosystems mature.
 
-### Email ☐
+### Email ◐
 
-| Format | Extensions |
-|--------|------------|
-| RFC822 | `.eml`     |
-| Mbox   | `.mbox`    |
+`.eml` (single RFC822/MIME message) and `.mbox` (mailbox) ship — see
+[features.md → Email](features.md#email-). Still open:
 
-Default view shows headers (From, To, Cc, Subject, Date, Message-ID) followed by body. Multipart
-messages list parts with content-type and size; HTML parts render via the same `html2text` path as
-the HTML viewer. Attachments listed with filename, type, size — not extracted.
-
-For `.mbox` (multiple messages concatenated): show a list view first, drill into a single message.
-
-File info: header summary, part count, total size, MIME walk.
-
-Crate: `mail-parser` (pure Rust).
+- **Attachment content-type column** in the listing (today rows show name + size only; the
+  listing primitive has no type column).
+- **Inline images** rendered in the body (cid: references resolved against inline parts).
 
 ### Calendar / Contacts ☐
 

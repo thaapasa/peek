@@ -27,6 +27,7 @@ pub use crate::types::directory::info::DirectoryStats;
 pub use crate::types::disk_image::info::DiskImageInfo;
 pub use crate::types::document::DocumentStats;
 pub use crate::types::ebook::EbookStats;
+pub use crate::types::email::EmailInfo;
 pub use crate::types::eps::EpsInfo;
 pub use crate::types::font::info::FontInfo;
 pub use crate::types::image::info::ImageStats;
@@ -89,6 +90,7 @@ pub enum FileExtras {
     Structured(StructuredInfo),
     Markdown(MarkdownInfo),
     Notebook(NotebookInfo),
+    Email(EmailInfo),
     Sql(SqlInfo),
     Css(CssInfo),
     Binary(BinaryInfo),

@@ -16,6 +16,7 @@
   - [Markdown](./file-types/markdown.md)
   - [Jupyter notebooks](./file-types/notebooks.md)
   - [HTML](./file-types/html.md)
+  - [Email](./file-types/email.md)
   - [Structured data](./file-types/structured-data.md)
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)

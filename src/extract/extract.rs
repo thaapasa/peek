@@ -114,6 +114,7 @@ pub fn extract(
         FileType::Audio(fmt) => audio_extract(source, *fmt, key),
         FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),
         FileType::Notebook => crate::types::notebook::extract::extract(source, key),
+        FileType::Email(_) => crate::types::email::extract::extract(source, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html

@@ -2,7 +2,8 @@ use std::path::Path;
 
 use crate::input::detect::{
     ArchiveFormat, AudioFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat,
-    EbookFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat, StructuredFormat,
+    EbookFormat, EmailFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat,
+    StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -178,6 +179,8 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Html => "text/html",
         FileType::Markdown => "text/markdown",
         FileType::Notebook => "application/x-ipynb+json",
+        FileType::Email(EmailFormat::Eml) => "message/rfc822",
+        FileType::Email(EmailFormat::Mbox) => "application/mbox",
         FileType::Ebook(EbookFormat::Epub) => "application/epub+zip",
         FileType::Comic(ComicFormat::Cbz) => "application/vnd.comicbook+zip",
         FileType::Document(DocumentFormat::Docx) => {
@@ -292,6 +295,8 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
     match file_type {
         FileType::Markdown => &["md", "markdown", "mdown", "mkd", "mkdn", "mdwn"],
         FileType::Notebook => &["ipynb"],
+        FileType::Email(EmailFormat::Eml) => &["eml"],
+        FileType::Email(EmailFormat::Mbox) => &["mbox"],
         FileType::Cert(_) => &[
             "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub",
         ],

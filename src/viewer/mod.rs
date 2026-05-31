@@ -104,6 +104,11 @@ impl Registry {
             FileType::Svg => {
                 crate::types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::Email(fmt) => {
+                crate::types::email::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
             FileType::Ebook(EbookFormat::Epub) => {
                 crate::types::ebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
@@ -185,46 +190,7 @@ impl Registry {
             }
         }
 
-        // Hex/Info/Help/About are universal — every file gets these views.
-        // Dedupe by ModeId so a file-type arm that pre-pushes one of these
-        // (e.g. DiskImage → Info) doesn't end up with two copies in the
-        // mode list (which would break `i:Info` jump and Tab cycle).
-        //
-        // Directories opt out of Hex: they have no byte stream to hex-dump.
-        // The Unix path tolerated `File::open` on a directory (silent 0-byte
-        // file), so HexMode's constructor accidentally succeeded; Windows
-        // rejects directory handles outright (`Access is denied`).
-        if !matches!(file_type, FileType::Directory) {
-            push_unique_mode(&mut modes, Box::new(HexMode::new(source, 0)?));
-        }
-        push_unique_mode(&mut modes, Box::new(InfoMode::new()));
-        push_unique_mode(&mut modes, Box::new(AboutMode::new()));
-
-        // Help screen: a "Global" section, then one section per mode
-        // that has extras (its label as the heading). A mode's entry is
-        // dropped from its section when it's already a global, so the
-        // global keys aren't repeated. The screen lists every mode the
-        // file has — sectioning makes clear which keys belong where.
-        let mut help_sections: Vec<HelpSection> = vec![HelpSection {
-            title: "Global".to_string(),
-            entries: GLOBAL_ACTIONS.to_vec(),
-        }];
-        for m in &modes {
-            let entries: Vec<HelpEntry> = m
-                .extra_actions()
-                .iter()
-                .filter(|e| !GLOBAL_ACTIONS.contains(e))
-                .copied()
-                .collect();
-            if !entries.is_empty() {
-                help_sections.push(HelpSection {
-                    title: m.label().to_string(),
-                    entries,
-                });
-            }
-        }
-        modes.push(Box::new(HelpMode::new(help_sections)));
-
+        append_universal_modes(&mut modes, source, file_type)?;
         Ok(modes)
     }
 
@@ -290,7 +256,7 @@ impl ComposeCtx {
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
             FileType::Svg | FileType::Html | FileType::Markdown => "Source",
-            FileType::PostScript(_) => "Source",
+            FileType::PostScript(_) | FileType::Email(_) => "Source",
             _ => "Content",
         };
 
@@ -336,6 +302,54 @@ fn push_unique_mode(modes: &mut Vec<Box<dyn Mode>>, mode: Box<dyn Mode>) {
         return;
     }
     modes.push(mode);
+}
+
+/// Append the universal view tail every frame gets: Hex (unless a
+/// directory), Info, About, then a Help screen sectioned per mode. Called
+/// at the end of `compose_modes` for top-level frames, and by descend
+/// builders (e.g. an mbox message) so synthetic frames don't drift from
+/// real ones — a descended message has the same Hex / Help / Info / About
+/// as a standalone file. Dedupes by `ModeId`, so a caller that pre-pushed
+/// Info/About doesn't double up.
+pub(crate) fn append_universal_modes(
+    modes: &mut Vec<Box<dyn Mode>>,
+    source: &InputSource,
+    file_type: &FileType,
+) -> Result<()> {
+    // Directories opt out of Hex: they have no byte stream to hex-dump.
+    // The Unix path tolerated `File::open` on a directory (silent 0-byte
+    // file), so HexMode's constructor accidentally succeeded; Windows
+    // rejects directory handles outright (`Access is denied`).
+    if !matches!(file_type, FileType::Directory) {
+        push_unique_mode(modes, Box::new(HexMode::new(source, 0)?));
+    }
+    push_unique_mode(modes, Box::new(InfoMode::new()));
+    push_unique_mode(modes, Box::new(AboutMode::new()));
+
+    // Help screen: a "Global" section, then one section per mode that has
+    // extras (its label as the heading). A mode's entry is dropped from
+    // its section when it's already a global, so the global keys aren't
+    // repeated. The screen lists every mode the frame has.
+    let mut help_sections: Vec<HelpSection> = vec![HelpSection {
+        title: "Global".to_string(),
+        entries: GLOBAL_ACTIONS.to_vec(),
+    }];
+    for m in modes.iter() {
+        let entries: Vec<HelpEntry> = m
+            .extra_actions()
+            .iter()
+            .filter(|e| !GLOBAL_ACTIONS.contains(e))
+            .copied()
+            .collect();
+        if !entries.is_empty() {
+            help_sections.push(HelpSection {
+                title: m.label().to_string(),
+                entries,
+            });
+        }
+    }
+    modes.push(Box::new(HelpMode::new(help_sections)));
+    Ok(())
 }
 
 /// True when pretty-printing the format drops information from the source

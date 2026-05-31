@@ -17,6 +17,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV extract, workbook metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT, RTF, EPUB, CBZ
+- **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing + extract, message-list drill-in
 - **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
 - **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
