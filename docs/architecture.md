@@ -106,9 +106,10 @@ pub(crate) trait Mode {
     fn tick(&mut self) -> bool { false }
     fn tracks_position(&self) -> bool { false }
     fn take_warnings(&mut self) -> Vec<String> { vec![] }
+    fn set_search(&mut self, _query: Option<&str>) -> SearchTarget { SearchTarget::Owned }
 }
 
-pub(crate) enum Handled { No, Yes, YesResetScroll }
+pub(crate) enum Handled { No, Yes, YesResetScroll, YesScrollTo(usize) }
 ```
 
 `render_window` is the single rendering contract. The mode receives a viewport request `(scroll,

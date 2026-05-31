@@ -31,7 +31,7 @@ Status legend: ✅ implemented · ◐ partial
 
 ## Operating Modes
 
-### Viewer Mode ◐
+### Viewer Mode ✅
 
 Full-screen interactive console view. User exits manually (`q` / `Esc`). Keyboard interaction for
 toggling options, scrolling, searching, and switching between views.
@@ -47,7 +47,7 @@ render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. 
 line-number gutter in text views. Text search (`/` opens the prompt, `n`/`p` cycle matches) works
 in the text / source / structured views.
 
-### Print Mode ◐
+### Print Mode ✅
 
 Direct stdout, no interactivity (`cat`-like). Default output by file type:
 
@@ -530,7 +530,7 @@ and `*` are silently dropped. SMIL (`<animate>`, `<animateMotion>`) is still def
 `--no-svg-anim` forces the static render. The Info panel reports frame count, total duration,
 and looping vs one-shot.
 
-#### Transparency Handling ◐
+#### Transparency Handling ✅
 
 Images with transparency (PNG, SVG, WebP, GIF) need a compositing background before ASCII rendering.
 Without one, transparent regions default to black, making dark content invisible against dark
@@ -547,7 +547,7 @@ Auto-detection: dark content → white bg, light content → black bg. `--backgr
 cycling work. Checkerboard uses 8×8 pixel gray. Compositing is always applied when an alpha channel
 is present (no per-image opt-out).
 
-#### Image Sizing Modes ◐
+#### Image Sizing Modes ✅
 
 | Mode        | Behavior                                                              |
 |-------------|-----------------------------------------------------------------------|
@@ -827,7 +827,7 @@ extensions; magic-byte sniff catches `00 01 00 00` / `OTTO` / `ttcf` / Apple's `
 so unnamed sources (stdin, archive entries) still classify. Source view is omitted — fonts are
 binary containers, so the universal hex aux mode handles raw byte inspection.
 
-Per face (collections list face 0 in the first cut; per-face listing is planned):
+Per face:
 
 - Family, subfamily, full name, postscript name, version
 - OS/2 weight (`100`..`900` with the canonical name in parens), width class, italic flag,
@@ -889,7 +889,7 @@ dump of the archive bytes.
 `/` opens a **leaf-name search**. The query matches against the last path segment of each
 row only — `sub/` finds nothing because no leaf carries a slash. Directory leaves
 participate, so a search for an ancestor name brings that subtree into view; the file
-selection only moves when the match lands on a file row, so Extract / Descend still target a
+selection only moves when the active match lands on a file row, so Extract / Descend still target a
 descendable entry. `n` / `p` step matches with wrap. Same `/` search is wired into every
 ListingMode consumer — archives, ISO 9660, PDF `/EmbeddedFiles`, audio embed bundles,
 directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
@@ -1116,7 +1116,7 @@ chapter step, or a terminal resize (the read-mode views key match indices to wra
 Regex matching and incremental (search-as-you-type) are still planned — see
 [planned.md](planned.md#viewer-features-).
 
-### Help Screen ◐
+### Help Screen ✅
 
 `h` / `?` opens the help screen. Shows keyboard shortcuts and the active theme. The shortcut list
 is sectioned: a **Global** block, then one block per loaded mode (its label as the heading) for
@@ -1133,7 +1133,7 @@ showcase — cycling themes with `t` while on About previews how each theme pain
 
 ### Extraction ✅
 
-Pull an inner item out of a container as a standalone file. Three sources currently:
+Pull an inner item out of a container as a standalone file. Sources currently:
 
 - **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst|.lz4]`, `.7z`, `.cpio[.gz]`, `.ar`):
   extract a single file by its inner path. Stored zip / uncompressed tar members are a verbatim
@@ -1156,8 +1156,15 @@ Pull an inner item out of a container as a standalone file. Three sources curren
 - **Animation frames** (`.gif`, `.webp`, animated SVG): extract a single composited frame as a
   PNG at the source's native pixel size (SVG sub-512px scales up to 512 on the longest axis;
   override with `--extract-size`).
+- **PDF embeds** (`/EmbeddedFiles` attachments, memory source) and **inline images**
+  (`pages/page{N}/image{M}.{ext}` pseudo-paths for image XObjects).
+- **Audio embeds**: `pictures/<usage>.<ext>` per visual, plus `lyrics/lyrics.txt`.
+- **SQLite entities**: `<kind>/<name>.sql` (DDL) and `<kind>/<name>.csv` (table / view contents).
+- **Spreadsheet sheets**: `<sheet>.csv` streams one worksheet to CSV; raw ZIP paths extract the
+  underlying workbook part.
+- **Document embeds** (DOCX / ODT / RTF): extract an embedded image by its inner path.
 
-CLI: `peek <file> --extract <KEY> [-o PATH]`. `<KEY>` is an entry path for archives/ISOs or a
+CLI: `peek <file> --extract <KEY> [-o PATH]`. `<KEY>` is an entry path for containers or a
 1-based frame index for animations. `-o PATH` overrides the suggested filename; `-o -` or piping
 stdout streams raw bytes. Adding `--print` or `--info` instead replaces the active source with
 the extracted item and runs the rest of the pipeline against it — that's recursive peek

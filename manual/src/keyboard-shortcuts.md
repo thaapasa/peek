@@ -58,7 +58,6 @@ navigate matches instead, and `Esc` clears the search to get chapter stepping ba
 | `+` / `-` | Zoom in / out (1.25× per step, capped at 16×)            |
 | `0`       | Reset zoom to 1× and pan to origin                       |
 | `1`..`9` | Jump to whole-number zoom (1× .. 9×)                     |
-| `e`       | Extract current animation frame                          |
 
 Zoom anchors on the viewport centre — the pixel under the centre
 stays put across `+` / `-`. The same zoom keys work in animation,
@@ -69,8 +68,9 @@ PDF / CBZ, and font specimen views. See
 
 | Key       | Action                |
 |-----------|-----------------------|
-| `Space`   | Play / pause          |
-| `n` / `p` | Next / previous frame |
+| `Space`   | Play / pause                  |
+| `n` / `p` | Next / previous frame         |
+| `e`       | Extract current frame as a PNG |
 
 ## Listings (archives, PDF embeds, audio embeds, ISO, directories)
 

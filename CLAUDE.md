@@ -31,6 +31,7 @@ src/
   cli.rs               — Args struct (clap derive)
   base64.rs            — shared standard-alphabet base64 decoder (crate-wide; notebook image extract is first user)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
+  xml.rs               — shared XML attribute-unescape helper (docx / odt / epub / structured-xml / spreadsheet)
   input/               — InputSource (File / Memory / FileRange / TempFile) + ByteSource +
                          LineSource (streaming, anchor-indexed); detect (magic-byte / extension /
                          sniff); mime (RFC 6838 classification); stream (ByteSource → io::Read /
@@ -49,9 +50,10 @@ src/
                          via the markdown pipeline + JSON source), sql, sqlite
                          (read-only via bundled rusqlite — schema listing +
                          streaming row viewer), css,
-                         structured (JSON/YAML/TOML/XML), csv, image (+ ASCII pipeline +
+                         structured (JSON/YAML/TOML/XML), csv,
+                         spreadsheet (xlsx/xlsm/ods), image (+ ASCII pipeline +
                          SVG anim), html, email (eml/mbox), ebook (epub),
-                         document (docx/odt/rtf), pdf,
+                         document (docx/odt/rtf), pdf, eps (eps/ps),
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
                          disk_image (iso/dmg), objfile, classfile,
                          cert (PEM X.509 / CSR / CRL / keys / SSH pubkey),

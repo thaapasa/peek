@@ -13,6 +13,11 @@ Pull an inner item out of a container as a standalone file.
 - **PDF embedded files** (`/EmbeddedFiles` attachments) — extracted as a memory source.
 - **PDF inline images** — `pages/page{N}/image{M}.{ext}` pseudo-paths for image XObjects.
 - **Audio embeds** — `pictures/<usage>.<ext>` per visual, plus `lyrics/lyrics.txt`.
+- **SQLite entities** — `<kind>/<name>.sql` for an entity's `CREATE …` DDL, `<kind>/<name>.csv`
+  for a table or view's contents (streamed `SELECT *`).
+- **Spreadsheet sheets** — `<sheet>.csv` streams one worksheet to CSV; raw ZIP-container paths
+  extract the underlying workbook part.
+- **Document embeds** (DOCX / ODT / RTF) — extract an embedded image by its inner path.
 - **Animation frames** (`.gif`, `.webp`, animated SVG) — extract a single composited frame as
   a PNG at the source's native pixel size (sub-512px SVG scales up to 512 on the longest
   axis; override with `--extract-size`).
