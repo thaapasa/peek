@@ -1,0 +1,44 @@
+From: Alice Example <alice@example.com>
+To: Bob Tester <bob@example.org>
+Cc: Carol <carol@example.net>
+Subject: Project Peek — sample message
+Date: Sun, 31 May 2026 10:15:00 +0000
+Message-ID: <sample-0001@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="OUTER"
+
+--OUTER
+Content-Type: multipart/alternative; boundary="ALT"
+
+--ALT
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hello Bob,
+
+This is the plain-text alternative of the sample message used by peek's
+email viewer tests. It has a few lines so wrapping has something to do.
+
+Regards,
+Alice
+--ALT
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+<html>
+  <body>
+    <h1>Hello Bob</h1>
+    <p>This is the <b>HTML</b> alternative of the sample message.</p>
+    <p>peek prefers this part and renders it via html2text.</p>
+  </body>
+</html>
+--ALT--
+
+--OUTER
+Content-Type: text/plain; charset="utf-8"
+Content-Disposition: attachment; filename="notes.txt"
+Content-Transfer-Encoding: 7bit
+
+These are the attached notes.
+Line two of the attachment.
+--OUTER--

@@ -9,7 +9,7 @@ use super::super::FileExtras;
 use super::gather;
 use crate::input::InputSource;
 use crate::input::detect;
-use crate::input::detect::{FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat};
+use crate::input::detect::{EmailFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat};
 use crate::types::eps::dos_eps::PreviewKind;
 use crate::types::eps::gs;
 use crate::types::image::info::{AnimationStats, LoopCount};
@@ -533,4 +533,40 @@ fn ods_people_workbook_lists_sheets() {
         panic!("expected Spreadsheet extras");
     };
     assert_eq!(wb.sheets, vec!["people".to_string(), "totals".to_string()]);
+}
+
+// Email fixtures
+
+/// `.eml` detects as a single message and gathers its header summary +
+/// attachment count through the full pipeline.
+#[test]
+fn eml_sample_detects_and_gathers() {
+    let source = InputSource::File(fixture("test-data/sample.eml"));
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(detected.file_type, FileType::Email(EmailFormat::Eml));
+
+    let info = gather(&source, &detected).expect("gather");
+    let FileExtras::Email(email) = &info.extras else {
+        panic!("expected Email extras");
+    };
+    assert_eq!(email.attachment_count, 1);
+    assert_eq!(email.message_count, None);
+    assert_eq!(
+        email.from.as_deref(),
+        Some("Alice Example <alice@example.com>")
+    );
+}
+
+/// `.mbox` detects as a mailbox and reports its message count.
+#[test]
+fn mbox_sample_detects_and_counts_messages() {
+    let source = InputSource::File(fixture("test-data/sample.mbox"));
+    let detected = detect::detect(&source).expect("detect");
+    assert_eq!(detected.file_type, FileType::Email(EmailFormat::Mbox));
+
+    let info = gather(&source, &detected).expect("gather");
+    let FileExtras::Email(email) = &info.extras else {
+        panic!("expected Email extras");
+    };
+    assert_eq!(email.message_count, Some(3));
 }

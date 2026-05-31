@@ -16,6 +16,7 @@ pub mod directory;
 pub mod disk_image;
 pub mod document;
 pub mod ebook;
+pub mod email;
 pub mod eps;
 pub mod font;
 pub mod html;

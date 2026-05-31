@@ -181,6 +181,36 @@ notebooks piped via stdin route to the cell viewer rather than the generic JSON 
 
 The Info view shows the structured XML stats (root element, element counts).
 
+#### Email ◐
+
+`.eml` (single RFC822 / MIME message) and `.mbox` (concatenated mailbox) parse via the pure-Rust
+`mail-parser` crate. Detection works by extension and by content sniff — a leading `From ` line
+(mbox) or an RFC822 header block carrying a recognised mail header (eml) — so extension-less
+messages still route here.
+
+**`.eml`** composes:
+
+- **Message** (default) — a themed header block (From / To / Cc / Date / Subject, plus an
+  attachment count when present) followed by the body. When the message carries an HTML part it
+  renders through the same `html2text` driver as the HTML viewer; otherwise the plain-text part
+  is word-wrapped to the viewport. `RenderedTextMode` caches the result per width / theme.
+- **Source** — the raw RFC822 text via `ContentMode`. `--plain` drops the rendered view and
+  opens straight on the source.
+- **Attachments** (when present) — a `ListingMode` over the message's MIME attachments; `e`
+  extracts one to disk through the standard extract pipeline (`message/rfc822` → recursive peek
+  on the saved part).
+
+**`.mbox`** composes a **Messages** TOC (one row per message, prefixed with its index so
+duplicate subjects stay distinct, with the message `Date` in the mtime column) over a hand-rolled
+`From `-separator splitter. `Enter` descends
+into the selected message — a zero-copy `InputSource::subrange` of just that message, viewed with
+the same Message / Attachments / Info / hex / help stack as a standalone `.eml` (minus the
+per-message raw Source view; the mailbox's own raw text is the secondary top-level view) — so even
+a multi-GB mailbox lists instantly and only the opened message is parsed.
+
+The Info view shows the header summary and attachment count + total size (`.eml`) or the message
+count (`.mbox`).
+
 #### EPUB ✅
 
 `.epub` files (a ZIP container with HTML chapters + OPF metadata) get a three-mode view:

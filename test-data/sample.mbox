@@ -1,0 +1,42 @@
+From alice@example.com Sun May 31 10:15:00 2026
+From: Alice Example <alice@example.com>
+To: Bob Tester <bob@example.org>
+Subject: First message
+Date: Sun, 31 May 2026 10:15:00 +0000
+Message-ID: <mbox-0001@example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Hello Bob,
+
+This is the first message in the sample mailbox.
+
+Alice
+
+From bob@example.org Sun May 31 11:30:00 2026
+From: Bob Tester <bob@example.org>
+To: Alice Example <alice@example.com>
+Subject: Re: First message
+Date: Sun, 31 May 2026 11:30:00 +0000
+Message-ID: <mbox-0002@example.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Hi Alice,
+
+Got it — replying from the second message in the mailbox.
+
+Bob
+
+From carol@example.net Sun May 31 12:45:00 2026
+From: Carol <carol@example.net>
+To: Alice Example <alice@example.com>
+Subject: Third and final
+Date: Sun, 31 May 2026 12:45:00 +0000
+Message-ID: <mbox-0003@example.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+Just chiming in as the third message.
+
+Carol

@@ -192,6 +192,17 @@ src/
         read_mode.rs   — EpubReadMode: one chapter at a time via shared html `render`. Per-chapter render cache keyed by (idx, width); n / N step chapter (Action::NextChapter / PrevChapter). render_to_pipe walks the whole spine. Pre-processes `<img>` tags to inject `alt="image: <basename>"` for empty / missing alt so chapter image refs stay visible. Cover-style chapters (≤ 3 non-empty rendered lines + at least one `<img>`) render the first image as ASCII via the image pipeline
         info_gather.rs — Populate EbookStats (DC metadata + chapter count) from package::open
         info_render.rs — Render EPUB info section from EbookStats
+    email/
+      mod.rs           — Module wiring; re-exports EmailInfo
+      compose.rs       — compose(fmt): `.eml` → [rendered Message (unless --plain) + raw Source + Attachments ListingMode]; `.mbox` → Messages ListingMode with descend handler (subrange one message → reuse the .eml stack) + raw Source. Source precedes the attachments listing so the print/pipe first-data-mode pick is the message, not the listing
+      detect.rs        — format_from_ext (eml → Eml, mbox → Mbox) + sniff_text (`From ` separator → Mbox; RFC822 header block with a recognised mail header → Eml; guards against arbitrary `key: value` files)
+      format.rs        — EmailFormat { Eml, Mbox } + label()
+      message.rs       — Single parse site over mail-parser: parse(bytes) → owned ParsedEmail { from/to/cc/subject/date/message_id, Body (Html preferred over Text), attachments }; attachment_base() (declared filename or `attachment-N.<ext>`) + dedupe_keys() (unique names pass through clean for CLI extract, collisions get a `-N` stem suffix) shared with the extractor; content_type() helper
+      mbox.rs          — split(bytes) → Vec<MboxEntry { offset, len, subject, date_secs }> by scanning `From ` line-start separators; ranges point past the separator so each slice parses standalone; lightweight Subject + Date scan (Date via mail_parser::DateTime::parse_rfc822 → epoch) avoids a full parse per row
+      renderer.rs      — EmailRenderer: TextRenderer rendering a themed header block + body (HTML via html::render::render, plain text word-wrapped); re-parses per render like HtmlRenderer (RenderedTextMode caches)
+      extract.rs       — Resolve an attachment key to an in-memory source (re-parse, match part by recomputed key, copy decoded contents); NotFound on miss
+      info.rs          — EmailInfo (header summary + attachment count/bytes for .eml, message count for .mbox) + gather_extras(source, fmt) (None falls back to text/binary gather)
+      info_render.rs   — Render Email info section (header rows truncated; Messages count for mbox)
     eps/
       mod.rs           — Module wiring; re-exports EpsInfo; `postscript_text(bytes, header)` helper (PS section slice for DOS-EPS, whole file otherwise; lossy UTF-8)
       compose.rs       — compose(): [Preview: PagedImageMode<EpsImageRenderer> when a DOS-EPS TIFF preview exists] + [Render: PagedImageMode<EpsImageRenderer> when gs::find() succeeds, lazy] + Source (text_content_mode over the PS-section slice). `--plain` drops both image views. First-pushed = default, so Preview leads when present

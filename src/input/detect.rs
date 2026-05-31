@@ -18,6 +18,7 @@ pub use crate::types::csv::format::CsvFormat;
 pub use crate::types::disk_image::format::DiskImageFormat;
 pub use crate::types::document::format::DocumentFormat;
 pub use crate::types::ebook::format::EbookFormat;
+pub use crate::types::email::format::EmailFormat;
 pub use crate::types::eps::format::PostScriptFormat;
 pub use crate::types::font::format::FontFormat;
 pub use crate::types::pdf::format::PdfFlavor;
@@ -33,6 +34,7 @@ use crate::types::csv::detect as csv_detect;
 use crate::types::disk_image::detect as disk_image_detect;
 use crate::types::document::detect as document_detect;
 use crate::types::ebook::detect as ebook_detect;
+use crate::types::email::detect as email_detect;
 use crate::types::eps::detect as eps_detect;
 use crate::types::font::detect as font_detect;
 use crate::types::spreadsheet::detect as spreadsheet_detect;
@@ -68,6 +70,12 @@ pub enum FileType {
     /// cells (markdown prose + syntax-highlighted code + textual output)
     /// as a styled read view, paired with the raw notebook JSON source.
     Notebook,
+    /// Email message (`.eml` single RFC822/MIME message) or mailbox
+    /// (`.mbox` concatenation of messages). `.eml` drives a rendered
+    /// header+body read view, the raw source, and an attachments
+    /// listing; `.mbox` drives a message-list TOC that descends into a
+    /// single message.
+    Email(EmailFormat),
     /// E-book (EPUB = ZIP container with HTML chapters + OPF
     /// metadata). Drives a per-chapter rendered read mode plus the
     /// container's listing TOC.
@@ -657,6 +665,13 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     if let Some(fmt) = eps_detect::sniff_text(text) {
         return Some((FileType::PostScript(fmt), "application/postscript"));
     }
+    if let Some(fmt) = email_detect::sniff_text(text) {
+        let mime = match fmt {
+            EmailFormat::Mbox => "application/mbox",
+            EmailFormat::Eml => "message/rfc822",
+        };
+        return Some((FileType::Email(fmt), mime));
+    }
     None
 }
 
@@ -756,6 +771,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = ebook_detect::format_from_ext(&ext) {
         return Some(FileType::Ebook(fmt));
+    }
+    if let Some(fmt) = email_detect::format_from_ext(&ext) {
+        return Some(FileType::Email(fmt));
     }
     if let Some(fmt) = eps_detect::format_from_ext(&ext) {
         return Some(FileType::PostScript(fmt));
