@@ -8,7 +8,9 @@
 //! Two concrete sources live on top of this trait today:
 //!
 //! * [`crate::types::csv::parse::CsvData`] — streams records out of a
-//!   `csv::Reader`, appends them to an internal `Vec` as the user scrolls.
+//!   `csv::Reader`, holding a seed of the first records plus a sliding
+//!   window over wherever the user scrolled past it; memory stays flat
+//!   regardless of file size.
 //! * `SqliteRowSet` (added by the SQLite viewer) — windowed read out of
 //!   a `rusqlite` connection: `ensure_row` slides a buffer covering the
 //!   current viewport, total row count is known up front.
@@ -30,12 +32,12 @@ use anyhow::Result;
 
 /// Lazy, index-addressable row stream.
 ///
-/// Implementations cache rows as the caller asks for them; whether
-/// they're held forever (`CsvData`) or kept in a sliding window
-/// (`SqliteRowSet`) is up to the impl. The mode treats every successful
-/// [`Self::row`] lookup as ground truth and only ever calls
-/// [`Self::ensure_row`] beforehand for rows it is about to render or
-/// scan.
+/// Implementations cache rows as the caller asks for them, but both
+/// concrete sources keep memory bounded: `CsvData` holds a fixed seed
+/// plus a sliding window, `SqliteRowSet` a single window over a known
+/// total. The mode treats every successful [`Self::row`] lookup as
+/// ground truth and only ever calls [`Self::ensure_row`] beforehand for
+/// rows it is about to render or scan.
 pub(crate) trait RowSource {
     /// Make `idx` accessible if possible. Returns the current
     /// upper bound (`row(i)` will return `None` for any `i >=
