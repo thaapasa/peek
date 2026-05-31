@@ -119,6 +119,14 @@ struct CellMatch {
     range: Range<usize>,
 }
 
+/// Search-match overlay spec for a single cell passed to [`render_cell`]:
+/// byte ranges into the cell's display form plus which of them is the
+/// active cursor match. An empty `ranges` is the no-search case.
+struct CellMatches<'a> {
+    ranges: &'a [Range<usize>],
+    current: Option<usize>,
+}
+
 const TABLE_ACTIONS: &[HelpEntry] = &[
     (&[Action::ToggleHeader], "Toggle header row"),
     (&[Action::ReflowWidths], "Reflow column widths"),
@@ -345,8 +353,16 @@ impl RowsTableMode {
 
     /// Build the header row painted with `theme.heading`. Returns
     /// `String::new()` when there's no header (the caller should skip
-    /// emitting it).
-    fn build_header_row(&self, widths: &[usize], theme: &PeekTheme) -> String {
+    /// emitting it). `start_col` is the first column to draw and
+    /// `overflow` chooses spill-vs-truncate — the interactive view passes
+    /// `(self.h_col, false)`, the print path `(0, true)`.
+    fn build_header_row(
+        &self,
+        widths: &[usize],
+        theme: &PeekTheme,
+        start_col: usize,
+        overflow: bool,
+    ) -> String {
         if !self.has_header {
             return String::new();
         }
@@ -355,14 +371,18 @@ impl RowsTableMode {
         };
         let mut out = String::new();
         out.push(' ');
-        for (i, w) in widths.iter().enumerate().skip(self.h_col) {
-            if i > self.h_col {
+        for (i, w) in widths.iter().enumerate().skip(start_col) {
+            if i > start_col {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
             let cell = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
             let (ranges, current) = self.cell_match_ranges(0, i);
-            let painted = render_cell(cell, *w, theme.heading, align, theme, &ranges, current);
+            let matches = CellMatches {
+                ranges: &ranges,
+                current,
+            };
+            let painted = render_cell(cell, *w, theme.heading, align, theme, matches, overflow);
             out.push_str(&painted);
         }
         out
@@ -374,20 +394,24 @@ impl RowsTableMode {
     }
 
     /// Build one body row at record index `body_idx` (0 = first body row).
-    /// `malformed` flag paints the row with `theme.warning`.
+    /// A malformed record paints every column `<error>` with
+    /// `theme.warning`. `start_col` / `overflow` follow the same
+    /// interactive-vs-print convention as [`build_header_row`].
     fn build_body_row(
         &self,
         body_idx: usize,
         widths: &[usize],
         theme: &PeekTheme,
+        start_col: usize,
+        overflow: bool,
     ) -> Option<String> {
         let rec_idx = self.body_start() + body_idx;
         let malformed = self.source.row_is_malformed(rec_idx);
         let cells = self.source.row(rec_idx)?;
         let mut out = String::new();
         out.push(' ');
-        for (i, w) in widths.iter().enumerate().skip(self.h_col) {
-            if i > self.h_col {
+        for (i, w) in widths.iter().enumerate().skip(start_col) {
+            if i > start_col {
                 out.push_str(&theme.paint_muted(COL_SEP));
             }
             let (cell, color): (&str, Color) = if malformed {
@@ -397,8 +421,12 @@ impl RowsTableMode {
             };
             let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
             let (ranges, current) = self.cell_match_ranges(rec_idx, i);
+            let matches = CellMatches {
+                ranges: &ranges,
+                current,
+            };
             out.push_str(&render_cell(
-                cell, *w, color, align, theme, &ranges, current,
+                cell, *w, color, align, theme, matches, overflow,
             ));
         }
         Some(out)
@@ -456,27 +484,36 @@ fn body_cell<'a>(
 /// `↵` marker is repainted with `theme.muted` so it reads as
 /// non-content. Padding sits outside the colored span.
 ///
-/// `match_ranges` are byte offsets into the cell's *display* form, used
-/// to overlay search-match backgrounds. `current_idx` picks the active
-/// match within `match_ranges` (cursor) — receives the brighter
-/// background. Ranges that fall in the truncated tail are dropped.
+/// `matches` carries byte offsets into the cell's *display* form, used
+/// to overlay search-match backgrounds, plus which range is the active
+/// cursor match (the brighter background). Ranges that fall in the
+/// truncated tail are dropped. Pass [`CellMatches { ranges: &[], current: None }`] when no
+/// search is active.
+///
+/// When `overflow` is set, a cell wider than `width` is emitted in full
+/// (no truncation marker, no padding) and spills past the column edge —
+/// the print path uses this so a wide cell prints whole; the next row
+/// realigns. The interactive path passes `false` to keep the grid tight.
 fn render_cell(
     cell: &str,
     width: usize,
     color: Color,
     align: Alignment,
     theme: &PeekTheme,
-    match_ranges: &[Range<usize>],
-    current_idx: Option<usize>,
+    matches: CellMatches,
+    overflow: bool,
 ) -> String {
     let display = display_cell(cell);
     let cell_w = display.width();
-    let (content, prefix_len, pad): (Cow<str>, usize, usize) = if cell_w > width {
+    let (content, prefix_len, pad): (Cow<str>, usize, usize) = if cell_w > width && !overflow {
         let t = take_cols(&display, width.saturating_sub(1));
         let prefix = t.len();
         let mut c = t;
         c.push(TRUNCATE_MARKER);
         (Cow::Owned(c), prefix, 0)
+    } else if cell_w > width {
+        let len = display.len();
+        (display, len, 0)
     } else {
         let len = display.len();
         (display, len, width - cell_w)
@@ -485,8 +522,9 @@ fn render_cell(
     let mut inner = String::with_capacity(content.len() + 24);
     paint_content_with_markers(&mut inner, &content, color, theme);
 
-    if !match_ranges.is_empty() {
-        let (kept, kept_current) = filter_ranges_for_prefix(match_ranges, current_idx, prefix_len);
+    if !matches.ranges.is_empty() {
+        let (kept, kept_current) =
+            filter_ranges_for_prefix(matches.ranges, matches.current, prefix_len);
         if !kept.is_empty() {
             inner = overlay_matches(&inner, &kept, kept_current, theme);
         }
@@ -630,7 +668,7 @@ impl Mode for RowsTableMode {
         let clip = |line: String| truncate_ansi(&line, ctx.term_cols);
 
         if self.has_header {
-            let header_row = self.build_header_row(&widths, ctx.peek_theme);
+            let header_row = self.build_header_row(&widths, ctx.peek_theme, self.h_col, false);
             if !header_row.is_empty() {
                 lines.push(clip(header_row));
             }
@@ -641,7 +679,9 @@ impl Mode for RowsTableMode {
         let mut emitted = 0;
         let mut body_idx = self.top_record;
         while emitted < body_rows && body_idx < total_body {
-            if let Some(row) = self.build_body_row(body_idx, &widths, ctx.peek_theme) {
+            if let Some(row) =
+                self.build_body_row(body_idx, &widths, ctx.peek_theme, self.h_col, false)
+            {
                 lines.push(clip(row));
             }
             body_idx += 1;
@@ -664,16 +704,18 @@ impl Mode for RowsTableMode {
         // (alignment breaks for that row, next row realigns).
         let widths = self.seed_widths.clone();
         if self.has_header && self.source.loaded() > 0 {
-            out.write_line(&self.build_header_row_print(&widths, ctx.peek_theme))?;
-            out.write_line(&self.build_separator_row_print(&widths, ctx.peek_theme))?;
+            // Print mode draws every column from index 0 and lets wide
+            // cells spill past the column edge (`overflow = true`).
+            out.write_line(&self.build_header_row(&widths, ctx.peek_theme, 0, true))?;
+            out.write_line(&build_separator_row(&widths, ctx.peek_theme, 0))?;
         }
         let body_start = self.body_start();
         let loaded = self.source.loaded();
         for rec_idx in body_start..loaded {
-            let malformed = self.source.row_is_malformed(rec_idx);
-            let mut row = String::new();
-            row.push(' ');
-            if malformed {
+            if self.source.row_is_malformed(rec_idx) {
+                // Whole-row marker — print mode collapses a malformed
+                // record to one spanning line rather than per-column.
+                let mut row = String::from(' ');
                 row.push_str(
                     &ctx.peek_theme
                         .paint("<malformed record>", ctx.peek_theme.warning),
@@ -681,38 +723,11 @@ impl Mode for RowsTableMode {
                 out.write_line(&row)?;
                 continue;
             }
-            let Some(cells) = self.source.row(rec_idx) else {
-                continue;
-            };
-            for (i, w) in widths.iter().enumerate() {
-                if i > 0 {
-                    row.push_str(&ctx.peek_theme.paint_muted(COL_SEP));
-                }
-                let (raw, color) = body_cell(cells, i, ctx.peek_theme.foreground, ctx.peek_theme);
-                let cell = display_cell(raw);
-                let cell_w = cell.width();
-                let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
-                if cell_w > *w {
-                    // Print-mode overflow: emit cell in full, push the rest
-                    // of this row rightward past terminal edge. Re-paint
-                    // the marker glyph muted in line with the interactive
-                    // path so a multi-line cell prints consistently.
-                    let mut painted = String::new();
-                    paint_content_with_markers(&mut painted, &cell, color, ctx.peek_theme);
-                    row.push_str(&painted);
-                } else {
-                    row.push_str(&render_cell(
-                        &cell,
-                        *w,
-                        color,
-                        align,
-                        ctx.peek_theme,
-                        &[],
-                        None,
-                    ));
-                }
+            if let Some(row) =
+                self.build_body_row(rec_idx - body_start, &widths, ctx.peek_theme, 0, true)
+            {
+                out.write_line(&row)?;
             }
-            out.write_line(&row)?;
         }
         Ok(())
     }
@@ -874,47 +889,6 @@ impl Mode for RowsTableMode {
     }
 }
 
-impl RowsTableMode {
-    /// Header row variant for print mode — uses plain widths without
-    /// honoring `h_col` (print mode emits every column from index 0).
-    fn build_header_row_print(&self, widths: &[usize], theme: &PeekTheme) -> String {
-        let Some(cells) = self.source.row(0) else {
-            return String::new();
-        };
-        let mut out = String::new();
-        out.push(' ');
-        for (i, w) in widths.iter().enumerate() {
-            if i > 0 {
-                out.push_str(&theme.paint_muted(COL_SEP));
-            }
-            let raw = cells.get(i).and_then(|c| c.as_deref()).unwrap_or("");
-            let cell = display_cell(raw);
-            let cell_w = cell.width();
-            let align = self.align.get(i).copied().unwrap_or(Alignment::Left);
-            if cell_w > *w {
-                let mut painted = String::new();
-                paint_content_with_markers(&mut painted, &cell, theme.heading, theme);
-                out.push_str(&painted);
-            } else {
-                out.push_str(&render_cell(
-                    &cell,
-                    *w,
-                    theme.heading,
-                    align,
-                    theme,
-                    &[],
-                    None,
-                ));
-            }
-        }
-        out
-    }
-
-    fn build_separator_row_print(&self, widths: &[usize], theme: &PeekTheme) -> String {
-        build_separator_row(widths, theme, 0)
-    }
-}
-
 /// Box-drawing separator row between header and body. `start_col` is
 /// the first column index to draw — the interactive view starts at the
 /// horizontal-scroll cursor, print mode always starts at 0.
@@ -1071,8 +1045,11 @@ mod tests {
             theme.foreground,
             Alignment::Right,
             &theme,
-            &[],
-            None,
+            CellMatches {
+                ranges: &[],
+                current: None,
+            },
+            false,
         );
         // Three pad spaces precede the content.
         assert!(out.starts_with("   "));
@@ -1116,8 +1093,11 @@ mod tests {
             theme.foreground,
             Alignment::Left,
             &theme,
-            &[],
-            None,
+            CellMatches {
+                ranges: &[],
+                current: None,
+            },
+            false,
         );
         assert!(out.ends_with("   "));
     }
@@ -1164,7 +1144,18 @@ mod tests {
                 let w = 60usize;
                 let align = Alignment::Left;
                 let raw = cell.as_deref().unwrap_or("");
-                let rendered = render_cell(raw, w, theme.foreground, align, &theme, &[], None);
+                let rendered = render_cell(
+                    raw,
+                    w,
+                    theme.foreground,
+                    align,
+                    &theme,
+                    CellMatches {
+                        ranges: &[],
+                        current: None,
+                    },
+                    false,
+                );
                 assert!(
                     !rendered.contains('\n'),
                     "row {i} cell rendered with embedded newline: {rendered:?}"
@@ -1205,8 +1196,11 @@ mod tests {
             theme.foreground,
             Alignment::Left,
             &theme,
-            &[],
-            None,
+            CellMatches {
+                ranges: &[],
+                current: None,
+            },
+            false,
         );
         assert!(
             rendered.contains('\u{21B5}'),
