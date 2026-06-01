@@ -37,16 +37,29 @@ embedded XML partition-map size, segment number / count, data + master checksum 
 and the documented trailer flag bits (flattened, internet-enabled).
 
 It also decodes the **partition map** from the embedded plist — one small read, no payload
-bytes. Each partition shows its Apple type (`Apple_HFS`, `Apple_APFS`, `MBR`,
-`Primary GPT Header`, …), logical size, and a compression summary: codec (zlib / bzip2 /
-lzfse / lzma / ADC), stored size, ratio, and chunk count. Sparse `Apple_Free` regions show as
-`(sparse)`. Example:
+bytes. Real filesystems (`Apple_HFS`, `Apple_APFS`, …) each get a detail block; the format
+scaffolding (protective MBR, primary/backup GPT header + table, free-space gaps) collapses into
+one `Partition scheme` block, one line each. Nothing is hidden — the split just puts the real
+content first. Each row carries its image offset (the byte position `mount -o offset=`, `dd
+skip=`, or `mmls` would select on). Example:
 
 ```
-Partitions    8
-  MBR         512 B → 31 B (zlib, 16.5×, 1 chunk)
-  Apple_APFS  10.21 MiB → 201.90 KiB (zlib, 51.8×, 3 chunks)
-  Apple_Free  3.00 KiB (sparse, 1 chunk)
+Partitions    8 (1 filesystem, 7 scheme)
+
+── Partition · HFS+ ───────────────────
+  Name          disk image (Apple_HFS : 4)
+  Type          HFS+ (Apple_HFS)
+  Logical size  596.33 MiB
+  Stored        159.64 MiB (27% of logical)
+  Compression   zlib · 3.7×
+  Chunks        408 (1 raw, 4 ignore, 403 zlib)
+  Image offset  20,480 B (sector 40)
+
+── Partition scheme ────────────────────
+  MBR                512 B · zlib · @ 0 B
+  Primary GPT Header 512 B · zlib · @ 512 B
+  free space         3.00 KiB · sparse · @ 17,408 B
+  ...
 ```
 
 Walking each partition's inner filesystem (HFS+ / APFS) is a separate, deferred effort — the

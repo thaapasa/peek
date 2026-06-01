@@ -314,11 +314,11 @@ src/
       iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
       dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes); carries plist_offset for the partition-map read
       dmg_plist.rs     — quick-xml walk of the embedded plist → blkx entries (Name + decoded mish Data); not a general plist parser, pulls only the partition map
-      mish.rs          — UDIF "mish" (BLKX) block-table parser: sector span + per-chunk (kind, stored length) → MishSummary (logical size, stored bytes, codec set, chunk count); structure only, no payload decode
+      mish.rs          — UDIF "mish" (BLKX) block-table parser: start sector + sector span + per-chunk (kind, stored length) → MishSummary (offset, logical size, stored bytes, chunk count, run-type histogram + codecs()); structure only, no payload decode
       mbr.rs           — MBR partition-table parser for raw `.img` / `.bin` / `.dd` images; reads the 512-byte boot sector and populates `MbrTable` / `MbrPartition` shown in the Info view
       extract.rs       — ISO entry extract: lookup_file_range → zero-copy FileRange (or Bytes::slice for stdin-piped); DMG returns Unsupported
       info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes + (if present) the plist region → dmg_plist + mish → DmgPartition rows
-      info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks incl. partition map)
+      info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks); DMG partition map split into per-filesystem detail blocks + one compact "Partition scheme" block (structural/free entries), classified by is_structural + friendly_type
     objfile/
       mod.rs           — Module wiring
       compose.rs       — compose(): InfoMode landing view + Sections / Symbols TableMode (no extract path)

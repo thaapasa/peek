@@ -178,10 +178,12 @@ fn build_partition(entry: dmg_plist::BlkxEntry) -> Option<DmgPartition> {
     Some(DmgPartition {
         fs_type: parse_fs_type(&entry.name),
         name: entry.name,
+        start_sector: summary.first_sector,
         size_bytes: summary.uncompressed_bytes,
         stored_bytes: summary.stored_bytes,
-        compression: summary.methods,
+        compression: summary.codecs(),
         chunk_count: summary.chunk_count,
+        run_histogram: summary.run_counts,
     })
 }
 
@@ -198,7 +200,140 @@ fn parse_fs_type(name: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_fs_type;
+    use super::*;
+
+    // --- synthetic-DMG builders ------------------------------------------
+    // Mirror the on-disk shapes just enough to drive the real gather path:
+    // a "mish" block table, a base64 encoder (crate::base64 only decodes),
+    // an embedding plist, and a koly trailer pointing at it.
+
+    /// Build a mish block: `(tag, stored_length)` chunks plus the fixed
+    /// header carrying start sector + sector span.
+    fn mish(first_sector: u64, sector_count: u64, chunks: &[(u32, u64)]) -> Vec<u8> {
+        const HEADER: usize = 204;
+        const CHUNK: usize = 40;
+        let mut b = vec![0u8; HEADER + chunks.len() * CHUNK];
+        b[0..4].copy_from_slice(b"mish");
+        b[8..16].copy_from_slice(&first_sector.to_be_bytes());
+        b[16..24].copy_from_slice(&sector_count.to_be_bytes());
+        b[200..204].copy_from_slice(&(chunks.len() as u32).to_be_bytes());
+        for (i, (tag, stored)) in chunks.iter().enumerate() {
+            let off = HEADER + i * CHUNK;
+            b[off..off + 4].copy_from_slice(&tag.to_be_bytes());
+            b[off + 32..off + 40].copy_from_slice(&stored.to_be_bytes());
+        }
+        b
+    }
+
+    /// Standard-alphabet base64 encode (round-trips with crate::base64).
+    fn b64(data: &[u8]) -> String {
+        const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        let mut out = String::new();
+        for chunk in data.chunks(3) {
+            let b0 = chunk[0];
+            let b1 = *chunk.get(1).unwrap_or(&0);
+            let b2 = *chunk.get(2).unwrap_or(&0);
+            out.push(A[(b0 >> 2) as usize] as char);
+            out.push(A[(((b0 & 0x3) << 4) | (b1 >> 4)) as usize] as char);
+            out.push(if chunk.len() > 1 {
+                A[(((b1 & 0xf) << 2) | (b2 >> 6)) as usize] as char
+            } else {
+                '='
+            });
+            out.push(if chunk.len() > 2 {
+                A[(b2 & 0x3f) as usize] as char
+            } else {
+                '='
+            });
+        }
+        out
+    }
+
+    /// 512-byte koly trailer pointing at the embedded plist.
+    fn koly(plist_offset: u64, plist_length: u64, sector_count: u64) -> Vec<u8> {
+        let mut b = vec![0u8; 512];
+        b[0..4].copy_from_slice(b"koly");
+        b[4..8].copy_from_slice(&4u32.to_be_bytes()); // version
+        b[216..224].copy_from_slice(&plist_offset.to_be_bytes());
+        b[224..232].copy_from_slice(&plist_length.to_be_bytes());
+        b[488..492].copy_from_slice(&1u32.to_be_bytes()); // device variant
+        b[492..500].copy_from_slice(&sector_count.to_be_bytes());
+        b
+    }
+
+    fn blkx_entry(name: &str, data: &[u8]) -> String {
+        format!(
+            "<dict><key>Data</key><data>{}</data>\
+             <key>Name</key><string>{name}</string></dict>",
+            b64(data)
+        )
+    }
+
+    #[test]
+    fn build_partition_reads_mish_into_row() {
+        // 2048 sectors logical, one zlib chunk storing 4 KiB + terminator.
+        let data = mish(40, 2048, &[(0x8000_0005, 4096), (0xffff_ffff, 0)]);
+        let entry = dmg_plist::BlkxEntry {
+            name: "disk image (Apple_HFS : 4)".to_string(),
+            data,
+        };
+        let p = build_partition(entry).expect("valid mish → partition");
+        assert_eq!(p.fs_type.as_deref(), Some("Apple_HFS"));
+        assert_eq!(p.start_sector, 40);
+        assert_eq!(p.size_bytes, 2048 * 512);
+        assert_eq!(p.stored_bytes, 4096);
+        assert_eq!(p.compression, vec!["zlib"]);
+        assert_eq!(p.chunk_count, 1);
+        assert_eq!(p.run_histogram, vec![("zlib", 1)]);
+    }
+
+    #[test]
+    fn build_partition_rejects_non_mish_data() {
+        let entry = dmg_plist::BlkxEntry {
+            name: "x".to_string(),
+            data: b"not a mish block".to_vec(),
+        };
+        assert!(build_partition(entry).is_none());
+    }
+
+    #[test]
+    fn gather_dmg_decodes_partition_map_end_to_end() {
+        let mbr = mish(0, 1, &[(0x8000_0005, 30), (0xffff_ffff, 0)]);
+        let hfs = mish(40, 2048, &[(0x8000_0005, 4096), (0xffff_ffff, 0)]);
+        let plist = format!(
+            "<?xml version=\"1.0\"?><plist><dict>\
+             <key>resource-fork</key><dict>\
+             <key>blkx</key><array>{}{}</array>\
+             </dict></dict></plist>",
+            blkx_entry("Protective Master Boot Record (MBR : 0)", &mbr),
+            blkx_entry("disk image (Apple_HFS : 4)", &hfs),
+        );
+
+        // Layout: [data-fork stand-in][plist][koly]. The plist offset must
+        // be non-zero (the trailer's plist_present check rejects offset 0).
+        let mut file = vec![0u8; 256];
+        let plist_offset = file.len() as u64;
+        file.extend_from_slice(plist.as_bytes());
+        file.extend_from_slice(&koly(plist_offset, plist.len() as u64, 2089));
+
+        let source = InputSource::memory(file, "synthetic.dmg");
+        let FileExtras::DiskImage(info) = gather_extras(&source, DiskImageFormat::Dmg) else {
+            panic!("expected DiskImage extras");
+        };
+        let Some(DiskImageMeta::Dmg(dmg)) = info.meta else {
+            panic!("expected Dmg meta, error = {:?}", info.error);
+        };
+
+        assert_eq!(dmg.partitions.len(), 2, "both blkx entries decoded");
+        // Order preserved from the plist.
+        assert_eq!(dmg.partitions[0].fs_type.as_deref(), Some("MBR"));
+        let hfs = &dmg.partitions[1];
+        assert_eq!(hfs.fs_type.as_deref(), Some("Apple_HFS"));
+        assert_eq!(hfs.start_sector, 40);
+        assert_eq!(hfs.size_bytes, 2048 * 512);
+        assert_eq!(hfs.stored_bytes, 4096);
+        assert_eq!(hfs.compression, vec!["zlib"]);
+    }
 
     #[test]
     fn extracts_type_token_from_blkx_name() {

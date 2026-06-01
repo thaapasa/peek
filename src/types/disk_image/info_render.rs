@@ -191,48 +191,193 @@ fn render_dmg(lines: &mut Vec<String>, dmg: &DmgMeta, theme: &PeekTheme) {
     render_dmg_partitions(lines, &dmg.partitions, theme);
 }
 
-/// Render the decoded partition map: a count plus one row per partition
-/// (type, logical size, and stored size / compression / ratio). Skipped
-/// entirely when no partitions were decoded.
+/// Render the decoded partition map. Filesystems each get a detail block;
+/// the format scaffolding (MBR / GPT structures / free-space gaps)
+/// collapses into one "Partition scheme" block, one terse line each — no
+/// entry is ever hidden. Skipped entirely when no partitions decoded.
 fn render_dmg_partitions(lines: &mut Vec<String>, parts: &[DmgPartition], theme: &PeekTheme) {
     if parts.is_empty() {
         return;
     }
+    let (filesystems, scheme): (Vec<&DmgPartition>, Vec<&DmgPartition>) =
+        parts.iter().partition(|p| !is_structural(p));
+
+    let mut summary = pluralise(filesystems.len(), "filesystem");
+    if !scheme.is_empty() {
+        summary.push_str(&format!(", {} scheme", scheme.len()));
+    }
     push_field(
         lines,
         "Partitions",
-        &theme.paint_value(&parts.len().to_string()),
+        &theme.paint_value(&format!("{} ({summary})", parts.len())),
         theme,
     );
-    for p in parts {
-        let label = p.fs_type.clone().unwrap_or_else(|| p.name.clone());
-        push_field(
-            lines,
-            &format!("  {label}"),
-            &theme.paint_value(&partition_detail(p)),
-            theme,
-        );
+
+    for p in &filesystems {
+        render_partition_block(lines, p, theme);
+    }
+    if !scheme.is_empty() {
+        render_scheme_block(lines, &scheme, theme);
     }
 }
 
-/// One partition's size / compression summary, e.g.
-/// `"1.20 GiB → 460.00 MiB (lzfse, 2.7×, 412 chunks)"`.
-fn partition_detail(p: &DmgPartition) -> String {
-    let logical = format_size_human(p.size_bytes);
-    let chunks = format!(
-        "{} chunk{}",
-        p.chunk_count,
-        if p.chunk_count == 1 { "" } else { "s" }
+/// Full detail block for one filesystem partition.
+fn render_partition_block(lines: &mut Vec<String>, p: &DmgPartition, theme: &PeekTheme) {
+    lines.push(String::new());
+    let title = match &p.fs_type {
+        Some(t) => format!("Partition \u{b7} {}", friendly_type(t)),
+        None => "Partition".to_string(),
+    };
+    push_section_header(lines, &title, theme);
+
+    push_field(lines, "Name", &theme.paint_value(&p.name), theme);
+    if let Some(t) = &p.fs_type {
+        let friendly = friendly_type(t);
+        let val = if friendly == *t {
+            t.clone()
+        } else {
+            format!("{friendly} ({t})")
+        };
+        push_field(lines, "Type", &theme.paint_value(&val), theme);
+    }
+    push_field(
+        lines,
+        "Logical size",
+        &theme.paint_value(&format_size_human(p.size_bytes)),
+        theme,
     );
-    if !p.compression.is_empty() && p.stored_bytes > 0 {
-        let stored = format_size_human(p.stored_bytes);
-        let methods = p.compression.join("+");
-        let ratio = p.size_bytes as f64 / p.stored_bytes as f64;
-        format!("{logical} → {stored} ({methods}, {ratio:.1}×, {chunks})")
-    } else if p.stored_bytes == 0 {
-        format!("{logical} (sparse, {chunks})")
+    push_field(lines, "Stored", &theme.paint_value(&stored_desc(p)), theme);
+    push_field(
+        lines,
+        "Compression",
+        &theme.paint_value(&compression_desc(p)),
+        theme,
+    );
+    push_field(lines, "Chunks", &theme.paint_value(&chunks_desc(p)), theme);
+    push_field(
+        lines,
+        "Image offset",
+        &theme.paint_value(&offset_desc(p)),
+        theme,
+    );
+}
+
+/// Compact block for the format scaffolding — one line per entry, each
+/// still carrying its size, codec, and image offset.
+fn render_scheme_block(lines: &mut Vec<String>, scheme: &[&DmgPartition], theme: &PeekTheme) {
+    lines.push(String::new());
+    push_section_header(lines, "Partition scheme", theme);
+    for p in scheme {
+        let label = p
+            .fs_type
+            .as_deref()
+            .map(friendly_type)
+            .unwrap_or_else(|| p.name.clone());
+        let codec = if !p.compression.is_empty() {
+            p.compression.join("+")
+        } else if p.stored_bytes == 0 {
+            "sparse".to_string()
+        } else {
+            "raw".to_string()
+        };
+        let offset = thousands_sep(p.start_sector.saturating_mul(512));
+        let value = format!(
+            "{} \u{b7} {codec} \u{b7} @ {offset} B",
+            format_size_human(p.size_bytes)
+        );
+        push_field(lines, &label, &theme.paint_value(&value), theme);
+    }
+}
+
+/// `"159.64 MiB (27% of logical)"`, or `"0 (sparse)"` for a zero-fill
+/// partition.
+fn stored_desc(p: &DmgPartition) -> String {
+    if p.stored_bytes == 0 {
+        return "0 (sparse)".to_string();
+    }
+    let pct = if p.size_bytes > 0 {
+        (p.stored_bytes as f64 / p.size_bytes as f64 * 100.0).round() as u64
     } else {
-        format!("{logical} (uncompressed, {chunks})")
+        0
+    };
+    format!("{} ({pct}% of logical)", format_size_human(p.stored_bytes))
+}
+
+/// `"zlib · 3.7×"`, `"none (sparse)"`, or `"none (uncompressed)"`.
+fn compression_desc(p: &DmgPartition) -> String {
+    if !p.compression.is_empty() && p.stored_bytes > 0 {
+        let ratio = p.size_bytes as f64 / p.stored_bytes as f64;
+        format!("{} \u{b7} {ratio:.1}\u{d7}", p.compression.join("+"))
+    } else if p.stored_bytes == 0 {
+        "none (sparse)".to_string()
+    } else {
+        "none (uncompressed)".to_string()
+    }
+}
+
+/// `"408 (405 zlib, 2 raw, 1 zero-fill)"` — count plus run-type histogram.
+fn chunks_desc(p: &DmgPartition) -> String {
+    if p.chunk_count == 0 {
+        return "0".to_string();
+    }
+    let hist = p
+        .run_histogram
+        .iter()
+        .map(|(label, n)| format!("{n} {label}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{} ({hist})", p.chunk_count)
+}
+
+/// `"36,864 B (sector 72)"` — the byte offset external tools select on.
+fn offset_desc(p: &DmgPartition) -> String {
+    format!(
+        "{} B (sector {})",
+        thousands_sep(p.start_sector.saturating_mul(512)),
+        thousands_sep(p.start_sector)
+    )
+}
+
+/// Format scaffolding vs a real filesystem. Classifies by the Apple type
+/// token; an unknown / missing token errs toward "filesystem" (full
+/// block) so novelty surfaces more detail, never less.
+fn is_structural(p: &DmgPartition) -> bool {
+    match &p.fs_type {
+        Some(t) => {
+            let lower = t.to_ascii_lowercase();
+            t == "MBR"
+                || t == "DDM"
+                || lower.contains("gpt")
+                || lower.contains("free")
+                || lower.contains("partition_map")
+                || lower.contains("partition map")
+                || lower.contains("driver descriptor")
+        }
+        None => false,
+    }
+}
+
+/// Map an Apple type token to a readable filesystem name, or return it
+/// unchanged when there's nothing friendlier to say.
+fn friendly_type(token: &str) -> String {
+    match token {
+        "Apple_HFS" => "HFS+",
+        "Apple_HFSX" => "HFSX",
+        "Apple_APFS" => "APFS",
+        "Apple_UFS" => "UFS",
+        "Apple_Free" => "free space",
+        "Apple_partition_map" => "Apple partition map",
+        other => other,
+    }
+    .to_string()
+}
+
+/// `"1 filesystem"` / `"2 filesystems"` / `"0 filesystems"`.
+fn pluralise(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
     }
 }
 
@@ -368,5 +513,145 @@ mod tests {
     fn dmg_flags_unknown_bits_surface_as_hex() {
         assert_eq!(format_dmg_flags(0x12), "0x12");
         assert_eq!(format_dmg_flags(0x11), "flattened, 0x10");
+    }
+
+    fn part(fs_type: Option<&str>) -> DmgPartition {
+        DmgPartition {
+            name: "x".to_string(),
+            fs_type: fs_type.map(str::to_string),
+            start_sector: 0,
+            size_bytes: 0,
+            stored_bytes: 0,
+            compression: Vec::new(),
+            chunk_count: 0,
+            run_histogram: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn filesystems_split_from_scaffolding() {
+        assert!(!is_structural(&part(Some("Apple_HFS"))));
+        assert!(!is_structural(&part(Some("Apple_APFS"))));
+        // Unknown type errs toward a filesystem block (more detail).
+        assert!(!is_structural(&part(Some("Some_New_FS"))));
+        assert!(!is_structural(&part(None)));
+
+        assert!(is_structural(&part(Some("MBR"))));
+        assert!(is_structural(&part(Some("Primary GPT Header"))));
+        assert!(is_structural(&part(Some("Backup GPT Table"))));
+        assert!(is_structural(&part(Some("Apple_Free"))));
+        assert!(is_structural(&part(Some("DDM"))));
+        assert!(is_structural(&part(Some("Apple_partition_map"))));
+    }
+
+    #[test]
+    fn friendly_type_maps_known_and_passes_through() {
+        assert_eq!(friendly_type("Apple_HFS"), "HFS+");
+        assert_eq!(friendly_type("Apple_APFS"), "APFS");
+        assert_eq!(friendly_type("Apple_Free"), "free space");
+        // Unmapped token is returned verbatim.
+        assert_eq!(friendly_type("Primary GPT Header"), "Primary GPT Header");
+    }
+
+    #[test]
+    fn chunks_desc_shows_count_and_histogram() {
+        let mut p = part(Some("Apple_HFS"));
+        p.chunk_count = 408;
+        p.run_histogram = vec![("raw", 1), ("ignore", 4), ("zlib", 403)];
+        assert_eq!(chunks_desc(&p), "408 (1 raw, 4 ignore, 403 zlib)");
+    }
+
+    #[test]
+    fn pluralise_filesystem_count() {
+        assert_eq!(pluralise(0, "filesystem"), "0 filesystems");
+        assert_eq!(pluralise(1, "filesystem"), "1 filesystem");
+        assert_eq!(pluralise(3, "filesystem"), "3 filesystems");
+    }
+
+    #[test]
+    fn stored_desc_percent_and_sparse() {
+        let mut p = part(Some("Apple_HFS"));
+        p.size_bytes = 1000;
+        p.stored_bytes = 270;
+        assert_eq!(stored_desc(&p), "270 B (27% of logical)");
+
+        p.stored_bytes = 0;
+        assert_eq!(stored_desc(&p), "0 (sparse)");
+    }
+
+    #[test]
+    fn compression_desc_ratio_sparse_uncompressed() {
+        let mut p = part(Some("Apple_HFS"));
+        p.size_bytes = 1000;
+        p.stored_bytes = 270;
+        p.compression = vec!["zlib"];
+        assert_eq!(compression_desc(&p), "zlib \u{b7} 3.7\u{d7}");
+
+        p.compression = Vec::new();
+        p.stored_bytes = 0;
+        assert_eq!(compression_desc(&p), "none (sparse)");
+
+        p.stored_bytes = 500;
+        assert_eq!(compression_desc(&p), "none (uncompressed)");
+    }
+
+    #[test]
+    fn offset_desc_is_byte_offset_with_sector() {
+        let mut p = part(Some("Apple_HFS"));
+        p.start_sector = 40;
+        assert_eq!(offset_desc(&p), "20,480 B (sector 40)");
+        p.start_sector = 0;
+        assert_eq!(offset_desc(&p), "0 B (sector 0)");
+    }
+
+    fn test_theme() -> PeekTheme {
+        let t = crate::theme::load_embedded_theme(
+            crate::theme::PeekThemeName::IdeaDark.tmtheme_source(),
+        );
+        PeekTheme::from_syntect(&t)
+    }
+
+    #[test]
+    fn render_routes_filesystem_to_block_and_scaffolding_to_scheme() {
+        let fs = DmgPartition {
+            name: "disk image (Apple_HFS : 4)".to_string(),
+            fs_type: Some("Apple_HFS".to_string()),
+            start_sector: 40,
+            size_bytes: 2048 * 512,
+            stored_bytes: 159 * 1024 * 1024,
+            compression: vec!["zlib"],
+            chunk_count: 408,
+            run_histogram: vec![("raw", 1), ("zlib", 407)],
+        };
+        let mbr = DmgPartition {
+            name: "Protective Master Boot Record (MBR : 0)".to_string(),
+            fs_type: Some("MBR".to_string()),
+            start_sector: 0,
+            size_bytes: 512,
+            stored_bytes: 30,
+            compression: vec!["zlib"],
+            chunk_count: 1,
+            run_histogram: vec![("zlib", 1)],
+        };
+
+        let theme = test_theme();
+        let mut lines = Vec::new();
+        render_dmg_partitions(&mut lines, &[mbr, fs], &theme);
+        let blob = lines.join("\n");
+
+        assert!(
+            blob.contains("2 (1 filesystem, 1 scheme)"),
+            "summary line: {blob}"
+        );
+        // Filesystem gets a full block (heading + Name field).
+        assert!(blob.contains("Partition \u{b7} HFS+"), "fs block heading");
+        assert!(blob.contains("disk image (Apple_HFS : 4)"), "fs Name field");
+        // Scaffolding collapses into the scheme block — the MBR's full
+        // name never appears (it'd only render in a full block).
+        assert!(blob.contains("Partition scheme"), "scheme heading");
+        assert!(
+            !blob.contains("Protective Master Boot Record"),
+            "MBR must not get a full block: {blob}"
+        );
     }
 }

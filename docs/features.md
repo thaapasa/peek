@@ -974,13 +974,22 @@ data-fork length, embedded XML partition-map size, segment number / count, data 
 algorithms, and the documented trailer flag bits (flattened, internet-enabled).
 
 The **partition map** is decoded from the embedded XML plist the trailer points at — one read of
-the plist region (a few KB), no payload bytes. Each `blkx` table surfaces as a partition row: the
-Apple type token (`Apple_HFS`, `Apple_APFS`, `MBR`, `Primary GPT Header`, …) parsed from the entry
-name, the logical size (sector span × 512), and a per-partition compression summary read from the
-entry's "mish" block table — codec (zlib / bzip2 / lzfse / lzma / ADC), stored size, ratio, and
-chunk count. Sparse (zero-fill) regions like `Apple_Free` show as `(sparse)`. The mish runs are
-read for their structure only; reconstructing a partition's payload (decompressing the runs) and
-walking its filesystem is deferred — see [planned.md](planned.md#disk-images-).
+the plist region (a few KB), no payload bytes. Each `blkx` table is read for its Apple type token
+(parsed from the entry name), its logical size (sector span × 512), its start sector, and a
+compression summary from the entry's "mish" block table.
+
+The rows split two ways. **Filesystem** partitions (`Apple_HFS`, `Apple_APFS`, … — and any
+unrecognised type, which errs toward this side) each get a detail block: full name, friendly type
+(`HFS+` / `APFS` / …), logical size, stored size + percent, codec (zlib / bzip2 / lzfse / lzma /
+ADC) + ratio, a run-type histogram (`408 (1 raw, 4 ignore, 403 zlib)`), and the image offset in
+bytes + sectors. The format **scaffolding** — protective MBR, primary/backup GPT header + table,
+and free-space gaps — collapses into one compact `Partition scheme` block, one line each (size,
+codec/`sparse`, offset). Nothing is hidden; the split just puts the substance up front. The image
+offset (`mount -o offset=`, `dd skip=`, `mmls`) is shown for every partition, scaffolding included.
+
+The mish runs are read for their structure only; reconstructing a partition's payload
+(decompressing the runs) and walking its inner filesystem is deferred — see
+[planned.md](planned.md#disk-images-).
 
 The parsers are hand-rolled — no extra crate. The plist is walked with `quick-xml` (an existing
 dep, same as DOCX / ODT) in `dmg_plist.rs`; the block tables parse in `mish.rs`. Hex view (`x`)

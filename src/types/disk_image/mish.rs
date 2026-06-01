@@ -7,7 +7,7 @@
 //! and stored length — without us decompressing a single byte.
 //!
 //! We read only the structural fields the info view surfaces: the
-//! partition's sector span and a per-chunk (kind, sector count, stored
+//! partition's start sector + sector span, and a per-chunk (kind, stored
 //! length) tuple. Reconstructing the partition payload (decoding the
 //! zlib / lzfse / … runs) is a separate, deferred effort.
 
@@ -28,6 +28,10 @@ const CHUNK_LEN: usize = 40;
 /// comment / terminator markers are kept so callers can reason about the
 /// raw table; [`MishTable::summary`] is the filtered view.
 pub struct MishTable {
+    /// First sector of this partition within the whole logical image.
+    /// Multiplied by 512, this is the byte offset external tools key on
+    /// (`mmls`, `dd skip=`, `mount -o offset=`, …).
+    pub first_sector: u64,
     /// Sector span of this partition (drives the logical size).
     pub sector_count: u64,
     pub runs: Vec<MishRun>,
@@ -63,6 +67,26 @@ pub enum RunKind {
     Other(u32),
 }
 
+/// Run-kind labels in canonical display order. `summary` reports counts
+/// against these; the codecs are the tail subset (see [`is_codec`]).
+const CATEGORIES: [&str; 9] = [
+    "zero-fill",
+    "raw",
+    "ignore",
+    "ADC",
+    "zlib",
+    "bzip2",
+    "lzfse",
+    "lzma",
+    "other",
+];
+
+/// Whether a [`CATEGORIES`] label names a compression codec (as opposed
+/// to zero-fill / raw / ignore).
+fn is_codec(label: &str) -> bool {
+    matches!(label, "ADC" | "zlib" | "bzip2" | "lzfse" | "lzma")
+}
+
 impl RunKind {
     fn from_tag(raw: u32) -> RunKind {
         match raw {
@@ -80,22 +104,20 @@ impl RunKind {
         }
     }
 
-    /// Marker runs carry no data — excluded from chunk counts and stored
-    /// totals.
-    fn is_marker(self) -> bool {
-        matches!(self, RunKind::Comment | RunKind::Terminator)
-    }
-
-    /// Codec label when this run is compressed; `None` for raw / sparse /
-    /// marker runs.
-    fn compression_label(self) -> Option<&'static str> {
+    /// Index into [`CATEGORIES`], or `None` for marker runs (comment /
+    /// terminator) which carry no data and don't count.
+    fn category(self) -> Option<usize> {
         Some(match self {
-            RunKind::Adc => "ADC",
-            RunKind::Zlib => "zlib",
-            RunKind::Bzip2 => "bzip2",
-            RunKind::Lzfse => "lzfse",
-            RunKind::Lzma => "lzma",
-            _ => return None,
+            RunKind::ZeroFill => 0,
+            RunKind::Raw => 1,
+            RunKind::Ignore => 2,
+            RunKind::Adc => 3,
+            RunKind::Zlib => 4,
+            RunKind::Bzip2 => 5,
+            RunKind::Lzfse => 6,
+            RunKind::Lzma => 7,
+            RunKind::Other(_) => 8,
+            RunKind::Comment | RunKind::Terminator => return None,
         })
     }
 }
@@ -103,14 +125,29 @@ impl RunKind {
 /// Aggregated view of a block table — the Layer-2 summary surfaced in the
 /// info section.
 pub struct MishSummary {
+    /// First sector of the partition in the logical image (× 512 = byte
+    /// offset).
+    pub first_sector: u64,
     /// Logical partition size: sector span × 512.
     pub uncompressed_bytes: u64,
     /// On-disk footprint: sum of every data chunk's stored length.
     pub stored_bytes: u64,
     /// Number of data chunks (markers excluded).
     pub chunk_count: usize,
-    /// Distinct compression codecs in first-seen order.
-    pub methods: Vec<&'static str>,
+    /// Per-kind chunk counts in canonical order, zero buckets omitted —
+    /// e.g. `[("raw", 2), ("zlib", 405)]`.
+    pub run_counts: Vec<(&'static str, usize)>,
+}
+
+impl MishSummary {
+    /// Distinct compression codecs present, in canonical order.
+    pub fn codecs(&self) -> Vec<&'static str> {
+        self.run_counts
+            .iter()
+            .filter(|(label, _)| is_codec(label))
+            .map(|(label, _)| *label)
+            .collect()
+    }
 }
 
 impl MishTable {
@@ -121,6 +158,7 @@ impl MishTable {
         if buf.len() < HEADER_LEN || &buf[0..4] != SIGNATURE {
             return None;
         }
+        let first_sector = read_u64(&buf[8..16]);
         let sector_count = read_u64(&buf[16..24]);
         let declared = read_u32(&buf[200..204]) as usize;
 
@@ -140,30 +178,35 @@ impl MishTable {
             });
         }
 
-        Some(MishTable { sector_count, runs })
+        Some(MishTable {
+            first_sector,
+            sector_count,
+            runs,
+        })
     }
 
     pub fn summary(&self) -> MishSummary {
+        let mut counts = [0usize; CATEGORIES.len()];
         let mut stored_bytes = 0u64;
-        let mut chunk_count = 0usize;
-        let mut methods: Vec<&'static str> = Vec::new();
         for run in &self.runs {
-            if run.kind.is_marker() {
+            let Some(idx) = run.kind.category() else {
                 continue;
-            }
-            chunk_count += 1;
+            };
+            counts[idx] += 1;
             stored_bytes = stored_bytes.saturating_add(run.stored_length);
-            if let Some(m) = run.kind.compression_label()
-                && !methods.contains(&m)
-            {
-                methods.push(m);
-            }
         }
+        let run_counts: Vec<(&'static str, usize)> = CATEGORIES
+            .iter()
+            .zip(counts)
+            .filter(|(_, n)| *n > 0)
+            .map(|(label, n)| (*label, n))
+            .collect();
         MishSummary {
+            first_sector: self.first_sector,
             uncompressed_bytes: self.sector_count.saturating_mul(SECTOR_SIZE),
             stored_bytes,
-            chunk_count,
-            methods,
+            chunk_count: counts.iter().sum(),
+            run_counts,
         }
     }
 }
@@ -215,14 +258,17 @@ mod tests {
         // plus a terminator that must not count.
         let buf = build(34, 2048, &[(0x8000_0007, 2048, 4096), (0xffff_ffff, 0, 0)]);
         let table = MishTable::parse(&buf).expect("valid mish");
+        assert_eq!(table.first_sector, 34);
         assert_eq!(table.sector_count, 2048);
         assert_eq!(table.runs.len(), 2);
 
         let s = table.summary();
+        assert_eq!(s.first_sector, 34);
         assert_eq!(s.uncompressed_bytes, 2048 * 512);
         assert_eq!(s.stored_bytes, 4096);
         assert_eq!(s.chunk_count, 1, "terminator excluded");
-        assert_eq!(s.methods, vec!["lzfse"]);
+        assert_eq!(s.run_counts, vec![("lzfse", 1)]);
+        assert_eq!(s.codecs(), vec!["lzfse"]);
     }
 
     #[test]
@@ -230,24 +276,27 @@ mod tests {
         let buf = build(0, 8, &[(0x0000_0000, 8, 0), (0xffff_ffff, 0, 0)]);
         let s = MishTable::parse(&buf).unwrap().summary();
         assert_eq!(s.stored_bytes, 0);
-        assert!(s.methods.is_empty());
+        assert_eq!(s.run_counts, vec![("zero-fill", 1)]);
+        assert!(s.codecs().is_empty());
         assert_eq!(s.chunk_count, 1);
     }
 
     #[test]
-    fn distinct_methods_preserved_in_order() {
+    fn histogram_counts_per_kind_in_canonical_order() {
         let buf = build(
             0,
             100,
             &[
                 (0x8000_0005, 10, 100), // zlib
                 (0x8000_0007, 10, 100), // lzfse
-                (0x8000_0005, 10, 100), // zlib again — not duplicated
-                (0x0000_0001, 10, 100), // raw — no method
+                (0x8000_0005, 10, 100), // zlib again — counted, not deduped
+                (0x0000_0001, 10, 100), // raw
             ],
         );
         let s = MishTable::parse(&buf).unwrap().summary();
-        assert_eq!(s.methods, vec!["zlib", "lzfse"]);
+        // Canonical order (raw < zlib < lzfse), not encounter order.
+        assert_eq!(s.run_counts, vec![("raw", 1), ("zlib", 2), ("lzfse", 1)]);
+        assert_eq!(s.codecs(), vec!["zlib", "lzfse"]);
         assert_eq!(s.chunk_count, 4);
         assert_eq!(s.stored_bytes, 400);
     }

@@ -129,6 +129,10 @@ pub struct DmgPartition {
     /// Apple partition-type token parsed out of the name (`"Apple_HFS"`,
     /// `"MBR"`, …), when the name carries the parenthesised form.
     pub fs_type: Option<String>,
+    /// First sector of the partition in the logical image. `× 512` is the
+    /// byte offset external tools select on (`mmls`, `dd skip=`,
+    /// `mount -o offset=`).
+    pub start_sector: u64,
     /// Logical (uncompressed) size: sector span × 512.
     pub size_bytes: u64,
     /// On-disk footprint in the data fork (sum of chunk stored lengths).
@@ -139,6 +143,9 @@ pub struct DmgPartition {
     pub compression: Vec<&'static str>,
     /// Block-chunk count (markers excluded).
     pub chunk_count: usize,
+    /// Per-kind chunk counts in canonical order (`[("raw", 2),
+    /// ("zlib", 405)]`) — the run-type histogram.
+    pub run_histogram: Vec<(&'static str, usize)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
