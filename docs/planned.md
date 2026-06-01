@@ -6,27 +6,13 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 
 ## File Types
 
-### Markup / Documentation ◐
+### SQL ◐
 
-| Format   | Extensions                                             | Status |
-|----------|--------------------------------------------------------|--------|
-| Markdown | `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, `.mdwn` | ✅      |
-| SQL      | `.sql`, `.ddl`, `.dml`, `.psql`                        | ◐      |
-
-Markdown rendered read mode (CommonMark + GFM, syntect-highlighted fenced code, box-drawing
-tables, task lists, footnotes, frontmatter strip) shipped — see
-[features.md → Markdown](features.md#markdown-). SQL highlighted source + format-aware Info
-section also ship today. Still planned:
-
-- SQL: pretty-print / formatter, statement-outline aux mode, distinct PL/pgSQL grammar dispatch
+- Pretty-print / formatter, statement-outline aux mode, distinct PL/pgSQL grammar dispatch
   inside `$$ … $$` bodies.
 - Outline aux mode shared between Markdown headings and SQL statements (mode + key binding TBD).
 
 ### CSS ◐
-
-Syntax-highlighted source + CSS-aware Info section (stylesheet stats, `@import` list,
-colour-palette swatches) ship today — see
-[features.md → CSS](features.md#css-). Two items still planned:
 
 #### Selector specificity inline-annotation
 
@@ -44,24 +30,7 @@ typed `Transform` / `Animation` values over the current `cssparser` + `cssparser
 (picked for the Info view because it's ~120–200 KB vs ~400–700 KB and covers everything the Info
 view needs). Revisit as its own task; if picked up, weigh swapping the CSS dep then.
 
-### Structured Data Additions ☐
-
-CSV / TSV shipped — see [features.md](features.md#structured-data--config-files).
-
-JSONL streaming for multi-GB logs is still pending — the current implementation reads the
-whole file into memory, which is fine for most logs but breaks down for very large ones.
-
-### Document Files ☐
-
-DOCX, RTF, PDF, and spreadsheets (`.xlsx` / `.xlsm` / `.ods`) are shipped — see
-[features.md](features.md). Nothing word-processing-side is currently planned; legacy binary
-`.doc` / `.xls` are out of scope (modern XML-based Office formats only).
-
-#### PDFium Distribution
-
-PDF support ships with `pdfium-render` (dynamically loads `libpdfium.dylib` / `.so` / `.dll`).
-The release tarball already bundles the matching Pdfium build next to the binary — see
-`release.yml`'s `Bundle Pdfium` step. Still-pending packaging work:
+### PDFium Distribution ◐
 
 - **install.sh**: detect an already-installed system Pdfium (homebrew etc.) and skip the bundled
   copy when present. (Version pinning per release is already handled — the workflow reads the
@@ -71,10 +40,7 @@ The release tarball already bundles the matching Pdfium build next to the binary
 - **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size down for
   embedded targets.
 
-### Vector / PostScript Files — remaining gaps ◐
-
-`.ai` (modern, PDF-internal), `.eps`, and `.ps` are shipped — see
-[features.md](features.md). What's still open:
+### Vector / PostScript Files ◐
 
 - **Legacy AI (pre-CS2)** — pure PostScript, no PDF wrapper. Routes through the EPS/PostScript
   path today (source + DSC info + `gs` render when available), but isn't specifically detected
@@ -98,71 +64,19 @@ In print mode: file metadata (duration, resolution, codec, bitrate), possibly a 
 
 ### Archive Files ◐
 
-| Format      | Extensions                     | Status |
-|-------------|--------------------------------|--------|
-| ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅      |
-| Tar         | `.tar`                         | ✅      |
-| Tar + gzip  | `.tar.gz`, `.tgz`              | ✅      |
-| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅      |
-| Tar + xz    | `.tar.xz`, `.txz`              | ✅      |
-| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅      |
-| 7-Zip       | `.7z`                          | ✅      |
-| RAR         | `.rar`                         | ☐      |
+| Format | Extensions | Status |
+|--------|------------|--------|
+| RAR    | `.rar`     | ☐      |
 
-Listing-only mode — primary view is a file tree with per-entry size, mode, and mtime. No
-extraction, no content preview of inner files. Reuses the existing permissions/size painting from
-the file info screen. Tab cycles tree view ↔ file info; hex (`x`) still works on the raw archive
-bytes.
+RAR is the awkward one — closed format, library wrap via `unrar` (wraps the proprietary unrar C
+lib). License caveats: listing only is fine, but distribution adds friction, so defer behind a
+Cargo feature flag (`rar`), off by default.
 
-Reads the table of contents only — no payload decompression — so even multi-GB archives list
-instantly via streaming through the existing `ByteSource`.
-
-#### Implementation Libraries
-
-| Format        | Crate         | Notes                                                                                                  |
-|---------------|---------------|--------------------------------------------------------------------------------------------------------|
-| `.zip`        | `zip`         | Pure Rust, mature. Central directory = ready-made TOC.                                                 |
-| `.tar` family | `tar`         | Pure Rust. Streaming entry iterator.                                                                   |
-| `.gz`         | `flate2`      | Pure Rust (miniz_oxide backend).                                                                       |
-| `.bz2`        | `bzip2-rs`    | Pure Rust.                                                                                             |
-| `.xz`         | `liblzma`     | liblzma bindings; `static` vendors + builds the C source (no system lib). Streaming `Read` decoder.    |
-| `.zst`        | `zstd`        | C bindings, well-maintained.                                                                           |
-| `.7z`         | `sevenz-rust` | Pure Rust.                                                                                             |
-| `.rar`        | `unrar`       | Wraps proprietary unrar C lib. License caveats — listing only is fine, but distribution adds friction. |
-
-RAR is the awkward one — closed format, library wrap. Defer behind a Cargo feature flag (`rar`),
-off by default. Everything else is pure Rust or low-friction C bindings.
-
-#### Extract enhancements
-
-Extract from archive entries ships today via `--extract <KEY>` and `e` in the viewer (see
-[features.md → Extraction](features.md#extraction-)). Entries ≥ 16 MiB spool to a
-`NamedTempFile` (`InputSource::TempFile`), lifting the in-memory 256 MiB cap for the common
-case; stored zip / uncompressed tar members now extract as zero-copy `FileRange` views (no
-spool, no copy) over the backing source — including ranges over a spooled tempfile, kept alive
-by an `Arc<NamedTempFile>` guard. tar/cpio/ar/7z extract streams the walk over a seekable reader
-(`open_seekable`, with a windowed range adapter for `FileRange` sources), so finding one member
-no longer reads the whole archive into RAM, the matched body streams to the spool, and
-compressed tars inflate only up to the match. 7z streams via `for_each_entries` (a `&mut dyn Read`
-per entry), draining the preceding entries of the target's solid block to advance the shared
-stream — the solid-block decode-up-to-the-match cost is inherent, but the body no longer buffers.
-Untrusted size/name header fields no longer drive up-front allocations. Still planned:
-
+- **RAR listing** — table-of-contents view through the existing `ByteSource` / `ListingMode` path.
 - **RAR extract** — once RAR listing lands, extract reuses the unrar wrapper; same listing-only
   caveats apply.
 
 ### Disk Images ◐
-
-| Format | Extensions | Status                                                |
-|--------|------------|-------------------------------------------------------|
-| ISO    | `.iso`     | ✅ PVD metadata + recursive directory listing (Joliet) |
-| DMG    | `.dmg`     | ✅ UDIF trailer-only (no partition map walk)           |
-
-ISO ships with a TOC view backed by `viewer::listing` (same render path as archive containers).
-DMG remains metadata-only. See [features.md → Disk Images](features.md#disk-images-) for what's
-surfaced today.
-
-Still planned:
 
 - **ISO Rock Ridge detection** — needs a SUSP scan inside the root directory record; one extra
   read pass. Would surface real Unix permissions in the perms column.
@@ -174,24 +88,9 @@ Still planned:
   (zlib / bzip2 / lzfse chunks) before any meaningful filesystem walk could expose individual
   files. Significant work, deferred indefinitely.
 
-#### Implementation Libraries
-
-| Format          | Crate       | Notes                                                                       |
-|-----------------|-------------|-----------------------------------------------------------------------------|
-| ISO (PVD + TOC) | hand-rolled | Current implementation — directory walker is ~250 LOC, no crate dependency. |
-| DMG (trailer)   | hand-rolled | Current implementation — ~80 lines, no crate dependency.                    |
-| DMG (partition) | `plist`     | For decoding the embedded XML partition map.                                |
-
 UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for peek.
 
 ### Config Files ◐
-
-Syntax highlighting ships — see [features.md → Source Code](features.md#source-code-). INI / CFG /
-CONF / `.properties` / `.env` (incl. `.env.local` etc.) / HCL / TF and by-name matches (`Makefile`,
-`Dockerfile`, `.gitignore`, `justfile`, …) all resolve to a syntect grammar through the standard
-text path; no dedicated mode. `.dhall` / `.cue` have no grammar in two-face and fall to plain text.
-
-Still open (only if a use case appears):
 
 - **Structured pretty-print + section folding** for INI / properties via native parsers
   (`rust-ini`, `java-properties`) — would need the folding infrastructure (see
@@ -199,9 +98,6 @@ Still open (only if a use case appears):
 - **HCL / Dhall / CUE** beyond highlighting — typed parsing only if those ecosystems mature.
 
 ### Email ◐
-
-`.eml` (single RFC822/MIME message) and `.mbox` (mailbox) ship — see
-[features.md → Email](features.md#email-). Still open:
 
 - **Attachment content-type column** in the listing (today rows show name + size only; the
   listing primitive has no type column).
@@ -221,10 +117,7 @@ File info: event/contact count, date range (calendars), version.
 
 Crates: `ical` (covers both iCalendar and vCard, pure Rust).
 
-### Audio Files — Stretch ☐
-
-Tags + technical properties + embedded cover-art view + embedded lyrics view + embeds
-listing shipped (see [features.md](features.md) "Audio Files"). Open ideas:
+### Audio Files ☐
 
 - **Audiobook chapters** for `.m4b` containers — MP4 chapter atoms / `chpl` boxes drive a
   `NextChapter` / `PrevChapter` flow like EPUB. Defer until a real m4b ships up.
@@ -238,9 +131,6 @@ listing shipped (see [features.md](features.md) "Audio Files"). Open ideas:
   cheap and useful.
 
 ### Font Files ◐
-
-TTF / OTF / TTC metadata + specimen render ship — see
-[features.md → Fonts](features.md#fonts-). Still planned:
 
 | Format    | Extensions        |
 |-----------|-------------------|
@@ -261,9 +151,6 @@ Stretch:
 
 ### Single-File Compressed ◐
 
-`.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` single-stream wrappers ship — see
-[features.md → Single-stream Compression](features.md#single-stream-compression-). Still planned:
-
 | Format | Extensions |
 |--------|------------|
 | brotli | `.br`      |
@@ -271,10 +158,6 @@ Stretch:
 Brotli would slot into the same transparent-decompress pipeline (`brotli` crate).
 
 ### Certificates and Keys — DER / PKCS#12 / JWK ☐
-
-PEM ships (see [features.md](features.md#certificates-and-keys-) — X.509 cert / CSR / CRL /
-private + public keys / SSH pubkey, fingerprints, SANs, key usage, validity, days remaining).
-Still open:
 
 | Format        | Extensions      | Notes                                                                                                                                                                                                 |
 |---------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -287,9 +170,6 @@ Crates: `der` / `cms` (DER + PKCS#7), `pkcs12` (encrypted bags). JWK can ride th
 
 ### Object Files — deeper inspection ☐
 
-The base object-file viewer ships — ELF / Mach-O / PE/COFF detection, header Info, Sections and
-Symbols tables, universal-binary unwrapping (see [features.md](features.md)). Still open:
-
 - **Linked libraries** — `DT_NEEDED` (ELF), load commands (Mach-O), import table (PE).
 - **Notes / build metadata** — build ID, compiler / toolchain hints, code-signature presence.
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
@@ -298,17 +178,9 @@ Symbols tables, universal-binary unwrapping (see [features.md](features.md)). St
   detection routing nor a tailored view is wired.
 - **Bare COFF `.obj`** — no magic signature, so not auto-detected.
 
-## Image Features
-
 ## Viewer Features
 
 ### Text Search ◐
-
-Exact-substring search with smart-case shipped for every text-rendering view — `ContentMode`,
-the rendered HTML view, the EPUB / DOCX / ODT / RTF read views, the PDF text view, the
-CSV / TSV table view and the SQLite contents view that shares it (single-cell scope; SQLite
-scans only the buffered window today), and listings (leaf-name scope) — all on a shared
-`SearchState`. See [features.md → Text Search](features.md#text-search-). Still planned:
 
 - **Regex matching** — the "desirable" from the original spec. Plain substring is the shipped
   minimum.
@@ -332,13 +204,13 @@ unboundedly with scroll, or whole-file slurps lack a cap. Audit snapshot (2026-0
 snapshot have drifted; treat its categorization as the source-of-truth shape, the specific
 file:line citations as starting points to re-find.
 
-| Priority | Site                                 | Fix                                                                                                                                        |
-|----------|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|
-| High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".                                           |
-| Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                                                                |
-| Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                                                     |
-| Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                                                           |
-| Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path).                                   |
+| Priority | Site                                 | Fix                                                                                                      |
+|----------|--------------------------------------|----------------------------------------------------------------------------------------------------------|
+| High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".         |
+| Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                              |
+| Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                   |
+| Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                         |
+| Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path). |
 
 ## Future / Optional Features
 
