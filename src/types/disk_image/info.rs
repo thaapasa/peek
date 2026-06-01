@@ -106,10 +106,39 @@ pub struct DmgMeta {
     /// the plist holds the partition map / blkx tables).
     pub plist_present: bool,
     pub plist_length: u64,
+    /// Byte offset of the embedded XML plist. Filled from the trailer;
+    /// the gatherer uses it to read and decode the blkx partition map.
+    /// Not rendered directly.
+    pub plist_offset: u64,
+    /// Partitions decoded from the plist's blkx tables. Empty when the
+    /// image carries no plist or it couldn't be parsed (the trailer info
+    /// still renders).
+    pub partitions: Vec<DmgPartition>,
     pub segment_number: u32,
     pub segment_count: u32,
     pub data_checksum_type: DmgChecksumKind,
     pub master_checksum_type: DmgChecksumKind,
+}
+
+/// One partition (blkx entry) from a DMG's embedded plist. Size and
+/// compression are read from the entry's "mish" block table; no payload
+/// bytes are decompressed.
+pub struct DmgPartition {
+    /// Descriptive name from the plist, e.g. `"disk image (Apple_HFS : 4)"`.
+    pub name: String,
+    /// Apple partition-type token parsed out of the name (`"Apple_HFS"`,
+    /// `"MBR"`, …), when the name carries the parenthesised form.
+    pub fs_type: Option<String>,
+    /// Logical (uncompressed) size: sector span × 512.
+    pub size_bytes: u64,
+    /// On-disk footprint in the data fork (sum of chunk stored lengths).
+    /// Zero for a pure zero-fill (sparse) partition.
+    pub stored_bytes: u64,
+    /// Distinct compression codecs across the partition's chunks
+    /// (`["lzfse"]`); empty when stored raw / sparse.
+    pub compression: Vec<&'static str>,
+    /// Block-chunk count (markers excluded).
+    pub chunk_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

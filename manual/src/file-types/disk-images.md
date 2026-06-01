@@ -34,10 +34,24 @@ Opens straight to the file info screen — there's no listing path because the i
 The Info view parses the 512-byte "koly" trailer at the end of the file: UDIF version, image
 variant (device / partition / mounted system), total uncompressed size, data-fork length,
 embedded XML partition-map size, segment number / count, data + master checksum algorithms,
-and the documented trailer flag bits (flattened, internet-enabled). The XML partition map
-itself isn't parsed yet; it shows up as a presence + size row.
+and the documented trailer flag bits (flattened, internet-enabled).
 
-DMG extract is intentionally unsupported — UDIF block decompression is a separate effort.
+It also decodes the **partition map** from the embedded plist — one small read, no payload
+bytes. Each partition shows its Apple type (`Apple_HFS`, `Apple_APFS`, `MBR`,
+`Primary GPT Header`, …), logical size, and a compression summary: codec (zlib / bzip2 /
+lzfse / lzma / ADC), stored size, ratio, and chunk count. Sparse `Apple_Free` regions show as
+`(sparse)`. Example:
+
+```
+Partitions    8
+  MBR         512 B → 31 B (zlib, 16.5×, 1 chunk)
+  Apple_APFS  10.21 MiB → 201.90 KiB (zlib, 51.8×, 3 chunks)
+  Apple_Free  3.00 KiB (sparse, 1 chunk)
+```
+
+Walking each partition's inner filesystem (HFS+ / APFS) is a separate, deferred effort — the
+compression runs are read for their structure, not decompressed. DMG extract is likewise
+unsupported.
 
 ## Raw
 

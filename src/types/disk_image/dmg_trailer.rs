@@ -42,6 +42,8 @@ pub fn parse(buf: &[u8]) -> Option<DmgMeta> {
         data_fork_length,
         plist_present: plist_offset != 0 && plist_length != 0,
         plist_length,
+        plist_offset,
+        partitions: Vec::new(),
         segment_number,
         segment_count,
         data_checksum_type,

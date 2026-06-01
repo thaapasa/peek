@@ -80,10 +80,10 @@ Cargo feature flag (`rar`), off by default.
 
 - **ISO Rock Ridge detection** — needs a SUSP scan inside the root directory record; one extra
   read pass. Would surface real Unix permissions in the perms column.
-- **DMG partition map** — parse the embedded XML plist for the blkx tables (partition list with
-  per-partition name, type, size). Adds a `plist` crate dependency.
 - **DMG nested filesystem metadata** — HFS+ / APFS volume names inside the partition payload.
-  Significant work; probably never worth it for peek.
+  The partition map (names / types / sizes / compression) already shows — see
+  [features.md → Disk Images](features.md#disk-images-); this is the next layer down, walking the
+  reconstructed partition's filesystem. Significant work; probably never worth it for peek.
 - **DMG entry extract** — currently returns `Unsupported`. Needs UDIF block decompression
   (zlib / bzip2 / lzfse chunks) before any meaningful filesystem walk could expose individual
   files. Significant work, deferred indefinitely.

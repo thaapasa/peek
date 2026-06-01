@@ -2,11 +2,11 @@
 //! plug into this same section header by adding their own block here
 //! and a matching arm in `gather_extras`.
 
-use crate::info::{push_field, push_section_header, thousands_sep};
+use crate::info::{format_size_human, push_field, push_section_header, thousands_sep};
 use crate::theme::PeekTheme;
 use crate::types::disk_image::info::{
-    DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgVariant, IsoDateTime, IsoVolumeMeta,
-    MbrPartition, RawImageMeta,
+    DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgPartition, DmgVariant, IsoDateTime,
+    IsoVolumeMeta, MbrPartition, RawImageMeta,
 };
 use crate::types::disk_image::mbr;
 
@@ -188,6 +188,52 @@ fn render_dmg(lines: &mut Vec<String>, dmg: &DmgMeta, theme: &PeekTheme) {
     );
     let flags = format_dmg_flags(dmg.flags);
     push_field(lines, "Flags", &theme.paint_value(&flags), theme);
+    render_dmg_partitions(lines, &dmg.partitions, theme);
+}
+
+/// Render the decoded partition map: a count plus one row per partition
+/// (type, logical size, and stored size / compression / ratio). Skipped
+/// entirely when no partitions were decoded.
+fn render_dmg_partitions(lines: &mut Vec<String>, parts: &[DmgPartition], theme: &PeekTheme) {
+    if parts.is_empty() {
+        return;
+    }
+    push_field(
+        lines,
+        "Partitions",
+        &theme.paint_value(&parts.len().to_string()),
+        theme,
+    );
+    for p in parts {
+        let label = p.fs_type.clone().unwrap_or_else(|| p.name.clone());
+        push_field(
+            lines,
+            &format!("  {label}"),
+            &theme.paint_value(&partition_detail(p)),
+            theme,
+        );
+    }
+}
+
+/// One partition's size / compression summary, e.g.
+/// `"1.20 GiB → 460.00 MiB (lzfse, 2.7×, 412 chunks)"`.
+fn partition_detail(p: &DmgPartition) -> String {
+    let logical = format_size_human(p.size_bytes);
+    let chunks = format!(
+        "{} chunk{}",
+        p.chunk_count,
+        if p.chunk_count == 1 { "" } else { "s" }
+    );
+    if !p.compression.is_empty() && p.stored_bytes > 0 {
+        let stored = format_size_human(p.stored_bytes);
+        let methods = p.compression.join("+");
+        let ratio = p.size_bytes as f64 / p.stored_bytes as f64;
+        format!("{logical} → {stored} ({methods}, {ratio:.1}×, {chunks})")
+    } else if p.stored_bytes == 0 {
+        format!("{logical} (sparse, {chunks})")
+    } else {
+        format!("{logical} (uncompressed, {chunks})")
+    }
 }
 
 fn variant_label(variant: DmgVariant) -> &'static str {

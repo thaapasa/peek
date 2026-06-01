@@ -949,7 +949,7 @@ shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
 | Format | Extensions            | Status                                                |
 |--------|-----------------------|-------------------------------------------------------|
 | ISO    | `.iso`                | ✅ PVD metadata + recursive directory listing (Joliet) |
-| DMG    | `.dmg`                | ✅ UDIF trailer-only (no partition map walk yet)       |
+| DMG    | `.dmg`                | ✅ UDIF trailer + plist partition map (no inner-FS walk) |
 | Raw    | `.img`, `.bin`, `.dd` | ✅ MBR partition table walk in info (no listing)       |
 
 **ISO 9660** opens to a **TOC view** (the same tree-style listing archive containers use): one row
@@ -965,16 +965,26 @@ publisher, data preparer, application, volume size in blocks, and the four PVD t
 (creation / modification / expiration / effective). Joliet extension and El Torito boot record
 presence are surfaced from the descriptor walk.
 
-**DMG** opens straight to the file info screen — there's no listing path because the inner
+**DMG** opens straight to the file info screen — there's no TOC listing because the inner
 filesystem (HFS+ / APFS / FAT) would need its own walker.
 
 **Apple Disk Image (UDIF)** metadata comes from the 512-byte "koly" trailer at the end of the
 file: UDIF version, image variant (device / partition / mounted system), total uncompressed size,
 data-fork length, embedded XML partition-map size, segment number / count, data + master checksum
-algorithms, and the documented trailer flag bits (flattened, internet-enabled). The XML partition
-map itself isn't parsed yet; it shows up as a presence + size row.
+algorithms, and the documented trailer flag bits (flattened, internet-enabled).
 
-Both parsers are hand-rolled — no extra crate. Hex view (`x`) still works on the raw image bytes.
+The **partition map** is decoded from the embedded XML plist the trailer points at — one read of
+the plist region (a few KB), no payload bytes. Each `blkx` table surfaces as a partition row: the
+Apple type token (`Apple_HFS`, `Apple_APFS`, `MBR`, `Primary GPT Header`, …) parsed from the entry
+name, the logical size (sector span × 512), and a per-partition compression summary read from the
+entry's "mish" block table — codec (zlib / bzip2 / lzfse / lzma / ADC), stored size, ratio, and
+chunk count. Sparse (zero-fill) regions like `Apple_Free` show as `(sparse)`. The mish runs are
+read for their structure only; reconstructing a partition's payload (decompressing the runs) and
+walking its filesystem is deferred — see [planned.md](planned.md#disk-images-).
+
+The parsers are hand-rolled — no extra crate. The plist is walked with `quick-xml` (an existing
+dep, same as DOCX / ODT) in `dmg_plist.rs`; the block tables parse in `mish.rs`. Hex view (`x`)
+still works on the raw image bytes.
 
 #### Filesystem Directories ✅
 

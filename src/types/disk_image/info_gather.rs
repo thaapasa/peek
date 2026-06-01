@@ -5,11 +5,13 @@
 
 use bytes::Bytes;
 
-use super::{dmg_trailer, iso_pvd, mbr};
+use super::{dmg_plist, dmg_trailer, iso_pvd, mbr, mish};
 use crate::info::FileExtras;
 use crate::input::InputSource;
 use crate::input::detect::DiskImageFormat;
-use crate::types::disk_image::info::{DiskImageInfo, DiskImageMeta, RawImageMeta};
+use crate::types::disk_image::info::{
+    DiskImageInfo, DiskImageMeta, DmgMeta, DmgPartition, RawImageMeta,
+};
 
 /// Sectors of the descriptor area we pull on a single read for ISO.
 /// Eight 2 KiB sectors covers PVD + supplementary descriptors + boot
@@ -68,11 +70,18 @@ fn gather_iso(source: &InputSource, format_name: &'static str) -> FileExtras {
 fn gather_dmg(source: &InputSource, format_name: &'static str) -> FileExtras {
     match read_dmg_trailer(source) {
         Ok(buf) => match dmg_trailer::parse(&buf) {
-            Some(dmg) => FileExtras::DiskImage(DiskImageInfo {
-                format_name,
-                meta: Some(DiskImageMeta::Dmg(dmg)),
-                error: None,
-            }),
+            Some(mut dmg) => {
+                // Decode the partition map from the embedded plist. Best
+                // effort: a parse failure leaves the trailer info intact.
+                if dmg.plist_present {
+                    dmg.partitions = read_dmg_partitions(source, &dmg).unwrap_or_default();
+                }
+                FileExtras::DiskImage(DiskImageInfo {
+                    format_name,
+                    meta: Some(DiskImageMeta::Dmg(dmg)),
+                    error: None,
+                })
+            }
             None => FileExtras::DiskImage(DiskImageInfo {
                 format_name,
                 meta: None,
@@ -126,4 +135,92 @@ fn read_dmg_trailer(source: &InputSource) -> anyhow::Result<Bytes> {
         );
     }
     Ok(buf)
+}
+
+/// Upper bound on the embedded plist we'll read into memory. Real DMG
+/// plists run a few KB to low single-digit MB; this only guards a corrupt
+/// length field from driving a huge allocation.
+const DMG_PLIST_MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// Read the embedded XML plist and decode its blkx tables into partition
+/// rows. Touches only the plist region — no payload bytes.
+fn read_dmg_partitions(source: &InputSource, dmg: &DmgMeta) -> anyhow::Result<Vec<DmgPartition>> {
+    if dmg.plist_length == 0 || dmg.plist_length > DMG_PLIST_MAX_BYTES {
+        anyhow::bail!("implausible plist length: {}", dmg.plist_length);
+    }
+    let bs = source.open_byte_source()?;
+    let end = dmg
+        .plist_offset
+        .checked_add(dmg.plist_length)
+        .ok_or_else(|| anyhow::anyhow!("plist range overflows u64"))?;
+    if end > bs.len() {
+        anyhow::bail!(
+            "plist range {}..{} exceeds image size {}",
+            dmg.plist_offset,
+            end,
+            bs.len()
+        );
+    }
+    let raw = bs.read_range(dmg.plist_offset, dmg.plist_length as usize)?;
+    let xml =
+        std::str::from_utf8(&raw).map_err(|e| anyhow::anyhow!("plist is not valid UTF-8: {e}"))?;
+    Ok(dmg_plist::extract_blkx(xml)
+        .into_iter()
+        .filter_map(build_partition)
+        .collect())
+}
+
+/// Turn one blkx entry into a partition row, reading size + compression
+/// from its mish block table. `None` when the entry's `Data` isn't a
+/// valid block table.
+fn build_partition(entry: dmg_plist::BlkxEntry) -> Option<DmgPartition> {
+    let summary = mish::MishTable::parse(&entry.data)?.summary();
+    Some(DmgPartition {
+        fs_type: parse_fs_type(&entry.name),
+        name: entry.name,
+        size_bytes: summary.uncompressed_bytes,
+        stored_bytes: summary.stored_bytes,
+        compression: summary.methods,
+        chunk_count: summary.chunk_count,
+    })
+}
+
+/// Pull the Apple partition-type token out of a blkx name like
+/// `"disk image (Apple_HFS : 4)"` → `"Apple_HFS"`. Returns `None` when
+/// the name carries no parenthesised `type : index` form.
+fn parse_fs_type(name: &str) -> Option<String> {
+    let open = name.rfind('(')?;
+    let inner = &name[open + 1..];
+    let close = inner.find(')')?;
+    let token = inner[..close].split(':').next()?.trim();
+    (!token.is_empty()).then(|| token.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_fs_type;
+
+    #[test]
+    fn extracts_type_token_from_blkx_name() {
+        assert_eq!(
+            parse_fs_type("disk image (Apple_HFS : 4)").as_deref(),
+            Some("Apple_HFS")
+        );
+        assert_eq!(
+            parse_fs_type("Protective Master Boot Record (MBR : 0)").as_deref(),
+            Some("MBR")
+        );
+        // Multi-word token before the colon is kept intact.
+        assert_eq!(
+            parse_fs_type("GPT Header (Primary GPT Header : 1)").as_deref(),
+            Some("Primary GPT Header")
+        );
+    }
+
+    #[test]
+    fn none_without_parenthesised_type() {
+        assert_eq!(parse_fs_type("just a name"), None);
+        assert_eq!(parse_fs_type("trailing ("), None);
+        assert_eq!(parse_fs_type("( : 3)"), None);
+    }
 }

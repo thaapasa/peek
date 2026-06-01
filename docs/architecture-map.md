@@ -309,14 +309,16 @@ src/
       compose.rs       — compose(): ISO → directory-tree ListingMode; DMG / Raw → InfoMode (no filesystem walker available)
       detect.rs        — format_from_ext + Raw → Iso upgrade (cheap 6-byte PVD probe at offset 32768)
       format.rs        — DiskImageFormat enum (Iso/Dmg/Raw) + label
-      info.rs          — DiskImageInfo + DiskImageMeta { Iso | Dmg | Raw } + IsoVolumeMeta / IsoDateTime / DmgMeta / DmgVariant / DmgChecksumKind / RawImageMeta / MbrTable / MbrPartition
+      info.rs          — DiskImageInfo + DiskImageMeta { Iso | Dmg | Raw } + IsoVolumeMeta / IsoDateTime / DmgMeta / DmgPartition / DmgVariant / DmgChecksumKind / RawImageMeta / MbrTable / MbrPartition
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
       iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
-      dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes)
+      dmg_trailer.rs   — Hand-rolled UDIF (Apple Disk Image) "koly" trailer parser (last 512 bytes); carries plist_offset for the partition-map read
+      dmg_plist.rs     — quick-xml walk of the embedded plist → blkx entries (Name + decoded mish Data); not a general plist parser, pulls only the partition map
+      mish.rs          — UDIF "mish" (BLKX) block-table parser: sector span + per-chunk (kind, stored length) → MishSummary (logical size, stored bytes, codec set, chunk count); structure only, no payload decode
       mbr.rs           — MBR partition-table parser for raw `.img` / `.bin` / `.dd` images; reads the 512-byte boot sector and populates `MbrTable` / `MbrPartition` shown in the Info view
       extract.rs       — ISO entry extract: lookup_file_range → zero-copy FileRange (or Bytes::slice for stdin-piped); DMG returns Unsupported
-      info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes
-      info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks)
+      info_gather.rs   — gather_extras: ISO reads 16 KiB at offset 32768; DMG reads tail 512 bytes + (if present) the plist region → dmg_plist + mish → DmgPartition rows
+      info_render.rs   — render_section (Disk Image info section, ISO + DMG blocks incl. partition map)
     objfile/
       mod.rs           — Module wiring
       compose.rs       — compose(): InfoMode landing view + Sections / Symbols TableMode (no extract path)
