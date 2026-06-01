@@ -1,10 +1,9 @@
 # peek
 
-Modern terminal file viewer with syntax highlighting, structured-data pretty-printing, and image
-rendering.
+Modern terminal file viewer. Syntax highlighting, structured-data pretty-print, image rendering.
 
-**Single-file viewer.** One path (or stdin) at a time. No batch mode, no file list, no `cat`-style
-concatenation — those use cases belong to other tools.
+**Single-file viewer.** One path (or stdin) at time. No batch mode, no file list, no `cat`-style
+concatenation — those belong to other tools.
 
 ## Build & Run
 
@@ -16,14 +15,13 @@ cargo test                   # run all tests
 cargo clippy                 # lint
 ```
 
-No external runtime dependencies. Image rendering is built in. (PDF support uses Pdfium —
-shipped alongside the binary in the release tarball, dynamically loaded at startup; no system
-install needed.)
+No external runtime deps. Image rendering built in. PDF support use Pdfium — ships beside binary in
+release tarball, loaded dynamically at startup. Ghostscript available if found on path,
 
 ## Architecture map
 
 Top-level only. Full file/module breakdown: [docs/architecture-map.md](docs/architecture-map.md) —
-read when adding files, modifying a module, or unsure where logic lives.
+read when adding files, modifying module, or unsure where logic lives.
 
 ```
 src/
@@ -84,46 +82,45 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 
 ## Workflow
 
-- **Don't commit unless asked.** The user decides what and when.
-- **Don't push, open PRs, or trigger GitHub Actions on your own initiative.** Local commits only.
-  The user pushes / opens PRs / merges themselves so they can amend locally first. Open a PR
-  only when the user explicitly asks for one.
-- **Run `cargo fmt` after editing Rust code** so formatting drift doesn't pile up across unrelated
-  files. Cheap; keeps diffs focused on real changes.
-- **Keep checkup-finding IDs (H4, M2, L1, …) out of commit subjects.** The findings doc is
-  temporary — once an item ships and the entry is deleted, the ID stops resolving and the
-  subject becomes a dangling reference. Body may mention an ID when the commit itself touches
-  the findings doc (so the diff explains the ID's last appearance), but the subject reads
-  by intent, not by tracker ID.
+- **Don't commit unless asked.** User decides what and when.
+- **Don't push, open PRs, or trigger GitHub Actions on own initiative.** Local commits only. User
+  pushes / opens PRs / merges themselves so they can amend locally first. Open PR only when user
+  explicitly asks.
+- **Run `cargo fmt` after editing Rust code** so formatting drift no pile up across unrelated files.
+  Cheap; keeps diffs focused on real changes.
+- **Keep checkup-finding IDs (H4, M2, L1, …) out of commit subjects.** Findings doc temporary — once
+  item ships and entry deleted, ID stops resolving and subject becomes dangling reference. Body may
+  mention ID when commit itself touches findings doc (so diff explains ID's last appearance), but
+  subject reads by intent, not by tracker ID.
 
 ## Collaboration
 
 Three north stars:
 
-1. **Clean, robust, maintainable architecture.** New abstractions earn their place by reducing total
+1. **Clean, robust, maintainable architecture.** New abstractions earn place by reducing total
    surface area or making extension easier. Modules have narrow responsibilities. `main.rs` stays
    short — file-type-specific logic lives in `compose_modes` and the modes themselves.
-2. **Stream, don't load.** Multi-GB files are first-class. Prefer
-   `InputSource::open_byte_source()` (random access) or chunked iteration over `read_bytes()` /
-   `read_text()` (whole-file). Whole-file reads only when the feature truly needs it (full-file
-   pretty-print of structured data, image decode) — never as a casual default.
-3. **Keep cognitive load low.** What matters is what the next reader has to hold in their head.
-   Abstractions can reduce that load (named trait → stop thinking about mechanism) or add to it
-   (chasing four files for one operation). Inlining cuts both ways. Type count, line count, and
-   call-site count aren't the test — what the reader has to track is.
+2. **Stream, don't load.** Multi-GB files first-class. Prefer `InputSource::open_byte_source()` (
+   random access) or chunked iteration over `read_bytes()` / `read_text()` (whole-file). Whole-file
+   reads only when feature truly needs it (full-file pretty-print of structured data, image
+   decode) — never as casual default.
+3. **Keep cognitive load low.** What matters: what next reader must hold in head. Abstractions can
+   cut that load (named trait → stop thinking about mechanism) or add to it (chasing four files for
+   one operation). Inlining cuts both ways. Type count, line count, call-site count aren't the
+   test — what reader must track is.
 
-Be a critical collaborator. Push back when a change would:
+Be critical collaborator. Push back when change would:
 
 - **Damage architecture quality** — leak abstractions, blur boundaries, conflate orthogonal
-  concerns (mixing print-mode + interactive paths), or re-introduce a `match file_type` chain that
-  `compose_modes` was meant to eliminate.
+  concerns (mixing print-mode + interactive paths), or re-introduce `match file_type` chain that
+  `compose_modes` meant to eliminate.
 - **Add cognitive load without payoff** — deep branching, scattered state synced by hand, mechanism
-  leaking through call sites, indirection that doesn't earn the click-through, hypothetical-future
-  abstractions whose concept isn't real yet.
+  leaking through call sites, indirection that no earn the click-through, hypothetical-future
+  abstractions whose concept not real yet.
 - **Hurt performance** — redundant re-renders, hot-path allocations, full-file reads where streaming
   or seeking would do, eager work that should be lazy.
 
-Surface the trade-off concretely; propose an alternative.
+Surface trade-off concretely; propose alternative.
 
 ## Conventions
 
@@ -131,16 +128,16 @@ Surface the trade-off concretely; propose an alternative.
 
 ## Documentation
 
-Keep these in sync with code changes:
+Keep in sync with code changes:
 
 - **README.md** — project overview, feature summary, usage examples
-- **manual/src/** — user-facing manual (mdbook). Update the relevant chapter when a
-  user-visible feature changes
+- **manual/src/** — user-facing manual (mdbook). Update relevant chapter when user-visible feature
+  changes
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/architecture-map.md** — full file/module breakdown. Update when files / modules are
-  added, moved, or removed
-- **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of
-  the manual; manual stays concise
+- **docs/architecture-map.md** — full file/module breakdown. Update when files / modules added,
+  moved, or removed
+- **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of manual;
+  manual stays concise
 - **docs/planned.md** — planned features and open ideas (☐ + ❓)
 - **docs/conventions.md** — coding conventions
 - **docs/release.md** — release pipeline and recovery
@@ -148,17 +145,17 @@ Keep these in sync with code changes:
 
 ### Docs hygiene
 
-- `docs/` holds **live reference only** — features, planned, conventions, architecture,
-  and in-progress plans. Anything here must reflect current code.
-- **Plans are temporary.** When a plan is done:
-  - If it has lasting historical value (design rationale, why-we-rejected, postmortem),
-    move it to `docs/archived/`. Add a status blockquote right under the title:
-    `> **Status: Completed YYYY-MM-DD.** Archived for reference.` Title stays the same.
-    Linked references in other docs must point at the archived path. No entry in
-    `architecture-map.md` — archived files are a graveyard, not part of the live map.
-  - Otherwise, delete it.
-  - Either way, it must not stay in `docs/` root as a "landed" plan.
-- **Active instructions belong in their own doc** (or as a section of an existing general
-  doc like `architecture.md` / `conventions.md`), never inside a plan file. Example: an
-  "adding a new file type" checklist lives in `architecture.md`, not buried in a refactor
-  plan that future readers won't know to open.
+- `docs/` holds **live reference only** — features, planned, conventions, architecture, in-progress
+  plans. Anything here must reflect current code.
+- **Plans are temporary.** When plan done:
+    - If lasting historical value (design rationale, why-we-rejected, postmortem), move to
+      `docs/archived/`. Add status blockquote right under title:
+      `> **Status: Completed YYYY-MM-DD.** Archived for reference.` Title stays same. Linked
+      references in other docs must point at archived path. No entry in `architecture-map.md` —
+      archived files are graveyard, not part of live map.
+    - Otherwise, delete it.
+    - Either way, must not stay in `docs/` root as "landed" plan.
+- **Active instructions belong in own doc** (or as section of existing general doc like
+  `architecture.md` / `conventions.md`), never inside plan file. Example: "adding new file type"
+  checklist lives in `architecture.md`, not buried in refactor plan future readers won't know to
+  open.
