@@ -358,7 +358,7 @@ src/
       pretty_view.rs   — PrettyView: the lazy structured pretty-print branch — one-shot parse (size-capped at PRETTY_MAX_BYTES), size-cap / parse-error fallback state, theme-keyed rendered-line cache. ContentMode keeps the raw-vs-pretty view state + windowing
       gutter.rs        — Gutter: ContentMode's line-number gutter — on/off state + digit-width sizing, per-visual-row `prefix` (interactive), whole-Vec `apply` (pipe)
       hex.rs           — HexMode: byte-offset-scrolled hex dump (interactive + pipe stream)
-      info.rs          — InfoMode: file metadata view
+      info.rs          — InfoMode: file metadata view; each rendered field word-wrapped to the content width (a long warning / path can't soft-wrap a row the ScreenBuffer miscounts), re-renders on resize
       help.rs          — HelpMode: keyboard-shortcut listing
       about.rs         — AboutMode: logo, version, palette swatches, tips
       rendered_text.rs — RenderedTextMode<R>: generic whole-document read mode (caching per (width, style_mode), search, windowing) over a TextRenderer R. Used by DOCX/ODT, RTF, HTML, PDF text — each supplies a small TextRenderer impl
@@ -369,7 +369,7 @@ src/
       rows_mode.rs     — RowsTableMode: streaming flavour over `Box<dyn RowSource>`. Aligned table with sticky header, monotonic auto-widen (grows widths as wider cells scroll into view; sticky header repaints on every change), `Shift+R` reflow widths from viewport (opt-in shrink), `Shift+H` toggle header, Left/Right column-step horizontal pan. Per-column Alignment + has_header decided at construction by the source's compose path (CSV: classify_cell on seed body; SQLite: column-type affinity). Embedded `\n` collapses to a muted `↵` glyph; `\t` → space, `\r` dropped. Cell-scoped `/` search: scans every cell's display-form bytes, matches stay inside one cell (never cross delimiters); `n`/`p` step matches and pan h_col + scroll top_record. Print mode uses seed widths only — single-row overflow pushes following columns of that row past the terminal edge
     ui/
       mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
-      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache, extract dispatch + prompt overlay slot + status flash
+      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache, extract dispatch + prompt overlay slot + status flash. `ensure_active_rendered` recovers from render failures: retry_frame_detection (magic-byte re-detect for misnamed files) then degrade_active_to_hex (drop broken mode → Hex view + decode-cause warning) before propagating
       prompt.rs        — Modal text-input Prompt overlay (readline-style nav) consuming raw key events; replaces status line while open
       screen.rs        — ScreenBuffer: per-row diff against prev frame, no-flash redraw
       keys.rs          — Action enum (centralized keybindings), Outcome

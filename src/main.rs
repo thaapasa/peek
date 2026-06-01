@@ -200,15 +200,45 @@ fn run_view(
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);
-        modes[primary_idx]
-            .render_to_pipe(&ctx, &mut output)
-            .with_context(|| format!("failed to render {}", source.name()))?;
+        // When the primary view can't render the input at all (corrupt
+        // image, malformed payload), don't abort — fall back to the
+        // universal Hex view, mirroring the interactive viewer's degrade
+        // path, and note the cause on stderr.
+        let rendered_idx = match modes[primary_idx].render_to_pipe(&ctx, &mut output) {
+            Ok(()) => primary_idx,
+            Err(e) => {
+                let hex_idx = modes
+                    .iter()
+                    .position(|m| m.id() == viewer::modes::ModeId::Hex)
+                    .filter(|&i| i != primary_idx);
+                match hex_idx {
+                    Some(i) => {
+                        let cause = e
+                            .chain()
+                            .last()
+                            .map_or_else(|| e.to_string(), |c| c.to_string());
+                        eprintln!(
+                            "peek: cannot display {} — {cause}; showing hex",
+                            source.name()
+                        );
+                        modes[i]
+                            .render_to_pipe(&ctx, &mut output)
+                            .with_context(|| format!("failed to render {}", source.name()))?;
+                        i
+                    }
+                    None => {
+                        return Err(e)
+                            .with_context(|| format!("failed to render {}", source.name()));
+                    }
+                }
+            }
+        };
         // Per-page / per-chapter render errors are non-fatal — the pipe
         // path still wrote a placeholder. Surface them on stderr so a
         // `peek --print broken.pdf > out` user sees what was skipped
         // instead of getting silent gaps. Interactive mode drains the
         // same warnings through the status line.
-        for w in modes[primary_idx].take_warnings() {
+        for w in modes[rendered_idx].take_warnings() {
             eprintln!("peek: {w}");
         }
         output.finish()?;

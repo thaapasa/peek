@@ -20,10 +20,16 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
     let cfg = image_config(args);
-    if let Some(frames) = crate::types::image::pipeline::animate::decode_anim_frames(
+    // A decode failure here (corrupt/truncated animation) is not fatal:
+    // fall back to the static raster mode, which attempts its own decode
+    // and — if that also fails — degrades to Hex at render time via the
+    // viewer's universal fallback. Never abort compose over bad pixels.
+    let frames = crate::types::image::pipeline::animate::decode_anim_frames(
         source,
         detected.magic_mime.as_deref(),
-    )? {
+    )
+    .unwrap_or(None);
+    if let Some(frames) = frames {
         modes.push(Box::new(AnimationMode::new(frames, cfg)));
     } else {
         modes.push(Box::new(ImageRenderMode::new(

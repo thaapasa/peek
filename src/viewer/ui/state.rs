@@ -28,6 +28,16 @@ pub(crate) struct RenderedView {
     total: usize,
 }
 
+/// Concise one-line summary of a render failure for the status flash /
+/// warning row: the deepest cause in the error chain (e.g. the decoder's
+/// "CRC error: …"), which is more actionable than the outer
+/// "failed to render" wrapper.
+fn render_failure_cause(err: &anyhow::Error) -> String {
+    err.chain()
+        .last()
+        .map_or_else(|| err.to_string(), |c| c.to_string())
+}
+
 /// Global actions that work in every mode (unless the mode shadows the
 /// key via its own `extra_actions`). Used for both key dispatch and the
 /// help screen.
@@ -825,6 +835,16 @@ impl ViewerState {
                         let active = self.frame().active;
                         let view = self.render_active()?;
                         self.frame_mut().views[active] = Some(view);
+                    } else if let Some(view) = self.degrade_active_to_hex(&e)? {
+                        // Re-detection didn't help (or already ran): the
+                        // active mode genuinely can't render this input
+                        // (corrupt image, malformed payload, …). Rather
+                        // than abort the whole viewer, drop to the
+                        // universal Hex view and surface the error as a
+                        // warning. `degrade_active_to_hex` repointed
+                        // `active` at Hex before rendering.
+                        let active = self.frame().active;
+                        self.frame_mut().views[active] = Some(view);
                     } else {
                         return Err(e);
                     }
@@ -871,6 +891,44 @@ impl ViewerState {
         // (or earlier render attempt) left on screen.
         self.screen.invalidate();
         Ok(true)
+    }
+
+    /// Last-resort fallback when the active mode cannot render the input
+    /// (e.g. a corrupt image, a malformed structured payload). Repoints
+    /// `active` at the always-present Hex view, records `err` as a frame
+    /// warning (so the Info view and the breadcrumb `!` mark surface it),
+    /// flashes a one-line notice, and returns the Hex render so the caller
+    /// can cache it.
+    ///
+    /// Returns `Ok(None)` when there's nothing safer to fall back to —
+    /// the failed mode *is* Hex, or no Hex view exists (directories) — so
+    /// the caller propagates the original error instead of looping.
+    fn degrade_active_to_hex(&mut self, err: &anyhow::Error) -> Result<Option<RenderedView>> {
+        let f = self.frame();
+        let failed = f.active;
+        let Some(hex_idx) = f.mode_index(ModeId::Hex) else {
+            return Ok(None);
+        };
+        if failed == hex_idx {
+            return Ok(None);
+        }
+        let warning = format!("{}: {}", f.modes[failed].label(), render_failure_cause(err));
+        let f = self.frame_mut();
+        if !f.file_info.warnings.contains(&warning) {
+            f.file_info.warnings.push(warning);
+            if let Some(idx) = f.mode_index(ModeId::Info) {
+                f.views[idx] = None;
+            }
+        }
+        // The broken mode is no longer the home view: aux toggles must not
+        // bounce back into it.
+        if f.last_primary == Some(failed) {
+            f.last_primary = None;
+        }
+        f.active = hex_idx;
+        self.flash = Some(format!("cannot display — {}", render_failure_cause(err)));
+        let view = self.render_active()?;
+        Ok(Some(view))
     }
 
     pub(crate) fn invalidate_active(&mut self) {
@@ -1128,6 +1186,57 @@ mod tests {
             ModeId::ImageRender,
             "tab wraps back to image"
         );
+    }
+
+    /// A corrupt image can't be decoded. Rendering must not abort the
+    /// viewer: the active mode degrades to the universal Hex view and the
+    /// decode error is recorded as a frame warning (surfaced by the Info
+    /// view and the breadcrumb `!` mark).
+    #[test]
+    fn corrupt_image_degrades_to_hex_with_warning() {
+        // Pin a narrow viewport so the verbose decode warning is wider
+        // than the content area — the Info view must wrap it rather than
+        // let the terminal soft-wrap a row the ScreenBuffer miscounts.
+        let _term = crate::viewer::ui::test_term_override::pin(40, 24);
+
+        let source = fixture_source("test-images/corrupt.png");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/corrupt.png"], source, detected);
+
+        // Composes as an image — ImageRender is the home view.
+        assert_eq!(active_id(&state), ModeId::ImageRender);
+
+        // The decode fails inside render_window; ensure_active_rendered
+        // must swallow it (Ok), not propagate.
+        state.ensure_active_rendered().unwrap();
+
+        // Degraded to Hex, with the decode cause captured as a warning.
+        assert_eq!(active_id(&state), ModeId::Hex, "fell back to hex view");
+        assert!(
+            state
+                .frame()
+                .file_info
+                .warnings
+                .iter()
+                .any(|w| w.contains("CRC error")),
+            "decode failure recorded as warning, got {:?}",
+            state.frame().file_info.warnings
+        );
+
+        // Switch to Info and confirm every rendered line fits the content
+        // width — no over-wide line for the terminal to soft-wrap.
+        state.apply(Action::SwitchInfo).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info);
+        state.ensure_active_rendered().unwrap();
+        let info_idx = state.frame().active;
+        let view = state.frame().views[info_idx].as_ref().unwrap();
+        let cols = terminal_cols();
+        for line in &view.lines {
+            assert!(
+                crate::viewer::ui::strip_ansi_width(line) <= cols,
+                "Info line exceeds content width {cols}: {line:?}"
+            );
+        }
     }
 
     #[test]

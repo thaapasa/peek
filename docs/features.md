@@ -503,6 +503,12 @@ Five ASCII-art rendering modes (cyclable with `m`; CLI `--image-mode`):
 In viewer mode, Tab cycles the file's view modes (image → file info for raster; image → SVG source
 → file info for SVG). 24-bit truecolor; status line shows the active mode.
 
+A corrupt or truncated image (bad CRC, partial payload) does not abort peek: the viewer degrades to
+the Hex view and records the decode error as a warning (shown in Info and flagged with `!` on the
+breadcrumb); the pipe path falls back to a hex dump with the cause on stderr. This degrade-to-Hex
+fallback is generic to the render loop — any view mode that fails to render an input lands on Hex
+plus a warning rather than crashing.
+
 #### SVG ✅
 
 SVG (`.svg`) is vector; the `image` crate doesn't handle it. Rasterized via `resvg`.

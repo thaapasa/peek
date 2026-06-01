@@ -370,6 +370,20 @@ loop {
 `redraw` calls `state.ensure_active_rendered()` (lazy mode render), composes the status line (name,
 mode label, status segments, theme), then `state.draw()`.
 
+**Render-failure fallbacks.** `ensure_active_rendered` never lets a bad input abort the viewer. When
+the active mode's `render_window` errors, it tries two recoveries before giving up. First,
+`retry_frame_detection` re-detects the source with `detect_ignore_name` (magic bytes only, no path
+bias) — for a file whose extension lied about its content this rebuilds the frame with the correct
+type. If that doesn't apply (already ran, or re-detection agrees with the original), it falls back to
+`degrade_active_to_hex`: the active mode is repointed at the always-present Hex view, the decode
+cause (deepest error in the chain, e.g. a PNG `CRC error`) is pushed onto `FileInfo.warnings` and
+flashed on the status line, and `last_primary` is cleared if it pointed at the broken mode so aux
+toggles don't bounce back into it. Only when there is nothing safer to fall back to (the failed mode
+*is* Hex, or no Hex view exists — directories) does the error propagate. The pipe path
+(`main.rs`) mirrors this: a primary-mode `render_to_pipe` failure falls back to Hex with the cause on
+stderr. Net effect: a corrupt image, truncated archive, or malformed payload degrades to a hex dump
+plus a warning rather than crashing peek.
+
 ### Modal prompt overlay (`viewer/ui/prompt.rs`)
 
 A single `Option<(Prompt, PromptKind)>` slot on `ViewerState`. While `Some`, raw key events route
