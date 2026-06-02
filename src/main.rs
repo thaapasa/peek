@@ -204,6 +204,12 @@ fn run_view(
         // image, malformed payload), don't abort — fall back to the
         // universal Hex view, mirroring the interactive viewer's degrade
         // path, and note the cause on stderr.
+        //
+        // Assumes the failed primary wrote nothing before erroring, so the
+        // Hex bytes aren't prefixed with a partial primary render. Holds
+        // for every mode on this path today (decode failures surface
+        // up-front in render_window, before any write). A mode that streams
+        // incrementally and then errors mid-stream would break it.
         let rendered_idx = match modes[primary_idx].render_to_pipe(&ctx, &mut output) {
             Ok(()) => primary_idx,
             Err(e) => {
