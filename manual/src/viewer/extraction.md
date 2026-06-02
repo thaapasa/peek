@@ -4,7 +4,7 @@ Pull an inner item out of a container as a standalone file.
 
 ## Sources
 
-- **Archive entries** (ZIP, tar [+ gz/bz2/xz/zst/lz4], 7-Zip, cpio, ar) — extract a single file
+- **Archive entries** (ZIP, tar [+ gz/bz2/xz/zst/lz4/br], 7-Zip, cpio, ar) — extract a single file
   by its inner path. Entries ≥ 16 MiB spool to a temporary file in `$TMPDIR/peek-*` (random-
   access reads without holding the whole payload in RAM); smaller entries stay in memory. The
   temp file is unlinked automatically when the extracted view is closed.

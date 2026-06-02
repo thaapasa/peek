@@ -72,6 +72,14 @@ pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Bytes> {
                 .read_to_end(&mut out)
                 .context("lz4 decode failed")?;
         }
+        CompressionFormat::Br => {
+            // 4 KiB internal buffer — matches the crate's own default
+            // for the reader wrapper; the outer `.take` enforces the cap.
+            brotli_decompressor::Decompressor::new(raw, 4096)
+                .take(take_limit)
+                .read_to_end(&mut out)
+                .context("brotli decode failed")?;
+        }
     }
     if out.len() as u64 > MAX_DECOMPRESS_BYTES {
         bail!(
@@ -257,6 +265,17 @@ mod tests {
         ))
         .unwrap();
         let out = decompress_bytes(&raw, CompressionFormat::Lz4).unwrap();
+        assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
+    }
+
+    #[test]
+    fn decompress_br_round_trip() {
+        let raw = std::fs::read(format!(
+            "{}/test-data/single.br",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let out = decompress_bytes(&raw, CompressionFormat::Br).unwrap();
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 

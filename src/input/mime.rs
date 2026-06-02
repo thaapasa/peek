@@ -323,6 +323,7 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Compressed(CompressionFormat::Xz) => &["xz", "txz"],
         FileType::Compressed(CompressionFormat::Zst) => &["zst", "tzst"],
         FileType::Compressed(CompressionFormat::Lz4) => &["lz4", "tlz4"],
+        FileType::Compressed(CompressionFormat::Br) => &["br", "tbr"],
         _ => &[],
     }
 }

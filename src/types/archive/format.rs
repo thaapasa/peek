@@ -14,6 +14,8 @@ pub enum ArchiveFormat {
     Ar,
     /// tar + lz4 frame (`.tar.lz4`).
     TarLz4,
+    /// tar + brotli (`.tar.br`).
+    TarBr,
     /// cpio archive (newc `070701` / `070702` or ODC `070707`).
     Cpio,
     /// cpio + gzip (`.cpio.gz`).
@@ -30,6 +32,7 @@ impl ArchiveFormat {
             Self::TarXz => "tar + xz",
             Self::TarZst => "tar + zstd",
             Self::TarLz4 => "tar + lz4",
+            Self::TarBr => "tar + brotli",
             Self::SevenZ => "7-Zip archive",
             Self::Ar => "ar archive",
             Self::Cpio => "cpio archive",

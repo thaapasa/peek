@@ -923,6 +923,7 @@ directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 | Tar + xz    | `.tar.xz`, `.txz`              | ✅         |
 | Tar + zstd  | `.tar.zst`, `.tzst`            | ✅         |
 | Tar + lz4   | `.tar.lz4`, `.tlz4`            | ✅         |
+| Tar + brotli| `.tar.br`, `.tbr`             | ✅         |
 | 7-Zip       | `.7z`                          | ✅         |
 | cpio        | `.cpio`                        | ✅         |
 | cpio + gzip | `.cpio.gz`                     | ✅         |
@@ -953,10 +954,14 @@ warning row in info.
 | xz     | `.xz`      | ✅         |
 | zstd   | `.zst`     | ✅         |
 | lz4    | `.lz4`     | ✅         |
-| brotli | `.br`      | ☐ planned |
+| brotli | `.br`      | ✅         |
 
 Decompressed output is capped at 256 MiB. Anything larger surfaces a warning and the viewer
 shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
+
+Every codec except brotli is detected by magic bytes *and* extension; a raw brotli stream has
+no signature, so `.br` / `.tar.br` are extension-only — an extensionless or piped brotli stream
+won't auto-classify.
 
 #### Disk Images ✅
 
@@ -1174,7 +1179,7 @@ showcase — cycling themes with `t` while on About previews how each theme pain
 
 Pull an inner item out of a container as a standalone file. Sources currently:
 
-- **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst|.lz4]`, `.7z`, `.cpio[.gz]`, `.ar`):
+- **Archive entries** (`.zip`, `.tar[.gz|.bz2|.xz|.zst|.lz4|.br]`, `.7z`, `.cpio[.gz]`, `.ar`):
   extract a single file by its inner path. Stored zip / uncompressed tar members are a verbatim
   slice of the backing source, so they extract as a zero-copy `FileRange` view — no spool, no
   copy. Other entries ≥ 16 MiB spool to a `NamedTempFile` in `$TMPDIR/peek-*` (random-access
@@ -1186,7 +1191,7 @@ Pull an inner item out of a container as a standalone file. Sources currently:
   dropped — the user has opted in to OOM risk). tar/cpio/ar/7z extract streams the walk over a
   seekable reader (a windowed range adapter backs `FileRange` sources), so locating one member
   never reads the whole archive into RAM and a compressed tar inflates only up to the matched
-  entry — every codec (gz/bz2/xz/zst/lz4) streams. 7z streams per-entry too (solid blocks still
+  entry — every codec (gz/bz2/xz/zst/lz4/br) streams. 7z streams per-entry too (solid blocks still
   decode up to the match — inherent to the format — but the member never buffers).
 - **ISO entries** (`.iso`): extract a single file via a zero-copy `FileRange` view over the
   backing image — no decompression, no buffering, multi-GB ISOs unaffected. A recursive ISO

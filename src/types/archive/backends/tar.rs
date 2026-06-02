@@ -30,6 +30,7 @@ pub(crate) fn decode_compressed(
         ),
         CompressionFormat::Lz4 => Box::new(lz4_flex::frame::FrameDecoder::new(reader)),
         CompressionFormat::Xz => Box::new(liblzma::read::XzDecoder::new(reader)),
+        CompressionFormat::Br => Box::new(brotli_decompressor::Decompressor::new(reader, 4096)),
     })
 }
 
@@ -55,6 +56,10 @@ pub(crate) fn list_lz4(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
 
 pub(crate) fn list_xz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
     list_from_read(decode_compressed(reader, CompressionFormat::Xz)?)
+}
+
+pub(crate) fn list_br(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+    list_from_read(decode_compressed(reader, CompressionFormat::Br)?)
 }
 
 fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {

@@ -137,6 +137,7 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntr
         ArchiveFormat::TarXz => tar::list_xz(reader),
         ArchiveFormat::TarZst => tar::list_zst(reader),
         ArchiveFormat::TarLz4 => tar::list_lz4(reader),
+        ArchiveFormat::TarBr => tar::list_br(reader),
         ArchiveFormat::SevenZ => sevenz::list(reader),
         ArchiveFormat::Ar => ar::list(reader),
         ArchiveFormat::Cpio => cpio::list_plain(reader),
@@ -255,6 +256,15 @@ mod tests {
     fn list_tar_lz4_finds_expected_entries() {
         let entries = list_entries(&fixture("archive.tar.lz4"), ArchiveFormat::TarLz4).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarLz4.label(), &entries);
+        assert_eq!(stats.file_count, 14);
+        assert_eq!(stats.dir_count, 2);
+        assert_eq!(stats.total_size, 30_683);
+    }
+
+    #[test]
+    fn list_tar_br_finds_expected_entries() {
+        let entries = list_entries(&fixture("archive.tar.br"), ArchiveFormat::TarBr).unwrap();
+        let stats = Stats::from_root(ArchiveFormat::TarBr.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
         assert_eq!(stats.total_size, 30_683);

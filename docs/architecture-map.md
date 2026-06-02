@@ -17,7 +17,7 @@ src/
     detect.rs          — File-type detection orchestrator (magic-byte / extension / content-sniff priority + Detected / FileType / CompressionFormat); per-type format enums + detection helpers live alongside their types under `types/<x>/{format,detect}.rs` and are re-exported here
     mime.rs            — MimeCategory + MimeInfo: RFC 6838 classification (Registered / Vendor / x-prefix / unknown) used by the Info screen MIME row
     stream.rs          — ByteStream: io::Read / io::BufRead / io::Seek wrapper over any ByteSource so callers can use io::copy / read_until / lines (tar / cpio / etc. go through this seam); Seek is relative to the range start so a post-BOM range is a clean 0-based seekable stream. `ReadSeek` (Read + Seek) trait alias lets a reader carry either a ByteStream or a Cursor behind one Box (csv seekable reader)
-    compression.rs     — decompress_bytes (5 codecs: gz/bz2/xz/zst/lz4) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
+    compression.rs     — decompress_bytes (6 codecs: gz/bz2/xz/zst/lz4/br — brotli is extension-only, no magic) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
     stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
   extract/
     mod.rs             — Module declarations + re-exports (Extracted, ExtractOptions, ExtractError, extract, sanitize_entry_path)
@@ -291,11 +291,11 @@ src/
       format.rs        — ArchiveFormat enum + label
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper + open_seekable (streams File/TempFile/Memory; RangeReadSeek windows a FileRange over its backing file — no slurp)
       info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
-      extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4]/7z/cpio[gz]/ar. Stored zip / uncompressed tar members → zero-copy InputSource::subrange view (no spool). tar/cpio/ar/7z stream the walk over open_seekable (walk_tar; compressed via backends::tar::decode_compressed; 7z via for_each_entries draining preceding solid-block entries) — never reads the whole archive into RAM, matched body streams to spool
+      extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4/br]/7z/cpio[gz]/ar. Stored zip / uncompressed tar members → zero-copy InputSource::subrange view (no spool). tar/cpio/ar/7z stream the walk over open_seekable (walk_tar; compressed via backends::tar::decode_compressed; 7z via for_each_entries draining preceding solid-block entries) — never reads the whole archive into RAM, matched body streams to spool
       backends/
         mod.rs         — Backend module wiring
         zip.rs         — Zip TOC via central directory (no decompression); returns Vec<FlatEntry>
-        tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/xz/zst/lz4 all stream-decompress (xz via liblzma streaming reader)
+        tar.rs         — Tar TOC via header walk; decode_compressed (shared by listing + extract): gz/bz2/xz/zst/lz4/br all stream-decompress (xz via liblzma streaming reader, br via brotli-decompressor)
         sevenz.rs      — 7-Zip TOC via sevenz-rust2 (header-only)
         cpio.rs        — cpio TOC via hand-rolled newc (`070701`/`070702`) + ODC (`070707`) header walker. CpioReader state machine drives both list (skip bodies) and extract (read matched body). plain + gz wrappers; old-binary cpio not supported
         ar.rs          — ar(1) reader for `.deb`. ArReader header-chain state machine drives both list and extract (same split as CpioReader). Decodes BSD `#1/<len>` long names; GNU `//` string table unhandled (members shown lossily)

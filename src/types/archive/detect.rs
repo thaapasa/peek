@@ -25,6 +25,9 @@ pub fn format_from_name(name: &str) -> Option<ArchiveFormat> {
     if lower.ends_with(".tar.lz4") || lower.ends_with(".tlz4") {
         return Some(ArchiveFormat::TarLz4);
     }
+    if lower.ends_with(".tar.br") || lower.ends_with(".tbr") {
+        return Some(ArchiveFormat::TarBr);
+    }
     if lower.ends_with(".tar") {
         return Some(ArchiveFormat::Tar);
     }

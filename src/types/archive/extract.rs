@@ -50,6 +50,7 @@ pub fn extract(
         ArchiveFormat::TarXz => extract_tar(source, &target, key, TarCompression::Xz, opts),
         ArchiveFormat::TarZst => extract_tar(source, &target, key, TarCompression::Zst, opts),
         ArchiveFormat::TarLz4 => extract_tar(source, &target, key, TarCompression::Lz4, opts),
+        ArchiveFormat::TarBr => extract_tar(source, &target, key, TarCompression::Br, opts),
         ArchiveFormat::SevenZ => extract_7z(source, &target, key, opts),
         ArchiveFormat::Ar => extract_ar(source, &target, key, opts),
         ArchiveFormat::Cpio => extract_cpio(source, &target, key, CpioCompression::None, opts),
@@ -251,6 +252,7 @@ enum TarCompression {
     Xz,
     Zst,
     Lz4,
+    Br,
 }
 
 impl TarCompression {
@@ -263,6 +265,7 @@ impl TarCompression {
             TarCompression::Xz => Some(CompressionFormat::Xz),
             TarCompression::Zst => Some(CompressionFormat::Zst),
             TarCompression::Lz4 => Some(CompressionFormat::Lz4),
+            TarCompression::Br => Some(CompressionFormat::Br),
         }
     }
 }
@@ -482,6 +485,20 @@ mod tests {
             &opts(),
         )
         .expect("tar.lz4 extract");
+        assert_eq!(extracted.suggested_name, "fibonacci.py");
+        let bytes = extracted.source.read_bytes().unwrap();
+        assert_eq!(bytes.len(), 2_250);
+    }
+
+    #[test]
+    fn extract_tar_br_returns_known_entry() {
+        let extracted = extract(
+            &fixture("archive.tar.br"),
+            ArchiveFormat::TarBr,
+            STABLE_ENTRY,
+            &opts(),
+        )
+        .expect("tar.br extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted.source.read_bytes().unwrap();
         assert_eq!(bytes.len(), 2_250);
@@ -774,6 +791,7 @@ mod tests {
             ("archive.tar.xz", ArchiveFormat::TarXz),
             ("archive.tar.zst", ArchiveFormat::TarZst),
             ("archive.tar.lz4", ArchiveFormat::TarLz4),
+            ("archive.tar.br", ArchiveFormat::TarBr),
             ("archive.7z", ArchiveFormat::SevenZ),
             ("archive.cpio", ArchiveFormat::Cpio),
             ("archive.cpio.gz", ArchiveFormat::CpioGz),

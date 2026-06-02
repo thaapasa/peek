@@ -143,14 +143,6 @@ Stretch:
   and checksums). The current shape — face-cycle keys (`n` / `p`) on the SpecimenMode and
   every face's metadata in Info — covers the visible use case at a fraction of the cost.
 
-### Single-File Compressed ◐
-
-| Format | Extensions |
-|--------|------------|
-| brotli | `.br`      |
-
-Brotli would slot into the same transparent-decompress pipeline (`brotli` crate).
-
 ### Certificates and Keys — DER / PKCS#12 / JWK ☐
 
 | Format        | Extensions      | Notes                                                                                                                                                                                                 |

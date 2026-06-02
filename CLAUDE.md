@@ -33,7 +33,7 @@ src/
   input/               — InputSource (File / Memory / FileRange / TempFile) + ByteSource +
                          LineSource (streaming, anchor-indexed); detect (magic-byte / extension /
                          sniff); mime (RFC 6838 classification); stream (ByteSource → io::Read /
-                         io::BufRead); compression (gz/bz2/xz/zst/lz4); stdin reopen
+                         io::BufRead); compression (gz/bz2/xz/zst/lz4/br); stdin reopen
   extract/             — FileType → per-type extractor dispatch; Extracted / Options / Error;
                          path sanitiser; stdout-stream or file write
   output/              — PrintOutput (write-once stdout for --print / pipes / --info);

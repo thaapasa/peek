@@ -1876,6 +1876,7 @@ name = "peek"
 version = "0.2.10"
 dependencies = [
  "anyhow",
+ "brotli-decompressor",
  "bytes",
  "bzip2",
  "cafebabe",

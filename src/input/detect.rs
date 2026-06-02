@@ -170,6 +170,8 @@ pub enum CompressionFormat {
     Zst,
     /// lz4 frame stream (`.lz4`).
     Lz4,
+    /// brotli stream (`.br`). No magic header — extension-only.
+    Br,
 }
 
 impl CompressionFormat {
@@ -181,6 +183,7 @@ impl CompressionFormat {
             Self::Xz => "xz",
             Self::Zst => "zstd",
             Self::Lz4 => "lz4",
+            Self::Br => "brotli",
         }
     }
 
@@ -193,6 +196,7 @@ impl CompressionFormat {
             Self::Xz => ".xz",
             Self::Zst => ".zst",
             Self::Lz4 => ".lz4",
+            Self::Br => ".br",
         }
     }
 }
@@ -563,10 +567,15 @@ fn compression_format_from_name(name: &str) -> Option<CompressionFormat> {
     if lower.ends_with(".lz4") {
         return Some(CompressionFormat::Lz4);
     }
+    if lower.ends_with(".br") {
+        return Some(CompressionFormat::Br);
+    }
     None
 }
 
 /// Map an `infer` magic-byte MIME to a single-stream compression codec.
+/// Brotli is deliberately absent: a raw `.br` stream has no signature,
+/// so it can't be sniffed and is detected by extension only.
 fn compression_format_from_mime(mime: &str) -> Option<CompressionFormat> {
     match mime {
         "application/gzip" | "application/x-gzip" => Some(CompressionFormat::Gz),

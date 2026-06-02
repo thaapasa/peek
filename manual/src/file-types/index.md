@@ -20,8 +20,8 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Images            | PNG, JPEG, GIF, WebP, BMP, TIFF, ICO, AVIF, PNM, TGA, EXR, QOI, DDS |
 | Vector            | SVG (incl. CSS `@keyframes` animation)                      |
 | Audio             | MP3, FLAC, Ogg, Opus, WAV, MPEG-4, AAC, AIFF, CAF, MKA, WMA |
-| Archives          | ZIP, tar (+gz/bz2/xz/zst/lz4), 7-Zip, cpio, ar / `.deb`     |
-| Compression       | gzip, bzip2, xz, zstd, lz4 (bare wrappers — open through)   |
+| Archives          | ZIP, tar (+gz/bz2/xz/zst/lz4/br), 7-Zip, cpio, ar / `.deb`  |
+| Compression       | gzip, bzip2, xz, zstd, lz4, brotli (bare wrappers)          |
 | Comic archives    | CBZ                                                         |
 | Disk images       | ISO 9660, DMG (UDIF trailer)                                |
 | Filesystem        | Directories (one-level listing)                             |

@@ -13,6 +13,7 @@ instantly.
 | Tar + xz      | `.tar.xz`, `.txz`              |      |
 | Tar + zstd    | `.tar.zst`, `.tzst`            |      |
 | Tar + lz4     | `.tar.lz4`, `.tlz4`            |      |
+| Tar + brotli  | `.tar.br`, `.tbr`             |      |
 | 7-Zip         | `.7z`                          | [7-Zip format](https://www.7-zip.org/7z.html) |
 | cpio          | `.cpio` (+ `.cpio.gz`)         | newc / ODC headers; old-binary not supported   |
 | ar / Debian   | `.ar`, `.deb`, `.a`            | Unix `ar(1)` archive (also Debian binary packages) |
@@ -48,6 +49,11 @@ view adds a Compression row showing the codec plus before / after sizes.
 | xz     | `.xz`     |
 | zstd   | `.zst`    |
 | lz4    | `.lz4`    |
+| brotli | `.br`     |
 
 Decompressed output is capped at 256 MiB. Larger streams surface a warning and the viewer falls
 back to a hex view of the raw compressed bytes.
+
+Brotli is the one exception to magic-byte detection: a raw brotli stream carries no signature,
+so `.br` / `.tar.br` are recognised by extension only — a brotli stream piped through stdin
+without a filename won't be auto-detected.
