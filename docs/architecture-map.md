@@ -95,9 +95,11 @@ src/
       info_render.rs   — Render PEM info section (Content + per-entry blocks: Subject / Issuer / Serial / NotBefore / NotAfter / Days Left / Public Key / Signature / SANs / Key Usage / fingerprints). Days-Left ≤ 30 painted as warning; expired painted as warning with negative day count
     font/
       mod.rs           — Module wiring
-      format.rs        — FontFormat enum (TrueType / OpenType / Collection) + label
-      detect.rs        — format_from_ext (`.ttf` / `.otf` / `.ttc` / `.otc`) + sniff_font_bytes (4-byte magic: `00 01 00 00` / `true` / `OTTO` / `ttcf`). WOFF / WOFF2 deferred (need separate decompressors)
-      compose.rs       — compose(): rasterise specimen → SpecimenMode (primary view). Best-effort — a font fontdue can't parse skips the specimen push and falls through to the Info + Hex tail
+      format.rs        — FontFormat enum (TrueType / OpenType / Collection / Woff) + label
+      detect.rs        — format_from_ext (`.ttf` / `.otf` / `.ttc` / `.otc` / `.woff`) + sniff_font_bytes (4-byte magic: `00 01 00 00` / `true` / `OTTO` / `ttcf` / `wOFF`). WOFF2 deferred (needs brotli + table transform)
+      sfnt.rs          — decode(bytes, format) → Cow<[u8]>: single entry point handing every consumer raw sfnt. Bare TrueType/OpenType/Collection borrow through (no copy); Woff unwraps to an owned buffer. Called first by both info_gather (font_gather) and compose
+      woff.rs          — decode(): WOFF 1.0 → sfnt. Rebuilds the offset table + directory, inflates each table (zlib via in-tree flate2, or copies verbatim when stored uncompressed), 4-byte-aligns table data. Bounds-checked against hostile input; metadata/private blocks dropped. No new dep
+      compose.rs       — compose(): unwrap to sfnt (sfnt::decode) → rasterise specimen → SpecimenMode (primary view). Best-effort — a font fontdue can't parse (or a malformed WOFF) skips the specimen push and falls through to the Info + Hex tail
       info.rs          — FontInfo { format, face_count, faces, parse_errors } + FaceInfo (family / subfamily / postscript_name / version / OS/2 weight + width / italic / monospaced / glyph_count / units_per_em / codepoint_count / scripts / hinting / designer / vendor / copyright / license_url)
       info_gather.rs   — ttf-parser Face walk: read_name_table (UTF-16BE + Mac Roman decoders — Apple system fonts still ship Macintosh-platform records as canonical, so the full Mac Roman upper-half mapping is bundled here) + head_flags (hinting bit) + scan_cmap (Unicode codepoint count + 12-bucket script coverage from cmap ranges). Every face in a collection is gathered; face_count() exposed so the compose path can size SpecimenMode's cycle range without re-parsing
       info_render.rs   — Render Font info section (Format + Faces count for collections, then a per-face block per FaceInfo). Weight painted as `<class> (<name>)` for canonical OS/2 weights, bare number otherwise; empty name-table fields skip their row entirely

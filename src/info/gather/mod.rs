@@ -371,5 +371,10 @@ fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) 
     let Ok(bytes) = source.read_bytes() else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    FileExtras::Font(crate::types::font::info_gather::gather(&bytes, fmt))
+    // Unwrap WOFF to its inner sfnt before parsing; bare sfnt borrows
+    // through. A malformed wrapper falls back to the binary view.
+    let Ok(sfnt) = crate::types::font::sfnt::decode(&bytes, fmt) else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    FileExtras::Font(crate::types::font::info_gather::gather(&sfnt, fmt))
 }

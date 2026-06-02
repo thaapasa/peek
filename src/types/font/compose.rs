@@ -8,11 +8,14 @@
 //! parse falls through silently, leaving the user with the Info +
 //! Hex tail from the universal append (still useful).
 
+use std::borrow::Cow;
+
 use anyhow::Result;
+use bytes::Bytes;
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::Detected;
+use crate::input::detect::{Detected, FileType};
 use crate::types::font::info_gather;
 use crate::types::font::specimen;
 use crate::types::font::specimen_mode::SpecimenMode;
@@ -28,25 +31,39 @@ const SPECIMEN_TARGET_HEIGHT_PX: u32 = 320;
 
 pub fn compose(
     source: &InputSource,
-    _detected: &Detected,
+    detected: &Detected,
     args: &Args,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
+    let FileType::Font(fmt) = detected.file_type else {
+        return Ok(());
+    };
+
     // Best-effort: a malformed font (or one fontdue rejects) skips the
     // specimen and falls through to the universal Info + Hex tail.
-    if let Ok(bytes) = source.read_bytes()
-        && let Ok(image) = specimen::rasterise(&bytes, 0, SPECIMEN_TARGET_HEIGHT_PX)
-    {
-        let config = crate::viewer::image_config(args);
-        let face_count = info_gather::face_count(&bytes);
-        modes.push(Box::new(SpecimenMode::new(
-            bytes,
-            face_count,
-            image,
-            SPECIMEN_TARGET_HEIGHT_PX,
-            config,
-        )));
+    if let Ok(bytes) = source.read_bytes() {
+        // Unwrap WOFF to its inner sfnt before fontdue sees it. Bare
+        // sfnt borrows through, so clone the refcounted handle rather
+        // than copying; WOFF produces an owned buffer. SpecimenMode
+        // keeps these bytes to re-rasterise on face cycle / zoom, so it
+        // must hold the decoded sfnt, not the wrapper.
+        let sfnt: Bytes = match crate::types::font::sfnt::decode(&bytes, fmt) {
+            Ok(Cow::Borrowed(_)) => bytes.clone(),
+            Ok(Cow::Owned(v)) => Bytes::from(v),
+            Err(_) => return Ok(()),
+        };
+        if let Ok(image) = specimen::rasterise(&sfnt, 0, SPECIMEN_TARGET_HEIGHT_PX) {
+            let config = crate::viewer::image_config(args);
+            let face_count = info_gather::face_count(&sfnt);
+            modes.push(Box::new(SpecimenMode::new(
+                sfnt,
+                face_count,
+                image,
+                SPECIMEN_TARGET_HEIGHT_PX,
+                config,
+            )));
+        }
     }
     Ok(())
 }

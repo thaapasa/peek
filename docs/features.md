@@ -827,11 +827,18 @@ prompt, JWK. Tracked in [planned.md](planned.md).
 
 ### Fonts ◐
 
-TrueType and OpenType wrappers (`.ttf` / `.otf`) plus font collections (`.ttc` / `.otc`) decode
-into a themed **Font** info section. Detection runs both ways: extension routing covers the four
-extensions; magic-byte sniff catches `00 01 00 00` / `OTTO` / `ttcf` / Apple's `true` variant,
-so unnamed sources (stdin, archive entries) still classify. Source view is omitted — fonts are
-binary containers, so the universal hex aux mode handles raw byte inspection.
+TrueType and OpenType wrappers (`.ttf` / `.otf`), font collections (`.ttc` / `.otc`), and the
+WOFF web wrapper (`.woff`) decode into a themed **Font** info section. Detection runs both ways:
+extension routing covers the five extensions; magic-byte sniff catches `00 01 00 00` / `OTTO` /
+`ttcf` / Apple's `true` variant / `wOFF`, so unnamed sources (stdin, archive entries) still
+classify. Source view is omitted — fonts are binary containers, so the universal hex aux mode
+handles raw byte inspection.
+
+WOFF 1.0 is zlib-per-table compression around an ordinary sfnt: the container is unwrapped to
+its inner sfnt (offset table + directory rebuilt, each table inflated) before the metadata /
+specimen pipeline runs, so every downstream consumer sees a plain font. The unwrap reuses the
+`flate2` zlib decoder already in the tree — no new dependency. Detection is content-true (`wOFF`
+has a magic signature, unlike a bare `.br` stream).
 
 Per face:
 
@@ -863,8 +870,8 @@ parse leaves the previous specimen in place rather than going blank.
 Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
 (pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser.
 
-WOFF / WOFF2 wrappers and multi-script sample sentences keyed on cmap coverage are
-[planned](planned.md#font-files-).
+The WOFF2 wrapper (brotli, whole-font transform) and multi-script sample sentences keyed on
+cmap coverage are [planned](planned.md#font-files-).
 
 ### Binary and Archive Files ◐
 

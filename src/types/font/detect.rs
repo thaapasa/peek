@@ -14,6 +14,7 @@ pub fn format_from_ext(ext: &str) -> Option<FontFormat> {
         "ttf" => FontFormat::TrueType,
         "otf" => FontFormat::OpenType,
         "ttc" | "otc" => FontFormat::Collection,
+        "woff" => FontFormat::Woff,
         _ => return None,
     })
 }
@@ -38,6 +39,9 @@ pub fn sniff_font_bytes(head: &[u8]) -> Option<FontFormat> {
     if sig == b"ttcf" {
         return Some(FontFormat::Collection);
     }
+    if sig == b"wOFF" {
+        return Some(FontFormat::Woff);
+    }
     None
 }
 
@@ -51,7 +55,7 @@ mod tests {
         assert_eq!(format_from_ext("otf"), Some(FontFormat::OpenType));
         assert_eq!(format_from_ext("ttc"), Some(FontFormat::Collection));
         assert_eq!(format_from_ext("otc"), Some(FontFormat::Collection));
-        assert_eq!(format_from_ext("woff"), None);
+        assert_eq!(format_from_ext("woff"), Some(FontFormat::Woff));
         assert_eq!(format_from_ext("txt"), None);
     }
 
@@ -64,6 +68,7 @@ mod tests {
         assert_eq!(sniff_font_bytes(b"true...."), Some(FontFormat::TrueType));
         assert_eq!(sniff_font_bytes(b"OTTOxxxx"), Some(FontFormat::OpenType));
         assert_eq!(sniff_font_bytes(b"ttcfxxxx"), Some(FontFormat::Collection));
+        assert_eq!(sniff_font_bytes(b"wOFFxxxx"), Some(FontFormat::Woff));
     }
 
     #[test]
@@ -71,9 +76,8 @@ mod tests {
         assert_eq!(sniff_font_bytes(b""), None);
         assert_eq!(sniff_font_bytes(b"OTT"), None);
         assert_eq!(sniff_font_bytes(b"PNG\x0d"), None);
-        // WOFF / WOFF2 wrappers exist but are deferred — sniff should
-        // not surface them as Font today.
-        assert_eq!(sniff_font_bytes(b"wOFFxxxx"), None);
+        // WOFF2 (brotli, whole-font transform) is still deferred — sniff
+        // should not surface it as Font yet.
         assert_eq!(sniff_font_bytes(b"wOF2xxxx"), None);
     }
 }

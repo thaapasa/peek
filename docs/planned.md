@@ -132,12 +132,13 @@ Crates: `ical` (covers both iCalendar and vCard, pure Rust).
 
 ### Font Files ◐
 
-| Format    | Extensions        |
-|-----------|-------------------|
-| Web fonts | `.woff`, `.woff2` |
+| Format    | Extensions |
+|-----------|------------|
+| Web fonts | `.woff2`   |
 
-WOFF / WOFF2 need separate decompressors (zlib / brotli) — deferred until the case for shipping
-their dep weight is concrete.
+WOFF 1.0 (`.woff`) ships — it unwraps to sfnt with the in-tree `flate2` zlib decoder. WOFF2
+(`.woff2`) is brotli plus a whole-font table transform (glyf/loca re-encoding), so it needs the
+`brotli` crate and a transform-reconstruction step; deferred until that lands.
 
 Stretch:
 

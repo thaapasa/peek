@@ -14,9 +14,10 @@ peek /System/Library/Fonts/Menlo.ttc
 - `.ttf` — TrueType outline fonts
 - `.otf` — OpenType / CFF outline fonts
 - `.ttc` / `.otc` — TrueType / OpenType collections (multiple faces in one file)
+- `.woff` — WOFF 1.0 web fonts (unwrapped to their inner font before display)
 
-WOFF and WOFF2 wrappers are not yet wired — they need separate decompressors. Tracked in
-[planned features](https://github.com/thaapasa/peek/blob/main/docs/planned.md).
+WOFF2 (`.woff2`) is not yet wired — it needs a brotli decompressor and a font-table transform
+step. Tracked in [planned features](https://github.com/thaapasa/peek/blob/main/docs/planned.md).
 
 ## Detection
 

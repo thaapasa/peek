@@ -401,6 +401,7 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
                 FontFormat::TrueType => "font/ttf",
                 FontFormat::OpenType => "font/otf",
                 FontFormat::Collection => "font/collection",
+                FontFormat::Woff => "font/woff",
             }
             .to_string(),
         );
@@ -454,6 +455,7 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         "font/ttf" | "application/font-sfnt" => Some(FontFormat::TrueType),
         "font/otf" => Some(FontFormat::OpenType),
         "font/collection" => Some(FontFormat::Collection),
+        "font/woff" | "application/font-woff" => Some(FontFormat::Woff),
         _ => None,
     } {
         return Some(FileType::Font(fmt));

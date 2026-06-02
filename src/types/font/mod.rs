@@ -11,5 +11,7 @@ pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
+pub mod sfnt;
 pub mod specimen;
 pub mod specimen_mode;
+pub mod woff;
