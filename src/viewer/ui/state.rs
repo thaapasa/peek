@@ -831,11 +831,23 @@ impl ViewerState {
                     // different file type, rebuild the frame and retry
                     // the render. Applies uniformly to root and nested
                     // descended frames.
-                    if !self.frame().retry_attempted && self.retry_frame_detection()? {
-                        let active = self.frame().active;
-                        let view = self.render_active()?;
-                        self.frame_mut().views[active] = Some(view);
-                    } else if let Some(view) = self.degrade_active_to_hex(&e)? {
+                    let render_err =
+                        if !self.frame().retry_attempted && self.retry_frame_detection()? {
+                            let active = self.frame().active;
+                            match self.render_active() {
+                                Ok(view) => {
+                                    self.frame_mut().views[active] = Some(view);
+                                    return Ok(());
+                                }
+                                // Re-detected type also fails to render;
+                                // fall through to the Hex degrade below
+                                // with the new error.
+                                Err(e2) => e2,
+                            }
+                        } else {
+                            e
+                        };
+                    if let Some(view) = self.degrade_active_to_hex(&render_err)? {
                         // Re-detection didn't help (or already ran): the
                         // active mode genuinely can't render this input
                         // (corrupt image, malformed payload, …). Rather
@@ -846,7 +858,7 @@ impl ViewerState {
                         let active = self.frame().active;
                         self.frame_mut().views[active] = Some(view);
                     } else {
-                        return Err(e);
+                        return Err(render_err);
                     }
                 }
             }

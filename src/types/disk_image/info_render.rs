@@ -315,7 +315,7 @@ fn compression_desc(p: &DmgPartition) -> String {
     }
 }
 
-/// `"408 (405 zlib, 2 raw, 1 zero-fill)"` — count plus run-type histogram.
+/// `"408 (1 zero-fill, 2 raw, 405 zlib)"` — count plus run-type histogram.
 fn chunks_desc(p: &DmgPartition) -> String {
     if p.chunk_count == 0 {
         return "0".to_string();
