@@ -147,6 +147,11 @@ ttf-parser = "0.25"
 # Glyph rasterizer for font specimen render. Already used by the image
 # pipeline's glyph atlas; now also promoted to a runtime dep.
 fontdue = "0.9"
+# WOFF2 → sfnt unwrap. Pure Rust (brotli-decompressor, no C++ FFI); we
+# enable only the `brotli` feature since the woff1 path is hand-rolled
+# on the in-tree flate2 (see types/font/woff.rs). Handles the brotli
+# stream + the glyf/loca table transform that bare decompression can't.
+wuff = { version = "0.2", default-features = false, features = ["brotli"] }
 calamine = "0.35.0"
 
 # Email (.eml / .mbox) parsing. Pure Rust, no system deps. Parses one

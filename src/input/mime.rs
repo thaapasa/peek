@@ -223,6 +223,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Font(crate::input::detect::FontFormat::OpenType) => "font/otf",
         FileType::Font(crate::input::detect::FontFormat::Collection) => "font/collection",
         FileType::Font(crate::input::detect::FontFormat::Woff) => "font/woff",
+        FileType::Font(crate::input::detect::FontFormat::Woff2) => "font/woff2",
         FileType::Sqlite(_) => "application/vnd.sqlite3",
         // For Image, Archive, Compressed, ObjectFile, and Binary, the
         // magic-byte MIME is more specific than any generic registered

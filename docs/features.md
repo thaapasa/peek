@@ -828,17 +828,24 @@ prompt, JWK. Tracked in [planned.md](planned.md).
 ### Fonts ◐
 
 TrueType and OpenType wrappers (`.ttf` / `.otf`), font collections (`.ttc` / `.otc`), and the
-WOFF web wrapper (`.woff`) decode into a themed **Font** info section. Detection runs both ways:
-extension routing covers the five extensions; magic-byte sniff catches `00 01 00 00` / `OTTO` /
-`ttcf` / Apple's `true` variant / `wOFF`, so unnamed sources (stdin, archive entries) still
-classify. Source view is omitted — fonts are binary containers, so the universal hex aux mode
-handles raw byte inspection.
+WOFF / WOFF2 web wrappers (`.woff` / `.woff2`) decode into a themed **Font** info section.
+Detection runs both ways: extension routing covers the six extensions; magic-byte sniff catches
+`00 01 00 00` / `OTTO` / `ttcf` / Apple's `true` variant / `wOFF` / `wOF2`, so unnamed sources
+(stdin, archive entries) still classify. Source view is omitted — fonts are binary containers,
+so the universal hex aux mode handles raw byte inspection.
 
-WOFF 1.0 is zlib-per-table compression around an ordinary sfnt: the container is unwrapped to
-its inner sfnt (offset table + directory rebuilt, each table inflated) before the metadata /
-specimen pipeline runs, so every downstream consumer sees a plain font. The unwrap reuses the
-`flate2` zlib decoder already in the tree — no new dependency. Detection is content-true (`wOFF`
-has a magic signature, unlike a bare `.br` stream).
+Both web wrappers are unwrapped to their inner sfnt before the metadata / specimen pipeline
+runs, so every downstream consumer sees a plain font:
+
+- **WOFF 1.0** — zlib-per-table compression around an ordinary sfnt. Unwrapped in-tree (offset
+  table + directory rebuilt, each table inflated) on the `flate2` zlib decoder already present —
+  no new dependency.
+- **WOFF 2.0** — a single brotli stream plus a glyf/loca table transform, so bare decompression
+  isn't enough: the glyf table is re-encoded and loca must be rebuilt from it. Delegated to
+  `wuff` (pure Rust, `brotli-decompressor` — no C++ FFI), which reconstructs the sfnt.
+
+Detection is content-true for both — `wOFF` / `wOF2` carry magic signatures, unlike a bare
+`.br` stream.
 
 Per face:
 
@@ -868,10 +875,10 @@ metadata block (family / subfamily / weight / glyphs / scripts / …). A face fo
 parse leaves the previous specimen in place rather than going blank.
 
 Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post` table walks
-(pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser.
+(pure Rust, no_std, zero-alloc). `fontdue` for the specimen rasteriser. `wuff` for the WOFF2
+unwrap.
 
-The WOFF2 wrapper (brotli, whole-font transform) and multi-script sample sentences keyed on
-cmap coverage are [planned](planned.md#font-files-).
+Multi-script sample sentences keyed on cmap coverage are [planned](planned.md#font-files-).
 
 ### Binary and Archive Files ◐
 
