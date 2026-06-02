@@ -220,6 +220,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Csv(crate::input::detect::CsvFormat::Tsv) => "text/tab-separated-values",
         FileType::Cert(crate::input::detect::CertFormat::Pem) => "application/x-pem-file",
         FileType::Cert(crate::input::detect::CertFormat::Der) => "application/pkix-cert",
+        FileType::Cert(crate::input::detect::CertFormat::Jwk) => "application/jwk+json",
         FileType::Font(crate::input::detect::FontFormat::TrueType) => "font/ttf",
         FileType::Font(crate::input::detect::FontFormat::OpenType) => "font/otf",
         FileType::Font(crate::input::detect::FontFormat::Collection) => "font/collection",
@@ -305,7 +306,7 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::VObject(crate::input::detect::VObjectFormat::ICal) => &["ics", "ical", "ifb"],
         FileType::VObject(crate::input::detect::VObjectFormat::VCard) => &["vcf", "vcard"],
         FileType::Cert(_) => &[
-            "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub", "der",
+            "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub", "der", "jwk", "jwks",
         ],
         FileType::Comic(ComicFormat::Cbz) => &["cbz"],
         FileType::Ebook(EbookFormat::Epub) => &["epub"],

@@ -7,16 +7,40 @@
 //! crate root, named `base64`, so any other type that needs to decode
 //! an embedded blob can reuse it instead of rolling its own.
 
-/// Map one base64 alphabet byte to its 6-bit value.
+/// Map one base64 alphabet byte to its 6-bit value. Accepts both the
+/// standard (`+` / `/`) and URL-safe (`-` / `_`) alphabets — they don't
+/// overlap, so one table decodes either without a mode flag (JWK members
+/// are base64url).
 fn sextet(b: u8) -> Option<u32> {
     Some(match b {
         b'A'..=b'Z' => u32::from(b - b'A'),
         b'a'..=b'z' => u32::from(b - b'a') + 26,
         b'0'..=b'9' => u32::from(b - b'0') + 52,
-        b'+' => 62,
-        b'/' => 63,
+        b'+' | b'-' => 62,
+        b'/' | b'_' => 63,
         _ => return None,
     })
+}
+
+/// Encode bytes as URL-safe base64 (`-` / `_` alphabet) with no `=`
+/// padding — the form RFC 7638 mandates for a JWK thumbprint.
+pub(crate) fn encode_url(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    let mut acc = 0u32;
+    let mut bits = 0u32;
+    for &b in bytes {
+        acc = (acc << 8) | u32::from(b);
+        bits += 8;
+        while bits >= 6 {
+            bits -= 6;
+            out.push(ALPHABET[((acc >> bits) & 0x3f) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(ALPHABET[((acc << (6 - bits)) & 0x3f) as usize] as char);
+    }
+    out
 }
 
 /// Decode a base64 string. Whitespace (line wraps) and `=` padding are
@@ -81,5 +105,26 @@ mod tests {
         for s in ["aGVsbG8=", "aGVsbG8gd29ybGQ=", "iVBORw0KGgo="] {
             assert_eq!(decoded_len(s), decode(s).unwrap().len(), "len for {s}");
         }
+    }
+
+    #[test]
+    fn encode_url_no_padding_and_url_alphabet() {
+        // No `=` padding; uses `-` / `_` rather than `+` / `/`.
+        assert_eq!(encode_url(b""), "");
+        assert_eq!(encode_url(b"hello"), "aGVsbG8");
+        assert_eq!(encode_url(&[0xff, 0xff, 0xfe]), "___-");
+    }
+
+    #[test]
+    fn decode_round_trips_url_alphabet() {
+        for v in [&b"hi"[..], &[0xff, 0xef, 0x00, 0x10], &[0xfb, 0xff]] {
+            assert_eq!(decode(&encode_url(v)).unwrap(), v);
+        }
+    }
+
+    #[test]
+    fn decode_accepts_url_alphabet() {
+        // `-_` map to the same 62 / 63 as `+/`.
+        assert_eq!(decode("__8").unwrap(), vec![0xff, 0xff]);
     }
 }

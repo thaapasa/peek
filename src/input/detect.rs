@@ -657,6 +657,16 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
                 if value.get("nbformat").is_some() && value.get("cells").is_some() {
                     return Some((FileType::Notebook, "application/x-ipynb+json"));
                 }
+                // A JSON Web Key / Key Set routes to the cert viewer (key
+                // sidecar + pretty JSON source), not the generic JSON view.
+                if cert_detect::sniff_jwk(&value) {
+                    let mime = if value.get("keys").is_some() {
+                        "application/jwk-set+json"
+                    } else {
+                        "application/jwk+json"
+                    };
+                    return Some((FileType::Cert(CertFormat::Jwk), mime));
+                }
                 return Some((
                     FileType::Structured(StructuredFormat::Json),
                     "application/json",

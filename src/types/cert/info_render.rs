@@ -1,8 +1,8 @@
 use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
 use crate::types::cert::info::{
-    CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, KeyEntry, KeyType, SshPubKeyEntry,
-    UnknownEntry,
+    CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, JwkEntry, KeyEntry, KeyType,
+    SshPubKeyEntry, UnknownEntry,
 };
 use crate::types::text::info_render::push_text_stats;
 
@@ -61,6 +61,7 @@ fn entry_title(entry: &CertEntry, index: usize) -> String {
         CertEntry::PrivateKey(_) => "Private Key",
         CertEntry::PublicKey(_) => "Public Key",
         CertEntry::SshPublicKey(_) => "SSH Public Key",
+        CertEntry::JsonWebKey(_) => "JSON Web Key",
         CertEntry::Unknown(_) => "Unknown",
     };
     format!("{kind} #{index}")
@@ -74,7 +75,39 @@ fn render_entry(lines: &mut Vec<String>, entry: &CertEntry, theme: &PeekTheme) {
         CertEntry::PrivateKey(k) => render_key(lines, k, theme, false),
         CertEntry::PublicKey(k) => render_key(lines, k, theme, true),
         CertEntry::SshPublicKey(k) => render_ssh_pubkey(lines, k, theme),
+        CertEntry::JsonWebKey(k) => render_jwk(lines, k, theme),
         CertEntry::Unknown(u) => render_unknown(lines, u, theme),
+    }
+}
+
+fn render_jwk(lines: &mut Vec<String>, k: &JwkEntry, theme: &PeekTheme) {
+    let kind = match &k.crv {
+        Some(crv) if !crv.is_empty() => format!("{} ({crv})", k.kty),
+        _ => k.kty.clone(),
+    };
+    push_field(lines, "Type", &theme.paint_value(&kind), theme);
+    if let Some(bits) = k.key_size_bits {
+        push_field(lines, "Bits", &theme.paint_value(&bits.to_string()), theme);
+    }
+    if let Some(alg) = &k.alg {
+        push_field(lines, "Algorithm", &theme.paint_value(alg), theme);
+    }
+    if let Some(use_) = &k.use_ {
+        push_field(lines, "Use", &theme.paint_value(use_), theme);
+    }
+    if !k.key_ops.is_empty() {
+        push_field(
+            lines,
+            "Key Ops",
+            &theme.paint_value(&k.key_ops.join(", ")),
+            theme,
+        );
+    }
+    if let Some(kid) = &k.kid {
+        push_field(lines, "Key ID", &theme.paint_muted(kid), theme);
+    }
+    if let Some(tp) = &k.thumbprint {
+        push_field(lines, "Thumbprint", &theme.paint_muted(tp), theme);
     }
 }
 

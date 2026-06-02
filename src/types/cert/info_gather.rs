@@ -81,6 +81,29 @@ pub fn gather_der(der: &[u8]) -> CertInfo {
     }
 }
 
+/// Build [`CertInfo`] for a JWK / JWK Set. The source is JSON text, so it
+/// keeps the text-stats Content block (like PEM); the entries section
+/// holds one decoded key per JWK. A JSON parse failure lands in
+/// `parse_errors` so the Content section still renders.
+pub fn gather_jwk(text: &str, text_stats: TextStats) -> CertInfo {
+    let (entries, parse_errors) = match serde_json::from_str::<serde_json::Value>(text) {
+        Ok(value) => (
+            super::jwk::parse(&value)
+                .into_iter()
+                .map(CertEntry::JsonWebKey)
+                .collect(),
+            Vec::new(),
+        ),
+        Err(e) => (Vec::new(), vec![format!("jwk: {e}")]),
+    };
+    CertInfo {
+        text: Some(text_stats),
+        source_label: "JWK",
+        entries,
+        parse_errors,
+    }
+}
+
 /// Recover a DER blob's kind by trying each structure in turn. Uses a
 /// synthetic label (DER has none) matching the PEM tag each decoder
 /// expects, so the rendered entry reads the same as its PEM twin.

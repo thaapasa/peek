@@ -1,8 +1,9 @@
-//! Per-type compose for cert / key files. PEM gets the source text
-//! viewer; raw DER is binary, so it has no text source — its only view
-//! is the universal Info aux mode (appended by `Registry::compose_modes`
-//! and populated from `FileExtras::Cert`) plus the hex dump. The rich
-//! decode lives in the Info section either way.
+//! Per-type compose for cert / key files. The source view depends on the
+//! container: PEM shows its plain text; JWK shows the pretty-printed JSON
+//! (via the shared structured content mode); raw DER is binary and has no
+//! text source — Info + the universal hex tail carry it. The rich decode
+//! lives in the Info aux mode (appended by `Registry::compose_modes`,
+//! populated from `FileExtras::Cert`) for every container.
 
 use std::rc::Rc;
 
@@ -10,7 +11,7 @@ use anyhow::Result;
 
 use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{CertFormat, Detected};
+use crate::input::detect::{CertFormat, Detected, FileType, StructuredFormat};
 use crate::viewer::ComposeCtx;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 
@@ -22,21 +23,32 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: CertFormat,
 ) -> Result<()> {
-    // DER is binary: no source view, just Info + the universal hex tail.
-    if fmt == CertFormat::Der {
-        return Ok(());
+    match fmt {
+        // DER is binary: no source view, just Info + the universal hex tail.
+        CertFormat::Der => {}
+        // JWK is JSON: reuse the structured content mode so the source view
+        // pretty-prints + highlights exactly like a standalone `.json`.
+        CertFormat::Jwk => {
+            modes.push(ctx.text_content_mode(
+                source,
+                &FileType::Structured(StructuredFormat::Json),
+                args,
+            )?);
+        }
+        CertFormat::Pem => {
+            let line_source = source.open_line_source()?;
+            modes.push(Box::new(ContentMode::new(
+                source.clone(),
+                line_source,
+                Rc::clone(&ctx.theme_manager),
+                ctx.theme_name,
+                ContentModeConfig {
+                    label: "Source",
+                    line_numbers: args.line_numbers,
+                    ..Default::default()
+                },
+            )));
+        }
     }
-    let line_source = source.open_line_source()?;
-    modes.push(Box::new(ContentMode::new(
-        source.clone(),
-        line_source,
-        Rc::clone(&ctx.theme_manager),
-        ctx.theme_name,
-        ContentModeConfig {
-            label: "Source",
-            line_numbers: args.line_numbers,
-            ..Default::default()
-        },
-    )));
     Ok(())
 }

@@ -14,4 +14,7 @@ pub enum CertFormat {
     /// key with no base64 armour and no label. The decoder tries each
     /// structure in turn to recover the kind.
     Der,
+    /// JSON Web Key or Key Set (`.jwk` / `.jwks`) — a JSON document. Gets
+    /// the pretty-printed JSON source view plus a decoded key sidecar.
+    Jwk,
 }

@@ -18,8 +18,18 @@ pub fn format_from_ext(ext: &str) -> Option<CertFormat> {
     match ext {
         "pem" | "csr" | "crl" | "key" | "p7b" | "p7c" | "pub" => Some(CertFormat::Pem),
         "der" => Some(CertFormat::Der),
+        "jwk" | "jwks" => Some(CertFormat::Jwk),
         _ => None,
     }
+}
+
+/// True when a parsed JSON value is a JWK or JWK Set. Lets the content
+/// sniffer route a `.json` JWK to the key viewer instead of the generic
+/// JSON pretty-printer. Tight (`kty` must be a known type) so unrelated
+/// JSON isn't grabbed; the pretty-JSON source view is preserved either
+/// way, so nothing is lost on a match.
+pub fn sniff_jwk(value: &serde_json::Value) -> bool {
+    super::jwk::looks_like_jwk(value)
 }
 
 /// True if `text` opens with a recognisable PEM header (after
@@ -145,7 +155,82 @@ mod tests {
             PrivateKey(_) => "PrivateKey",
             PublicKey(_) => "PublicKey",
             SshPublicKey(_) => "SshPublicKey",
+            JsonWebKey(_) => "JsonWebKey",
             Unknown(_) => "Unknown",
+        }
+    }
+
+    #[test]
+    fn format_from_ext_jwk() {
+        assert_eq!(format_from_ext("jwk"), Some(CertFormat::Jwk));
+        assert_eq!(format_from_ext("jwks"), Some(CertFormat::Jwk));
+    }
+
+    #[test]
+    fn sniff_jwk_accepts_key_and_set_rejects_plain_json() {
+        let jwk: serde_json::Value = serde_json::json!({"kty": "EC", "crv": "P-256"});
+        let set: serde_json::Value = serde_json::json!({"keys": [{"kty": "RSA"}]});
+        let plain: serde_json::Value = serde_json::json!({"name": "x", "kty": "unknown"});
+        let not_keys: serde_json::Value = serde_json::json!({"keys": [{"id": 1}]});
+        assert!(sniff_jwk(&jwk));
+        assert!(sniff_jwk(&set));
+        assert!(!sniff_jwk(&plain));
+        assert!(!sniff_jwk(&not_keys));
+    }
+
+    fn jwks_fixture() -> String {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data/keys.jwks");
+        std::fs::read_to_string(path).expect("keys.jwks fixture")
+    }
+
+    /// Decode the two-key fixture. The expected RFC 7638 thumbprints are
+    /// computed independently (an OpenSSL + Python pass over the same
+    /// keys), so this cross-checks peek's thumbprint against a reference
+    /// implementation rather than against itself.
+    #[test]
+    fn jwk_decodes_set_with_thumbprints() {
+        use crate::types::cert::info::CertEntry;
+        let info = super::super::info_gather::gather_jwk(&jwks_fixture(), stub_stats());
+        assert_eq!(info.source_label, "JWK");
+        assert!(info.parse_errors.is_empty());
+        assert_eq!(info.entries.len(), 2);
+
+        let CertEntry::JsonWebKey(rsa) = &info.entries[0] else {
+            panic!("expected JWK entry");
+        };
+        assert_eq!(rsa.kty, "RSA");
+        assert_eq!(rsa.key_size_bits, Some(2048));
+        assert_eq!(rsa.alg.as_deref(), Some("RS256"));
+        assert_eq!(
+            rsa.thumbprint.as_deref(),
+            Some("SHA-256:Gc2sKhlHnzx8V3y_pGBuw7mVsXCRsljLz8QRfPok7Q4")
+        );
+
+        let CertEntry::JsonWebKey(ec) = &info.entries[1] else {
+            panic!("expected JWK entry");
+        };
+        assert_eq!(ec.kty, "EC");
+        assert_eq!(ec.crv.as_deref(), Some("P-256"));
+        assert_eq!(ec.key_size_bits, Some(256));
+        assert_eq!(ec.key_ops, vec!["verify".to_string()]);
+        assert_eq!(
+            ec.thumbprint.as_deref(),
+            Some("SHA-256:mopLKn99TN2jE4dvMxFAup-xoynNh7THvm-mFf4TQtQ")
+        );
+    }
+
+    fn stub_stats() -> crate::types::text::info::TextStats {
+        use crate::types::text::info::{Encoding, LineEndings, TextStats};
+        TextStats {
+            line_count: 0,
+            word_count: 0,
+            char_count: 0,
+            blank_lines: 0,
+            longest_line_chars: 0,
+            line_endings: LineEndings::Lf,
+            indent_style: None,
+            encoding: Encoding::Utf8,
+            shebang: None,
         }
     }
 }

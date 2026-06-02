@@ -35,6 +35,7 @@ pub enum CertEntry {
     PrivateKey(KeyEntry),
     PublicKey(KeyEntry),
     SshPublicKey(SshPubKeyEntry),
+    JsonWebKey(JwkEntry),
     Unknown(UnknownEntry),
 }
 
@@ -127,6 +128,30 @@ pub struct SshPubKeyEntry {
     /// `SHA256:base64`-formatted fingerprint, matching `ssh-keygen
     /// -l` output for the same key.
     pub fingerprint_sha256: String,
+}
+
+/// One JSON Web Key (RFC 7517). A JWK Set yields one entry per member of
+/// its `keys` array; a bare JWK yields a single entry. Fields not present
+/// in the key are `None` / empty.
+pub struct JwkEntry {
+    /// Key type (`RSA` / `EC` / `oct` / `OKP`) — the one required member.
+    pub kty: String,
+    /// Curve (`P-256`, `Ed25519`, …) for EC / OKP keys.
+    pub crv: Option<String>,
+    /// Intended algorithm (`RS256`, `ES256`, …).
+    pub alg: Option<String>,
+    /// Public-key use (`sig` / `enc`).
+    pub use_: Option<String>,
+    /// Key ID.
+    pub kid: Option<String>,
+    /// Permitted operations (`sign`, `verify`, …).
+    pub key_ops: Vec<String>,
+    /// Best-effort key size — RSA modulus bits, EC / OKP curve bits, or
+    /// `oct` secret bits. `None` when the material to size it is absent.
+    pub key_size_bits: Option<usize>,
+    /// RFC 7638 thumbprint (`base64url(SHA-256(canonical JWK))`),
+    /// prefixed `SHA-256:`. `None` when the required members are missing.
+    pub thumbprint: Option<String>,
 }
 
 pub struct UnknownEntry {

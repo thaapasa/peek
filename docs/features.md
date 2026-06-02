@@ -821,19 +821,23 @@ also deferred.
 
 ### Certificates and Keys ◐
 
-Cryptographic material gets a per-entry Info section. PEM additionally shows the raw source view;
-raw DER is binary, so it gets Info + hex only. Detection runs both ways: extension routing covers
-`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` (PEM) and `.der` (DER); content sniff
-catches anything starting with `-----BEGIN ` or an OpenSSH algorithm prefix (`ssh-rsa`,
-`ssh-ed25519`, `ecdsa-sha2-*`, including the FIDO/U2F `sk-*` variants). `.crt` / `.cer`
-deliberately route by content because they carry *either* encoding — a `-----BEGIN ` lead picks
-PEM, a leading `0x30 0x82` SEQUENCE that fully decodes as an X.509 cert picks DER. The DER sniff
-parses (not just magic-byte matches) so unrelated ASN.1 / BER blobs aren't mislabelled.
+Cryptographic material gets a per-entry Info section. The source view depends on the container:
+PEM shows its text, JWK shows the pretty-printed JSON, raw DER is binary so it gets Info + hex
+only. Detection runs both ways: extension routing covers `.pem` / `.csr` / `.crl` / `.key` /
+`.p7b` / `.p7c` / `.pub` (PEM), `.der` (DER), and `.jwk` / `.jwks` (JWK); content sniff catches
+`-----BEGIN ` headers, OpenSSH algorithm prefixes (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`, incl.
+the FIDO/U2F `sk-*` variants), a JSON object whose `kty` is a known key type, and raw DER. `.crt`
+/ `.cer` deliberately route by content because they carry *either* PEM or DER — a `-----BEGIN `
+lead picks PEM, a leading `0x30 0x82` SEQUENCE that fully decodes as an X.509 cert picks DER. The
+DER and JWK sniffs both parse (not just pattern-match) so unrelated ASN.1 / JSON isn't mislabelled.
+A `.json`-named JWK keeps the generic JSON view — the JWK sniff only fires for `.jwk` / `.jwks`,
+stdin, and extension-less files, where the extension isn't already authoritative.
 
-Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports); a DER
-file is one entry. Each renders as its own block under the info section (headed **PEM** or **DER**
-by source). DER carries no label, so its kind is recovered by structure: X.509 cert, then CRL,
-then CSR, then a PKCS#8 / SPKI key — first that decodes wins:
+Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports), a JWK
+Set holds one per `keys` member, a DER file is one entry. Each renders as its own block under the
+info section (headed **PEM** / **DER** / **JWK** by source). DER carries no label, so its kind is
+recovered by structure: X.509 cert, then CRL, then CSR, then a PKCS#8 / SPKI key — first that
+decodes wins:
 
 | Entry             | Surface fields                                                                                                                                                                                                                                                                                                                           |
 |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -843,17 +847,19 @@ then CSR, then a PKCS#8 / SPKI key — first that decodes wins:
 | Private key       | label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size (best-effort from PKCS#1 / SEC1 / PKCS#8). Encrypted / opaque keys (`ENCRYPTED PRIVATE KEY`, `OPENSSH PRIVATE KEY`) show structural info only — no password prompt                                                                                                 |
 | Public key        | label, key type, bit size (parsed from SPKI envelope)                                                                                                                                                                                                                                                                                    |
 | SSH public key    | algorithm, bits, comment, SHA-256 fingerprint (matches `ssh-keygen -l -E sha256` output)                                                                                                                                                                                                                                                 |
+| JSON Web Key      | type (RSA / EC / oct / OKP) + curve, bit size (RSA modulus / curve / `oct` secret), algorithm, use, key ops, key ID, RFC 7638 thumbprint (`SHA-256:` base64url)                                                                                                                                                                           |
 
 Decode failures don't suppress the rest of the section — a malformed block lands in a per-entry
 **Parse error** row so a single bad PEM in a chain doesn't hide the others. Unrecognised PEM
 labels surface as an `Unknown` entry that still records the label + DER body size.
 
 Crates: `pem` (block parsing), `x509-parser` (cert / CSR / CRL), `ssh-key` (OpenSSH public-key
-text), `sha1` + `sha2` (fingerprints). Private-key bit-size inference uses a hand-rolled ASN.1
-TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes — small enough to inline without pulling
-in `pkcs8` / `sec1` / `pkcs1` separately.
+text), `sha1` + `sha2` (fingerprints), `serde_json` (JWK). Private-key bit-size inference uses a
+hand-rolled ASN.1 TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes — small enough to inline
+without pulling in `pkcs8` / `sec1` / `pkcs1` separately; the JWK thumbprint reuses the shared
+base64url codec in `crate::base64`.
 
-Not yet wired: PKCS#12 / PFX, encrypted PKCS#8 password prompt, JWK. Tracked in
+Not yet wired: PKCS#12 / PFX, encrypted PKCS#8 password prompt. Tracked in
 [planned.md](planned.md).
 
 ### Fonts ◐

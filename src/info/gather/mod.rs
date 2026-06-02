@@ -367,7 +367,10 @@ fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) 
     let Ok(text) = source.read_text() else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    FileExtras::Cert(crate::types::cert::info_gather::gather(&text, text_stats))
+    FileExtras::Cert(match fmt {
+        CertFormat::Jwk => crate::types::cert::info_gather::gather_jwk(&text, text_stats),
+        _ => crate::types::cert::info_gather::gather(&text, text_stats),
+    })
 }
 
 /// Cap on bytes read for font parsing. The largest fonts in the wild —

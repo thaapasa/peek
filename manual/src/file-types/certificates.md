@@ -2,26 +2,28 @@
 
 Certificate and key files open with a rich **Info** sidecar that decodes the cryptographic
 material: X.509 certificates, certificate signing requests (CSRs), certificate revocation lists
-(CRLs), private keys (RSA / EC / Ed25519 / DSA / PKCS#8), public keys, and OpenSSH public-key
-files (`.pub`). PEM files also open the raw source view; raw DER is binary, so it gets the Info
-sidecar and the [hex dump](./binary.md) only.
+(CRLs), private keys (RSA / EC / Ed25519 / DSA / PKCS#8), public keys, OpenSSH public-key files
+(`.pub`), and JSON Web Keys. The source view depends on the container: PEM shows its text, a JWK
+shows the pretty-printed JSON, and raw DER is binary so it gets the Info sidecar and the
+[hex dump](./binary.md) only.
 
 A PEM file may contain many entries — a fullchain bundle, for example, holds one or more
-certificates plus an intermediate. A DER file is a single entry. Every entry is decoded and
-rendered as its own block in the Info section.
+certificates plus an intermediate. A JWK Set holds one key per `keys` member; a DER file is a
+single entry. Every entry is decoded and rendered as its own block in the Info section.
 
 ## Detection
 
 - **By extension** — `.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` (PEM), `.der`
-  (DER).
+  (DER), `.jwk` / `.jwks` (JWK).
 - **By content** — anything that starts with `-----BEGIN ` (any label, PEM), an OpenSSH algorithm
-  prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-…`, including the FIDO/U2F `sk-*` variants), or a
-  binary DER certificate.
+  prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-…`, including the FIDO/U2F `sk-*` variants), a
+  binary DER certificate, or a JSON object whose `kty` is a known key type.
 
 `.crt` and `.cer` are intentionally *not* routed by extension because they carry *either*
 encoding. A PEM-encoded one is picked up by the `-----BEGIN ` sniff; a DER-encoded one is
 recognised when its bytes decode as an X.509 certificate. (DER carries no label, so peek tries
-certificate, then CRL, CSR, and key in turn.)
+certificate, then CRL, CSR, and key in turn.) A JWK saved as `.json` keeps the generic JSON view —
+the JWK content sniff only applies to `.jwk` / `.jwks`, stdin, and extension-less files.
 
 ## What you see
 
@@ -38,6 +40,8 @@ Per entry, the Info section surfaces:
   structural info only — no password prompt.
 - **Public key** — label, key type, bit size (parsed from the SPKI envelope).
 - **SSH public key** — algorithm, bits, comment, SHA-256 fingerprint matching `ssh-keygen -l`.
+- **JSON Web Key** — type (RSA / EC / oct / OKP) and curve, bit size, algorithm, use, key
+  operations, key ID, and the RFC 7638 thumbprint.
 
 Decode failures don't suppress the rest of the section. A malformed block surfaces as a per-entry
 **Parse error** row so one bad PEM in a chain doesn't hide the others. Unrecognised PEM labels

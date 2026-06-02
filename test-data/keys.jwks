@@ -1,0 +1,24 @@
+{
+  "keys": [
+    {
+      "kty": "RSA",
+      "n": "ui_wVWQg4cU3cAjzfpnR7x-SialdIuSGPVNd6nPy7tLTsZxx1oZtwkiU9oxw-6VEASItEuDjQOvvB5fXBitbZgR4Y39sZmQ9NzoDqfbji0cYICOQKzQT2-SMWod2gF5moBywVRPLjv6LItGXwdyXt5tWnfNORFQzWT-pstwaPvNzUEtZz2B7g8WtuKYjiYlo1jGmQfk3f69NgNndr1G7tZ3zxdh1NNQpy0apXES0L7VYy-UR1FsJf4ZNw0VpM8MDlxeiJUEl1wrrXoJk4kiQk3bfRJ55MsGD1JUohiT8TQ04IvFVcv2XRbNda3zp5E1dgmvqCSG4v906s1H_nAvuEQ",
+      "e": "AQAB",
+      "alg": "RS256",
+      "kid": "2011-04-29",
+      "use": "sig"
+    },
+    {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "lP5t9_0t38ztuRLYZwQvQH8qvP5OzOPVBFy-VzDLD6w",
+      "y": "cZD3m1EUj8n4OHcIzcGQbfKBcxdkwGZfnpVFhKI-tw",
+      "use": "sig",
+      "alg": "ES256",
+      "kid": "1",
+      "key_ops": [
+        "verify"
+      ]
+    }
+  ]
+}
