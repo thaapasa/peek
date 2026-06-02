@@ -50,10 +50,68 @@ pub fn gather(text: &str, text_stats: TextStats) -> CertInfo {
     }
 
     CertInfo {
-        text: text_stats,
+        text: Some(text_stats),
+        source_label: "PEM",
         entries,
         parse_errors,
     }
+}
+
+/// Build [`CertInfo`] for a raw DER (binary ASN.1) file. DER carries no
+/// label, so the kind is recovered by structure: try X.509 certificate,
+/// then CRL, then CSR, then a PKCS#8 / SPKI key, taking the first that
+/// decodes. An all-miss lands in a single `Unknown` entry so the user
+/// still sees the byte length rather than an empty section.
+pub fn gather_der(der: &[u8]) -> CertInfo {
+    let (entries, parse_errors) = match classify_der(der) {
+        Ok(entry) => (vec![entry], Vec::new()),
+        Err(e) => (
+            vec![CertEntry::Unknown(UnknownEntry {
+                label: "DER".to_string(),
+                der_bytes: der.len(),
+            })],
+            vec![e],
+        ),
+    };
+    CertInfo {
+        text: None,
+        source_label: "DER",
+        entries,
+        parse_errors,
+    }
+}
+
+/// Recover a DER blob's kind by trying each structure in turn. Uses a
+/// synthetic label (DER has none) matching the PEM tag each decoder
+/// expects, so the rendered entry reads the same as its PEM twin.
+fn classify_der(der: &[u8]) -> Result<CertEntry, String> {
+    if let Ok(c) = parse_certificate("CERTIFICATE", der) {
+        return Ok(CertEntry::Certificate(Box::new(c)));
+    }
+    if let Ok(c) = parse_crl("X509 CRL", der) {
+        return Ok(CertEntry::CertificateRevocationList(Box::new(c)));
+    }
+    if let Ok(c) = parse_csr("CERTIFICATE REQUEST", der) {
+        return Ok(CertEntry::CertificateRequest(Box::new(c)));
+    }
+    // A bare key: PKCS#8 private key first, then a SubjectPublicKeyInfo.
+    let (key_type, bits) = classify_pkcs8(der);
+    if key_type != KeyType::Other {
+        return Ok(CertEntry::PrivateKey(KeyEntry {
+            label: "PRIVATE KEY".to_string(),
+            key_type,
+            key_size_bits: bits,
+        }));
+    }
+    let (key_type, bits) = classify_public_key(der);
+    if key_type != KeyType::Other {
+        return Ok(CertEntry::PublicKey(KeyEntry {
+            label: "PUBLIC KEY".to_string(),
+            key_type,
+            key_size_bits: bits,
+        }));
+    }
+    Err("not a recognised DER certificate / CRL / CSR / key".to_string())
 }
 
 /// Iterator over lines of `text` that fall outside any

@@ -1,24 +1,27 @@
 # Certificates and keys
 
-PEM-encoded certificate and key files open in the source viewer with a rich **Info** sidecar
-that decodes every PEM block: X.509 certificates, certificate signing requests (CSRs),
-certificate revocation lists (CRLs), private keys (RSA / EC / Ed25519 / DSA / PKCS#8), public
-keys, and OpenSSH public-key files (`.pub`).
+Certificate and key files open with a rich **Info** sidecar that decodes the cryptographic
+material: X.509 certificates, certificate signing requests (CSRs), certificate revocation lists
+(CRLs), private keys (RSA / EC / Ed25519 / DSA / PKCS#8), public keys, and OpenSSH public-key
+files (`.pub`). PEM files also open the raw source view; raw DER is binary, so it gets the Info
+sidecar and the [hex dump](./binary.md) only.
 
-A single file may contain many entries — a fullchain bundle, for example, holds one or more
-certificates plus an intermediate. Every entry is decoded and rendered as its own block in the
-Info section.
+A PEM file may contain many entries — a fullchain bundle, for example, holds one or more
+certificates plus an intermediate. A DER file is a single entry. Every entry is decoded and
+rendered as its own block in the Info section.
 
 ## Detection
 
-- **By extension** — `.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub`.
-- **By content** — anything that starts with `-----BEGIN ` (any label), or an OpenSSH algorithm
-  prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-…`, including the FIDO/U2F `sk-*` variants).
+- **By extension** — `.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` (PEM), `.der`
+  (DER).
+- **By content** — anything that starts with `-----BEGIN ` (any label, PEM), an OpenSSH algorithm
+  prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-…`, including the FIDO/U2F `sk-*` variants), or a
+  binary DER certificate.
 
-`.crt` and `.cer` are intentionally *not* routed by extension because they routinely carry raw
-DER as well as PEM. A PEM-encoded `.crt` is picked up by the `-----BEGIN ` content sniff; a
-DER-encoded `.crt` falls through to the hex viewer, which is more useful than a mojibake source
-dump.
+`.crt` and `.cer` are intentionally *not* routed by extension because they carry *either*
+encoding. A PEM-encoded one is picked up by the `-----BEGIN ` sniff; a DER-encoded one is
+recognised when its bytes decode as an X.509 certificate. (DER carries no label, so peek tries
+certificate, then CRL, CSR, and key in turn.)
 
 ## What you see
 

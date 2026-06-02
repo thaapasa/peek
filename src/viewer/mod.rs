@@ -164,8 +164,10 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
-            FileType::Cert(_) => {
-                crate::types::cert::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            FileType::Cert(fmt) => {
+                crate::types::cert::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
             }
             FileType::Font(_) => {
                 crate::types::font::compose::compose(source, detected, args, &ctx, &mut modes)?;

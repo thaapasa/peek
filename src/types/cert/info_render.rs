@@ -10,16 +10,20 @@ use crate::types::text::info_render::push_text_stats;
 /// stays so the user gets the same line/word/encoding facts they get
 /// for any text file; the cert-specific section appears below.
 pub fn render_section(lines: &mut Vec<String>, info: &CertInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Content", theme);
-    push_text_stats(lines, &info.text, theme);
+    // Text stats only apply to a text (PEM) source; a raw DER file is
+    // binary, so its `text` is `None` and the Content section is skipped.
+    if let Some(text) = &info.text {
+        lines.push(String::new());
+        push_section_header(lines, "Content", theme);
+        push_text_stats(lines, text, theme);
+    }
 
     if info.entries.is_empty() && info.parse_errors.is_empty() {
         return;
     }
 
     lines.push(String::new());
-    push_section_header(lines, "PEM", theme);
+    push_section_header(lines, info.source_label, theme);
     push_field(
         lines,
         "Entries",

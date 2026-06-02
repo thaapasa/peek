@@ -129,16 +129,17 @@ Stretch:
   and checksums). The current shape — face-cycle keys (`n` / `p`) on the SpecimenMode and
   every face's metadata in Info — covers the visible use case at a fraction of the cost.
 
-### Certificates and Keys — DER / PKCS#12 / JWK ☐
+### Certificates and Keys — PKCS#12 / JWK ☐
+
+X.509 DER (`.der`, and DER-encoded `.crt` / `.cer`) ships — see
+[features.md → Certificates and Keys](features.md#certificates-and-keys-).
 
 | Format        | Extensions      | Notes                                                                                                                                                                                                 |
 |---------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| X.509 DER     | `.der`          | Today `.crt` / `.cer` carrying raw DER fall through to the hex viewer. Wire a magic-byte / leading `0x30 0x82` sniff and decode through the same `x509-parser` path the PEM viewer uses               |
 | PKCS#12 / PFX | `.p12`, `.pfx`  | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
 | JWK / JWKS    | `.jwk`, `.jwks` | JSON form — the structured viewer already pretty-prints these. A cert sidecar would add key thumbprint (RFC 7638) and a normalised key-type / bits / curve row                                        |
 
-Crates: `der` / `cms` (DER + PKCS#7), `pkcs12` (encrypted bags). JWK can ride the existing
-`serde_json` dependency.
+Crates: `pkcs12` (encrypted bags). JWK can ride the existing `serde_json` dependency.
 
 ### Object Files — deeper inspection ☐
 

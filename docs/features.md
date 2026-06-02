@@ -821,16 +821,19 @@ also deferred.
 
 ### Certificates and Keys ◐
 
-PEM-encoded cryptographic material gets a per-entry Info section paired with the raw PEM source
-view. Detection runs both ways: extension routing covers `.pem` / `.csr` / `.crl` / `.key` /
-`.p7b` / `.p7c` / `.pub`; content sniff catches anything starting with `-----BEGIN ` or an
-OpenSSH algorithm prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-*`, including the FIDO/U2F
-`sk-*` variants). `.crt` / `.cer` deliberately fall through to content sniff because they
-routinely carry raw DER too — DER files end up in the hex viewer, where bytes are more useful
-than mojibake.
+Cryptographic material gets a per-entry Info section. PEM additionally shows the raw source view;
+raw DER is binary, so it gets Info + hex only. Detection runs both ways: extension routing covers
+`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` (PEM) and `.der` (DER); content sniff
+catches anything starting with `-----BEGIN ` or an OpenSSH algorithm prefix (`ssh-rsa`,
+`ssh-ed25519`, `ecdsa-sha2-*`, including the FIDO/U2F `sk-*` variants). `.crt` / `.cer`
+deliberately route by content because they carry *either* encoding — a `-----BEGIN ` lead picks
+PEM, a leading `0x30 0x82` SEQUENCE that fully decodes as an X.509 cert picks DER. The DER sniff
+parses (not just magic-byte matches) so unrelated ASN.1 / BER blobs aren't mislabelled.
 
-Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports), and
-each renders as its own block under the **PEM** info section:
+Decoded entries — a single PEM file may carry many (fullchain bundles, multi-block exports); a DER
+file is one entry. Each renders as its own block under the info section (headed **PEM** or **DER**
+by source). DER carries no label, so its kind is recovered by structure: X.509 cert, then CRL,
+then CSR, then a PKCS#8 / SPKI key — first that decodes wins:
 
 | Entry             | Surface fields                                                                                                                                                                                                                                                                                                                           |
 |-------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -850,8 +853,8 @@ text), `sha1` + `sha2` (fingerprints). Private-key bit-size inference uses a han
 TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes — small enough to inline without pulling
 in `pkcs8` / `sec1` / `pkcs1` separately.
 
-Not yet wired: DER-encoded `.crt` / `.cer` / `.der`, PKCS#12 / PFX, encrypted PKCS#8 password
-prompt, JWK. Tracked in [planned.md](planned.md).
+Not yet wired: PKCS#12 / PFX, encrypted PKCS#8 password prompt, JWK. Tracked in
+[planned.md](planned.md).
 
 ### Fonts ◐
 

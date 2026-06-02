@@ -87,12 +87,12 @@ src/
       info_render.rs   — Render CSS info section (Content + CSS blocks + Colors swatch grid)
     cert/
       mod.rs           — Module wiring
-      format.rs        — CertFormat enum (Pem only; DER / PKCS#12 planned)
-      detect.rs        — format_from_ext (`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub`) + sniff_pem (`-----BEGIN ` header / `ssh-rsa…` etc. content sniff). `.crt` / `.cer` left to content sniff because they routinely carry DER too
-      compose.rs       — compose(): paired Source ContentMode for PEM text (no syntax token); Info aux mode renders the cert sidecar
-      info.rs          — CertInfo { text: TextStats, entries: Vec<CertEntry>, parse_errors: Vec<String> } + CertEntry variants (Certificate / CSR / CRL / PrivateKey / PublicKey / SshPublicKey / Unknown — heavy variants boxed) + per-entry shapes + KeyType (Rsa / Ec(curve) / Ed25519 / Dsa / Other)
-      info_gather.rs   — pem::parse_many → per-block dispatch by PEM label. X.509 cert / CSR / CRL decoded via x509-parser; SSH public-key lines (outside any PEM fence) decoded via ssh-key. Private/public keys: hand-rolled ASN.1 TLV walker reads PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes to recover key type + bit size without pulling in a fourth crypto crate. SHA-1 + SHA-256 fingerprints over the cert DER (sha1 / sha2)
-      info_render.rs   — Render PEM info section (Content + per-entry blocks: Subject / Issuer / Serial / NotBefore / NotAfter / Days Left / Public Key / Signature / SANs / Key Usage / fingerprints). Days-Left ≤ 30 painted as warning; expired painted as warning with negative day count
+      format.rs        — CertFormat enum (Pem / Der; PKCS#12 planned)
+      detect.rs        — format_from_ext (`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` → Pem, `.der` → Der) + sniff_pem (`-----BEGIN ` header / `ssh-rsa…` content sniff) + sniff_der (leading `0x30 0x82` SEQUENCE that fully parses as X509Certificate — parse, not just magic, so unrelated ASN.1 isn't mislabelled). `.crt` / `.cer` left to content sniff because they carry either encoding
+      compose.rs       — compose(fmt): PEM → paired Source ContentMode (no syntax token); DER → no source view (binary), just the universal Info + hex tail. Info aux mode renders the cert sidecar either way
+      info.rs          — CertInfo { text: Option<TextStats> (None for binary DER), source_label: &'static str ("PEM" / "DER"), entries: Vec<CertEntry>, parse_errors: Vec<String> } + CertEntry variants (Certificate / CSR / CRL / PrivateKey / PublicKey / SshPublicKey / Unknown — heavy variants boxed) + per-entry shapes + KeyType (Rsa / Ec(curve) / Ed25519 / Dsa / Other)
+      info_gather.rs   — gather(text): pem::parse_many → per-block dispatch by PEM label. gather_der(der): label-less DER recovered by structure (classify_der tries cert → CRL → CSR → PKCS#8 / SPKI key, first decode wins, else Unknown). X.509 cert / CSR / CRL via x509-parser; SSH pubkey lines (outside any PEM fence) via ssh-key. Keys: hand-rolled ASN.1 TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes recovers key type + bit size without a fourth crypto crate. SHA-1 + SHA-256 fingerprints over the cert DER (sha1 / sha2)
+      info_render.rs   — Render cert info section (Content text-stats block only when `text` is Some; entries section headed by source_label, per-entry blocks: Subject / Issuer / Serial / NotBefore / NotAfter / Days Left / Public Key / Signature / SANs / Key Usage / fingerprints). Days-Left ≤ 30 painted as warning; expired painted as warning with negative day count
     font/
       mod.rs           — Module wiring
       format.rs        — FontFormat enum (TrueType / OpenType / Collection / Woff / Woff2) + label

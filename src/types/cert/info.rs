@@ -6,7 +6,11 @@
 use crate::types::text::info::TextStats;
 
 pub struct CertInfo {
-    pub text: TextStats,
+    /// Text stats for the source — `None` for a raw DER file, which is
+    /// binary and has no line / word / encoding facts to report.
+    pub text: Option<TextStats>,
+    /// Container label for the entries section header (`PEM` / `DER`).
+    pub source_label: &'static str,
     pub entries: Vec<CertEntry>,
     /// Best-effort decode errors. One per failed PEM block / SSH
     /// pubkey line — rendered as a Warning row so a malformed entry

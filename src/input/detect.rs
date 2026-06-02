@@ -418,6 +418,12 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
             .to_string(),
         );
     }
+    // Raw DER X.509 certificate (`.der`, or `.crt` / `.cer` carrying DER
+    // instead of PEM). `infer` doesn't classify it; the probe full-parses
+    // to avoid claiming unrelated ASN.1 blobs.
+    if cert_detect::sniff_der(head) {
+        return Some("application/pkix-cert".to_string());
+    }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
 
@@ -482,6 +488,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     }
     if let Some(fmt) = sqlite_detect::format_from_mime(mime) {
         return Some(FileType::Sqlite(fmt));
+    }
+    if mime == "application/pkix-cert" {
+        return Some(FileType::Cert(CertFormat::Der));
     }
     if mime.starts_with("video/") {
         return Some(FileType::Binary);
