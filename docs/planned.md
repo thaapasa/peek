@@ -103,20 +103,6 @@ UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for pe
   listing primitive has no type column).
 - **Inline images** rendered in the body (cid: references resolved against inline parts).
 
-### Calendar / Contacts ☐
-
-| Format | Extensions |
-|--------|------------|
-| iCal   | `.ics`     |
-| vCard  | `.vcf`     |
-
-Pretty list of events / contacts: human-readable date/time formatting, grouped fields, normalised
-property names. Raw view shows the original text.
-
-File info: event/contact count, date range (calendars), version.
-
-Crates: `ical` (covers both iCalendar and vCard, pure Rust).
-
 ### Audio Files ☐
 
 - **Audiobook chapters** for `.m4b` containers — MP4 chapter atoms / `chpl` boxes drive a

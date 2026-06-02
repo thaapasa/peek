@@ -18,6 +18,7 @@ Modern terminal file viewer — preview any file, any format.
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT, RTF, EPUB, CBZ
 - **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing + extract, message-list drill-in
+- **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards with human date-times, grouped fields, recurrence
 - **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
 - **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
 - **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
@@ -55,6 +56,8 @@ peek /bin/ls            # executable — header / sections / symbols
 peek Main.class         # Java classfile — fields, methods, signatures
 peek server.pem         # certificate / key — subject, validity, SANs, fingerprints
 peek Lobster.ttf        # font — rasterised specimen + family / weight / scripts
+peek invite.ics         # calendar — agenda with dates, recurrence, attendees
+peek contacts.vcf       # vCard — grouped contact cards
 peek -                  # explicit stdin
 echo '{"a":1}' | peek   # piped stdin auto-detected
 ```

@@ -1,0 +1,39 @@
+//! Per-type compose for vObject documents.
+//!
+//! Both flavours get the same two-view stack: a rendered read view (the
+//! pretty agenda / contact-card list) followed by the raw source via the
+//! generic content mode. `--plain` drops the rendered view so the raw
+//! text is the first (print/pipe) mode.
+
+use anyhow::Result;
+
+use crate::Args;
+use crate::input::InputSource;
+use crate::input::detect::{Detected, FileType, VObjectFormat};
+use crate::viewer::ComposeCtx;
+use crate::viewer::modes::{Mode, RenderedTextMode};
+
+use super::calendar::CalendarRenderer;
+use super::contact::ContactRenderer;
+
+pub fn compose(
+    source: &InputSource,
+    _detected: &Detected,
+    args: &Args,
+    ctx: &ComposeCtx,
+    modes: &mut Vec<Box<dyn Mode>>,
+    fmt: VObjectFormat,
+) -> Result<()> {
+    if !ctx.plain_mode {
+        modes.push(match fmt {
+            VObjectFormat::ICal => {
+                Box::new(RenderedTextMode::new(CalendarRenderer::new(source.clone())))
+            }
+            VObjectFormat::VCard => {
+                Box::new(RenderedTextMode::new(ContactRenderer::new(source.clone())))
+            }
+        });
+    }
+    modes.push(ctx.text_content_mode(source, &FileType::VObject(fmt), args)?);
+    Ok(())
+}

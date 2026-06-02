@@ -112,6 +112,9 @@ fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme
         FileExtras::Font(info) => {
             crate::types::font::info_render::render_section(lines, info, theme);
         }
+        FileExtras::VObject(info) => {
+            crate::types::vobject::info::render_section(lines, info, theme);
+        }
         FileExtras::Directory(stats) => {
             crate::types::directory::info::render_section(lines, stats, theme);
         }

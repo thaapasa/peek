@@ -41,6 +41,7 @@ pub use crate::types::sqlite::info::SqliteInfo;
 pub use crate::types::structured::info::StructuredInfo;
 pub use crate::types::svg::info::SvgStats;
 pub use crate::types::text::info::TextStats;
+pub use crate::types::vobject::VObjectInfo;
 
 /// Collected file metadata.
 pub struct FileInfo {
@@ -110,6 +111,7 @@ pub enum FileExtras {
     Sqlite(SqliteInfo),
     Cert(CertInfo),
     Font(FontInfo),
+    VObject(VObjectInfo),
 }
 
 #[cfg(unix)]

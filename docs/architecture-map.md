@@ -205,6 +205,17 @@ src/
       extract.rs       — Resolve an attachment key to an in-memory source (re-parse, match part by recomputed key, copy decoded contents); NotFound on miss
       info.rs          — EmailInfo (header summary + attachment count/bytes for .eml, message count for .mbox) + gather_extras(source, fmt) (None falls back to text/binary gather)
       info_render.rs   — Render Email info section (header rows truncated; Messages count for mbox)
+    vobject/
+      mod.rs           — Module wiring; re-exports VObjectInfo. iCalendar (.ics) + vCard (.vcf): the two IETF vObject text formats, one shared content-line parser, format-specific renderers
+      compose.rs       — compose(fmt): rendered read view (CalendarRenderer for ICal / ContactRenderer for VCard) unless --plain, then raw Source via text_content_mode. No inner items
+      detect.rs        — format_from_ext (ics/ical/ifb → ICal, vcf/vcard → VCard) + sniff_text (leading `BEGIN:VCALENDAR` / `BEGIN:VCARD` marker, BOM/blank-line tolerant)
+      format.rs        — VObjectFormat { ICal, VCard } + label() (iCalendar / vCard)
+      line.rs          — Shared hand-rolled content-line parser (no dependency): unfold (line folding + CRLF/LF), parse_line (NAME;PARAM=VAL:VALUE, quoted-param-aware colon/`;` splitting), parse_components (BEGIN/END → Component tree). ContentLine { name, params, value } + Component { name, props, children } with param/value/props_named accessors; unescape_text, split_structured (`;` fields), format_list (`,` list → ", "-joined)
+      datetime.rs      — format_datetime (ISO-basic / dashed / UTC-Z / date-only → `YYYY-MM-DD HH:MM`, raw passthrough on no match) + date_key (sortable YYYY-MM-DD). Pure string reshaping, no date crate / no zone math
+      calendar.rs      — CalendarRenderer: TextRenderer rendering a VCALENDAR agenda (name header + per-VEVENT/VTODO blocks: when-span, location, humanised RRULE, organizer/attendees, status, categories, description). humanize_rrule (FREQ/BYDAY/COUNT/UNTIL/INTERVAL) + format_when (same-day end-date collapse). summarize(text) → CalendarSummary (name/version/product, event+todo counts, date range) for Info
+      contact.rs       — ContactRenderer: TextRenderer rendering one grouped card per VCARD (FN-or-N name, org/title, every email/phone/address with TYPE annotation, web/birthday/categories/note). v3 + v4 handled together. summarize(text) → ContactSummary (count + leading version)
+      render.rs        — Shared rendered-view helpers: push_field (Label: value with hanging-indent wrap) + push_prose (wrapped multi-line block). Same visual grammar as the email header block
+      info.rs          — gather + render in one (tiny type): VObjectInfo { format, Detail::{Calendar(CalendarSummary)|Contact(ContactSummary)} }; gather_extras(source, fmt) (64 MiB cap, None falls back to text/binary) + render_section
     eps/
       mod.rs           — Module wiring; re-exports EpsInfo; `postscript_text(bytes, header)` helper (PS section slice for DOS-EPS, whole file otherwise; lossy UTF-8)
       compose.rs       — compose(): [Preview: PagedImageMode<EpsImageRenderer> when a DOS-EPS TIFF preview exists] + [Render: PagedImageMode<EpsImageRenderer> when gs::find() succeeds, lazy] + Source (text_content_mode over the PS-section slice). `--plain` drops both image views. First-pushed = default, so Preview leads when present

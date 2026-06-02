@@ -1,0 +1,61 @@
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Peek Test Data//Generic Contacts 1.0//EN
+N:Virtanen;Anna;Maria;;
+FN:Anna Virtanen
+NICKNAME:Annie
+ORG:Example Oy;Engineering
+TITLE:Staff Engineer
+EMAIL;TYPE=WORK,PREF:anna@example.com
+EMAIL;TYPE=HOME:anna.virtanen@personal.example
+TEL;TYPE=CELL,VOICE:+358 40 123 4567
+TEL;TYPE=WORK,VOICE:+358 9 555 0100
+ADR;TYPE=WORK:;;Mannerheimintie 1;Helsinki;;00100;Finland
+URL:https://anna.example.com
+BDAY:1988-04-12
+NOTE:Met at DevConf 2024. Owns the release pipeline.
+CATEGORIES:Work,Engineering
+REV:2026-01-01T08:00:00Z
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Korhonen;Ben;;Dr.;
+FN:Dr. Ben Korhonen
+ORG:Example Oy;Engineering
+TITLE:Backend Developer
+EMAIL;TYPE=WORK:ben@example.com
+TEL;TYPE=CELL:+358 50 987 6543
+ADR;TYPE=HOME:;;Koivutie 5 A 3;Espoo;;02100;Finland
+URL:https://ben.example.dev
+CATEGORIES:Work
+END:VCARD
+BEGIN:VCARD
+VERSION:4.0
+N:Niemi;Carla;;;
+FN:Carla Niemi
+ORG:Freelance
+TITLE:UX Designer
+EMAIL;TYPE=work:carla@example.com
+TEL;TYPE="cell,voice";VALUE=uri:tel:+358-44-222-3344
+ADR;TYPE=home:;;Rantakatu 12;Turku;;20100;Finland
+URL:https://carla.design
+GENDER:F
+LANG;PREF=1:fi
+LANG;PREF=2:en
+NOTE:Prefers Signal over email.
+END:VCARD
+BEGIN:VCARD
+VERSION:3.0
+N:Smith;John;Quincy;Mr.;Jr.
+FN:John Q. Smith Jr.
+ORG:Globex Corporation
+TITLE:Sales Director
+EMAIL;TYPE=WORK:john.smith@globex.example
+EMAIL;TYPE=HOME:jqs@home.example
+TEL;TYPE=WORK,VOICE:+1 415 555 0142
+TEL;TYPE=FAX:+1 415 555 0143
+ADR;TYPE=WORK:;Suite 400;1 Market St;San Francisco;CA;94105;USA
+URL:https://globex.example
+BDAY:1975-11-30
+CATEGORIES:Work,Sales,VIP
+END:VCARD

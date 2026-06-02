@@ -170,6 +170,11 @@ impl Registry {
             FileType::Font(_) => {
                 crate::types::font::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::VObject(fmt) => {
+                crate::types::vobject::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
             FileType::Directory => {
                 crate::types::directory::compose::compose(
                     source, detected, args, &ctx, &mut modes,
@@ -260,7 +265,7 @@ impl ComposeCtx {
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
             FileType::Svg | FileType::Html | FileType::Markdown => "Source",
-            FileType::PostScript(_) | FileType::Email(_) => "Source",
+            FileType::PostScript(_) | FileType::Email(_) | FileType::VObject(_) => "Source",
             _ => "Content",
         };
 

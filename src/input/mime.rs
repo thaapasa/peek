@@ -225,6 +225,8 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Font(crate::input::detect::FontFormat::Woff) => "font/woff",
         FileType::Font(crate::input::detect::FontFormat::Woff2) => "font/woff2",
         FileType::Sqlite(_) => "application/vnd.sqlite3",
+        FileType::VObject(crate::input::detect::VObjectFormat::ICal) => "text/calendar",
+        FileType::VObject(crate::input::detect::VObjectFormat::VCard) => "text/vcard",
         // For Image, Archive, Compressed, ObjectFile, and Binary, the
         // magic-byte MIME is more specific than any generic registered
         // fallback would be.
@@ -299,6 +301,8 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Notebook => &["ipynb"],
         FileType::Email(EmailFormat::Eml) => &["eml"],
         FileType::Email(EmailFormat::Mbox) => &["mbox"],
+        FileType::VObject(crate::input::detect::VObjectFormat::ICal) => &["ics", "ical", "ifb"],
+        FileType::VObject(crate::input::detect::VObjectFormat::VCard) => &["vcf", "vcard"],
         FileType::Cert(_) => &[
             "pem", "crt", "cer", "csr", "crl", "key", "p7b", "p7c", "pub",
         ],

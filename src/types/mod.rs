@@ -31,3 +31,4 @@ pub mod sqlite;
 pub mod structured;
 pub mod svg;
 pub mod text;
+pub mod vobject;

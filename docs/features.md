@@ -211,6 +211,34 @@ a multi-GB mailbox lists instantly and only the opened message is parsed.
 The Info view shows the header summary and attachment count + total size (`.eml`) or the message
 count (`.mbox`).
 
+#### Calendar and Contacts ✅
+
+iCalendar (`.ics` / `.ical` / `.ifb`) and vCard (`.vcf` / `.vcard`) are the two IETF "vObject"
+text formats. They share one content-line grammar (RFC 5545 §3.1 / RFC 6350 §3.3 — line folding,
+`NAME;PARAM=VALUE:VALUE` properties, `BEGIN`/`END` component nesting), so both parse through a
+single hand-rolled parser (`types/vobject/line.rs`) with no added dependency; only the renderer
+diverges. Detection is by extension and by content sniff — a leading `BEGIN:VCALENDAR` /
+`BEGIN:VCARD` marker — so extension-less files (and stdin) still route here.
+
+Both flavours compose a **rendered** read view (default) followed by the raw **Source** via
+`ContentMode`; `--plain` drops the rendered view and opens on the source. The rendered view goes
+through `RenderedTextMode`, so it's cached per width / theme.
+
+- **iCalendar** renders an agenda: an optional calendar name header, then one block per `VEVENT` /
+  `VTODO`. Each event shows a summary heading, a human-formatted date-time span (same-day timed
+  ranges collapse the redundant end date; `TZID` is shown verbatim — no zone conversion),
+  location, a humanised `RRULE` (`Weekly on Mon, Tue, …, 40 times`), organizer + attendees,
+  status, categories, link, and a wrapped description. Todos show due date and status +
+  percent-complete. Info: calendar name, event / todo counts, event date range, version, product.
+- **vCard** renders one grouped card per `VCARD`: display name (`FN`, or composed from the
+  structured `N`), nickname, org (`Company — Department`), title, every email / phone / address
+  with its `TYPE` annotation, web, birthday, categories, and a wrapped note. v3 and v4 cards are
+  handled together (v4 `tel:` URIs and quoted multi-`TYPE` params included). Info: contact count
+  + the leading card's version.
+
+Date-times reformat to a readable `YYYY-MM-DD HH:MM` without a date crate — the values are already
+calendar fields, so it's string reshaping, not time math. No inner items to extract.
+
 #### EPUB ✅
 
 `.epub` files (a ZIP container with HTML chapters + OPF metadata) get a three-mode view:

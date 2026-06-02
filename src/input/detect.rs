@@ -25,6 +25,7 @@ pub use crate::types::pdf::format::PdfFlavor;
 pub use crate::types::spreadsheet::format::SpreadsheetFormat;
 pub use crate::types::sqlite::format::SqliteFormat;
 pub use crate::types::structured::format::StructuredFormat;
+pub use crate::types::vobject::format::VObjectFormat;
 
 use crate::types::archive::detect as archive_detect;
 use crate::types::audio::detect as audio_detect;
@@ -40,6 +41,7 @@ use crate::types::font::detect as font_detect;
 use crate::types::spreadsheet::detect as spreadsheet_detect;
 use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
+use crate::types::vobject::detect as vobject_detect;
 
 /// Bytes read from the head of a file for magic-byte detection. `infer`
 /// inspects only the first few hundred bytes; 16 KB is comfortable headroom.
@@ -146,6 +148,11 @@ pub enum FileType {
     /// cut: family / subfamily / weight / glyph + codepoint counts /
     /// supported scripts. No source view (binary container).
     Font(FontFormat),
+    /// vObject text document — iCalendar calendar (`.ics`) or vCard
+    /// address book (`.vcf`). Drives a rendered read view (agenda /
+    /// contact cards) plus the raw source, and an Info summary
+    /// (counts / date range / version).
+    VObject(VObjectFormat),
     /// Binary / unknown
     Binary,
 }
@@ -678,6 +685,13 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     if let Some(fmt) = eps_detect::sniff_text(text) {
         return Some((FileType::PostScript(fmt), "application/postscript"));
     }
+    if let Some(fmt) = vobject_detect::sniff_text(text) {
+        let mime = match fmt {
+            VObjectFormat::ICal => "text/calendar",
+            VObjectFormat::VCard => "text/vcard",
+        };
+        return Some((FileType::VObject(fmt), mime));
+    }
     if let Some(fmt) = email_detect::sniff_text(text) {
         let mime = match fmt {
             EmailFormat::Mbox => "application/mbox",
@@ -778,6 +792,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     }
     if let Some(fmt) = font_detect::format_from_ext(&ext) {
         return Some(FileType::Font(fmt));
+    }
+    if let Some(fmt) = vobject_detect::format_from_ext(&ext) {
+        return Some(FileType::VObject(fmt));
     }
     if let Some(fmt) = structured_detect::format_from_ext(&ext) {
         return Some(FileType::Structured(fmt));

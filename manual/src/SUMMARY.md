@@ -17,6 +17,7 @@
   - [Jupyter notebooks](./file-types/notebooks.md)
   - [HTML](./file-types/html.md)
   - [Email](./file-types/email.md)
+  - [Calendar and contacts](./file-types/calendar-contacts.md)
   - [Structured data](./file-types/structured-data.md)
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
