@@ -234,9 +234,9 @@ mod tests {
         // > 4095 tables overflow the u16 `* 16` products; saturate rather
         // than wrap. No real font reaches this — adversarial-input guard.
         let (range, selector, shift) = search_params(u16::MAX as usize);
-        assert_eq!(range, u16::MAX);
+        assert_eq!(range, u16::MAX); // 32768*16 = 524288, saturated
         assert_eq!(selector, 15); // floor(log2(65535))
-        assert!(shift <= u16::MAX);
+        assert_eq!(shift, u16::MAX); // 65535*16 - 524288 = 524272, saturated
     }
 
     #[test]
