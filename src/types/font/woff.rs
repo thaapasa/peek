@@ -168,6 +168,11 @@ fn inflate_exact(src: &[u8], dst: &mut [u8]) -> Result<()> {
 /// but emitting the spec values keeps the rebuilt font byte-clean for
 /// any validator that checks them. `searchRange = 16 * 2^floor(log2 n)`,
 /// `entrySelector = floor(log2 n)`, `rangeShift = 16n - searchRange`.
+///
+/// The two `* 16` products are u16 fields that overflow past 4095 tables;
+/// no real font comes close (table counts are tens), but compute in usize
+/// and saturate so an adversarial `numTables` yields a bounded value
+/// rather than a wrapped one. The fields stay advisory either way.
 fn search_params(num_tables: usize) -> (u16, u16, u16) {
     let mut entry_selector = 0u16;
     let mut largest_pow2 = 1usize;
@@ -175,9 +180,13 @@ fn search_params(num_tables: usize) -> (u16, u16, u16) {
         largest_pow2 *= 2;
         entry_selector += 1;
     }
-    let search_range = (largest_pow2 * 16) as u16;
-    let range_shift = (num_tables * 16) as u16 - search_range;
-    (search_range, entry_selector, range_shift)
+    let search_range = largest_pow2 * 16;
+    let range_shift = num_tables * 16 - search_range;
+    (
+        search_range.min(u16::MAX as usize) as u16,
+        entry_selector,
+        range_shift.min(u16::MAX as usize) as u16,
+    )
 }
 
 /// Round up to the next 4-byte boundary (sfnt tables are 4-aligned).
@@ -218,6 +227,16 @@ mod tests {
         assert_eq!(search_params(1), (16, 0, 0));
         // 16 tables: range 256, selector 4, shift 0.
         assert_eq!(search_params(16), (256, 4, 0));
+    }
+
+    #[test]
+    fn search_params_saturate_past_u16() {
+        // > 4095 tables overflow the u16 `* 16` products; saturate rather
+        // than wrap. No real font reaches this — adversarial-input guard.
+        let (range, selector, shift) = search_params(u16::MAX as usize);
+        assert_eq!(range, u16::MAX);
+        assert_eq!(selector, 15); // floor(log2(65535))
+        assert!(shift <= u16::MAX);
     }
 
     #[test]
