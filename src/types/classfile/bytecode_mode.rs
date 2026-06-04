@@ -11,19 +11,20 @@ use syntect::highlighting::Color;
 
 use super::bytecode::{Disassembly, MethodAsm};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
-use crate::viewer::modes::{
-    Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
-};
+use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, strip_ansi_width, wrap_styled};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
-    (&[Action::OpenSearch], "Search"),
-    NEXT_PREV_MATCH_HELP,
     (
+        // With a search active these step matches instead of methods
+        // (mirrors the EPUB read mode's n/p overload). Listed before
+        // OpenSearch so `n` / `p` resolve to method navigation, not the
+        // generic NextMatch/PrevMatch.
         &[Action::NextMethod, Action::PrevMethod],
-        "Jump to next / previous method",
+        "Next / previous method",
     ),
+    (&[Action::OpenSearch], "Search"),
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -147,10 +148,13 @@ impl Mode for BytecodeMode {
                 self.search = None;
                 Handled::Yes
             }
+            // `n` / `p` jump methods — but while a search is active they
+            // step matches instead (Esc clears the search to get method
+            // jumps back), matching the EPUB read mode.
+            Action::NextMethod if self.search.is_some() => step_search(&mut self.search, 1),
+            Action::PrevMethod if self.search.is_some() => step_search(&mut self.search, -1),
             Action::NextMethod => self.jump_method(true),
             Action::PrevMethod => self.jump_method(false),
-            Action::NextMatch => step_search(&mut self.search, 1),
-            Action::PrevMatch => step_search(&mut self.search, -1),
             _ => Handled::No,
         }
     }
@@ -301,5 +305,40 @@ mod tests {
             let _ = mode.handle(Action::PrevMethod);
         }
         assert_eq!(mode.handle(Action::PrevMethod), Handled::YesScrollTo(0));
+    }
+
+    /// Regression: `n` / `p` must resolve to method navigation through the
+    /// real key dispatch, not the generic NextMatch/PrevMatch — the two
+    /// share the `n` / `p` bindings and dispatch is order-sensitive.
+    #[test]
+    fn n_p_dispatch_to_method_navigation() {
+        use crate::viewer::ui::GLOBAL_ACTIONS;
+        use crate::viewer::ui::keys::dispatch;
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+        let resolve = |c: char| {
+            let key = KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+            dispatch(key, GLOBAL_ACTIONS).or_else(|| dispatch(key, EXTRA_ACTIONS))
+        };
+        assert_eq!(resolve('n'), Some(Action::NextMethod));
+        assert_eq!(resolve('p'), Some(Action::PrevMethod));
+    }
+
+    /// While a search is active, `n` / `p` step matches instead of jumping
+    /// methods (the action stays NextMethod; the handler reinterprets it),
+    /// so the method cursor must not move.
+    #[test]
+    fn n_p_step_matches_while_searching() {
+        let mut mode = BytecodeMode::new(disasm());
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let _ = mode.ensure_rendered(100, &theme, PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        mode.set_search(Some("a")); // matches many lines
+        assert!(mode.search.is_some());
+
+        assert!(mode.handle(Action::NextMethod).was_consumed());
+        assert_eq!(
+            mode.method_cursor, 0,
+            "searching: n steps a match, leaving the method cursor put"
+        );
     }
 }
