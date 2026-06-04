@@ -755,8 +755,9 @@ Four views, Tab-cycled:
 - **Methods** — table: modifiers, name, signature. Descriptors are decoded to source form —
   `(Ljava/lang/String;I)V` renders as `(String, int) -> void`.
 - **Bytecode** — `javap -c`-style disassembly of every method: byte offset, mnemonic, and
-  resolved operand (member references as `class.name:descriptor`, branch targets as absolute
-  offsets). `n` / `p` jump between methods; `/` searches the listing. Parsed separately with
+  resolved operand (member references as `class.name:descriptor`, simple branch targets as
+  absolute offsets, switches summarised by entry count). `n` / `p` jump between methods; `/`
+  searches the listing. Parsed separately with
   bytecode enabled, so a decode failure here leaves the cheaper metadata views intact.
 
 Field types and method signatures are syntax-coloured the way a Java / Rust highlighter would
