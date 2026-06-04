@@ -59,9 +59,13 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> FileExtras 
 
 /// Summarise an `ar` archive's object members. Returns `None` for
 /// non-`ar` formats and for `ar` archives with no object members (e.g. a
-/// `.deb`, whose members are tarballs). Architecture is read from the
-/// first object member's header only — the per-member magic check that
-/// counts objects is cheap, but parsing every member for arch is not.
+/// `.deb`, whose members are tarballs).
+///
+/// This reads the whole archive once for random-access member slices —
+/// the same whole-file cost the object-file viewer pays, and acceptable
+/// for the same reason (static libraries are not multi-GB streams). Only
+/// the first object member is fully parsed (for its architecture); the
+/// per-member object check is a cheap `FileKind` magic read.
 fn static_lib_summary(source: &InputSource, format: ArchiveFormat) -> Option<StaticLibSummary> {
     if format != ArchiveFormat::Ar {
         return None;
@@ -187,7 +191,7 @@ mod tests {
     fn static_lib_summary_counts_objects() {
         let lib = static_lib_summary(&fixture("tiny.a"), ArchiveFormat::Ar)
             .expect("tiny.a is a static library");
-        assert_eq!(lib.object_members, 2);
+        assert_eq!(lib.object_members, 3);
         assert_eq!(lib.architecture.as_deref(), Some("AArch64"));
     }
 

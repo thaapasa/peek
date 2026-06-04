@@ -49,11 +49,13 @@ fn gather(source: &InputSource) -> ObjectInfo {
     })
 }
 
-/// Entry point, or `None` for relocatable objects (`.o` — no entry).
+/// Entry point, or `None` for relocatable objects (`.o` — no entry) and
+/// for containers that report a 0 entry (WASM, other non-executable
+/// kinds) — a `0x0` entry is a sentinel, not a real address.
 fn entry_point(file: &object::File<'_>) -> Option<u64> {
     match file.kind() {
         object::ObjectKind::Relocatable => None,
-        _ => Some(file.entry()),
+        _ => Some(file.entry()).filter(|&e| e != 0),
     }
 }
 
