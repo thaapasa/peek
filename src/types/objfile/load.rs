@@ -10,6 +10,11 @@ use object::read::macho::{FatArch, MachOFatFile32, MachOFatFile64};
 /// A parsed object plus, for universal containers, the fat-slice summary.
 pub struct Loaded<'data> {
     pub file: object::File<'data>,
+    /// The exact bytes `file` was parsed from: the whole input for a
+    /// plain object, or the selected slice for a universal Mach-O.
+    /// Lets format-specific walks (linked libraries) re-parse the same
+    /// view the rest of the Info reflects.
+    pub data: &'data [u8],
     /// `Some` when the input was a fat / universal Mach-O.
     pub fat: Option<FatSummary>,
 }
@@ -37,6 +42,7 @@ pub fn load(data: &[u8]) -> Result<Loaded<'_>> {
         _ => Ok(Loaded {
             file: object::File::parse(data)
                 .map_err(|e| anyhow!("not a recognised object file: {e}"))?,
+            data,
             fat: None,
         }),
     }
@@ -64,6 +70,7 @@ fn load_fat<'data, A: FatArch>(data: &'data [u8], arches: &[A]) -> Result<Loaded
         object::File::parse(slice).map_err(|e| anyhow!("universal slice not parseable: {e}"))?;
     Ok(Loaded {
         file,
+        data: slice,
         fat: Some(FatSummary {
             architectures,
             selected,

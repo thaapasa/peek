@@ -38,6 +38,7 @@ use crate::types::ebook::detect as ebook_detect;
 use crate::types::email::detect as email_detect;
 use crate::types::eps::detect as eps_detect;
 use crate::types::font::detect as font_detect;
+use crate::types::objfile::detect as objfile_detect;
 use crate::types::spreadsheet::detect as spreadsheet_detect;
 use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
@@ -398,6 +399,9 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.len() >= 4 && &head[..4] == LZ4_FRAME_MAGIC {
         return Some("application/x-lz4".to_string());
     }
+    if head.len() >= 4 && &head[..4] == WASM_MAGIC {
+        return Some("application/wasm".to_string());
+    }
     // Java class vs Mach-O fat binary — same `CA FE BA BE` magic. A
     // classfile's major_version (big-endian u16 at offset 6) is >= 45
     // (JDK 1.0); a fat Mach-O's nfat_arch slice count there is small
@@ -423,6 +427,12 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     // to avoid claiming unrelated ASN.1 blobs.
     if cert_detect::sniff_der(head) {
         return Some("application/pkix-cert".to_string());
+    }
+    // Bare COFF objects (`.obj`) have no dedicated magic — validate the
+    // full header before claiming, so a Wavefront `.obj` text model or
+    // other binary isn't misrouted to the object-file viewer.
+    if objfile_detect::is_bare_coff(head) {
+        return Some("application/x-coff".to_string());
     }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
@@ -483,6 +493,8 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         || mime == "application/x-mach-binary"
         || mime == "application/x-msdownload"
         || mime == "application/vnd.microsoft.portable-executable"
+        || mime == "application/wasm"
+        || mime == "application/x-coff"
     {
         return Some(FileType::ObjectFile);
     }
@@ -607,6 +619,11 @@ fn compression_format_from_mime(mime: &str) -> Option<CompressionFormat> {
 /// ar; without an explicit check, stdin-piped `.deb` files would
 /// classify as binary.
 const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
+
+/// WebAssembly module magic — `\0asm` followed by a 4-byte version.
+/// `infer` doesn't classify `.wasm`; the explicit prefix routes modules
+/// to the object-file viewer (the `object` crate parses them).
+const WASM_MAGIC: &[u8; 4] = b"\0asm";
 
 /// RTF (Rich Text Format) signature. Every conforming RTF starts with
 /// `{\rtf1`; `infer` doesn't classify RTF, so the explicit prefix
@@ -839,6 +856,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "pdf" => FileType::Pdf(PdfFlavor::Pdf),
         "ai" => FileType::Pdf(PdfFlavor::Illustrator),
         "class" => FileType::Classfile,
+        "wasm" => FileType::ObjectFile,
         "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn" => FileType::Markdown,
         "ipynb" => FileType::Notebook,
         _ => return None,

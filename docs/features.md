@@ -699,16 +699,18 @@ archive containers) are not supported — only CBZ ships today.
 
 ### Object Files ✅
 
-ELF, Mach-O, and PE/COFF binaries — executables, shared libraries, relocatable objects — get a
-dedicated viewer instead of the binary hex fallback. Backed by the `object` crate: one read-only
-API across all four container formats. Detection is magic-byte based (`infer` MIME →
-`FileType::ObjectFile`), so an extensionless `/bin/ls` routes correctly.
+ELF, Mach-O, PE/COFF, and WebAssembly binaries — executables, shared libraries, relocatable
+objects, `.wasm` modules — get a dedicated viewer instead of the binary hex fallback. Backed by the
+`object` crate: one read-only API across every container format. Detection is magic-byte based
+(`infer` MIME → `FileType::ObjectFile`, plus explicit `\0asm` for WASM), so an extensionless
+`/bin/ls` routes correctly.
 
 Three views, Tab-cycled:
 
 - **Info** (landing) — format, architecture, file kind (executable / relocatable object / dynamic
   library / core dump), 32- vs 64-bit, endianness, entry point, section and symbol counts,
-  debug-info presence. Mirrors `file` + `readelf -h`.
+  debug-info presence, build identity (ELF build ID / Mach-O UUID / PE PDB GUID), and linked
+  libraries (ELF `DT_NEEDED`, Mach-O dylibs, PE imports). Mirrors `file` + `readelf -d` + `otool -L`.
 - **Sections** — `readelf -S`-style table: index, name, address, size, kind.
 - **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
   falls back to the dynamic symbol table when the file is stripped.
@@ -727,11 +729,14 @@ standalone files.
 | ELF       | executables, shared objects (`.so`), relocatable objects (`.o`) |
 | Mach-O    | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
 | PE / COFF | Windows executables and DLLs                                    |
+| WebAssembly | `.wasm` modules (functions surface as symbols)                |
 
 `object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
-through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files
-without a magic signature aren't auto-detected yet; deeper inspection (linked libraries, build
-notes, per-slice switching) is tracked in [planned.md](planned.md).
+through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files have
+no dedicated magic, so they're detected by validating the full COFF header (known machine, no
+optional header, sane section count, executable-image flag clear) — strict enough that a Wavefront
+`.obj` 3D model stays text. Remaining deeper inspection (compiler/toolchain notes, interactive
+fat-slice switching) is tracked in [planned.md](planned.md).
 
 ### Java Classfiles ✅
 
@@ -741,7 +746,7 @@ Mach-O fat / universal-binary magic. `head_magic_mime` disambiguates on the fiel
 a classfile's `major_version` is ≥ 45 (JDK 1.0); a fat Mach-O's `nfat_arch` slice count there is
 small (< 45 in any real binary), so the field cleanly separates them.
 
-Three views, Tab-cycled:
+Four views, Tab-cycled:
 
 - **Info** (landing) — class name, superclass, interfaces, JDK version (classfile `major − 44`
   for major ≥ 49: 52 = Java 8, 61 = Java 17), kind (`public final class` / `interface` /
@@ -749,6 +754,11 @@ Three views, Tab-cycled:
 - **Fields** — table: modifiers, type, name.
 - **Methods** — table: modifiers, name, signature. Descriptors are decoded to source form —
   `(Ljava/lang/String;I)V` renders as `(String, int) -> void`.
+- **Bytecode** — `javap -c`-style disassembly of every method: byte offset, mnemonic, and
+  resolved operand (member references as `class.name:descriptor`, simple branch targets as
+  absolute offsets, switches summarised by entry count). `n` / `p` jump between methods; `/`
+  searches the listing. Parsed separately with
+  bytecode enabled, so a decode failure here leaves the cheaper metadata views intact.
 
 Field types and method signatures are syntax-coloured the way a Java / Rust highlighter would
 show them — primitive types, class names, array brackets, and punctuation each in their own
@@ -767,8 +777,7 @@ Two deliberate departures from a naive `javap` port:
   turns those typed values into readable, colour-tagged spans; it never re-parses raw
   descriptor strings.
 
-No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
-is not implemented; the Methods view shows signatures only.
+No extract path — fields and methods are not standalone files.
 
 ### SQLite Databases ✅
 
@@ -968,7 +977,10 @@ directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 | RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
-(corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.
+(corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty. When an
+`ar` archive's members are object files — i.e. a static library (`.a` / `.lib`) — the Info view adds
+a **Static library** section: object-member count and the target architecture (read from the first
+object member). A non-object `ar` archive such as a `.deb` doesn't get this section.
 
 A **sticky parent breadcrumb** pins the current top row's ancestor chain to the upper rows of the
 viewport when scrolled — so even mid-tree the path back to root stays visible. Same TOC code path

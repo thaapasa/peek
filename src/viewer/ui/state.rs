@@ -510,6 +510,8 @@ impl ViewerState {
             | Action::PrevChapter
             | Action::NextFace
             | Action::PrevFace
+            | Action::NextMethod
+            | Action::PrevMethod
             | Action::NextMatch
             | Action::PrevMatch
             | Action::CycleBackground

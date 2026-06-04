@@ -117,10 +117,11 @@ pulldown-cmark = { version = "0.13", default-features = false, features = ["html
 # readers.
 symphonia = { version = "0.5", features = ["all-codecs", "all-formats", "opt-simd"] }
 
-# Object-file parsing (ELF / Mach-O / PE / COFF). One read-only API
-# across all four formats, so the objfile viewer needs no per-format
-# parser. `write` feature dropped — peek never emits object files.
-object = { version = "0.36", default-features = false, features = ["read", "std"] }
+# Object-file parsing (ELF / Mach-O / PE / COFF / WASM). One read-only
+# API across all formats, so the objfile viewer needs no per-format
+# parser. `write` feature dropped — peek never emits object files. The
+# `wasm` feature pulls `wasmparser` so `.wasm` modules parse too.
+object = { version = "0.36", default-features = false, features = ["read", "std", "wasm"] }
 
 # Java classfile parsing (.class — JVM bytecode container). Pure Rust,
 # parse-only: constant pool, fields, methods, attributes, version.

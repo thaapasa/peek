@@ -302,7 +302,7 @@ src/
       detect.rs        — format_from_name + format_from_mime (handles double-extensions `.tar.gz` etc. before bare compression)
       format.rs        — ArchiveFormat enum + label
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper + open_seekable (streams File/TempFile/Memory; RangeReadSeek windows a FileRange over its backing file — no slurp)
-      info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section)
+      info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section); static_lib_summary adds a Static library section (object-member count + arch) when an `ar` archive's members are objects
       extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4/br]/7z/cpio[gz]/ar. Stored zip / uncompressed tar members → zero-copy InputSource::subrange view (no spool). tar/cpio/ar/7z stream the walk over open_seekable (walk_tar; compressed via backends::tar::decode_compressed; 7z via for_each_entries draining preceding solid-block entries) — never reads the whole archive into RAM, matched body streams to spool
       backends/
         mod.rs         — Backend module wiring
@@ -336,18 +336,22 @@ src/
     objfile/
       mod.rs           — Module wiring
       compose.rs       — compose(): InfoMode landing view + Sections / Symbols TableMode (no extract path)
-      load.rs          — Fat-aware load: object::FileKind probe → universal Mach-O slice select (host arch, else first) → object::File::parse; FatSummary lists every slice
-      info.rs          — ObjectInfo { meta: Option<ObjectMeta>, error } + ObjectMeta (semantic `object` enums: BinaryFormat / Architecture / ObjectKind / Endianness — not pre-formatted)
-      info_gather.rs   — gather_extras: load + capture header counts into ObjectMeta
-      info_render.rs   — render_section (Object File section) + enum→label maps (format / kind / arch / endianness — the one place metadata becomes text)
+      detect.rs        — is_bare_coff: full COFF-header validation (known machine + no optional header + sane section count + executable flag clear) so bare `.obj` routes here without misclaiming Wavefront 3D `.obj`
+      load.rs          — Fat-aware load: object::FileKind probe → universal Mach-O slice select (host arch, else first) → object::File::parse; carries the parsed slice bytes; FatSummary lists every slice
+      links.rs         — linked_libraries: per-format dependency walk (ELF DT_NEEDED / Mach-O LC_LOAD_DYLIB family / PE import table) — the unified imports() reports symbols, not the soname list
+      info.rs          — ObjectInfo { meta: Option<ObjectMeta>, error } + ObjectMeta (semantic `object` enums: BinaryFormat / Architecture / ObjectKind / Endianness — not pre-formatted) + BuildIdKind + linked libraries
+      info_gather.rs   — gather_extras: load + capture header counts, build identity (build_id / mach_uuid / pdb_info), and linked libraries into ObjectMeta
+      info_render.rs   — render_section (Object File section) + enum→label maps (format / kind / arch / endianness — the one place metadata becomes text); arch_label reused by the static-library summary
       tables.rs        — build(): Sections / Symbols as shared `viewer::table::Table` data (typed Cell + CellRole) via the `object` crate
     classfile/
       mod.rs           — Module wiring
-      compose.rs       — compose(): InfoMode landing view + Fields / Methods TableMode (no extract path)
+      compose.rs       — compose(): InfoMode landing view + Fields / Methods TableMode + Bytecode disassembly view (no extract path)
       info.rs          — ClassfileInfo { meta: Option<ClassfileMeta>, error } + ClassfileMeta (keeps cafebabe's ClassAccessFlags semantic; render maps it)
       info_gather.rs   — gather_extras: cafebabe parse_class_with_options (bytecode parsing off) → ClassfileMeta
       info_render.rs   — render_section (Class File section) + version / access-flag → label maps
       descriptor.rs    — Render cafebabe descriptor types as syntax-highlighted spans (`(Ljava/lang/String;I)V` → coloured `(String, int) -> void`: primitives / class names / `[]` / punctuation each a CellRole)
+      bytecode.rs      — build(): re-parse with bytecode on; Disassembly { methods: MethodAsm[] } of theme-free instruction data (offset / mnemonic / resolved operand) via cafebabe's decoded opcode stream
+      bytecode_mode.rs — BytecodeMode: caller-scrolled `javap -c` view; themed lines cached per (width, style, theme) with per-method header anchors; `n`/`p` jump methods (YesScrollTo), `/` searches
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
     mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), free `image_config`. Re-exports highlight_lines / LineStreamHighlighter from `highlight`

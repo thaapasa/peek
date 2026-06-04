@@ -140,6 +140,10 @@ pub(crate) enum Action {
     NextFace,
     /// Step back to the previous face (font Specimen mode).
     PrevFace,
+    /// Jump to the next method (classfile Bytecode mode).
+    NextMethod,
+    /// Jump to the previous method (classfile Bytecode mode).
+    PrevMethod,
     /// Open the text-search prompt (ContentMode).
     OpenSearch,
     /// Jump to the next search match (ContentMode).
@@ -229,6 +233,8 @@ impl Action {
             Action::PrevChapter         => binds![B::plain(Char('p'))],
             Action::NextFace            => binds![B::plain(Char('n'))],
             Action::PrevFace            => binds![B::plain(Char('p'))],
+            Action::NextMethod          => binds![B::plain(Char('n'))],
+            Action::PrevMethod          => binds![B::plain(Char('p'))],
             Action::OpenSearch          => binds![B::plain(Char('/'))],
             Action::NextMatch           => binds![B::plain(Char('n'))],
             Action::PrevMatch           => binds![B::plain(Char('p'))],
