@@ -36,6 +36,10 @@ pipeline as if it were a standalone file). `e` extracts; see
 Entry count, file count, directory count, total uncompressed size. Listing failures (corrupt
 archive, unsupported variant) surface as a warning row.
 
+When an `ar` archive turns out to be a **static library** — its members are object files (`.a` /
+`.lib`) — the Info view adds a Static library section with the object-member count and the target
+architecture. A non-object `ar` archive like a `.deb` doesn't show it.
+
 ## Single-stream compression
 
 Bare codec wrappers (without a tar inside) decompress transparently — peek opens straight to

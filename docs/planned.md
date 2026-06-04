@@ -146,8 +146,6 @@ Crates: `pkcs12` (encrypted bags).
   Mach-O UUID / PE PDB GUID already surface in Info.)
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
   auto-picked and the rest only listed in the Info view.
-- **Static libraries `.a` / `.lib`** — `object` parses archive members; a tailored summary view is
-  not wired (today `.a` routes to the archive viewer's member listing).
 
 ## Viewer Features
 

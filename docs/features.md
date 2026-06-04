@@ -973,7 +973,10 @@ directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 | RAR         | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
-(corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty.
+(corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty. When an
+`ar` archive's members are object files — i.e. a static library (`.a` / `.lib`) — the Info view adds
+a **Static library** section: object-member count and the target architecture (read from the first
+object member). A non-object `ar` archive such as a `.deb` doesn't get this section.
 
 A **sticky parent breadcrumb** pins the current top row's ancestor chain to the upper rows of the
 viewport when scrolled — so even mid-tree the path back to root stays visible. Same TOC code path

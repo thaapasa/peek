@@ -194,7 +194,7 @@ fn endianness_label(e: Endianness) -> &'static str {
 
 /// Friendly label for the common architectures; anything else falls
 /// back to the `object` enum's debug name (still readable — `S390x` etc).
-fn arch_label(a: Architecture) -> String {
+pub(crate) fn arch_label(a: Architecture) -> String {
     match a {
         Architecture::X86_64 => "x86-64".to_string(),
         Architecture::I386 => "x86 (i386)".to_string(),
