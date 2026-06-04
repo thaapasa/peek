@@ -746,7 +746,7 @@ Mach-O fat / universal-binary magic. `head_magic_mime` disambiguates on the fiel
 a classfile's `major_version` is ≥ 45 (JDK 1.0); a fat Mach-O's `nfat_arch` slice count there is
 small (< 45 in any real binary), so the field cleanly separates them.
 
-Three views, Tab-cycled:
+Four views, Tab-cycled:
 
 - **Info** (landing) — class name, superclass, interfaces, JDK version (classfile `major − 44`
   for major ≥ 49: 52 = Java 8, 61 = Java 17), kind (`public final class` / `interface` /
@@ -754,6 +754,10 @@ Three views, Tab-cycled:
 - **Fields** — table: modifiers, type, name.
 - **Methods** — table: modifiers, name, signature. Descriptors are decoded to source form —
   `(Ljava/lang/String;I)V` renders as `(String, int) -> void`.
+- **Bytecode** — `javap -c`-style disassembly of every method: byte offset, mnemonic, and
+  resolved operand (member references as `class.name:descriptor`, branch targets as absolute
+  offsets). `n` / `p` jump between methods; `/` searches the listing. Parsed separately with
+  bytecode enabled, so a decode failure here leaves the cheaper metadata views intact.
 
 Field types and method signatures are syntax-coloured the way a Java / Rust highlighter would
 show them — primitive types, class names, array brackets, and punctuation each in their own
@@ -772,8 +776,7 @@ Two deliberate departures from a naive `javap` port:
   turns those typed values into readable, colour-tagged spans; it never re-parses raw
   descriptor strings.
 
-No extract path — fields and methods are not standalone files. Bytecode disassembly (`javap -c`)
-is not implemented; the Methods view shows signatures only.
+No extract path — fields and methods are not standalone files.
 
 ### SQLite Databases ✅
 

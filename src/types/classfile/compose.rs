@@ -29,5 +29,11 @@ pub fn compose(
         modes.push(Box::new(TableMode::new("Fields", tables.fields)));
         modes.push(Box::new(TableMode::new("Methods", tables.methods)));
     }
+
+    // Bytecode disassembly — parsed separately (with bytecode enabled) so
+    // a parse failure here doesn't sink the cheaper metadata views above.
+    if let Ok(disasm) = super::bytecode::build(source) {
+        modes.push(Box::new(super::bytecode_mode::BytecodeMode::new(disasm)));
+    }
     Ok(())
 }
