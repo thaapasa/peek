@@ -398,6 +398,9 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.len() >= 4 && &head[..4] == LZ4_FRAME_MAGIC {
         return Some("application/x-lz4".to_string());
     }
+    if head.len() >= 4 && &head[..4] == WASM_MAGIC {
+        return Some("application/wasm".to_string());
+    }
     // Java class vs Mach-O fat binary — same `CA FE BA BE` magic. A
     // classfile's major_version (big-endian u16 at offset 6) is >= 45
     // (JDK 1.0); a fat Mach-O's nfat_arch slice count there is small
@@ -483,6 +486,7 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         || mime == "application/x-mach-binary"
         || mime == "application/x-msdownload"
         || mime == "application/vnd.microsoft.portable-executable"
+        || mime == "application/wasm"
     {
         return Some(FileType::ObjectFile);
     }
@@ -607,6 +611,11 @@ fn compression_format_from_mime(mime: &str) -> Option<CompressionFormat> {
 /// ar; without an explicit check, stdin-piped `.deb` files would
 /// classify as binary.
 const AR_MAGIC: &[u8; 8] = b"!<arch>\n";
+
+/// WebAssembly module magic — `\0asm` followed by a 4-byte version.
+/// `infer` doesn't classify `.wasm`; the explicit prefix routes modules
+/// to the object-file viewer (the `object` crate parses them).
+const WASM_MAGIC: &[u8; 4] = b"\0asm";
 
 /// RTF (Rich Text Format) signature. Every conforming RTF starts with
 /// `{\rtf1`; `infer` doesn't classify RTF, so the explicit prefix
@@ -839,6 +848,7 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "pdf" => FileType::Pdf(PdfFlavor::Pdf),
         "ai" => FileType::Pdf(PdfFlavor::Illustrator),
         "class" => FileType::Classfile,
+        "wasm" => FileType::ObjectFile,
         "md" | "markdown" | "mdown" | "mkd" | "mkdn" | "mdwn" => FileType::Markdown,
         "ipynb" => FileType::Notebook,
         _ => return None,

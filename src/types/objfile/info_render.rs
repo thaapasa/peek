@@ -156,6 +156,8 @@ fn arch_label(a: Architecture) -> String {
         Architecture::I386 => "x86 (i386)".to_string(),
         Architecture::Aarch64 => "AArch64".to_string(),
         Architecture::Arm => "ARM".to_string(),
+        Architecture::Wasm32 => "WebAssembly (32-bit)".to_string(),
+        Architecture::Wasm64 => "WebAssembly (64-bit)".to_string(),
         Architecture::Unknown => "unknown".to_string(),
         other => format!("{other:?}"),
     }

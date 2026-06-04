@@ -1,8 +1,9 @@
 # Object files
 
-Executables, shared libraries, and relocatable objects — **ELF**, **Mach-O**, and **PE / COFF** —
-open in a dedicated viewer rather than the binary hex fallback. Detection is by magic bytes, so an
-extensionless binary like `/bin/ls` is recognised without a `.elf` / `.exe` extension.
+Executables, shared libraries, relocatable objects, and **WebAssembly** modules — **ELF**,
+**Mach-O**, **PE / COFF**, and **`.wasm`** — open in a dedicated viewer rather than the binary hex
+fallback. Detection is by magic bytes, so an extensionless binary like `/bin/ls` is recognised
+without a `.elf` / `.exe` extension. WebAssembly functions surface in the Symbols view.
 
 ## Views
 

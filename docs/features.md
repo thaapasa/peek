@@ -699,10 +699,11 @@ archive containers) are not supported — only CBZ ships today.
 
 ### Object Files ✅
 
-ELF, Mach-O, and PE/COFF binaries — executables, shared libraries, relocatable objects — get a
-dedicated viewer instead of the binary hex fallback. Backed by the `object` crate: one read-only
-API across all four container formats. Detection is magic-byte based (`infer` MIME →
-`FileType::ObjectFile`), so an extensionless `/bin/ls` routes correctly.
+ELF, Mach-O, PE/COFF, and WebAssembly binaries — executables, shared libraries, relocatable
+objects, `.wasm` modules — get a dedicated viewer instead of the binary hex fallback. Backed by the
+`object` crate: one read-only API across every container format. Detection is magic-byte based
+(`infer` MIME → `FileType::ObjectFile`, plus explicit `\0asm` for WASM), so an extensionless
+`/bin/ls` routes correctly.
 
 Three views, Tab-cycled:
 
@@ -727,6 +728,7 @@ standalone files.
 | ELF       | executables, shared objects (`.so`), relocatable objects (`.o`) |
 | Mach-O    | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
 | PE / COFF | Windows executables and DLLs                                    |
+| WebAssembly | `.wasm` modules (functions surface as symbols)                |
 
 `object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
 through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files

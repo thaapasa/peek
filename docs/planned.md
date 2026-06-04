@@ -146,8 +146,8 @@ Crates: `pkcs12` (encrypted bags).
 - **Notes / build metadata** — build ID, compiler / toolchain hints, code-signature presence.
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
   auto-picked and the rest only listed in the Info view.
-- **WebAssembly `.wasm`** and **static libraries `.a` / `.lib`** — `object` parses both; neither
-  detection routing nor a tailored view is wired.
+- **Static libraries `.a` / `.lib`** — `object` parses archive members; a tailored summary view is
+  not wired (today `.a` routes to the archive viewer's member listing).
 - **Bare COFF `.obj`** — no magic signature, so not auto-detected.
 
 ## Viewer Features

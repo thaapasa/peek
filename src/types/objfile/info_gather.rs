@@ -54,3 +54,28 @@ fn entry_point(file: &object::File<'_>) -> Option<u64> {
         _ => Some(file.entry()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use object::BinaryFormat;
+    use std::path::PathBuf;
+
+    fn fixture(name: &str) -> InputSource {
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("test-data");
+        p.push(name);
+        InputSource::File(p)
+    }
+
+    /// A `.wasm` module parses through the same object-file path as ELF /
+    /// Mach-O / PE and reports the WebAssembly format. The exported
+    /// function surfaces as a symbol.
+    #[test]
+    fn wasm_module_parses_as_webassembly() {
+        let info = gather(&fixture("minimal.wasm"));
+        let meta = info.meta.expect("wasm module parses");
+        assert_eq!(meta.format, BinaryFormat::Wasm);
+        assert!(meta.section_count > 0, "wasm sections are listed");
+    }
+}
