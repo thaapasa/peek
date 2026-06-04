@@ -10,5 +10,6 @@ pub mod compose;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
+pub mod links;
 pub mod load;
 pub mod tables;

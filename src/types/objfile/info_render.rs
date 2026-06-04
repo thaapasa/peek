@@ -101,6 +101,16 @@ pub fn render_section(lines: &mut Vec<String>, info: &ObjectInfo, theme: &PeekTh
         }),
         theme,
     );
+    // Only surfaced when present — a statically-linked or format-without-
+    // deps file leaves the section out rather than printing "none".
+    if !meta.linked_libraries.is_empty() {
+        push_field(
+            lines,
+            "Linked libs",
+            &theme.paint_value(&meta.linked_libraries.join(", ")),
+            theme,
+        );
+    }
 }
 
 /// `.symtab` count with the dynamic-symbol count appended when present;

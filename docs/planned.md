@@ -142,7 +142,6 @@ Crates: `pkcs12` (encrypted bags).
 
 ### Object Files — deeper inspection ☐
 
-- **Linked libraries** — `DT_NEEDED` (ELF), load commands (Mach-O), import table (PE).
 - **Notes / build metadata** — build ID, compiler / toolchain hints, code-signature presence.
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
   auto-picked and the rest only listed in the Info view.

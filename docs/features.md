@@ -709,7 +709,8 @@ Three views, Tab-cycled:
 
 - **Info** (landing) — format, architecture, file kind (executable / relocatable object / dynamic
   library / core dump), 32- vs 64-bit, endianness, entry point, section and symbol counts,
-  debug-info presence. Mirrors `file` + `readelf -h`.
+  debug-info presence, and linked libraries (ELF `DT_NEEDED`, Mach-O dylibs, PE imports). Mirrors
+  `file` + `readelf -d` + `otool -L`.
 - **Sections** — `readelf -S`-style table: index, name, address, size, kind.
 - **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
   falls back to the dynamic symbol table when the file is stripped.

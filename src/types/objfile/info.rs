@@ -49,6 +49,10 @@ pub struct ObjectMeta {
     pub dynamic_symbol_count: usize,
     /// True when the file carries DWARF / debug sections.
     pub has_debug_info: bool,
+    /// Shared libraries the file links against (ELF `DT_NEEDED`, Mach-O
+    /// dylibs, PE imports), in file order. Empty when statically linked
+    /// or for formats we don't walk.
+    pub linked_libraries: Vec<String>,
     /// Universal (fat) Mach-O slice architectures, in container order.
     /// Empty for a plain single-architecture file.
     pub universal: Vec<Architecture>,

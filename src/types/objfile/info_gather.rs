@@ -42,6 +42,7 @@ fn gather(source: &InputSource) -> ObjectInfo {
         symbol_count: file.symbols().count(),
         dynamic_symbol_count: file.dynamic_symbols().count(),
         has_debug_info: file.has_debug_symbols(),
+        linked_libraries: super::links::linked_libraries(loaded.data),
         universal,
         universal_selected,
     })
