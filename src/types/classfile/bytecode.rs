@@ -90,15 +90,59 @@ fn method_bytecode<'m, 'a>(method: &'m MethodInfo<'a>) -> Option<&'m [(usize, Op
     })
 }
 
-/// Lowercased mnemonic, derived from the opcode variant name. cafebabe
-/// has no `Display`, so the `Debug` name (everything before the operand
-/// `(`) is the stable source of the JVM mnemonic.
+/// Lowercased mnemonic. cafebabe has no `Display`, and its CamelCase
+/// variant names drop the underscores the canonical JVM mnemonics carry
+/// (`Iconst0` vs `iconst_0`, `IfIcmpeq` vs `if_icmpeq`). The composite
+/// mnemonics are mapped explicitly; everything else lowercases its
+/// `Debug` variant name (the part before the operand `(`).
 fn mnemonic(op: &Opcode<'_>) -> String {
+    if let Some(canonical) = canonical_mnemonic(op) {
+        return canonical.to_string();
+    }
     let dbg = format!("{op:?}");
     dbg.split(['(', ' '])
         .next()
         .unwrap_or(&dbg)
         .to_ascii_lowercase()
+}
+
+/// Canonical spelling for the opcodes whose JVM mnemonic has an
+/// underscore the cafebabe variant name lacks. `None` for everything
+/// else (the lowercased variant name is already correct).
+fn canonical_mnemonic(op: &Opcode<'_>) -> Option<&'static str> {
+    use Opcode::*;
+    Some(match op {
+        AconstNull => "aconst_null",
+        IconstM1 => "iconst_m1",
+        Iconst0 => "iconst_0",
+        Iconst1 => "iconst_1",
+        Iconst2 => "iconst_2",
+        Iconst3 => "iconst_3",
+        Iconst4 => "iconst_4",
+        Iconst5 => "iconst_5",
+        Lconst0 => "lconst_0",
+        Lconst1 => "lconst_1",
+        Fconst0 => "fconst_0",
+        Fconst1 => "fconst_1",
+        Fconst2 => "fconst_2",
+        Dconst0 => "dconst_0",
+        Dconst1 => "dconst_1",
+        DupX1 => "dup_x1",
+        DupX2 => "dup_x2",
+        Dup2X1 => "dup2_x1",
+        Dup2X2 => "dup2_x2",
+        LdcW(_) => "ldc_w",
+        Ldc2W(_) => "ldc2_w",
+        IfIcmpeq(_) => "if_icmpeq",
+        IfIcmpne(_) => "if_icmpne",
+        IfIcmplt(_) => "if_icmplt",
+        IfIcmpge(_) => "if_icmpge",
+        IfIcmpgt(_) => "if_icmpgt",
+        IfIcmple(_) => "if_icmple",
+        IfAcmpeq(_) => "if_acmpeq",
+        IfAcmpne(_) => "if_acmpne",
+        _ => return None,
+    })
 }
 
 /// Rendered operand for the opcodes that carry one; empty otherwise.
@@ -201,6 +245,23 @@ mod tests {
             insns.iter().any(|i| i.mnemonic == "return"),
             "a void method returns"
         );
+    }
+
+    /// Composite mnemonics keep their canonical underscores; plain ones
+    /// fall through to the lowercased variant name.
+    #[test]
+    fn canonical_mnemonics_keep_underscores() {
+        use cafebabe::bytecode::Opcode;
+        assert_eq!(mnemonic(&Opcode::Iconst0), "iconst_0");
+        assert_eq!(mnemonic(&Opcode::IconstM1), "iconst_m1");
+        assert_eq!(mnemonic(&Opcode::AconstNull), "aconst_null");
+        assert_eq!(mnemonic(&Opcode::DupX1), "dup_x1");
+        assert_eq!(mnemonic(&Opcode::Dup2X1), "dup2_x1");
+        assert_eq!(mnemonic(&Opcode::IfIcmpeq(0)), "if_icmpeq");
+        assert_eq!(mnemonic(&Opcode::IfAcmpne(0)), "if_acmpne");
+        // No underscore — the Debug-derived fallback is already correct.
+        assert_eq!(mnemonic(&Opcode::Iadd), "iadd");
+        assert_eq!(mnemonic(&Opcode::Areturn), "areturn");
     }
 
     /// Every method carries a signature header.
