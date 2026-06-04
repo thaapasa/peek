@@ -5,7 +5,7 @@
 
 use object::Object;
 
-use super::info::{ObjectInfo, ObjectMeta};
+use super::info::{BuildIdKind, ObjectInfo, ObjectMeta};
 use super::load;
 use crate::info::FileExtras;
 use crate::input::InputSource;
@@ -42,6 +42,7 @@ fn gather(source: &InputSource) -> ObjectInfo {
         symbol_count: file.symbols().count(),
         dynamic_symbol_count: file.dynamic_symbols().count(),
         has_debug_info: file.has_debug_symbols(),
+        build_id: build_id(file),
         linked_libraries: super::links::linked_libraries(loaded.data),
         universal,
         universal_selected,
@@ -54,6 +55,22 @@ fn entry_point(file: &object::File<'_>) -> Option<u64> {
         object::ObjectKind::Relocatable => None,
         _ => Some(file.entry()),
     }
+}
+
+/// Build-identity blob, preferring the format's native source: ELF build
+/// ID, else Mach-O UUID, else PE PDB GUID. All three are unified
+/// `Object` accessors, so no per-format parsing is needed here.
+fn build_id(file: &object::File<'_>) -> Option<(BuildIdKind, Vec<u8>)> {
+    if let Ok(Some(id)) = file.build_id() {
+        return Some((BuildIdKind::GnuBuildId, id.to_vec()));
+    }
+    if let Ok(Some(uuid)) = file.mach_uuid() {
+        return Some((BuildIdKind::MachUuid, uuid.to_vec()));
+    }
+    if let Ok(Some(cv)) = file.pdb_info() {
+        return Some((BuildIdKind::PdbGuid, cv.guid().to_vec()));
+    }
+    None
 }
 
 #[cfg(test)]
@@ -78,5 +95,16 @@ mod tests {
         let meta = info.meta.expect("wasm module parses");
         assert_eq!(meta.format, BinaryFormat::Wasm);
         assert!(meta.section_count > 0, "wasm sections are listed");
+    }
+
+    /// A Mach-O carries an `LC_UUID`, captured as a 16-byte UUID build id.
+    #[test]
+    fn macho_uuid_is_captured() {
+        let info = gather(&fixture("tiny.dylib"));
+        let meta = info.meta.expect("dylib parses");
+        match meta.build_id {
+            Some((BuildIdKind::MachUuid, bytes)) => assert_eq!(bytes.len(), 16),
+            other => panic!("expected a Mach-O UUID, got {other:?}"),
+        }
     }
 }

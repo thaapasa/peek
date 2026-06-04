@@ -7,6 +7,18 @@
 
 use object::{Architecture, BinaryFormat, Endianness, ObjectKind};
 
+/// Which kind of build-identity blob a file carries. The bytes are
+/// rendered differently per kind (continuous hex vs. canonical UUID).
+#[derive(Debug)]
+pub enum BuildIdKind {
+    /// ELF `NT_GNU_BUILD_ID` note.
+    GnuBuildId,
+    /// Mach-O `LC_UUID` load command.
+    MachUuid,
+    /// PE CodeView PDB GUID.
+    PdbGuid,
+}
+
 /// Object-file metadata, or the reason parsing failed.
 pub struct ObjectInfo {
     /// Header metadata. `None` when parsing failed.
@@ -49,6 +61,9 @@ pub struct ObjectMeta {
     pub dynamic_symbol_count: usize,
     /// True when the file carries DWARF / debug sections.
     pub has_debug_info: bool,
+    /// Build-identity blob (ELF build ID, Mach-O UUID, PE PDB GUID) when
+    /// present, tagged with its source so the renderer can label it.
+    pub build_id: Option<(BuildIdKind, Vec<u8>)>,
     /// Shared libraries the file links against (ELF `DT_NEEDED`, Mach-O
     /// dylibs, PE imports), in file order. Empty when statically linked
     /// or for formats we don't walk.
