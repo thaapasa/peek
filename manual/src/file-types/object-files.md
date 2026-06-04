@@ -34,7 +34,9 @@ The Sections and Symbols views share a table layout:
 A universal Mach-O carries several architecture slices in one file. peek parses the slice matching
 your machine and lists every slice in the Info view.
 
+Bare COFF `.obj` files (no dedicated magic) are recognised by validating the COFF header, so a
+Wavefront `.obj` 3D model — which shares the extension but is text — still opens as text.
+
 ## Limitations
 
-Sections and symbols are views, not extractable files — there is no `e` extract here. Bare COFF
-`.obj` files without a magic signature aren't auto-detected.
+Sections and symbols are views, not extractable files — there is no `e` extract here.

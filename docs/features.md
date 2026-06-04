@@ -732,9 +732,11 @@ standalone files.
 | WebAssembly | `.wasm` modules (functions surface as symbols)                |
 
 `object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
-through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files
-without a magic signature aren't auto-detected yet; deeper inspection (linked libraries, build
-notes, per-slice switching) is tracked in [planned.md](planned.md).
+through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files have
+no dedicated magic, so they're detected by validating the full COFF header (known machine, no
+optional header, sane section count, executable-image flag clear) — strict enough that a Wavefront
+`.obj` 3D model stays text. Remaining deeper inspection (compiler/toolchain notes, interactive
+fat-slice switching) is tracked in [planned.md](planned.md).
 
 ### Java Classfiles ✅
 

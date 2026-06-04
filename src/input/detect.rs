@@ -38,6 +38,7 @@ use crate::types::ebook::detect as ebook_detect;
 use crate::types::email::detect as email_detect;
 use crate::types::eps::detect as eps_detect;
 use crate::types::font::detect as font_detect;
+use crate::types::objfile::detect as objfile_detect;
 use crate::types::spreadsheet::detect as spreadsheet_detect;
 use crate::types::sqlite::detect as sqlite_detect;
 use crate::types::structured::detect as structured_detect;
@@ -427,6 +428,12 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if cert_detect::sniff_der(head) {
         return Some("application/pkix-cert".to_string());
     }
+    // Bare COFF objects (`.obj`) have no dedicated magic — validate the
+    // full header before claiming, so a Wavefront `.obj` text model or
+    // other binary isn't misrouted to the object-file viewer.
+    if objfile_detect::is_bare_coff(head) {
+        return Some("application/x-coff".to_string());
+    }
     infer::get(head).map(|k| k.mime_type().to_string())
 }
 
@@ -487,6 +494,7 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
         || mime == "application/x-msdownload"
         || mime == "application/vnd.microsoft.portable-executable"
         || mime == "application/wasm"
+        || mime == "application/x-coff"
     {
         return Some(FileType::ObjectFile);
     }

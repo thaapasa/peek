@@ -148,7 +148,6 @@ Crates: `pkcs12` (encrypted bags).
   auto-picked and the rest only listed in the Info view.
 - **Static libraries `.a` / `.lib`** — `object` parses archive members; a tailored summary view is
   not wired (today `.a` routes to the archive viewer's member listing).
-- **Bare COFF `.obj`** — no magic signature, so not auto-detected.
 
 ## Viewer Features
 
