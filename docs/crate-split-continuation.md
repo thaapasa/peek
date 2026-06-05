@@ -164,6 +164,21 @@ in the bin (`cli.rs`) is the projection seam. The `Registry` now *holds* the `Co
 closures (main + state) no longer capture a cloned `Args`. All 23 `types/*/compose.rs` take
 `&ComposeOpts`; `types/` is now fully clap-free (`grep` confirms zero `cli::Args` references).
 
+### Inversions complete (2026-06-05) — tree poised for the carve
+
+All foundation→types *toolkit* edges are now removed. Verified: **zero** non-hub, non-test
+`crate::types::` references in `viewer/` (outside the `compose_modes` hub in `mod.rs`) or
+`info/` (outside the `gather` hub). The five inversions that got here:
+
+1. `FileExtras` enum → `InfoExtras` trait (on `main`).
+2. `pretty_view` → injected closure.
+3. image render vocab → `viewer/image_render` + `render_image_window` → `types::image::paged_render`.
+4. `Args` → `ComposeOpts` (clap out of compose).
+5. `text_content_mode` pretty closure → `types::structured::pretty_view_for` (the gap step B left).
+
+What remains is **purely mechanical**: relocate the two dispatch hubs, then draw the crate
+manifests + facade aliases + visibility bumps. No more design work.
+
 ### Step C — hub relocation
 
 **Refined after the A/B measurement (2026-06-05).** With the foundation toolkit now
