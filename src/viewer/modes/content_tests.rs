@@ -43,7 +43,7 @@ fn make_ctx<'a>(file_info: &'a crate::info::FileInfo, peek_theme: &'a PeekTheme)
 fn render_window_matches_whole_file_highlight() {
     let source = fixture("theme.rs");
     let detected = detect::detect(&source).unwrap();
-    let file_info = crate::info::gather(&source, &detected).unwrap();
+    let file_info = crate::gather::gather(&source, &detected).unwrap();
     let tm = Rc::new(ThemeManager::new(
         PeekThemeName::IdeaDark,
         StyleMode::TrueColor,
@@ -435,7 +435,7 @@ fn status_segments_show_search_position() {
 #[test]
 fn tab_indented_line_expands_to_spaces_in_render() {
     let source = InputSource::stdin(Bytes::from_static(b"\tindented\n"));
-    let file_info = crate::info::gather(&source, &detect::detect(&source).unwrap()).unwrap();
+    let file_info = crate::gather::gather(&source, &detect::detect(&source).unwrap()).unwrap();
     let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
     let peek_theme = tm.peek_theme().clone();
     let ctx = make_ctx(&file_info, &peek_theme);

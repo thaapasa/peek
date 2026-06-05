@@ -4,11 +4,9 @@ use std::time::SystemTime;
 use crate::input::mime::MimeInfo;
 use crate::theme::PeekTheme;
 
-mod gather;
 mod render;
 mod time;
 
-pub use gather::gather;
 pub use render::{RenderOptions, render, thousands_sep};
 pub(crate) use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;
@@ -103,7 +101,7 @@ macro_rules! impl_info_extras {
 }
 
 #[cfg(unix)]
-pub(super) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
+pub(crate) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     use std::os::unix::fs::PermissionsExt;
     let mode = meta.permissions().mode();
     Some(format_unix_permissions(
@@ -113,7 +111,7 @@ pub(super) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String
 }
 
 #[cfg(not(unix))]
-pub(super) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
+pub(crate) fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     let perms = meta.permissions();
     Some(if perms.readonly() {
         "read-only".to_string()

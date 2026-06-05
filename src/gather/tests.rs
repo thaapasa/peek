@@ -19,7 +19,7 @@ fn fixture(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel)
 }
 
-fn gather_fixture(rel: &str) -> super::super::FileInfo {
+fn gather_fixture(rel: &str) -> crate::info::FileInfo {
     let path = fixture(rel);
     assert!(path.exists(), "fixture missing: {}", path.display());
     let source = InputSource::File(path);

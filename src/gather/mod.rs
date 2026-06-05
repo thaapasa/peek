@@ -17,7 +17,7 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
+use crate::info::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
     CertFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,

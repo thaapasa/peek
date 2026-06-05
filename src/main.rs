@@ -6,6 +6,7 @@ use clap::Parser;
 mod base64;
 mod cli;
 mod extract;
+mod gather;
 mod info;
 mod input;
 mod output;
@@ -132,7 +133,7 @@ fn run_view(
     // a scrollable view, use the interactive viewer's Info mode (key `i`).
     if args.info {
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
         for line in &lines {
@@ -162,7 +163,7 @@ fn run_view(
                 )
             })?;
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         modes[listing_idx]
@@ -198,7 +199,7 @@ fn run_view(
         // (first non-aux) mode straight to stdout — for binary files,
         // where every mode is aux, fall back to the first mode (Hex).
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);

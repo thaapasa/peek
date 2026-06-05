@@ -211,7 +211,7 @@ impl ViewerState {
         no_tempfile: bool,
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name, style_mode);
-        let file_info = crate::info::gather(&source, &detected)?;
+        let file_info = crate::gather::gather(&source, &detected)?;
         let frame = SessionFrame::new(source, detected, file_info, modes);
         Ok(Self {
             frames: vec![frame],
@@ -616,7 +616,7 @@ impl ViewerState {
             modes,
             breadcrumb_label,
         } = frame;
-        let file_info = match crate::info::gather(&source, &detected) {
+        let file_info = match crate::gather::gather(&source, &detected) {
             Ok(info) => info,
             Err(e) => {
                 self.flash = Some(format!("descend failed: {e:#}"));
@@ -654,7 +654,7 @@ impl ViewerState {
                 return Ok(());
             }
         };
-        let file_info = crate::info::gather(&source, &detected)?;
+        let file_info = crate::gather::gather(&source, &detected)?;
         let frame = SessionFrame::new(source, detected, file_info, modes);
         // Dir → Dir descent re-targets the current frame instead of
         // pushing, so navigating between sibling subdirectories doesn't
@@ -892,7 +892,7 @@ impl ViewerState {
         let (source_clone, retried) =
             crate::input::compression::resolve_transparent(self.frame().source.clone(), retried);
         let modes = (self.mode_builder)(&source_clone, &retried)?;
-        let file_info = crate::info::gather(&source_clone, &retried)?;
+        let file_info = crate::gather::gather(&source_clone, &retried)?;
         let frame = self.frame_mut();
         frame.source = source_clone;
         frame.detected = retried;

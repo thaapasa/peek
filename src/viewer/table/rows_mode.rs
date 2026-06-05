@@ -1405,7 +1405,7 @@ mod tests {
                     another_long_a,another_long_b,another_long_c,another_long_d\n";
         let src = stdin(text);
         let detected = detect::detect(&src).unwrap();
-        let file_info = crate::info::gather(&src, &detected).unwrap();
+        let file_info = crate::gather::gather(&src, &detected).unwrap();
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         let mut mode = build_csv_mode(data);
 
