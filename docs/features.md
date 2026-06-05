@@ -44,7 +44,7 @@ straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`)
 cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
-line-number gutter in text views. Text search (`/` opens the prompt, `n`/`p` cycle matches) works
+line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/`p` cycle matches) works
 in the text / source / structured views.
 
 ### Print Mode ✅
@@ -1358,7 +1358,7 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `n` / `p` | Step to the next / previous face in a `.ttc` |
 
 The help screen (`h`) is the authoritative in-app reference — all bindings derive from a single
-source (`viewer/ui/keys.rs::Action::bindings`).
+source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 
 ## Color and Rendering
 

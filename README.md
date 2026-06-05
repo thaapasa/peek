@@ -26,7 +26,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Certificates and keys** — PEM / DER X.509 / CSR / CRL / keys / OpenSSH pubkeys / JWK: subject, validity, SANs, fingerprints, thumbprints
 - **Fonts** — TrueType / OpenType / TTC collections / WOFF / WOFF2: rasterised specimen render + family / weight / glyphs / script coverage
 - **Hex dump** fallback for binary, reachable from any view with `x`
-- **Interactive viewer** with live theme cycling, info screen, extraction, text search
+- **Interactive viewer** with live theme cycling, info screen, extraction, text search, soft wrap, image zoom/pan
 
 peek is a single-file viewer: one path (or stdin) at a time. Run peek once per file.
 

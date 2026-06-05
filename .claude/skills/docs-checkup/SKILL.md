@@ -36,11 +36,11 @@ what the code actually does:
 - `README.md` — outward-facing feature summary + usage examples.
 - `manual/src/SUMMARY.md` + every chapter under `manual/src/`.
 - `src/cli.rs` — clap Args, the authoritative CLI flag list.
-- `src/viewer/ui/keys.rs` — authoritative keybinding map.
-- `src/viewer/ui/help.rs` — in-app help screen text.
-- `src/input/detect.rs` — `FileType` enum + format enums, the
+- `crates/peek-foundation/src/viewer/ui/keys.rs` — authoritative keybinding map.
+- `crates/peek-foundation/src/viewer/ui/help.rs` — in-app help screen text.
+- `crates/peek-detect/src/detect.rs` — `FileType` enum + format enums, the
   authoritative file-type list.
-- `src/types/*/` — per-type modules, the authoritative source of "what
+- `crates/peek-types/src/types/*/` — per-type modules, the authoritative source of "what
   peek actually does for type X".
 - `git log --oneline -30` — recent direction; what likely drifted.
 
@@ -53,10 +53,12 @@ drift it's supposed to find.
 
 For every path / module / symbol named in this SKILL.md (the bulleted
 sources of truth in Step 1, plus the file-citation examples in Steps 3
-and 4 — `src/cli.rs`, `src/viewer/ui/keys.rs`,
-`src/viewer/ui/help.rs`, `src/input/detect.rs`, `src/types/*/`,
-`src/theme/name.rs::PeekThemeName`, `src/theme/style_mode.rs::StyleMode`,
-`src/viewer/ui/keys.rs::Action`, `src/cli.rs::Args`,
+and 4 — `src/cli.rs`, `crates/peek-foundation/src/viewer/ui/keys.rs`,
+`crates/peek-foundation/src/viewer/ui/help.rs`, `crates/peek-detect/src/detect.rs`,
+`crates/peek-types/src/types/*/`,
+`crates/peek-theme/src/name.rs::PeekThemeName`,
+`crates/peek-theme/src/style_mode.rs::StyleMode`,
+`crates/peek-foundation/src/viewer/ui/keys.rs::Action`, `src/cli.rs::Args`,
 `src/extract/`, every `docs/*.md` filename, `docs/archived/`,
 `manual/src/SUMMARY.md`, `manual/src/cli-reference.md`,
 `manual/src/keyboard-shortcuts.md`, `manual/src/environment.md`):
@@ -138,13 +140,14 @@ For each chapter, cross-check against the source of truth:
   enums, short/long forms, and help text wording should match. Hidden
   flags (`hide_short_help`) should still appear in the full reference.
 - **`keyboard-shortcuts.md`** + per-chapter keybinding notes vs
-  `src/viewer/ui/keys.rs` and `src/viewer/ui/help.rs`. Every key the
+  `crates/peek-foundation/src/viewer/ui/keys.rs` and
+  `crates/peek-foundation/src/viewer/ui/help.rs`. Every key the
   app binds must be in the reference (or explicitly per-chapter);
   every key the manual claims must actually be bound. Watch for
   per-mode bindings (paged image `n`/`p`, listing `e`, search `/`
   `n` `N`) that depend on which mode is active.
 - **`environment.md`** vs env vars actually read in the code. Grep
-  `std::env::var` / `env!` across `src/` for completeness.
+  `std::env::var` / `env!` across `src/` and `crates/` for completeness.
 - **`file-types/*.md`** — every chapter must describe a file type that
   ships today (i.e., has a `FileType` variant + `types/<x>/compose.rs`
   / equivalent). The set of chapters should cover every shipped file
@@ -155,10 +158,10 @@ For each chapter, cross-check against the source of truth:
   types. Do not document planned-but-unshipped enhancements as if
   they're live.
 - **`viewer/*.md`** (info screen, themes, color modes, line numbers /
-  wrap, extraction) vs the corresponding `src/viewer/` and
-  `src/theme/` modules. Theme list must match `PeekThemeName` variants
-  in `src/theme/name.rs`. Color-mode list must match `StyleMode`
-  variants in `src/theme/style_mode.rs`. Extraction behaviour
+  wrap, extraction) vs the corresponding `crates/peek-foundation/src/viewer/` and
+  `crates/peek-theme/src/` modules. Theme list must match `PeekThemeName` variants
+  in `crates/peek-theme/src/name.rs`. Color-mode list must match `StyleMode`
+  variants in `crates/peek-theme/src/style_mode.rs`. Extraction behaviour
   (`--extract`, `e` in viewer) must match `src/extract/` reality.
 - **`SUMMARY.md`** — every chapter file referenced exists; every
   chapter file under `manual/src/` is referenced. mdbook silently

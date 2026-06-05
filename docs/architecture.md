@@ -133,6 +133,9 @@ XML/SVG, `---` → YAML), in `peek-detect`'s `detect_bytes()` (`crates/peek-dete
 
 ## Key abstractions
 
+Paths below are relative to `crates/peek-foundation/src/` unless prefixed otherwise: `src/…` is the
+bin, `crates/peek-theme/src/…` is the theme crate, `crates/peek-types/src/…` is the readers crate.
+
 ### Mode trait — interactive (`viewer/modes/mod.rs`)
 
 ```rust
@@ -217,7 +220,7 @@ viewports aren't required.
 `main` picks the pipe primary as the first non-aux mode in the stack, falling back to the first
 mode when all are aux (binary files, where the stack is `[Hex, Info, About, Help]`).
 
-### ViewerState (`viewer/ui/state.rs`)
+### ViewerState (`src/viewer_session/state.rs`)
 
 The interactive controller: mode list, active index, `last_primary` slot (most recent non-aux mode),
 per-mode scroll offsets, lazy per-mode rendered-lines cache, and a `Position` (last known logical
@@ -242,7 +245,7 @@ active (`tracks_position()` returns `!use_pretty`). Switching from pretty Conten
 whichever byte Hex was last on, instead of synthesizing a wrong one. Modes that need exact mapping
 will eventually carry their own line-to-source-byte table.
 
-### Registry (`viewer/mod.rs`)
+### Registry (`src/compose.rs`)
 
 Factory built once from CLI args. Holds the shared `ThemeManager` plus the resolved `PeekTheme` /
 `plain_mode` flags consumed during composition. Provides `compose_modes(source, detected, args)`,
@@ -265,7 +268,7 @@ dumps are first-class.
 
 Streams the raw view from a `LineSource` (anchor-indexed line iterator over `InputSource`); a
 window-only render fetches just the visible lines per scroll, so multi-GB text never materializes.
-With a syntax token, `LineStreamHighlighter` (in `viewer/mod.rs`) carries syntect `ParseState` +
+With a syntax token, `LineStreamHighlighter` (in `viewer/highlight.rs`) carries syntect `ParseState` +
 `HighlightState` across `feed()` calls so multi-line constructs (block comments, here-docs)
 highlight correctly. Backward scrolls past the highlighter's cursor reset and replay forward —
 typical top-to-bottom reading is cheap; pathological backward jumps on huge files pay a one-time
@@ -394,7 +397,7 @@ strings would have to parse ANSI escapes. Instead the inner cell loops iterate `
 sub-range so the emitted strings are pre-windowed. `ImageRenderMode::owns_scroll() = true` and the
 mode tracks `scroll_x`/`scroll_y`; pipe / `--print` always renders with `Contain`.
 
-## Event loop (`viewer/interactive.rs`)
+## Event loop (`src/viewer_session/interactive.rs`)
 
 ```
 state = ViewerState::new(source, detected, theme, modes)
@@ -547,7 +550,7 @@ fallback — Windows pdfium tarball ships the dll under `bin/`, Unix tarballs sh
 
 ## Adding a new theme
 
-1. Drop `themes/<name>.tmTheme`.
-2. Add a `PeekThemeName` variant in `theme/name.rs`.
+1. Drop `crates/peek-theme/themes/<name>.tmTheme`.
+2. Add a `PeekThemeName` variant in `crates/peek-theme/src/name.rs`.
 3. Wire `include_str!()`, `cli_name()`, `tmtheme_source()`, `next()`, `help_text()`.
 4. `PeekTheme` semantic roles derive automatically from syntect.
