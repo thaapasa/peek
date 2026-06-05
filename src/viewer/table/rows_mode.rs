@@ -913,17 +913,60 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::info::RenderOptions;
-    use crate::input::{InputSource, detect};
+    use crate::info::{FileInfo, NoExtras, RenderOptions};
     use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
-    use crate::types::csv::CsvFormat;
-    use crate::types::csv::compose::{build_csv_mode, infer_alignments};
-    use crate::types::csv::parse::CsvData;
     use crate::viewer::ui::strip_ansi_width;
-    use bytes::Bytes;
 
-    fn stdin(text: &str) -> InputSource {
-        InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
+    /// In-memory [`RowSource`] for the table-mode mechanics tests. The CSV
+    /// reader's own behaviour (quoting, delimiter sniff, header heuristic,
+    /// alignment inference) is covered in peek-types; here only
+    /// `RowsTableMode`'s scroll / width / search logic is under test, so a
+    /// fake source keeps these tests in the foundation layer.
+    struct FakeRows {
+        rows: Vec<Vec<Option<String>>>,
+        cols: usize,
+    }
+
+    impl RowSource for FakeRows {
+        fn ensure_row(&mut self, _idx: usize) -> Result<usize> {
+            Ok(self.rows.len())
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+            self.rows.get(idx).map(Vec::as_slice)
+        }
+        fn loaded(&self) -> usize {
+            self.rows.len()
+        }
+        fn total(&self) -> Option<usize> {
+            Some(self.rows.len())
+        }
+        fn column_count(&self) -> usize {
+            self.cols
+        }
+    }
+
+    fn mode_from_cells(rows: Vec<Vec<&str>>) -> RowsTableMode {
+        let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+        let rows: Vec<Vec<Option<String>>> = rows
+            .into_iter()
+            .map(|r| r.into_iter().map(|c| Some(c.to_string())).collect())
+            .collect();
+        let align = vec![Alignment::Left; cols];
+        RowsTableMode::new(Box::new(FakeRows { rows, cols }), align, true, "Table")
+    }
+
+    /// Build a header-on, all-left-aligned `RowsTableMode` from simple
+    /// comma-separated lines. The split is deliberately naive (`,` / `\n`,
+    /// no quoting) — fixtures needing real CSV parsing live in peek-types.
+    fn mode_from(text: &str) -> RowsTableMode {
+        let rows = text
+            .lines()
+            .map(|line| line.split(',').collect::<Vec<_>>())
+            .collect();
+        mode_from_cells(rows)
     }
 
     /// Build a `PeekTheme` for the render-function tests.
@@ -931,15 +974,26 @@ mod tests {
         Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain))
     }
 
-    fn mode_from(text: &str, fmt: CsvFormat) -> RowsTableMode {
-        let src = stdin(text);
-        let data = CsvData::open(&src, fmt).unwrap();
-        build_csv_mode(data)
+    /// Minimal `FileInfo` for a `RenderCtx` without the gather hub — the
+    /// render-width tests never read its fields.
+    fn synthetic_file_info() -> FileInfo {
+        FileInfo {
+            file_name: String::new(),
+            path: String::new(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: Box::new(NoExtras),
+        }
     }
 
     #[test]
     fn seed_widths_grow_with_widest_seed_cell() {
-        let mode = mode_from("name,age\nalice,30\nelizabeth,99\n", CsvFormat::Csv);
+        let mode = mode_from("name,age\nalice,30\nelizabeth,99\n");
         // Column 0: max("name"=4, "alice"=5, "elizabeth"=9) = 9
         // Column 1: max("age"=3, "30"=2, "99"=2) = 3
         assert_eq!(mode.widths, vec![9, 3]);
@@ -947,7 +1001,7 @@ mod tests {
 
     #[test]
     fn scrolldown_advances_top_record_clamped_to_max() {
-        let mut mode = mode_from("h\na\nb\nc\nd\n", CsvFormat::Csv);
+        let mut mode = mode_from("h\na\nb\nc\nd\n");
         mode.cached_cols = 80;
         mode.cached_rows = 5; // 2 reserved for header+sep → 3 body rows
 
@@ -963,7 +1017,7 @@ mod tests {
 
     #[test]
     fn shift_h_toggles_header() {
-        let mut mode = mode_from("name,age\nalice,30\n", CsvFormat::Csv);
+        let mut mode = mode_from("name,age\nalice,30\n");
         assert!(mode.has_header);
         assert_eq!(mode.handle(Action::ToggleHeader), Handled::Yes);
         assert!(!mode.has_header);
@@ -974,10 +1028,7 @@ mod tests {
     fn shift_r_reflows_widths_to_viewport() {
         // After scrolling past a wide-cell block, Shift+R recomputes from
         // the visible window to reclaim space.
-        let mut mode = mode_from(
-            "a,b\nshort,x\nmuchlongercell,y\nshort,z\nshort,w\nshort,v\n",
-            CsvFormat::Csv,
-        );
+        let mut mode = mode_from("a,b\nshort,x\nmuchlongercell,y\nshort,z\nshort,w\nshort,v\n");
         mode.cached_cols = 80;
         mode.cached_rows = 4; // 2 reserved → 2 body rows visible
         assert!(
@@ -999,7 +1050,7 @@ mod tests {
 
     #[test]
     fn scroll_right_steps_by_column_clamped_at_last() {
-        let mut mode = mode_from("a,b,c\n1,2,3\n", CsvFormat::Csv);
+        let mut mode = mode_from("a,b,c\n1,2,3\n");
         mode.cached_cols = 80;
         mode.cached_rows = 5;
         assert_eq!(mode.h_col, 0);
@@ -1016,23 +1067,12 @@ mod tests {
 
     #[test]
     fn status_segments_show_record_position_and_column_count() {
-        let mode = mode_from("a,b\n1,2\n3,4\n", CsvFormat::Csv);
+        let mode = mode_from("a,b\n1,2\n3,4\n");
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         let segs = mode.status_segments(&theme);
         assert!(segs.iter().any(|(s, _)| s == "1/2"));
         assert!(segs.iter().any(|(s, _)| s == "col 1/2"));
-    }
-
-    #[test]
-    fn numeric_columns_right_align() {
-        // `id`, `salary` are numeric; `name`, `department`, `start_date`,
-        // `active` are not. Right-align matches the numeric columns only.
-        let mode = mode_from("id,name,age\n1,Alice,30\n2,Bob,25\n", CsvFormat::Csv);
-        assert_eq!(
-            mode.align,
-            vec![Alignment::Right, Alignment::Left, Alignment::Right]
-        );
     }
 
     #[test]
@@ -1102,96 +1142,49 @@ mod tests {
         assert!(out.ends_with("   "));
     }
 
-    // --- Fixture-based tests ------------------------------------------------
+    // --- Cell rendering of embedded newlines --------------------------------
+    //
+    // A cell may carry an embedded `\n` (CSV quoted field, SQLite text).
+    // The CSV reader's parsing of such fields is covered in peek-types;
+    // here only `render_cell`'s collapse-to-one-row behaviour matters, so
+    // the inputs are literal multi-line strings.
 
-    use std::path::PathBuf;
-
-    fn fixture(rel: &str) -> InputSource {
-        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        p.push(rel);
-        InputSource::File(p)
-    }
-
-    /// books.csv has two records with embedded `\n` in their description
-    /// cell. Rendering must collapse the cell to a single visual row —
-    /// no raw newline can survive into the output, or the terminal
-    /// breaks alignment for following columns.
+    /// A multi-line cell must collapse to a single visual row — no raw
+    /// `\n` / `\r` can survive into the output, or the terminal breaks
+    /// alignment for the following columns.
     #[test]
-    fn fixture_books_multiline_cells_have_no_raw_newlines() {
-        let src = fixture("test-data/books.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        // Sanity: fixture still carries embedded newlines.
-        let multi = data
-            .seed
-            .iter()
-            .filter(|r| !r.malformed)
-            .filter(|r| {
-                r.cells
-                    .iter()
-                    .any(|c| c.as_deref().is_some_and(|s| s.contains('\n')))
-            })
-            .count();
-        assert_eq!(multi, 2, "books.csv should have two multi-line cells");
-
-        let tm = theme_manager();
-        let theme = tm.peek_theme().clone();
-        // Render every record; no rendered line may contain a literal `\n`.
-        for rec in &data.seed {
-            if rec.malformed {
-                continue;
-            }
-            for (i, cell) in rec.cells.iter().enumerate() {
-                let w = 60usize;
-                let align = Alignment::Left;
-                let raw = cell.as_deref().unwrap_or("");
-                let rendered = render_cell(
-                    raw,
-                    w,
-                    theme.foreground,
-                    align,
-                    &theme,
-                    CellMatches {
-                        ranges: &[],
-                        current: None,
-                    },
-                    false,
-                );
-                assert!(
-                    !rendered.contains('\n'),
-                    "row {i} cell rendered with embedded newline: {rendered:?}"
-                );
-                assert!(
-                    !rendered.contains('\r'),
-                    "row {i} cell rendered with embedded CR: {rendered:?}"
-                );
-            }
-        }
-    }
-
-    /// books.csv embedded-newline cells render with the `↵` marker.
-    #[test]
-    fn fixture_books_embedded_newline_renders_as_marker() {
-        let src = fixture("test-data/books.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let multi = data
-            .seed
-            .iter()
-            .find(|r| {
-                !r.malformed
-                    && r.cells
-                        .iter()
-                        .any(|c| c.as_deref().is_some_and(|s| s.contains('\n')))
-            })
-            .expect("at least one multi-line row");
-        let cell = multi
-            .cells
-            .iter()
-            .find_map(|c| c.as_deref().filter(|s| s.contains('\n')))
-            .unwrap();
+    fn render_cell_collapses_embedded_newlines() {
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
         let rendered = render_cell(
-            cell,
+            "first line\nsecond line\r\nthird",
+            60,
+            theme.foreground,
+            Alignment::Left,
+            &theme,
+            CellMatches {
+                ranges: &[],
+                current: None,
+            },
+            false,
+        );
+        assert!(
+            !rendered.contains('\n'),
+            "cell rendered with embedded newline: {rendered:?}"
+        );
+        assert!(
+            !rendered.contains('\r'),
+            "cell rendered with embedded CR: {rendered:?}"
+        );
+    }
+
+    /// An embedded `\n` renders as the `↵` marker.
+    #[test]
+    fn render_cell_embedded_newline_renders_as_marker() {
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let rendered = render_cell(
+            "first line\nsecond line",
             120,
             theme.foreground,
             Alignment::Left,
@@ -1208,59 +1201,10 @@ mod tests {
         );
     }
 
-    /// employees.csv: header detected, 6 columns, numeric columns
-    /// (`id`, `salary`) right-aligned.
-    #[test]
-    fn fixture_employees_alignment_and_header() {
-        let src = fixture("test-data/employees.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        assert_eq!(data.delimiter, b',');
-        assert!(data.header_heuristic, "header row detected");
-        assert_eq!(data.column_count(), 6);
-        let body_start = if data.header_heuristic { 1 } else { 0 };
-        let aligns = infer_alignments(&data, body_start);
-        // id (int), name (text), department (text), salary (float),
-        // start_date (date), active (bool).
-        assert_eq!(aligns[0], Alignment::Right, "id column");
-        assert_eq!(aligns[1], Alignment::Left, "name column");
-        assert_eq!(aligns[3], Alignment::Right, "salary column");
-        assert_eq!(aligns[4], Alignment::Left, "start_date column");
-    }
-
-    /// measurements.tsv uses tab delimiter via extension.
-    #[test]
-    fn fixture_measurements_tsv_tab_delimiter() {
-        let src = fixture("test-data/measurements.tsv");
-        let data = CsvData::open(&src, CsvFormat::Tsv).unwrap();
-        assert_eq!(data.delimiter, b'\t');
-        assert!(data.header_heuristic);
-        assert_eq!(data.column_count(), 6);
-    }
-
-    /// euro-prices.csv uses `;` despite the `.csv` extension — the
-    /// content sniff overrides the default.
-    #[test]
-    fn fixture_euro_prices_sniffs_semicolon() {
-        let src = fixture("test-data/euro-prices.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        assert_eq!(data.delimiter, b';', "semicolon should win over comma");
-        assert!(data.header_heuristic);
-    }
-
-    /// sensor-log.csv has no header — row 0 begins with a numeric Unix
-    /// timestamp, so the heuristic must classify it as data.
-    #[test]
-    fn fixture_sensor_log_no_header() {
-        let src = fixture("test-data/sensor-log.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        assert!(!data.header_heuristic, "row 0 typed → no header");
-        assert_eq!(data.column_count(), 5);
-    }
-
     // --- Search -------------------------------------------------------------
 
     fn make_mode_from_str(text: &str) -> RowsTableMode {
-        let mut mode = mode_from(text, CsvFormat::Csv);
+        let mut mode = mode_from(text);
         mode.cached_cols = 80;
         mode.cached_rows = 10;
         mode
@@ -1376,16 +1320,22 @@ mod tests {
 
     #[test]
     fn search_matches_inside_multiline_cell_use_display_form() {
-        // books.csv has a record whose description spans two lines via
-        // an embedded \n. Searching the display-form text — across the
-        // `↵` glyph — must still locate the match.
-        let src = fixture("test-data/books.csv");
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = build_csv_mode(data);
+        // A description cell spans two lines via an embedded \n. Searching
+        // the display-form text — across the `↵` glyph — must still locate
+        // a match that straddles the original line break only if the query
+        // sits within one physical line; here the query is wholly on the
+        // second line, so it matches.
+        let mut mode = mode_from_cells(vec![
+            vec!["title", "author", "year", "description"],
+            vec![
+                "Refactoring",
+                "Fowler",
+                "1999",
+                "A catalog of refactorings.\nIncludes worked examples.",
+            ],
+        ]);
         mode.cached_cols = 200;
         mode.cached_rows = 30;
-        // "Includes worked examples" lives on the second physical line
-        // of the Refactoring book's description cell.
         mode.set_search(Some("Includes worked"));
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.matches.len(), 1);
@@ -1403,11 +1353,8 @@ mod tests {
         let text = "alpha,bravo,charlie,delta\n\
                     wide_value_one,wide_value_two,wide_value_three,wide_value_four\n\
                     another_long_a,another_long_b,another_long_c,another_long_d\n";
-        let src = stdin(text);
-        let detected = detect::detect(&src).unwrap();
-        let file_info = crate::gather::gather(&src, &detected).unwrap();
-        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
-        let mut mode = build_csv_mode(data);
+        let file_info = synthetic_file_info();
+        let mut mode = mode_from(text);
 
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
