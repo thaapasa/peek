@@ -9,8 +9,6 @@
 
 mod backends;
 pub mod compose;
-pub mod detect;
 pub mod extract;
-pub mod format;
 pub mod info;
 pub mod reader;

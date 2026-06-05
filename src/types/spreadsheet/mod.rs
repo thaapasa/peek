@@ -8,9 +8,7 @@
 //! `RowSource` whose alignment comes from calamine's native cell types.
 
 pub mod compose;
-pub mod detect;
 pub mod extract;
-pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
@@ -18,3 +16,7 @@ pub mod workbook;
 pub mod xml_props;
 
 pub use info::SpreadsheetInfo;
+
+/// Format enum, re-exported from `peek_detect` at the module root so
+/// reader code keeps a local `crate::types::spreadsheet::SpreadsheetFormat` path.
+pub use peek_detect::types::spreadsheet::SpreadsheetFormat;

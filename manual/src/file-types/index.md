@@ -32,4 +32,4 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Fonts             | TrueType, OpenType, TTC / OTC collections (metadata + specimen render) |
 | Binary / unknown  | Hex dump (`hexdump -C` style)                               |
 
-Detection logic: [`src/input/detect.rs`](https://github.com/thaapasa/peek/blob/main/src/input/detect.rs).
+Detection logic: [`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).

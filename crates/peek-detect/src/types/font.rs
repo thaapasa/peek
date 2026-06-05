@@ -1,0 +1,122 @@
+//! Font container format. Covers the bare OpenType wrappers shipped by
+//! the desktop ecosystem plus the WOFF / WOFF2 web wrappers. The bare
+//! wrappers are raw sfnt; WOFF zlib-compresses each table and WOFF2
+//! brotli-compresses the whole font with a glyf/loca transform. Both
+//! are unwrapped to sfnt before the metadata / specimen pipeline sees
+//! them (see [`crate::types::font::sfnt`]).
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FontFormat {
+    /// TrueType outline font (`.ttf`). Magic: `00 01 00 00`.
+    TrueType,
+    /// OpenType / CFF outline font (`.otf`). Magic: `OTTO`.
+    OpenType,
+    /// TrueType / OpenType font collection (`.ttc` / `.otc`). One
+    /// container, many faces. Magic: `ttcf`.
+    Collection,
+    /// Web Open Font Format 1.0 (`.woff`). A zlib-per-table wrapper
+    /// around an sfnt; magic `wOFF`. Decoded to the inner sfnt before
+    /// parsing.
+    Woff,
+    /// Web Open Font Format 2.0 (`.woff2`). Brotli-compressed whole
+    /// font with a glyf/loca table transform; magic `wOF2`. Decoded to
+    /// the inner sfnt before parsing.
+    Woff2,
+}
+
+impl FontFormat {
+    pub fn label(self) -> &'static str {
+        match self {
+            FontFormat::TrueType => "TrueType",
+            FontFormat::OpenType => "OpenType",
+            FontFormat::Collection => "Font Collection",
+            FontFormat::Woff => "WOFF",
+            FontFormat::Woff2 => "WOFF2",
+        }
+    }
+}
+
+// Detection contributions for font files. `format_from_ext` covers
+// filename routing (`classify_by_name`); `sniff_font_bytes` covers
+// content sniffing for unnamed sources (stdin, archive entries) and
+// for files whose extension lies.
+
+/// Map a lowercased filename extension to the font container format.
+/// `.ttc` and `.otc` both route to [`FontFormat::Collection`] — the
+/// container is the same regardless of whether the embedded faces are
+/// TrueType or CFF outlines.
+pub fn format_from_ext(ext: &str) -> Option<FontFormat> {
+    Some(match ext {
+        "ttf" => FontFormat::TrueType,
+        "otf" => FontFormat::OpenType,
+        "ttc" | "otc" => FontFormat::Collection,
+        "woff" => FontFormat::Woff,
+        "woff2" => FontFormat::Woff2,
+        _ => return None,
+    })
+}
+
+/// Sniff the leading bytes of a source for an OpenType wrapper. Used
+/// by the content-based detection path when extension routing doesn't
+/// apply. Returns `None` if `head` is shorter than the 4-byte magic or
+/// doesn't match a known signature.
+pub fn sniff_font_bytes(head: &[u8]) -> Option<FontFormat> {
+    if head.len() < 4 {
+        return None;
+    }
+    let sig = &head[..4];
+    // TrueType: 0x00010000 (the "scaler version" 1.0 cast as a u32).
+    // True-only Apple variant: `true`. Treat both as TrueType.
+    if sig == [0x00, 0x01, 0x00, 0x00] || sig == b"true" {
+        return Some(FontFormat::TrueType);
+    }
+    if sig == b"OTTO" {
+        return Some(FontFormat::OpenType);
+    }
+    if sig == b"ttcf" {
+        return Some(FontFormat::Collection);
+    }
+    if sig == b"wOFF" {
+        return Some(FontFormat::Woff);
+    }
+    if sig == b"wOF2" {
+        return Some(FontFormat::Woff2);
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_from_ext_canonical() {
+        assert_eq!(format_from_ext("ttf"), Some(FontFormat::TrueType));
+        assert_eq!(format_from_ext("otf"), Some(FontFormat::OpenType));
+        assert_eq!(format_from_ext("ttc"), Some(FontFormat::Collection));
+        assert_eq!(format_from_ext("otc"), Some(FontFormat::Collection));
+        assert_eq!(format_from_ext("woff"), Some(FontFormat::Woff));
+        assert_eq!(format_from_ext("woff2"), Some(FontFormat::Woff2));
+        assert_eq!(format_from_ext("txt"), None);
+    }
+
+    #[test]
+    fn sniff_recognises_each_wrapper() {
+        assert_eq!(
+            sniff_font_bytes(&[0x00, 0x01, 0x00, 0x00, 0xFF]),
+            Some(FontFormat::TrueType)
+        );
+        assert_eq!(sniff_font_bytes(b"true...."), Some(FontFormat::TrueType));
+        assert_eq!(sniff_font_bytes(b"OTTOxxxx"), Some(FontFormat::OpenType));
+        assert_eq!(sniff_font_bytes(b"ttcfxxxx"), Some(FontFormat::Collection));
+        assert_eq!(sniff_font_bytes(b"wOFFxxxx"), Some(FontFormat::Woff));
+        assert_eq!(sniff_font_bytes(b"wOF2xxxx"), Some(FontFormat::Woff2));
+    }
+
+    #[test]
+    fn sniff_rejects_short_and_unknown_heads() {
+        assert_eq!(sniff_font_bytes(b""), None);
+        assert_eq!(sniff_font_bytes(b"OTT"), None);
+        assert_eq!(sniff_font_bytes(b"PNG\x0d"), None);
+    }
+}

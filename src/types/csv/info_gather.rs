@@ -1,6 +1,6 @@
 //! Build `CsvStats` from a `CsvData` seed scan.
 
-use super::format::CsvFormat;
+use super::CsvFormat;
 use super::info::{ColumnStats, ColumnType, CsvStats};
 use super::parse::{CellKind, CsvData, SEED_RECORD_LIMIT, classify_cell};
 

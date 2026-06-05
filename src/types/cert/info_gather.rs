@@ -821,6 +821,96 @@ fn gregorian(unix_secs: i64) -> (i64, u32, u32, u32, u32, u32) {
 mod tests {
     use super::*;
 
+    fn der_fixture() -> Vec<u8> {
+        let path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data/cert-rsa.der");
+        std::fs::read(path).expect("cert-rsa.der fixture")
+    }
+
+    fn jwks_fixture() -> String {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("test-data/keys.jwks");
+        std::fs::read_to_string(path).expect("keys.jwks fixture")
+    }
+
+    fn entry_kind(e: &crate::types::cert::info::CertEntry) -> &'static str {
+        use crate::types::cert::info::CertEntry::*;
+        match e {
+            Certificate(_) => "Certificate",
+            CertificateRequest(_) => "CSR",
+            CertificateRevocationList(_) => "CRL",
+            PrivateKey(_) => "PrivateKey",
+            PublicKey(_) => "PublicKey",
+            SshPublicKey(_) => "SshPublicKey",
+            JsonWebKey(_) => "JsonWebKey",
+            Unknown(_) => "Unknown",
+        }
+    }
+
+    fn stub_stats() -> crate::types::text::info::TextStats {
+        use crate::types::text::info::{Encoding, LineEndings, TextStats};
+        TextStats {
+            line_count: 0,
+            word_count: 0,
+            char_count: 0,
+            blank_lines: 0,
+            longest_line_chars: 0,
+            line_endings: LineEndings::Lf,
+            indent_style: None,
+            encoding: Encoding::Utf8,
+            shebang: None,
+        }
+    }
+
+    #[test]
+    fn gather_der_decodes_certificate() {
+        use crate::types::cert::info::CertEntry;
+        let info = gather_der(&der_fixture());
+        assert!(info.text.is_none());
+        assert_eq!(info.source_label, "DER");
+        assert_eq!(info.entries.len(), 1);
+        assert!(info.parse_errors.is_empty());
+        match &info.entries[0] {
+            CertEntry::Certificate(c) => assert!(!c.subject.is_empty()),
+            other => panic!("expected Certificate, got {:?}", entry_kind(other)),
+        }
+    }
+
+    /// Decode the two-key fixture. The expected RFC 7638 thumbprints are
+    /// computed independently (an OpenSSL + Python pass over the same
+    /// keys), so this cross-checks peek's thumbprint against a reference
+    /// implementation rather than against itself.
+    #[test]
+    fn jwk_decodes_set_with_thumbprints() {
+        use crate::types::cert::info::CertEntry;
+        let info = gather_jwk(&jwks_fixture(), stub_stats());
+        assert_eq!(info.source_label, "JWK");
+        assert!(info.parse_errors.is_empty());
+        assert_eq!(info.entries.len(), 2);
+
+        let CertEntry::JsonWebKey(rsa) = &info.entries[0] else {
+            panic!("expected JWK entry");
+        };
+        assert_eq!(rsa.kty, "RSA");
+        assert_eq!(rsa.key_size_bits, Some(2048));
+        assert_eq!(rsa.alg.as_deref(), Some("RS256"));
+        assert_eq!(
+            rsa.thumbprint.as_deref(),
+            Some("SHA-256:Gc2sKhlHnzx8V3y_pGBuw7mVsXCRsljLz8QRfPok7Q4")
+        );
+
+        let CertEntry::JsonWebKey(ec) = &info.entries[1] else {
+            panic!("expected JWK entry");
+        };
+        assert_eq!(ec.kty, "EC");
+        assert_eq!(ec.crv.as_deref(), Some("P-256"));
+        assert_eq!(ec.key_size_bits, Some(256));
+        assert_eq!(ec.key_ops, vec!["verify".to_string()]);
+        assert_eq!(
+            ec.thumbprint.as_deref(),
+            Some("SHA-256:mopLKn99TN2jE4dvMxFAup-xoynNh7THvm-mFf4TQtQ")
+        );
+    }
+
     #[test]
     fn read_tlv_short_form() {
         // SEQUENCE (0x30), length 3, body 01 02 03.

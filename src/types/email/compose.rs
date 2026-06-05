@@ -18,7 +18,7 @@ use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
 
 use super::message::{self, ParsedEmail};
 use super::renderer::EmailRenderer;
-use super::{format::EmailFormat as Fmt, mbox};
+use super::{EmailFormat as Fmt, mbox};
 
 pub fn compose(
     source: &InputSource,

@@ -1,8 +1,8 @@
 //! EPS / PostScript info shape.
 
+use super::PostScriptFormat;
 use super::dos_eps::PreviewKind;
 use super::dsc::DscInfo;
-use super::format::PostScriptFormat;
 
 /// Metadata about an embedded DOS-EPS preview.
 #[derive(Debug, Clone)]

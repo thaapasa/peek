@@ -2,7 +2,7 @@
 //! summaries — a `.ttc` collection carries many faces, plain `.ttf` /
 //! `.otf` carry exactly one.
 
-use crate::types::font::format::FontFormat;
+use crate::types::font::FontFormat;
 
 pub struct FontInfo {
     pub format: FontFormat,

@@ -6,8 +6,10 @@ use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::viewer::modes::ModeId;
 
-use super::format::EmailFormat;
-use super::{compose, detect, extract, info, mbox, message};
+use peek_detect::types::email as detect;
+
+use super::EmailFormat;
+use super::{compose, extract, info, mbox, message};
 
 const EML: &[u8] = include_bytes!("../../../test-data/sample.eml");
 const MBOX: &[u8] = include_bytes!("../../../test-data/sample.mbox");

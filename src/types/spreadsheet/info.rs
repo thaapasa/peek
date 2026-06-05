@@ -2,7 +2,7 @@
 
 use crate::types::document::DocumentMetadata;
 
-use super::format::SpreadsheetFormat;
+use super::SpreadsheetFormat;
 
 #[derive(Debug, Clone)]
 pub struct SpreadsheetInfo {

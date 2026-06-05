@@ -23,23 +23,6 @@ pub fn parse(value: &Value) -> Vec<JwkEntry> {
     parse_one(value).into_iter().collect()
 }
 
-/// True when `value` looks like a JWK (object with a recognised `kty`) or
-/// a JWK Set (a `keys` array of such objects). Tight enough that an
-/// unrelated JSON file carrying a `kty` or `keys` field won't match.
-pub fn looks_like_jwk(value: &Value) -> bool {
-    if let Some(keys) = value.get("keys").and_then(Value::as_array) {
-        return !keys.is_empty() && keys.iter().all(has_known_kty);
-    }
-    has_known_kty(value)
-}
-
-fn has_known_kty(value: &Value) -> bool {
-    matches!(
-        value.get("kty").and_then(Value::as_str),
-        Some("RSA" | "EC" | "oct" | "OKP")
-    )
-}
-
 fn parse_one(value: &Value) -> Option<JwkEntry> {
     let kty = value.get("kty").and_then(Value::as_str)?.to_string();
     let str_field = |k: &str| value.get(k).and_then(Value::as_str).map(str::to_string);

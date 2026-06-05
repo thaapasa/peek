@@ -4,7 +4,7 @@
 
 use ttf_parser::{Face, fonts_in_collection};
 
-use crate::types::font::format::FontFormat;
+use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
 
 /// Parse `bytes` as a font of the given container `format` and produce
