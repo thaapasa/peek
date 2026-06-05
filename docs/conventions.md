@@ -33,7 +33,7 @@ One abstraction, two output paths.
 - **`Mode` trait** (`viewer/modes/mod.rs`) is the single rendering contract. Each file type
   composes a `Vec<Box<dyn Mode>>` via `Registry::compose_modes` — see
   [architecture.md](architecture.md#key-abstractions) for the full mode table and trait shape.
-- **Interactive path** (`viewer::interactive::run`) drives the stack through an event loop,
+- **Interactive path** (`viewer_session::interactive::run`, in the bin) drives the stack through an event loop,
   calling `Mode::render_window(ctx, scroll, rows) -> Result<Window>` per redraw. Streaming modes
   honour the requested window; fixed-content modes (Info/Help/About) materialise their output
   and slice via `slice_window`.
@@ -49,8 +49,8 @@ Modes that re-render on resize override `rerender_on_resize`. Modes that own scr
 
 ## File types
 
-Each file type is a self-contained subdirectory under `src/types/<name>/`. The directory
-owns the reader-side logic — input read, info gather, info render, view mode(s).
+Each file type is a self-contained subdirectory under `crates/peek-types/src/types/<name>/`.
+The directory owns the reader-side logic — input read, info gather, info render, view mode(s).
 **Detection** (the format enum + the extension/MIME/content-sniff helpers) lives in the
 `peek-detect` crate at `crates/peek-detect/src/types/<name>.rs`, *not* the reader — that
 keeps detection independent of the reader/viewer layer (a compile-time guarantee via the
@@ -67,8 +67,8 @@ Owned by the type module:
   render into one `info.rs`.)
 - `info_render.rs` — `render_section(lines, &<Stats>, theme)` appends themed
   lines for the type's own stats struct. Bound to the `InfoExtras` trait by a
-  single `impl_info_extras!` row in `src/types/info_impls.rs`; `info::render`
-  invokes it dynamically — there is no per-type render match.
+  single `impl_info_extras!` row in `crates/peek-types/src/types/info_impls.rs`;
+  `info::render` invokes it dynamically — there is no per-type render match.
 - `reader.rs` / `backends/` (optional) — format-specific parsing, streaming where
   possible (see CLAUDE.md "Stream, don't load").
 - `mode.rs` / `animation_mode.rs` (optional) — `Mode` impl(s), wired into
@@ -78,11 +78,14 @@ Wired in (centralized — never duplicated inside `types/<name>/`):
 
 - `crates/peek-detect/src/detect.rs` — the `FileType::<Variant>` + orchestrator wiring;
   `crates/peek-detect/src/types/<name>.rs` — the format enum + per-type sniff helpers.
-- `info/gather/mod.rs` — dispatches `FileType` → `types::<name>::info_gather::gather_extras`.
-- `src/types/info_impls.rs` — one `impl_info_extras!(<Stats>, ...::render_section)`
+- `src/gather/mod.rs` (the bin's gather hub) — dispatches `FileType` →
+  `types::<name>::info_gather::gather_extras`.
+- `crates/peek-types/src/types/info_impls.rs` — one `impl_info_extras!(<Stats>, ...::render_section)`
   row binding the stats struct to the `InfoExtras` trait. Replaces the old
   `FileExtras` enum variant + render match; `info::render` dispatches dynamically.
-- `viewer/mod.rs::compose_modes` — dispatches `FileType` → mode stack.
+- `src/compose.rs` (the bin's `Registry::compose_modes`) — dispatches `FileType` → mode stack.
+- `src/extract/extract.rs` (the bin's extract hub, container types only) — dispatches
+  `FileType` → `types::<name>::extract::extract`.
 
 Adding a new type: create the directory, add the wiring entries above (detection,
 the gather arm, one `info_impls.rs` row), fill in gather + render. Mode is optional
@@ -148,12 +151,16 @@ is a signal the math has invariants worth naming.
 ## Tests
 
 - **New `info::gather` / `info::render` / `input::detect` functionality needs fixture-based tests.**
-  Live under `src/info/gather/tests.rs` (or equivalent `tests` submodule). Use the real files in
-  `test-images/` and `test-data/` via `PathBuf::from(env!("CARGO_MANIFEST_DIR"))`. Each test runs
-  the full `detect` → `gather` pipeline and asserts a small set of known-true facts (dimensions,
-  top-level kind, indent style, root element). Reasoning: these layers are thin wrappers over
-  external parsers (image, exif, quick-xml, serde_json) — fixture tests catch upstream regressions
-  and pin field-extraction to ground truth.
+  Full `detect` → `gather` pipeline tests live at `src/gather/tests.rs` (the bin's gather hub);
+  per-type parser tests live in the owning `crates/peek-types/src/types/<name>/` module. Use the
+  real files in `test-images/` and `test-data/`. Fixtures sit at the **workspace root**, so the
+  path depends on the crate: the root bin uses `env!("CARGO_MANIFEST_DIR")` directly, but a member
+  crate (peek-types / peek-foundation) is two levels deeper — use
+  `concat!(env!("CARGO_MANIFEST_DIR"), "/../..")` (and the relative `include_bytes!` depth shifts
+  the same way). Each test runs the pipeline and asserts a small set of known-true facts
+  (dimensions, top-level kind, indent style, root element). Reasoning: these layers are thin
+  wrappers over external parsers (image, exif, quick-xml, serde_json) — fixture tests catch
+  upstream regressions and pin field-extraction to ground truth.
 - **Synthetic streaming-pass tests stay where they are** — UTF-8 chunk-boundary cases in
   `info::gather::text` are easier to assert against tiny synthetic inputs. Fixture tests complement,
   don't replace.

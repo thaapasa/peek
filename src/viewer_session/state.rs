@@ -1,0 +1,1499 @@
+use std::io;
+use std::time::Duration;
+
+use anyhow::Result;
+use crossterm::event::KeyEvent;
+
+use crate::info::{FileInfo, RenderOptions};
+use crate::input::InputSource;
+use crate::input::detect::Detected;
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
+use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
+
+use crate::extract::Extracted;
+use crate::viewer::ui::keys::{self, Action, Outcome};
+use crate::viewer::ui::prompt::{Prompt, PromptOutcome};
+use crate::viewer::ui::screen::ScreenBuffer;
+use crate::viewer::ui::{content_rows, make_peek_theme, terminal_cols};
+
+/// One mode's most recent windowed render. The `lines` field is the
+/// exact slice that should be drawn at the top of the viewport; the
+/// `scroll_at` and `rows_at` fields are the inputs the mode was given,
+/// used as the cache key. `total` is the full-source line count so
+/// scroll math (max_scroll, Bottom jump) doesn't need to re-render.
+pub(crate) struct RenderedView {
+    lines: Vec<String>,
+    scroll_at: usize,
+    rows_at: usize,
+    total: usize,
+}
+
+/// Concise one-line summary of a render failure for the status flash /
+/// warning row: the deepest cause in the error chain (e.g. the decoder's
+/// "CRC error: …"), which is more actionable than the outer
+/// "failed to render" wrapper.
+fn render_failure_cause(err: &anyhow::Error) -> String {
+    err.chain()
+        .last()
+        .map_or_else(|| err.to_string(), |c| c.to_string())
+}
+
+/// Hard cap on session-stack depth. Real listings rarely nest beyond
+/// 3–4 levels; the cap exists so a hostile container that recursively
+/// resolves to itself can't grow the stack without bound.
+const MAX_STACK_DEPTH: usize = 16;
+
+/// Builds the mode stack for a freshly-pushed session. Captured at
+/// `ViewerState` construction so `descend` doesn't have to know about
+/// `Registry` / `Args`.
+pub(crate) type ModeBuilder = Box<dyn Fn(&InputSource, &Detected) -> Result<Vec<Box<dyn Mode>>>>;
+
+/// What the modal [`Prompt`] is collecting input for — the action to run
+/// when the user confirms. Lets one prompt slot serve both the
+/// extract-save flow and text search.
+enum PromptKind {
+    /// Save the extracted item to the typed path.
+    Extract(Extracted),
+    /// Hand the typed query to the active mode's `set_search`.
+    Search,
+}
+
+/// One peek session — one `(source, detected, modes)` triple plus its
+/// per-mode scroll / view cache / position state. The recursive-peek
+/// stack is a `Vec<SessionFrame>`; the active session is always the
+/// last entry. Cross-session state (theme, prompt overlay, screen
+/// buffer) lives directly on `ViewerState`.
+pub(crate) struct SessionFrame {
+    pub source: InputSource,
+    pub detected: Detected,
+    pub file_info: FileInfo,
+    pub modes: Vec<Box<dyn Mode>>,
+    pub active: usize,
+    /// Most recent primary (non-aux) mode. Aux toggles return here.
+    /// `None` when no primary modes exist (binary files where Hex is
+    /// the only data view).
+    pub last_primary: Option<usize>,
+    pub scroll: Vec<usize>,
+    pub views: Vec<Option<RenderedView>>,
+    /// Last known logical position; restored when modes that track
+    /// position become active again.
+    pub position: Position,
+    /// One-shot retry guard: when a render fails on this frame, we try
+    /// re-detecting the source with `detect_ignore_name` and rebuild the
+    /// frame. Set after that retry runs (success or not) so a second
+    /// render failure on the rebuilt frame propagates rather than
+    /// looping.
+    pub retry_attempted: bool,
+    /// Overrides `source.name()` in the breadcrumb when set. Used by
+    /// synthetic descend frames that reuse the parent source (SQLite
+    /// table view) so the crumb shows the table name, not the db file
+    /// repeated.
+    pub breadcrumb_label: Option<String>,
+}
+
+impl SessionFrame {
+    fn new(
+        source: InputSource,
+        detected: Detected,
+        file_info: FileInfo,
+        modes: Vec<Box<dyn Mode>>,
+    ) -> Self {
+        assert!(!modes.is_empty(), "SessionFrame needs at least one mode");
+        let n = modes.len();
+        let last_primary = if modes[0].is_aux() { None } else { Some(0) };
+        Self {
+            source,
+            detected,
+            file_info,
+            modes,
+            active: 0,
+            last_primary,
+            scroll: vec![0; n],
+            views: (0..n).map(|_| None).collect(),
+            position: Position::Unknown,
+            retry_attempted: false,
+            breadcrumb_label: None,
+        }
+    }
+
+    /// Replace the mode stack and reset all per-mode caches (active,
+    /// last_primary, scroll, views, position) to the same shape
+    /// `SessionFrame::new` would produce. Used by the retry-detection
+    /// path so a future tweak to `new`'s reset rules flows here too.
+    fn reseed_from_modes(&mut self, modes: Vec<Box<dyn Mode>>) {
+        assert!(!modes.is_empty(), "SessionFrame needs at least one mode");
+        let n = modes.len();
+        self.last_primary = if modes[0].is_aux() { None } else { Some(0) };
+        self.modes = modes;
+        self.active = 0;
+        self.scroll = vec![0; n];
+        self.views = (0..n).map(|_| None).collect();
+        self.position = Position::Unknown;
+    }
+
+    fn mode_index(&self, id: ModeId) -> Option<usize> {
+        self.modes.iter().position(|m| m.id() == id)
+    }
+}
+
+pub(crate) struct ViewerState {
+    /// Recursive-peek stack. Always non-empty while the viewer runs;
+    /// the last `Back` on a single-frame stack returns `Outcome::Quit`.
+    frames: Vec<SessionFrame>,
+
+    /// Builds the mode stack for a freshly-pushed session. See
+    /// [`ModeBuilder`].
+    mode_builder: ModeBuilder,
+
+    pub current_theme: PeekThemeName,
+    pub peek_theme: PeekTheme,
+
+    /// Frame buffer: caches the previous draw, skips writes for
+    /// unchanged rows. Invalidated on resize and on stack push/pop.
+    screen: ScreenBuffer,
+    render_opts: RenderOptions,
+
+    /// Modal prompt overlay. While `Some`, raw key events go to the
+    /// prompt and the status line shows its render. The paired
+    /// [`PromptKind`] is the work to run on confirm — keeps the Prompt
+    /// widget oblivious to its purpose.
+    prompt: Option<(Prompt, PromptKind)>,
+
+    /// One-shot status flash (e.g. "wrote /tmp/foo"). Cleared after
+    /// one redraw.
+    flash: Option<String>,
+
+    /// Mirror of the CLI `--no-tempfile` flag. Threaded into every
+    /// `ExtractOptions` the interactive viewer builds so user choice
+    /// persists across descend / extract presses.
+    no_tempfile: bool,
+}
+
+impl ViewerState {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        source: InputSource,
+        detected: Detected,
+        theme_name: PeekThemeName,
+        style_mode: StyleMode,
+        render_opts: RenderOptions,
+        modes: Vec<Box<dyn Mode>>,
+        mode_builder: ModeBuilder,
+        no_tempfile: bool,
+    ) -> Result<Self> {
+        let peek_theme = make_peek_theme(theme_name, style_mode);
+        let file_info = crate::gather::gather(&source, &detected)?;
+        let frame = SessionFrame::new(source, detected, file_info, modes);
+        Ok(Self {
+            frames: vec![frame],
+            mode_builder,
+            current_theme: theme_name,
+            peek_theme,
+            screen: ScreenBuffer::new(),
+            render_opts,
+            prompt: None,
+            flash: None,
+            no_tempfile,
+        })
+    }
+
+    pub(crate) fn frame(&self) -> &SessionFrame {
+        self.frames.last().expect("non-empty stack")
+    }
+
+    fn frame_mut(&mut self) -> &mut SessionFrame {
+        self.frames.last_mut().expect("non-empty stack")
+    }
+
+    #[cfg(test)]
+    pub(crate) fn stack_depth(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Display names of every frame on the stack (root first), used
+    /// by the status line to render the breadcrumb segment.
+    pub(crate) fn breadcrumb(&self) -> Vec<String> {
+        self.frames
+            .iter()
+            .map(|f| {
+                f.breadcrumb_label
+                    .clone()
+                    .unwrap_or_else(|| f.source.name().to_string())
+            })
+            .collect()
+    }
+
+    // ---------------------------------------------------------------------
+    // Active mode access
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn active_label(&self) -> &str {
+        let f = self.frame();
+        f.modes[f.active].label()
+    }
+
+    pub(crate) fn active_status_segments(&self) -> Vec<(String, syntect::highlighting::Color)> {
+        let f = self.frame();
+        f.modes[f.active].status_segments(&self.peek_theme)
+    }
+
+    pub(crate) fn active_status_hints(&self) -> Vec<&'static str> {
+        let has_return = self.has_return_target();
+        let f = self.frame();
+        f.modes[f.active].status_hints(has_return)
+    }
+
+    pub(crate) fn has_return_target(&self) -> bool {
+        let f = self.frame();
+        f.last_primary.is_some_and(|i| i != f.active)
+    }
+
+    // ---------------------------------------------------------------------
+    // Key dispatch
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
+        let f = self.frame();
+        let extras = f.modes[f.active].extra_actions();
+        keys::dispatch(key, keys::GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
+    }
+
+    pub(crate) fn prompt_active(&self) -> bool {
+        self.prompt.is_some()
+    }
+
+    pub(crate) fn active_prompt(&self) -> Option<&Prompt> {
+        self.prompt.as_ref().map(|(p, _)| p)
+    }
+
+    pub(crate) fn take_flash(&mut self) -> Option<String> {
+        self.flash.take()
+    }
+
+    /// Open the save-to prompt; Enter writes `extracted` to the typed
+    /// path, Esc drops it without writing.
+    pub(crate) fn begin_extract_prompt(&mut self, extracted: Extracted) {
+        let prefill = extracted.suggested_name.clone();
+        self.prompt = Some((
+            Prompt::new("Save to", prefill),
+            PromptKind::Extract(extracted),
+        ));
+    }
+
+    /// Open the text-search prompt; Enter hands the query to the active
+    /// mode's `set_search`, Esc closes without changing the search.
+    fn begin_search_prompt(&mut self) {
+        self.prompt = Some((Prompt::new("Search", ""), PromptKind::Search));
+    }
+
+    pub(crate) fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
+        let Some((prompt, _)) = self.prompt.as_mut() else {
+            return Ok(false);
+        };
+        let outcome = prompt.handle_key(key);
+        match outcome {
+            PromptOutcome::Continue => Ok(true),
+            PromptOutcome::Cancelled => {
+                let (_, kind) = self.prompt.take().expect("prompt present");
+                if matches!(kind, PromptKind::Extract(_)) {
+                    self.flash = Some("extract cancelled".to_string());
+                }
+                Ok(true)
+            }
+            PromptOutcome::Confirmed(value) => {
+                let (_, kind) = self.prompt.take().expect("prompt present");
+                match kind {
+                    PromptKind::Extract(extracted) => {
+                        let dest = if value.is_empty() {
+                            crate::extract::write::Output::resolve(None, &extracted.suggested_name)
+                        } else if value == "-" {
+                            crate::extract::write::Output::Stdout
+                        } else {
+                            crate::extract::write::Output::Path(value.into())
+                        };
+                        match crate::extract::write::write_extracted(&extracted, dest) {
+                            Ok(path) => {
+                                self.flash = Some(format!("wrote {}", path.display()));
+                            }
+                            Err(e) => {
+                                self.flash = Some(format!("extract failed: {e}"));
+                            }
+                        }
+                    }
+                    PromptKind::Search => {
+                        let query = (!value.is_empty()).then_some(value.as_str());
+                        {
+                            let f = self.frame_mut();
+                            let active = f.active;
+                            let target = f.modes[active].set_search(query);
+                            // owns-scroll modes return `Owned` and
+                            // position themselves; flat modes return
+                            // `ScrollTo(line)` for the caller.
+                            if let crate::viewer::search::SearchTarget::ScrollTo(line) = target {
+                                f.scroll[active] = line;
+                            }
+                        }
+                        self.invalidate_active();
+                    }
+                }
+                Ok(true)
+            }
+        }
+    }
+
+    pub(crate) fn try_active_scroll(&mut self, action: Action) -> bool {
+        let f = self.frame_mut();
+        let active = f.active;
+        let m = &mut f.modes[active];
+        if !m.owns_scroll() {
+            return false;
+        }
+        m.scroll(action)
+    }
+
+    pub(crate) fn try_active_handle(&mut self, action: Action) -> bool {
+        let f = self.frame_mut();
+        let active = f.active;
+        let handled = f.modes[active].handle(action);
+        match handled {
+            Handled::YesResetScroll => f.scroll[active] = 0,
+            Handled::YesScrollTo(n) => f.scroll[active] = n,
+            Handled::No | Handled::Yes => {}
+        }
+        handled.was_consumed()
+    }
+
+    pub(crate) fn active_next_tick(&self) -> Option<Duration> {
+        let f = self.frame();
+        f.modes[f.active].next_tick()
+    }
+
+    pub(crate) fn tick_active(&mut self) -> bool {
+        let f = self.frame_mut();
+        let active = f.active;
+        f.modes[active].tick()
+    }
+
+    // ---------------------------------------------------------------------
+    // Globals — apply() handles everything not consumed by the active mode
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn apply(&mut self, action: Action) -> Result<Outcome> {
+        Ok(match action {
+            Action::Quit => Outcome::Quit,
+            Action::Back => {
+                if self.frames.len() > 1 {
+                    self.pop_frame();
+                    Outcome::Redraw
+                } else {
+                    Outcome::Quit
+                }
+            }
+            Action::ScrollUp => {
+                self.scroll_by(-1)?;
+                Outcome::Redraw
+            }
+            Action::ScrollDown => {
+                self.scroll_by(1)?;
+                Outcome::Redraw
+            }
+            Action::PageUp => {
+                self.page(-1)?;
+                Outcome::Redraw
+            }
+            Action::PageDown => {
+                self.page(1)?;
+                Outcome::Redraw
+            }
+            Action::Top => {
+                let f = self.frame_mut();
+                f.scroll[f.active] = 0;
+                Outcome::Redraw
+            }
+            Action::Bottom => {
+                self.prepare_total()?;
+                let max = self.max_scroll();
+                let f = self.frame_mut();
+                f.scroll[f.active] = max;
+                Outcome::Redraw
+            }
+            Action::SwitchInfo => {
+                self.jump_to(ModeId::Info);
+                Outcome::Redraw
+            }
+            Action::CycleView => {
+                self.cycle_view(1);
+                Outcome::Redraw
+            }
+            Action::CycleViewBack => {
+                self.cycle_view(-1);
+                Outcome::Redraw
+            }
+            Action::ToggleHelp => {
+                self.toggle_aux(ModeId::Help);
+                Outcome::Redraw
+            }
+            Action::SwitchToHex => {
+                self.toggle_aux(ModeId::Hex);
+                Outcome::Redraw
+            }
+            Action::SwitchToAbout => {
+                self.toggle_aux(ModeId::About);
+                Outcome::Redraw
+            }
+            Action::CycleTheme => {
+                self.cycle_theme(1);
+                Outcome::Redraw
+            }
+            Action::CycleThemeBack => {
+                self.cycle_theme(-1);
+                Outcome::Redraw
+            }
+            Action::CycleColorMode => {
+                self.cycle_color_mode(1);
+                Outcome::Redraw
+            }
+            Action::CycleColorModeBack => {
+                self.cycle_color_mode(-1);
+                Outcome::Redraw
+            }
+            Action::Extract => {
+                self.start_extract();
+                Outcome::Redraw
+            }
+            Action::Descend => {
+                self.descend()?;
+                Outcome::Redraw
+            }
+            Action::OpenSearch => {
+                self.begin_search_prompt();
+                Outcome::Redraw
+            }
+            // Mode-local actions: routed via the mode's own `handle` before
+            // we get here. Listed explicitly so adding a new Action variant
+            // forces a non-exhaustive-match compile error in this function
+            // and a deliberate decision about which side handles it.
+            Action::ToggleRawSource
+            | Action::PlayPause
+            | Action::NextFrame
+            | Action::PrevFrame
+            | Action::NextChapter
+            | Action::PrevChapter
+            | Action::NextFace
+            | Action::PrevFace
+            | Action::NextMethod
+            | Action::PrevMethod
+            | Action::NextMatch
+            | Action::PrevMatch
+            | Action::CycleBackground
+            | Action::CycleImageMode
+            | Action::CycleFitMode
+            | Action::ScrollLeft
+            | Action::ScrollRight
+            | Action::ToggleLineNumbers
+            | Action::ToggleSoftWrap
+            | Action::CycleBackgroundBack
+            | Action::CycleImageModeBack
+            | Action::ToggleStickyParents
+            | Action::ReflowWidths
+            | Action::ToggleHeader
+            | Action::ZoomIn
+            | Action::ZoomOut
+            | Action::ZoomReset
+            | Action::ZoomPreset(_) => Outcome::Unhandled,
+        })
+    }
+
+    fn extract_target_key(&mut self) -> Option<String> {
+        let f = self.frame();
+        let target = f.modes[f.active].extract_target()?;
+        Some(match target {
+            crate::viewer::modes::ExtractTarget::EntryPath(p) => p,
+            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
+        })
+    }
+
+    /// Run extract against the active mode's selection, then open the
+    /// save-to prompt. Failures flash on the status line.
+    fn start_extract(&mut self) {
+        let Some(key) = self.extract_target_key() else {
+            self.flash = Some("nothing selected to extract".to_string());
+            return;
+        };
+        let opts = crate::extract::ExtractOptions {
+            no_tempfile: self.no_tempfile,
+            ..Default::default()
+        };
+        let f = self.frame();
+        match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
+            Ok(extracted) => self.begin_extract_prompt(extracted),
+            Err(e) => self.flash = Some(format!("extract failed: {e}")),
+        }
+    }
+
+    /// Recursive peek: extract the active mode's selection and push it
+    /// as a new session on the stack. Failures (no selection,
+    /// unsupported, broken entry, stack full) flash and leave the
+    /// current frame active.
+    fn descend(&mut self) -> Result<()> {
+        if self.frames.len() >= MAX_STACK_DEPTH {
+            self.flash = Some(format!("peek stack at max depth ({MAX_STACK_DEPTH})"));
+            return Ok(());
+        }
+        // Mode-provided direct frame (e.g. SQLite table → row viewer)
+        // bypasses the extract pipeline entirely.
+        let frame_idx = self.active_frame_idx();
+        let active = self.frames[frame_idx].active;
+        if let Some(result) = self.frames[frame_idx].modes[active].build_descend_frame() {
+            return match result {
+                Ok(frame) => self.push_direct_frame(frame),
+                Err(e) => {
+                    self.flash = Some(format!("descend failed: {e:#}"));
+                    Ok(())
+                }
+            };
+        }
+        let Some(key) = self.extract_target_key() else {
+            self.flash = Some("nothing to descend into".to_string());
+            return Ok(());
+        };
+        let opts = crate::extract::ExtractOptions {
+            no_tempfile: self.no_tempfile,
+            ..Default::default()
+        };
+        let extracted = {
+            let f = self.frame();
+            match crate::extract::extract(&f.source, &f.detected, &key, &opts) {
+                Ok(e) => e,
+                Err(e) => {
+                    self.flash = Some(format!("descend failed: {e}"));
+                    return Ok(());
+                }
+            }
+        };
+        self.push_extracted(extracted)
+    }
+
+    /// Push a mode-supplied descend frame onto the session stack
+    /// without going through extract / re-detect. Used by modes that
+    /// already know the source, file type, and modes for the next
+    /// frame (SQLite contents → row viewer). Gathers `FileInfo` from
+    /// the supplied source + detected so the new frame's InfoMode has
+    /// a populated panel.
+    fn push_direct_frame(&mut self, frame: crate::viewer::modes::DescendFrame) -> Result<()> {
+        let crate::viewer::modes::DescendFrame {
+            source,
+            detected,
+            modes,
+            breadcrumb_label,
+        } = frame;
+        let file_info = match crate::gather::gather(&source, &detected) {
+            Ok(info) => info,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e:#}"));
+                return Ok(());
+            }
+        };
+        let mut session = SessionFrame::new(source, detected, file_info, modes);
+        session.breadcrumb_label = breadcrumb_label;
+        self.frames.push(session);
+        self.screen.invalidate();
+        Ok(())
+    }
+
+    fn active_frame_idx(&self) -> usize {
+        self.frames.len() - 1
+    }
+
+    fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {
+        let source = extracted.source;
+        let detected = match crate::input::detect::detect(&source) {
+            Ok(d) => d,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e}"));
+                return Ok(());
+            }
+        };
+        // Apply transparent decompression so descending into an
+        // extracted `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` lands
+        // straight on the inner content.
+        let (source, detected) = crate::input::compression::resolve_transparent(source, detected);
+        let modes = match (self.mode_builder)(&source, &detected) {
+            Ok(m) => m,
+            Err(e) => {
+                self.flash = Some(format!("descend failed: {e}"));
+                return Ok(());
+            }
+        };
+        let file_info = crate::gather::gather(&source, &detected)?;
+        let frame = SessionFrame::new(source, detected, file_info, modes);
+        // Dir → Dir descent re-targets the current frame instead of
+        // pushing, so navigating between sibling subdirectories doesn't
+        // accumulate a stack the user has to back out of. Esc on the
+        // resulting frame still exits peek (depth-1 Back semantics).
+        let collapse = matches!(
+            frame.detected.file_type,
+            crate::input::detect::FileType::Directory
+        ) && matches!(
+            self.frame().detected.file_type,
+            crate::input::detect::FileType::Directory
+        );
+        if collapse {
+            *self.frames.last_mut().expect("non-empty stack") = frame;
+        } else {
+            self.frames.push(frame);
+        }
+        self.screen.invalidate();
+        Ok(())
+    }
+
+    fn pop_frame(&mut self) {
+        if self.frames.len() <= 1 {
+            return;
+        }
+        self.frames.pop();
+        self.screen.invalidate();
+    }
+
+    // ---------------------------------------------------------------------
+    // Mode switching helpers
+    // ---------------------------------------------------------------------
+
+    fn jump_to(&mut self, target: ModeId) {
+        let idx = self.frame().mode_index(target);
+        if let Some(idx) = idx {
+            self.set_active(idx);
+        }
+    }
+
+    fn toggle_aux(&mut self, target: ModeId) {
+        let f = self.frame();
+        if f.modes[f.active].id() == target {
+            let dest = f.last_primary.unwrap_or(0);
+            if dest != f.active {
+                self.set_active(dest);
+            }
+        } else if let Some(idx) = f.mode_index(target) {
+            self.set_active(idx);
+        }
+    }
+
+    /// Switch the active mode index. Updates `last_primary` on
+    /// non-aux landings, captures the outgoing mode's position (when
+    /// it tracks) and restores it on the incoming mode.
+    fn set_active(&mut self, new_idx: usize) {
+        let f = self.frame_mut();
+        if new_idx == f.active {
+            return;
+        }
+        capture_position(f);
+        f.active = new_idx;
+        if !f.modes[new_idx].is_aux() {
+            f.last_primary = Some(new_idx);
+        }
+        restore_position(f);
+    }
+
+    fn cycle_view(&mut self, direction: isize) {
+        let f = self.frame();
+        let n = f.modes.len();
+        if n == 0 {
+            return;
+        }
+        // Hex sits in the cycle only when there's no other data
+        // view — i.e. binary files where Hex is the only thing to
+        // look at. Info doesn't count as a data view: a stack of
+        // [Hex, Info] would otherwise treat Info as the "primary"
+        // and silently drop Hex out of Tab, leaving the user stuck
+        // on Info.
+        let has_data_primary = f
+            .modes
+            .iter()
+            .any(|m| !m.is_aux() && !matches!(m.id(), ModeId::Info));
+        let mut i = f.active;
+        for _ in 0..n {
+            i = if direction >= 0 {
+                (i + 1) % n
+            } else {
+                (i + n - 1) % n
+            };
+            if i == self.frame().active {
+                break;
+            }
+            let id = self.frame().modes[i].id();
+            if matches!(id, ModeId::Help | ModeId::About) {
+                continue;
+            }
+            if id == ModeId::Hex && has_data_primary {
+                continue;
+            }
+            self.set_active(i);
+            return;
+        }
+    }
+
+    fn cycle_theme(&mut self, direction: isize) {
+        self.current_theme = if direction >= 0 {
+            self.current_theme.next()
+        } else {
+            self.current_theme.prev()
+        };
+        self.peek_theme = make_peek_theme(self.current_theme, self.peek_theme.style_mode);
+        self.invalidate_all_views();
+    }
+
+    fn cycle_color_mode(&mut self, direction: isize) {
+        self.peek_theme.style_mode = if direction >= 0 {
+            self.peek_theme.style_mode.next()
+        } else {
+            self.peek_theme.style_mode.prev()
+        };
+        self.invalidate_all_views();
+    }
+
+    /// Themes / color modes are global; staling every frame's view
+    /// cache stops a pop-into-old-frame from showing stale colours.
+    fn invalidate_all_views(&mut self) {
+        for frame in &mut self.frames {
+            for slot in &mut frame.views {
+                *slot = None;
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Resize
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn handle_resize(&mut self) {
+        let cols = terminal_cols();
+        let rows = content_rows();
+        for frame in &mut self.frames {
+            for (i, m) in frame.modes.iter_mut().enumerate() {
+                m.on_resize(cols, rows);
+                if m.rerender_on_resize() {
+                    frame.views[i] = None;
+                }
+            }
+        }
+        self.screen.invalidate();
+    }
+
+    // ---------------------------------------------------------------------
+    // Rendering
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn ensure_active_rendered(&mut self) -> Result<()> {
+        let (active, scroll) = {
+            let f = self.frame();
+            (f.active, f.scroll[f.active])
+        };
+        let rows = content_rows();
+        let cache_hit = self.frame().views[active]
+            .as_ref()
+            .is_some_and(|v| v.scroll_at == scroll && v.rows_at == rows);
+        if !cache_hit {
+            match self.render_active() {
+                Ok(view) => {
+                    self.frame_mut().views[active] = Some(view);
+                }
+                Err(e) => {
+                    // Frame may have been built from a name-biased detect
+                    // (file extension lied about the content). Try
+                    // magic-byte-only re-detection once; if it yields a
+                    // different file type, rebuild the frame and retry
+                    // the render. Applies uniformly to root and nested
+                    // descended frames.
+                    let render_err =
+                        if !self.frame().retry_attempted && self.retry_frame_detection()? {
+                            let active = self.frame().active;
+                            match self.render_active() {
+                                Ok(view) => {
+                                    self.frame_mut().views[active] = Some(view);
+                                    return Ok(());
+                                }
+                                // Re-detected type also fails to render;
+                                // fall through to the Hex degrade below
+                                // with the new error.
+                                Err(e2) => e2,
+                            }
+                        } else {
+                            e
+                        };
+                    if let Some(view) = self.degrade_active_to_hex(&render_err)? {
+                        // Re-detection didn't help (or already ran): the
+                        // active mode genuinely can't render this input
+                        // (corrupt image, malformed payload, …). Rather
+                        // than abort the whole viewer, drop to the
+                        // universal Hex view and surface the error as a
+                        // warning. `degrade_active_to_hex` repointed
+                        // `active` at Hex before rendering.
+                        let active = self.frame().active;
+                        self.frame_mut().views[active] = Some(view);
+                    } else {
+                        return Err(render_err);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Re-detect the active frame's source without using its path /
+    /// entry name, rebuild modes + file_info if the classification
+    /// changed, and reset cached views. Sets `retry_attempted` whether
+    /// or not the classification changed so the caller doesn't loop.
+    /// Returns `Ok(true)` when the frame was rebuilt and is worth
+    /// re-rendering, `Ok(false)` when re-detection didn't change the
+    /// type.
+    fn retry_frame_detection(&mut self) -> Result<bool> {
+        let retried = {
+            let frame = self.frame();
+            match crate::input::detect::detect_ignore_name(&frame.source) {
+                Ok(d) if d.file_type != frame.detected.file_type => d,
+                _ => {
+                    self.frame_mut().retry_attempted = true;
+                    return Ok(false);
+                }
+            }
+        };
+        // Re-detect-on-magic may surface a bare codec the name hid —
+        // resolve transparently so the rebuilt frame renders the
+        // decompressed inner content.
+        let (source_clone, retried) =
+            crate::input::compression::resolve_transparent(self.frame().source.clone(), retried);
+        let modes = (self.mode_builder)(&source_clone, &retried)?;
+        let file_info = crate::gather::gather(&source_clone, &retried)?;
+        let frame = self.frame_mut();
+        frame.source = source_clone;
+        frame.detected = retried;
+        frame.file_info = file_info;
+        frame.reseed_from_modes(modes);
+        frame.retry_attempted = true;
+        // Drop the ScreenBuffer's row-diff cache so the next draw
+        // repaints every row — the rebuilt frame's mode set, status
+        // line, and content can differ from whatever the parent frame
+        // (or earlier render attempt) left on screen.
+        self.screen.invalidate();
+        Ok(true)
+    }
+
+    /// Last-resort fallback when the active mode cannot render the input
+    /// (e.g. a corrupt image, a malformed structured payload). Repoints
+    /// `active` at the always-present Hex view, records `err` as a frame
+    /// warning (so the Info view and the breadcrumb `!` mark surface it),
+    /// flashes a one-line notice, and returns the Hex render so the caller
+    /// can cache it.
+    ///
+    /// Returns `Ok(None)` when there's nothing safer to fall back to —
+    /// the failed mode *is* Hex, or no Hex view exists (directories) — so
+    /// the caller propagates the original error instead of looping.
+    fn degrade_active_to_hex(&mut self, err: &anyhow::Error) -> Result<Option<RenderedView>> {
+        let f = self.frame();
+        let failed = f.active;
+        let Some(hex_idx) = f.mode_index(ModeId::Hex) else {
+            return Ok(None);
+        };
+        if failed == hex_idx {
+            return Ok(None);
+        }
+        let warning = format!("{}: {}", f.modes[failed].label(), render_failure_cause(err));
+        let f = self.frame_mut();
+        if !f.file_info.warnings.contains(&warning) {
+            f.file_info.warnings.push(warning);
+            if let Some(idx) = f.mode_index(ModeId::Info) {
+                f.views[idx] = None;
+            }
+        }
+        // The broken mode is no longer the home view: aux toggles must not
+        // bounce back into it.
+        if f.last_primary == Some(failed) {
+            f.last_primary = None;
+        }
+        f.active = hex_idx;
+        self.flash = Some(format!("cannot display — {}", render_failure_cause(err)));
+        let view = self.render_active()?;
+        Ok(Some(view))
+    }
+
+    pub(crate) fn invalidate_active(&mut self) {
+        let f = self.frame_mut();
+        let active = f.active;
+        f.views[active] = None;
+    }
+
+    fn render_active(&mut self) -> Result<RenderedView> {
+        let theme_name = self.current_theme;
+        let render_opts = self.render_opts;
+        let term_cols_v = terminal_cols();
+        let rows = content_rows();
+        // Borrow theme separately from the frame's mutable borrow —
+        // `peek_theme` lives on `self`, not on the frame, so the two
+        // disjoint accesses don't alias.
+        let peek_theme = self.peek_theme.clone();
+        let f = self.frame_mut();
+        let active = f.active;
+        let scroll = f.scroll[active];
+        let window = {
+            let ctx = RenderCtx {
+                file_info: &f.file_info,
+                theme_name,
+                peek_theme: &peek_theme,
+                render_opts,
+                term_cols: term_cols_v,
+                term_rows: rows,
+            };
+            f.modes[active].render_window(&ctx, scroll, rows)?
+        };
+        // Append only warnings not already recorded. Paged renderers
+        // re-emit the same per-frame warning on every redraw when a page
+        // can't be rendered (e.g. a failed Ghostscript / image decode);
+        // deduping keeps `file_info.warnings` from growing without bound
+        // and avoids needless Info-view cache invalidation each frame.
+        let new_warnings = f.modes[active].take_warnings();
+        let mut added_any = false;
+        for w in new_warnings {
+            if !f.file_info.warnings.contains(&w) {
+                f.file_info.warnings.push(w);
+                added_any = true;
+            }
+        }
+        if added_any && let Some(idx) = f.mode_index(ModeId::Info) {
+            f.views[idx] = None;
+        }
+        Ok(RenderedView {
+            lines: window.lines,
+            scroll_at: scroll,
+            rows_at: rows,
+            total: window.total,
+        })
+    }
+
+    // ---------------------------------------------------------------------
+    // Line scrolling (used when active mode does NOT own scroll)
+    // ---------------------------------------------------------------------
+
+    fn max_scroll(&self) -> usize {
+        let f = self.frame();
+        let total = f.views[f.active].as_ref().map_or(0, |v| v.total);
+        total.saturating_sub(content_rows())
+    }
+
+    fn prepare_total(&mut self) -> Result<()> {
+        let (active, total_lines, has_view) = {
+            let f = self.frame();
+            (
+                f.active,
+                f.modes[f.active].total_lines(),
+                f.views[f.active].is_some(),
+            )
+        };
+        if let Some(n) = total_lines {
+            let needs_seed = self.frame().views[active]
+                .as_ref()
+                .is_none_or(|v| v.total != n);
+            if needs_seed {
+                self.frame_mut().views[active] = Some(RenderedView {
+                    lines: Vec::new(),
+                    scroll_at: usize::MAX,
+                    rows_at: content_rows(),
+                    total: n,
+                });
+            }
+            return Ok(());
+        }
+        if !has_view {
+            self.ensure_active_rendered()?;
+        }
+        Ok(())
+    }
+
+    fn scroll_by(&mut self, delta: isize) -> Result<()> {
+        if self.frame().modes[self.frame().active].owns_scroll() {
+            return Ok(());
+        }
+        self.prepare_total()?;
+        let max = self.max_scroll();
+        let f = self.frame_mut();
+        let active = f.active;
+        let s = &mut f.scroll[active];
+        *s = if delta < 0 {
+            s.saturating_sub((-delta) as usize)
+        } else {
+            (*s + delta as usize).min(max)
+        };
+        Ok(())
+    }
+
+    fn page(&mut self, direction: isize) -> Result<()> {
+        if self.frame().modes[self.frame().active].owns_scroll() {
+            return Ok(());
+        }
+        self.prepare_total()?;
+        let step = content_rows().saturating_sub(1);
+        let max = self.max_scroll();
+        let f = self.frame_mut();
+        let active = f.active;
+        let s = &mut f.scroll[active];
+        *s = if direction < 0 {
+            s.saturating_sub(step)
+        } else {
+            (*s + step).min(max)
+        };
+        Ok(())
+    }
+
+    // ---------------------------------------------------------------------
+    // Drawing
+    // ---------------------------------------------------------------------
+
+    pub(crate) fn draw(&mut self, stdout: &mut io::Stdout, status: &str) -> Result<()> {
+        let reset_bytes = self.peek_theme.style_mode.reset_bytes();
+        // Clone the visible slice into an owned Vec so the immutable
+        // frame borrow doesn't conflict with the &mut self.screen
+        // call below. Per-frame this is one shallow copy of the
+        // viewport's String pointers — no glyph data duplicated.
+        let lines: Vec<String> = {
+            let f = self.frame();
+            f.views[f.active]
+                .as_ref()
+                .map(|v| v.lines.clone())
+                .unwrap_or_default()
+        };
+        self.screen.draw(stdout, &lines, status, reset_bytes)
+    }
+}
+
+fn capture_position(f: &mut SessionFrame) {
+    let mode = &f.modes[f.active];
+    if !mode.tracks_position() {
+        return;
+    }
+    let pos = if mode.owns_scroll() {
+        mode.position()
+    } else {
+        Position::Line(f.scroll[f.active])
+    };
+    if !matches!(pos, Position::Unknown) {
+        f.position = pos;
+    }
+}
+
+fn restore_position(f: &mut SessionFrame) {
+    let pos = f.position;
+    let active = f.active;
+    let source = f.source.clone();
+    let mode = &mut f.modes[active];
+    if !mode.tracks_position() {
+        return;
+    }
+    if mode.owns_scroll() {
+        mode.set_position(pos, &source);
+        return;
+    }
+    let line = match pos {
+        Position::Line(l) => Some(l),
+        Position::Byte(b) => source.byte_to_line(b),
+        Position::Unknown => None,
+    };
+    if let Some(l) = line {
+        f.scroll[active] = l;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Args;
+    use crate::compose::Registry;
+    use clap::Parser;
+    use crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
+    use std::rc::Rc;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent {
+            code,
+            modifiers: KeyModifiers::NONE,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> ViewerState {
+        let args = Args::parse_from(args_argv);
+        let registry = Rc::new(Registry::new(&args.compose_opts()).unwrap());
+        let modes = registry.compose_modes(&source, &detected).unwrap();
+        let registry_for_builder = registry.clone();
+        let mode_builder: ModeBuilder =
+            Box::new(move |s, d| registry_for_builder.compose_modes(s, d));
+        ViewerState::new(
+            source,
+            detected,
+            args.theme,
+            args.color,
+            RenderOptions::default(),
+            modes,
+            mode_builder,
+            args.no_tempfile,
+        )
+        .unwrap()
+    }
+
+    fn fixture_source(rel: &str) -> InputSource {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.push(rel);
+        InputSource::File(path)
+    }
+
+    fn active_id(state: &ViewerState) -> ModeId {
+        let f = state.frame();
+        f.modes[f.active].id()
+    }
+
+    #[test]
+    fn tab_cycles_svg_view_modes() {
+        let source = fixture_source("test-images/calendar.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
+
+        assert_eq!(active_id(&state), ModeId::ImageRender);
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Content, "tab → XML source");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info, "tab → info");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(
+            active_id(&state),
+            ModeId::ImageRender,
+            "tab wraps back to image"
+        );
+    }
+
+    /// A corrupt image can't be decoded. Rendering must not abort the
+    /// viewer: the active mode degrades to the universal Hex view and the
+    /// decode error is recorded as a frame warning (surfaced by the Info
+    /// view and the breadcrumb `!` mark).
+    #[test]
+    fn corrupt_image_degrades_to_hex_with_warning() {
+        // Pin a narrow viewport so the verbose decode warning is wider
+        // than the content area — the Info view must wrap it rather than
+        // let the terminal soft-wrap a row the ScreenBuffer miscounts.
+        let _term = crate::viewer::ui::test_term_override::pin(40, 24);
+
+        let source = fixture_source("test-images/corrupt.png");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/corrupt.png"], source, detected);
+
+        // Composes as an image — ImageRender is the home view.
+        assert_eq!(active_id(&state), ModeId::ImageRender);
+
+        // The decode fails inside render_window; ensure_active_rendered
+        // must swallow it (Ok), not propagate.
+        state.ensure_active_rendered().unwrap();
+
+        // Degraded to Hex, with the decode cause captured as a warning.
+        assert_eq!(active_id(&state), ModeId::Hex, "fell back to hex view");
+        assert!(
+            state
+                .frame()
+                .file_info
+                .warnings
+                .iter()
+                .any(|w| w.contains("CRC error")),
+            "decode failure recorded as warning, got {:?}",
+            state.frame().file_info.warnings
+        );
+
+        // Switch to Info and confirm every rendered line fits the content
+        // width — no over-wide line for the terminal to soft-wrap.
+        state.apply(Action::SwitchInfo).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info);
+        state.ensure_active_rendered().unwrap();
+        let info_idx = state.frame().active;
+        let view = state.frame().views[info_idx].as_ref().unwrap();
+        let cols = terminal_cols();
+        for line in &view.lines {
+            assert!(
+                crate::viewer::ui::strip_ansi_width(line) <= cols,
+                "Info line exceeds content width {cols}: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn scrolldown_on_info_after_tab_advances_scroll() {
+        let source = fixture_source("test-images/calendar.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
+
+        state.apply(Action::CycleView).unwrap(); // Content
+        state.apply(Action::CycleView).unwrap(); // Info
+        assert_eq!(active_id(&state), ModeId::Info);
+
+        state.ensure_active_rendered().unwrap();
+        let info_idx = state.frame().active;
+        let total = state.frame().views[info_idx].as_ref().unwrap().total;
+        let rows = content_rows();
+        if total > rows {
+            let before = state.frame().scroll[info_idx];
+            state.apply(Action::ScrollDown).unwrap();
+            let after = state.frame().scroll[info_idx];
+            assert_eq!(after, before + 1, "ScrollDown should bump scroll by 1");
+        }
+    }
+
+    #[test]
+    fn static_and_animated_svg_share_source_mode() {
+        let static_src = fixture_source("test-images/calendar.svg");
+        let static_det = crate::input::detect::detect(&static_src).unwrap();
+        let mut static_state = build_state(
+            &["peek", "test-images/calendar.svg"],
+            static_src,
+            static_det,
+        );
+
+        let anim_src = fixture_source("test-images/loader-dots.svg");
+        let anim_det = crate::input::detect::detect(&anim_src).unwrap();
+        let mut anim_state =
+            build_state(&["peek", "test-images/loader-dots.svg"], anim_src, anim_det);
+
+        assert_eq!(static_state.frame().modes[0].id(), ModeId::ImageRender);
+        assert_eq!(anim_state.frame().modes[0].id(), ModeId::Animation);
+
+        static_state.apply(Action::CycleView).unwrap();
+        anim_state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&static_state), ModeId::Content);
+        assert_eq!(active_id(&anim_state), ModeId::Content);
+        assert_eq!(static_state.active_label(), "Source");
+        assert_eq!(anim_state.active_label(), "Source");
+
+        let static_segs = static_state.active_status_segments();
+        let anim_segs = anim_state.active_status_segments();
+        assert!(
+            static_segs.iter().any(|(s, _)| s == "Pretty"),
+            "static SVG source should show Pretty segment, got {static_segs:?}"
+        );
+        assert!(
+            anim_segs.iter().any(|(s, _)| s == "Pretty"),
+            "animated SVG source should show Pretty segment, got {anim_segs:?}"
+        );
+    }
+
+    #[test]
+    fn scrolldown_on_svg_source_shifts_window() {
+        // Pin viewport so the assertion below isn't a function of the
+        // terminal the test happens to run in (the pretty SVG is ~52
+        // lines — a tall console makes `total > rows + 5` flaky).
+        let _term = crate::viewer::ui::test_term_override::pin(80, 21);
+
+        let source = fixture_source("test-images/walking-outside.svg");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(
+            &["peek", "test-images/walking-outside.svg"],
+            source,
+            detected,
+        );
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Content);
+
+        state.ensure_active_rendered().unwrap();
+        let idx = state.frame().active;
+        let total = state.frame().views[idx].as_ref().unwrap().total;
+        let rows = content_rows();
+        assert!(
+            total > rows + 5,
+            "walking-outside.svg pretty XML must exceed viewport (total={total}, rows={rows})"
+        );
+        let initial_first = state.frame().views[idx].as_ref().unwrap().lines[0].clone();
+
+        for _ in 0..5 {
+            assert!(state.try_active_scroll(Action::ScrollDown));
+            state.invalidate_active();
+        }
+        state.ensure_active_rendered().unwrap();
+        let scrolled_first = state.frame().views[idx].as_ref().unwrap().lines[0].clone();
+        assert_ne!(
+            initial_first, scrolled_first,
+            "viewport content should shift after scrolling"
+        );
+    }
+
+    /// Descending into an archive entry pushes a new frame; Back pops
+    /// it. Stack-depth counter reflects the push/pop.
+    #[test]
+    fn descend_then_back_round_trips_stack() {
+        let source = fixture_source("test-data/archive.zip");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data/archive.zip"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+
+        // Listing is the active mode for archives. Selection lands on
+        // the first file by default.
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 2, "descend pushed a frame");
+        assert_eq!(state.breadcrumb().len(), 2);
+
+        let back_outcome = state.apply(Action::Back).unwrap();
+        assert!(
+            matches!(back_outcome, Outcome::Redraw),
+            "back at depth 2 should redraw, not quit"
+        );
+        assert_eq!(state.stack_depth(), 1);
+
+        // Last back at depth 1 quits.
+        let final_back = state.apply(Action::Back).unwrap();
+        assert!(matches!(final_back, Outcome::Quit));
+    }
+
+    /// A SQLite table-contents frame reuses the db source, so its
+    /// breadcrumb must show the table name rather than repeating the
+    /// db file (`library.sqlite > books`, not `library.sqlite >
+    /// library.sqlite`).
+    #[test]
+    fn sqlite_table_frame_breadcrumb_shows_table_name() {
+        let source = fixture_source("test-data/library.sqlite");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(
+            &["peek", "test-data/library.sqlite"],
+            source.clone(),
+            detected.clone(),
+        );
+        assert_eq!(state.breadcrumb(), vec!["library.sqlite".to_string()]);
+
+        // Build the contents descend frame the way the listing does:
+        // a row viewer over the parent source, labelled with the table.
+        let table = crate::types::sqlite::table_mode::build(&source, "books").unwrap();
+        let modes: Vec<Box<dyn Mode>> = vec![Box::new(table)];
+        let frame = crate::viewer::modes::DescendFrame {
+            source: source.clone(),
+            detected,
+            modes,
+            breadcrumb_label: Some("books".to_string()),
+        };
+        state.push_direct_frame(frame).unwrap();
+        assert_eq!(
+            state.breadcrumb(),
+            vec!["library.sqlite".to_string(), "books".to_string()],
+        );
+    }
+
+    /// Directory descent into a subdirectory must collapse the new
+    /// frame onto the current one — no stack of dirs to back out of.
+    /// Descending into a regular file *does* push (so Back returns to
+    /// the listing), and Esc on a depth-1 directory frame quits.
+    #[test]
+    fn directory_subdir_descent_replaces_frame() {
+        // src/ has subdirectories. Row 0 is the synthetic `..`; skip
+        // past it so we exercise descent into a real child dir.
+        let source = fixture_source("src");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        assert!(matches!(
+            detected.file_type,
+            crate::input::detect::FileType::Directory
+        ));
+        let mut state = build_state(&["peek", "src"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+        state.try_active_scroll(Action::ScrollDown);
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 1, "dir → dir descent collapses stack");
+        assert!(matches!(
+            state.frame().detected.file_type,
+            crate::input::detect::FileType::Directory
+        ));
+    }
+
+    /// Descending from a directory into a regular file pushes a new
+    /// frame so Back returns to the listing.
+    #[test]
+    fn directory_file_descent_pushes_frame() {
+        // DirectoryMode sorts dirs first then files, so `Bottom`
+        // always lands on a file row regardless of how many
+        // subdirectories test-data picks up.
+        let source = fixture_source("test-data");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data"], source, detected);
+        assert_eq!(state.stack_depth(), 1);
+        state.try_active_scroll(Action::Bottom);
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 2, "dir → file descent pushes a frame");
+        let back = state.apply(Action::Back).unwrap();
+        assert!(matches!(back, Outcome::Redraw));
+        assert_eq!(state.stack_depth(), 1);
+    }
+
+    /// Selecting the synthetic `..` row walks one canonical level up
+    /// and collapses the frame (still a dir → dir descent).
+    #[test]
+    fn directory_parent_link_walks_up() {
+        let source = fixture_source("src");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "src"], source, detected);
+        // `..` is row 0 by construction.
+        state.apply(Action::Descend).unwrap();
+        assert_eq!(state.stack_depth(), 1, ".. descent stays at depth 1");
+        let new_path = state
+            .frame()
+            .source
+            .disk_path()
+            .expect("dir source has a path")
+            .to_path_buf();
+        // `peek <MANIFEST>/src` → `..` → `<MANIFEST>` (the project root).
+        let expected_parent = std::fs::canonicalize(env!("CARGO_MANIFEST_DIR")).unwrap();
+        assert_eq!(new_path, expected_parent);
+    }
+
+    /// `/` opens the search prompt; typing a query and pressing Enter
+    /// confirms it, closes the prompt, and re-renders without quitting.
+    #[test]
+    fn search_prompt_confirm_runs_search_without_quitting() {
+        let source = fixture_source("test-data/theme.rs");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
+        assert_eq!(active_id(&state), ModeId::Content);
+
+        // `/` opens the prompt.
+        let outcome = state.apply(Action::OpenSearch).unwrap();
+        assert!(matches!(outcome, Outcome::Redraw));
+        assert!(state.prompt_active(), "search prompt should be open");
+
+        // Type "fn" then Enter.
+        for c in "fn".chars() {
+            state.handle_prompt_key(key(KeyCode::Char(c))).unwrap();
+        }
+        let redraw = state.handle_prompt_key(key(KeyCode::Enter)).unwrap();
+        assert!(redraw, "confirm should request a redraw");
+        assert!(!state.prompt_active(), "prompt closes on confirm");
+
+        // The post-confirm render must not panic.
+        state.ensure_active_rendered().unwrap();
+    }
+
+    /// Binary files: Tab must round-trip Hex ↔ Info. Without the
+    /// Info-aware `has_data_primary` check, Info counts as the
+    /// primary view, Hex stays out of the cycle, and the user gets
+    /// stuck on Info after the first Tab.
+    #[test]
+    fn tab_round_trips_hex_and_info_on_binary() {
+        // Synthetic in-memory binary blob (non-UTF8 bytes, no
+        // recognised extension) — classified as Binary, so only
+        // Hex + Info compose into the mode stack.
+        let source = InputSource::memory(bytes::Bytes::from(vec![0xFFu8; 1024]), "blob");
+        let detected = crate::input::detect::detect(&source).unwrap();
+        let mut state = build_state(&["peek", "blob"], source, detected);
+        assert_eq!(active_id(&state), ModeId::Hex, "binary opens on Hex");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(active_id(&state), ModeId::Info, "Tab goes Hex → Info");
+
+        state.apply(Action::CycleView).unwrap();
+        assert_eq!(
+            active_id(&state),
+            ModeId::Hex,
+            "Tab returns Info → Hex on binary (Hex is the only data view)"
+        );
+    }
+}

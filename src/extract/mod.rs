@@ -13,5 +13,8 @@
 mod extract;
 pub mod write;
 
-pub use extract::{ExtractError, ExtractOptions, Extracted, extract};
-pub(crate) use extract::{forward_slash_key, sanitize_entry_path};
+pub use extract::extract;
+// The extract vocabulary moved to `peek-foundation` (so `peek-types` can
+// build extract results). Re-exported so the bin's `crate::extract::*`
+// paths (main, viewer_session, write) stay unchanged.
+pub use peek_foundation::extract::{ExtractOptions, Extracted};

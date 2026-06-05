@@ -1,0 +1,32 @@
+[package]
+name = "peek-foundation"
+description = "peek reader/viewer foundation — Mode trait + shared view modes + info base + render toolkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# Exposes the small test-only helpers (downcast_extras, SearchState
+# match_count, the terminal-size override) to *other* crates' test builds.
+# The binary's dev-dependencies turn this on so the per-type tests can
+# reach them; it stays off for normal/release builds, so the scaffolding
+# never ships.
+testing = []
+
+[dependencies]
+peek-io = { workspace = true }
+peek-detect = { workspace = true }
+peek-theme = { workspace = true }
+
+anyhow = { workspace = true }
+bytes = { workspace = true }
+crossterm = { workspace = true }
+syntect = { workspace = true }
+unicode-width = { workspace = true }
+quick-xml = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }

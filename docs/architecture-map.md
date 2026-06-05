@@ -3,9 +3,18 @@
 Full file/module breakdown. Read when adding files, modifying a module, or unsure where logic lives.
 CLAUDE.md keeps a condensed top-level version; this is the detailed reference.
 
-Cargo workspace: the `peek` binary at the repo root plus two leaf crates under `crates/`. The split
-makes the architectural rule "detection must not depend on the reader/viewer layer" a compile-time
-guarantee (Cargo dependency edges) rather than convention.
+Cargo workspace: the thin `peek` binary at the repo root plus five library crates under `crates/`
+(`peek-io`, `peek-detect`, `peek-theme`, `peek-foundation`, `peek-types`). The split makes the
+architectural rules ("detection must not depend on the readers"; "the parser layer must not reach the
+session layer / process control") compile-time guarantees (Cargo dependency edges) rather than
+convention. Layering, bottom-up: io / theme (leaves) → detect → foundation → types → bin.
+
+> **Relocation note (2026-06-05 crate carve):** the per-file breakdowns below for `info/`, `viewer/`
+> (the reader/viewer toolkit) and the `base64` / `xml` / `output/print` / `extract`-vocab helpers now
+> live in **`crates/peek-foundation/src/`**; the `types/` breakdown lives in
+> **`crates/peek-types/src/types/`**. Their internal module structure is unchanged — only the crate
+> root moved. The bin keeps only the session layer: the `compose` / `gather` / `extract` dispatch
+> hubs and `viewer_session/` (ViewerState + the event loop).
 
 ```
 crates/
@@ -47,33 +56,45 @@ crates/
     src/peek_theme.rs  — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
     src/manager.rs     — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
     themes/            — Embedded .tmTheme files (idea-dark default + vscode-dark-modern / vscode-dark-2026 / vscode-monokai)
-src/
-  main.rs              — CLI entry point: dispatches inputs to viewers
-  cli.rs               — Args struct (clap derive)
-  base64.rs            — shared crate-wide base64 codec: decode (standard + URL alphabet, both tables in one) + decoded_len + encode_url (URL-safe, no padding — for the JWK thumbprint); hand-rolled, no crate dep; first consumer was the notebook image extractor
+src/                   — the bin: the thin session layer. Re-exports peek-foundation / peek-types modules so the hubs keep `crate::{viewer,info,types,extract,base64,xml}` paths.
+  main.rs              — CLI entry: resolve source, build Registry, dispatch (info / list / interactive / pipe)
+  cli.rs               — Args struct (clap derive) + `compose_opts()` projection (keeps clap out of the readers)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
-  xml.rs               — shared XML helper: `unescape_attr_value` decodes a quick-xml attribute's raw UTF-8 bytes + resolves escapes via `quick_xml::escape::unescape` (feature-flag-independent — calamine enables quick-xml's `encoding` feature, which removes `Attribute::unescape_value`). Used by docx / odt / epub / structured-xml / spreadsheet props
   input/               — thin façade over peek-io + peek-detect (keeps the historical `crate::input::*` paths) + the CLI-level source dispatch
-    mod.rs             — re-exports peek-io (InputSource, ByteSource, LineSource, source, stream) and peek-detect (as `detect`, `mime`, and `compression::resolve_transparent`) under `crate::input::*`
+    mod.rs             — re-exports peek-io (InputSource) and peek-detect (as `detect`, `mime`, and `compression::resolve_transparent`) under `crate::input::*`
     stdin.rs           — build_source(&Args): pick file vs stdin from the CLI args (delegates the actual stdin read + tty reopen to peek_io::stdin)
-  extract/
-    mod.rs             — Module declarations + re-exports (Extracted, ExtractOptions, ExtractError, extract, sanitize_entry_path)
-    extract.rs         — Top-level dispatch (FileType → per-type extractor) + Extracted/Options/Error types + path sanitiser
+  compose.rs           — Registry (holds ComposeOpts) + compose_modes: the FileType → types::<x>::compose dispatch hub
+  gather/              — the FileType → types::<x> info-gather dispatch hub
+    mod.rs             — Per-source dispatch (gather() entry point); calls each type's gather_extras
+    tests.rs           — Fixture-based detect→gather tests against test-images / test-data
+  extract/             — the FileType → types::<x> extract dispatch hub
+    mod.rs             — `extract` dispatch fn + re-export of foundation's Extracted / ExtractOptions
+    extract.rs         — Top-level dispatch (FileType → per-type extractor); the vocab + sanitiser live in peek-foundation
     write.rs           — Output enum + write_extracted: streams to stdout or writes file at path
   output/
-    mod.rs             — re-exports PrintOutput
+    mod.rs             — CLI help/version screens module + re-export of foundation's PrintOutput
+    help.rs            — CLI help and version screens (uses foundation's paint_logo)
+  viewer_session/      — bin-side top of the viewer
+    mod.rs             — re-exports ViewerState / ModeBuilder
+    state.rs           — ViewerState: mode stack + scroll/view cache + extract/descend dispatch + prompt slot (reaches gather / compose / extract)
+    interactive.rs     — the interactive event loop
+crates/peek-foundation/src/   — reader/viewer toolkit + info base (relocated from the bin; structure unchanged)
+  lib.rs               — façade: `theme` alias + `input` re-export + viewer/info/output/extract/base64/xml + the impl_info_extras! macro + the `testing` feature gate
+  base64.rs            — shared crate-wide base64 codec: decode (standard + URL alphabet) + decoded_len + encode_url (URL-safe, no padding — JWK thumbprint); hand-rolled, no crate dep
+  xml.rs               — shared XML helper: `unescape_attr_value` (feature-flag-independent quick-xml attribute unescape). Used by docx / odt / epub / structured-xml / spreadsheet props
+  extract.rs           — extract vocabulary: Extracted / ExtractOptions / ExtractError + sanitize_entry_path / forward_slash_key (the dispatch hub is the bin's)
+  output/
+    mod.rs             — PrintOutput re-export + the theme-gradient logo painter (LOGO / paint_logo)
     print.rs           — PrintOutput: write-once stdout for --print / pipes / --info
-    help.rs            — CLI help and version screens
-  info/
-    mod.rs             — FileInfo + InfoExtras trait + Extras (`Box<dyn InfoExtras>` payload) + impl_info_extras! macro + test-only downcast_extras + shared permission helpers
-    gather/            — FileInfo collection, split per general file type
-      mod.rs           — Per-source dispatch (gather() entry point)
-      tests.rs         — Fixture-based tests against test-images / test-data
+  info/                — info base (the gather *hub* is the bin's `src/gather/`; per-type gather_extras live in peek-types)
+    mod.rs             — FileInfo + InfoExtras trait + Extras (`Box<dyn InfoExtras>` payload) + impl_info_extras! macro + (testing-gated) downcast_extras + shared permission helpers + NoExtras test fixture
     render/            — Themed terminal rendering of FileInfo, split per section
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
-  theme                — alias for the `peek-theme` crate (see crates/ above); `use peek_theme as theme` keeps `crate::theme::*` paths working
+  viewer/              — the reader/viewer toolkit (Mode engine, shared modes, listing/table, UI primitives, image-render vocab, paged, search, wrap_scroll, cell_size, highlight). Full breakdown at the `viewer/` block below. NB: compose_modes / ViewerState / the event loop are NOT here — they are the bin's session layer.
+crates/peek-types/src/   — per-file-type readers (relocated from the bin; structure unchanged)
+  lib.rs               — façade mirroring foundation's (theme alias + input re-export + viewer/info/output/extract/base64/xml) + `pub mod types`
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
     info_impls.rs      — Central registry: one impl_info_extras! row per type binding its stats struct to the `info::InfoExtras` trait (replaces the old FileExtras enum + render match). Only `types → info` edge is the trait itself
@@ -351,8 +372,8 @@ src/
       bytecode.rs      — build(): re-parse with bytecode on; Disassembly { methods: MethodAsm[] } of theme-free instruction data (offset / mnemonic / resolved operand) via cafebabe's decoded opcode stream
       bytecode_mode.rs — BytecodeMode: caller-scrolled `javap -c` view; themed lines cached per (width, style, theme) with per-method header anchors; `n`/`p` jump methods (YesScrollTo), `/` searches
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
-  viewer/
-    mod.rs             — Registry (holds ComposeOpts), compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), ComposeOpts (the 12-field clap-free view of `cli::Args` the compose path reads; built by `Args::compose_opts()` in the bin), free `image_config`. Re-exports highlight_lines / LineStreamHighlighter from `highlight`
+crates/peek-foundation/src/viewer/   — the reader/viewer toolkit (this is the `viewer/` referenced above)
+    mod.rs             — ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), ComposeOpts (the 12-field clap-free view of `cli::Args` the compose path reads; built by `Args::compose_opts()` in the bin), free `image_config`, `append_universal_modes` (Hex/Info/About/Help tail). Re-exports highlight_lines / LineStreamHighlighter from `highlight`. NB: `Registry` + `compose_modes` moved to the bin's `src/compose.rs`.
     highlight.rs       — Syntect highlighting: highlight_lines (whole-text), LineStreamHighlighter (forward-only streaming feeder used by ContentMode), syntax_token_for (FileType + filename → syntect syntax token, honors `--language`), fallback_syntax_token (extensions syntect doesn't natively support)
     cell_size.rs       — Terminal cell aspect-ratio detection: cell_aspect_h_over_w reads cell pixel dims from TIOCGWINSZ (cached on first call), falls back to 1:2 when the terminal can't report; set_override for an explicit user override. Used by the image pipeline to preserve source aspect across fonts
     image_render/      — Foundation render vocabulary shared by PagedImageMode + cell_size + the types/image engine (moved out of types/image so the shared mode doesn't depend on the reader). The only types/image → here edge is re-exporting these back.
@@ -361,7 +382,6 @@ src/
       zoom.rs          — ZoomLevel: multiplicative zoom factor on top of fit-mode base grid (1.25× per step, 1×..16× clamp, preset/label)
       scroll.rs        — Shared scroll-action handler for image-grid modes: arrows / PgUp / PgDn / Home / End → (scroll_x, scroll_y) deltas with Bounds clamping
       zoom_pan.rs      — ViewBounds + ZoomPanState: zoom/pan state machine (anchor-preserving zoom, pan clamping) over ScrollBounds + ZoomLevel
-    interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + LineView enum (Raw(&LineSource) | Pretty(&[String])). ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineView
     paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / pipe_rows. Image-config cycling: cycle_image_config handler + the CYCLE_BACKGROUND/IMAGE_MODE/FIT_HELP rows it dispatches, pinned together by a unit test so help and handling can't drift (shared by paged / image / animation / svg-anim / epub modes). Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); ::new defaults the tab label to "Read", ::with_label overrides it (EPS uses "Preview"/"Render"). PDF / CBZ / EPS each supply a small PageRenderer impl. The shared decode→fit→window-crop→ASCII (`render_image_window`) lives in `types::image::paged_render` beside the engine it drives — only the type-side renderers call it; `image_placeholder` here is the shared failure line. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
@@ -391,12 +411,11 @@ src/
       mode.rs          — TableMode (materialised flavour): sticky-header table over materialised rows, live-theme cell repaint, vertical scroll + Left/Right pan + `/` search (minimal reveal_h_scroll pan)
       row_source.rs    — RowSource trait: lazy index-addressable row stream (ensure_row / row / loaded / total / column_count / malformed_count / row_is_malformed). Cells are `Option<String>` so NULL stays distinct from empty string for SQLite. Three impls: CsvData (`types/csv/parse.rs`, seed + seek-anchored window) and SqliteRowSet (`types/sqlite/row_set.rs`, LIMIT/OFFSET window) are windowed/bounded; spreadsheet `Sheet` (`types/spreadsheet/workbook.rs`) is fully materialised (calamine has no streaming sheet API — bounded by one sheet). `WINDOW_SIZE` shared from `viewer::table`. Full-file cell search walks every row via repeated `ensure_row`, so windowed sources slide rather than materialise the whole table
       rows_mode.rs     — RowsTableMode: streaming flavour over `Box<dyn RowSource>`. Aligned table with sticky header, monotonic auto-widen (grows widths as wider cells scroll into view; sticky header repaints on every change), `Shift+R` reflow widths from viewport (opt-in shrink), `Shift+H` toggle header, Left/Right column-step horizontal pan. Per-column Alignment + has_header decided at construction by the source's compose path (CSV: classify_cell on seed body; SQLite: column-type affinity). Embedded `\n` collapses to a muted `↵` glyph; `\t` → space, `\r` dropped. Cell-scoped `/` search: scans every cell's display-form bytes, matches stay inside one cell (never cross delimiters); `n`/`p` step matches and pan h_col + scroll top_record. Print mode uses seed widths only — single-row overflow pushes following columns of that row past the terminal edge
-    ui/
-      mod.rs           — with_alternate_screen, status line composer, terminal-size helpers
-      state.rs         — ViewerState: mode stack, active index, scroll, lazy line cache, extract dispatch + prompt overlay slot + status flash. `ensure_active_rendered` recovers from render failures: retry_frame_detection (magic-byte re-detect for misnamed files) then degrade_active_to_hex (drop broken mode → Hex view + decode-cause warning) before propagating
+    ui/                — terminal UI primitives (ViewerState itself is the bin's `src/viewer_session/state.rs`)
+      mod.rs           — with_alternate_screen, status line composer, terminal-size helpers (+ the testing-gated term-size override)
       prompt.rs        — Modal text-input Prompt overlay (readline-style nav) consuming raw key events; replaces status line while open
       screen.rs        — ScreenBuffer: per-row diff against prev frame, no-flash redraw
-      keys.rs          — Action enum (centralized keybindings), Outcome
+      keys.rs          — Action enum (centralized keybindings), Outcome, GLOBAL_ACTIONS (the global keybinding-help vocab)
       help.rs          — Keyboard-shortcut help screen renderer
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
 docs/                  — Builder / agent reference (architecture, conventions, planning)

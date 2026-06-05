@@ -3,20 +3,33 @@ use std::io::IsTerminal;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-mod base64;
 mod cli;
+mod compose;
 mod extract;
-mod info;
+mod gather;
 mod input;
 mod output;
+mod update;
+mod viewer_session;
+
+// Per-file-type readers live in the `peek-types` crate. Re-exported so the
+// bin's dispatch hubs (compose / gather / extract) keep using
+// `crate::types::*` unchanged.
+pub use peek_types::types;
+
+// The reader/viewer foundation lives in the `peek-foundation` crate. Re-
+// exported here so the historical `crate::viewer` / `crate::info` /
+// `crate::base64` / `crate::xml` paths across the bin (compose / gather /
+// viewer_session / extract / types) stay unchanged — mirrors the `input`
+// façade and the `theme` alias below.
+pub use peek_foundation::{base64, info, viewer, xml};
+// `#[macro_export]` puts the macro at the foundation crate root; re-export
+// it so the per-type modules' `crate::impl_info_extras!` invocations resolve.
+pub use peek_foundation::impl_info_extras;
 // Theming lives in the `peek-theme` crate (a leaf, like peek-io). Aliased
 // here so the historical `crate::theme::*` paths across the tree are
 // unchanged — mirrors the `input` façade over peek-io / peek-detect.
 use peek_theme as theme;
-mod types;
-mod update;
-mod viewer;
-mod xml;
 
 pub use cli::Args;
 
@@ -125,14 +138,14 @@ fn run_view(
 
     let interactive = !args.print && std::io::stdout().is_terminal();
 
-    let viewers = viewer::Registry::new(&args.compose_opts())?;
+    let viewers = compose::Registry::new(&args.compose_opts())?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
     // --info mode: a fixed-size summary, written straight to stdout. For
     // a scrollable view, use the interactive viewer's Info mode (key `i`).
     if args.info {
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
         for line in &lines {
@@ -162,7 +175,7 @@ fn run_view(
                 )
             })?;
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         modes[listing_idx]
@@ -178,11 +191,11 @@ fn run_view(
         // path is uniform across file types.
         let viewers = std::rc::Rc::new(viewers);
         let viewers_for_builder = viewers.clone();
-        let mode_builder: viewer::ui::state::ModeBuilder =
+        let mode_builder: viewer_session::ModeBuilder =
             Box::new(move |s, d| viewers_for_builder.compose_modes(s, d));
         let theme_name = viewers.theme_name();
         let source_name = source.name().to_string();
-        viewer::interactive::run(
+        viewer_session::interactive::run(
             source.clone(),
             detected.clone(),
             theme_name,
@@ -198,7 +211,7 @@ fn run_view(
         // (first non-aux) mode straight to stdout — for binary files,
         // where every mode is aux, fall back to the first mode (Hex).
         let mut output = output::PrintOutput::stdout();
-        let file_info = info::gather(source, detected)
+        let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
         let primary_idx = modes.iter().position(|m| !m.is_aux()).unwrap_or(0);
@@ -274,7 +287,7 @@ fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
 /// and `term_cols` comes from `--width` or the detected terminal.
 fn pipe_render_ctx<'a>(
     file_info: &'a info::FileInfo,
-    viewers: &'a viewer::Registry,
+    viewers: &'a compose::Registry,
     render_opts: info::RenderOptions,
     args: &Args,
 ) -> viewer::modes::RenderCtx<'a> {
