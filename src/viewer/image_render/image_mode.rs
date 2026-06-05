@@ -1,5 +1,6 @@
-//! Image rendering mode selection. Drives which glyph palette
-//! [`super::render`] uses when matching cells to characters.
+//! Image rendering mode selection. Drives which glyph palette the
+//! `types/image` rasterization engine uses when matching cells to
+//! characters.
 
 /// Image rendering mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

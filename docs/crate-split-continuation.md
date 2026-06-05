@@ -120,6 +120,18 @@ it back.
 **Risk:** highest — large module, generic plumbing. Do while context is fresh.
 **Verify:** image/comic/pdf/font/eps/svg/ebook render + the paged image tests.
 
+**Done 2026-06-05.** Vocab moved to `viewer/image_render/` (config + image_mode +
+zoom/scroll/zoom_pan); `types/image` re-exports it back at the old paths. Also surfaced a
+*deeper* back-edge the measurement under-counted: `render_image_window` in `paged.rs`
+drove the rasterization engine (`prepare_decoded` / `render_prepared*`), not just vocab.
+It's only ever called by the type-side PDF/CBZ/EPS renderers, so it moved to
+`types::image::paged_render` (engine-side), taking `PagedRender`/`RenderArgs` back from the
+foundation. Result: **zero** production `viewer → types` edges outside the `compose_modes`
+hub in `viewer/mod.rs` (step C). Remaining `paged.rs` `types` references are all
+`#[cfg(test)]` (real PDF/CBZ renderers in PagedImageMode tests) — those must move to a
+bin-side / types-side integration test in step D, since foundation tests can't reach
+`types`.
+
 ### Step C — hub relocation
 
 - **Up to bin:** `info/gather/mod.rs` dispatch (56 edges — the `FileType → types::X::gather`

@@ -15,6 +15,7 @@ use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 pub mod cell_size;
 pub mod hex;
 pub mod highlight;
+pub(crate) mod image_render;
 pub mod interactive;
 pub(crate) mod listing;
 pub(crate) mod modes;

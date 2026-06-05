@@ -14,10 +14,9 @@ use anyhow::Result;
 use bytes::Bytes;
 use image::DynamicImage;
 
+use crate::types::image::paged_render::render_image_window;
 use crate::types::image::pipeline::ImageConfig;
-use crate::viewer::paged::{
-    PageRenderer, PagedRender, RenderArgs, image_placeholder, render_image_window,
-};
+use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placeholder};
 
 /// Where the displayed bitmap comes from.
 pub(crate) enum EpsImageSource {

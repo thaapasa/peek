@@ -24,12 +24,16 @@ pub mod info;
 pub mod info_gather;
 pub mod info_render;
 pub mod mode;
+pub(crate) mod paged_render;
 pub mod pipeline;
-pub(crate) mod scroll;
 pub(crate) mod view;
 pub mod xmp;
-pub(crate) mod zoom;
-pub(crate) mod zoom_pan;
+// The zoom / scroll / zoom_pan geometry + the render-config vocab moved to
+// the foundation (`crate::viewer::image_render`) so the shared paged mode
+// can use them without depending on this engine. Re-exported at the old
+// module paths so this crate's `super::zoom::*` / `image::scroll::*` uses
+// are unchanged (reader → foundation, the allowed direction).
+pub(crate) use crate::viewer::image_render::{scroll, zoom, zoom_pan};
 
 pub(crate) use animation_mode::AnimationMode;
 pub(crate) use mode::{ImageKind, ImageRenderMode};
