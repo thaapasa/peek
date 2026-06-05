@@ -85,3 +85,94 @@ impl PageRenderer for CbzPageRenderer {
         Ok(render_image_window(&img, config, args))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::image_render::{Background, FitMode, ImageMode, TermSize, ZoomLevel};
+    use peek_theme::StyleMode;
+
+    fn cbz_fixture() -> InputSource {
+        let path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("test-books/sample-pages.cbz");
+        InputSource::File(path)
+    }
+
+    fn config(fit: FitMode) -> ImageConfig {
+        ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit,
+        }
+    }
+
+    fn args(zoom: ZoomLevel) -> RenderArgs {
+        RenderArgs {
+            term: TermSize {
+                cols: 80,
+                rows: 40,
+                cell_h_over_w: 2.0,
+            },
+            zoom,
+            scroll_x: 0,
+            scroll_y: 0,
+            style_mode: StyleMode::Plain,
+        }
+    }
+
+    /// The real CBZ renderer must produce an effective grid wider than the
+    /// 80-col viewport for a landscape page at zoom 2× under fit=Contain —
+    /// this is the overflow signal `PagedImageMode` keys horizontal pan off.
+    #[test]
+    fn landscape_page_overflows_viewport_at_zoom_2x() {
+        let source = cbz_fixture();
+        let pages = package::list_pages(&source).expect("list pages");
+        assert!(pages.len() >= 2, "fixture needs a landscape page 2");
+        let renderer = CbzPageRenderer::new(source, pages);
+
+        let mut warnings = Vec::new();
+        // Page index 1 is the landscape (1500×1000) page.
+        let render = renderer
+            .render_page(
+                1,
+                config(FitMode::Contain),
+                args(ZoomLevel::preset(2)),
+                &mut warnings,
+            )
+            .expect("render");
+        assert!(
+            render.effective_cols > render.viewport_cols,
+            "expected effective grid ({}) wider than viewport ({}) at zoom 2×",
+            render.effective_cols,
+            render.viewport_cols,
+        );
+    }
+
+    /// Same overflow without zoom: a landscape page under fit=FitHeight at
+    /// zoom 1 still produces a grid wider than the viewport.
+    #[test]
+    fn landscape_page_overflows_viewport_fit_height_zoom_one() {
+        let source = cbz_fixture();
+        let pages = package::list_pages(&source).expect("list pages");
+        let renderer = CbzPageRenderer::new(source, pages);
+
+        let mut warnings = Vec::new();
+        let render = renderer
+            .render_page(
+                1,
+                config(FitMode::FitHeight),
+                args(ZoomLevel::preset(1)),
+                &mut warnings,
+            )
+            .expect("render");
+        assert!(
+            render.effective_cols > 80,
+            "expected horizontal overflow at fit=FitHeight, got {}",
+            render.effective_cols,
+        );
+    }
+}

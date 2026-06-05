@@ -865,4 +865,79 @@ mod tests {
         assert_eq!(classify_cell("1,234,567"), CellKind::Int);
         assert_eq!(classify_cell("1,234.56"), CellKind::Float);
     }
+
+    // --- Fixture-based CSV parsing ------------------------------------------
+    //
+    // These exercise the reader against the real on-disk fixtures: delimiter
+    // sniff, header heuristic, column count, and alignment inference. They
+    // live here (peek-types) because they test CsvData / infer_alignments;
+    // the table-mode mechanics they used to share a module with live in
+    // peek-foundation's rows_mode tests.
+
+    /// employees.csv: comma-delimited, header detected, 6 columns, with the
+    /// numeric columns (`id`, `salary`) inferred as right-aligned.
+    #[test]
+    fn fixture_employees_alignment_and_header() {
+        use crate::types::csv::compose::infer_alignments;
+        use crate::viewer::table::rows_mode::Alignment;
+
+        let data = CsvData::open(&fixture("test-data/employees.csv"), CsvFormat::Csv).unwrap();
+        assert_eq!(data.delimiter, b',');
+        assert!(data.header_heuristic, "header row detected");
+        assert_eq!(data.column_count(), 6);
+        let body_start = if data.header_heuristic { 1 } else { 0 };
+        let aligns = infer_alignments(&data, body_start);
+        // id (int), name (text), department (text), salary (float),
+        // start_date (date), active (bool).
+        assert_eq!(aligns[0], Alignment::Right, "id column");
+        assert_eq!(aligns[1], Alignment::Left, "name column");
+        assert_eq!(aligns[3], Alignment::Right, "salary column");
+        assert_eq!(aligns[4], Alignment::Left, "start_date column");
+    }
+
+    /// measurements.tsv uses the tab delimiter via its extension.
+    #[test]
+    fn fixture_measurements_tsv_tab_delimiter() {
+        let data = CsvData::open(&fixture("test-data/measurements.tsv"), CsvFormat::Tsv).unwrap();
+        assert_eq!(data.delimiter, b'\t');
+        assert!(data.header_heuristic);
+        assert_eq!(data.column_count(), 6);
+    }
+
+    /// euro-prices.csv uses `;` despite the `.csv` extension — the content
+    /// sniff overrides the comma default.
+    #[test]
+    fn fixture_euro_prices_sniffs_semicolon() {
+        let data = CsvData::open(&fixture("test-data/euro-prices.csv"), CsvFormat::Csv).unwrap();
+        assert_eq!(data.delimiter, b';', "semicolon should win over comma");
+        assert!(data.header_heuristic);
+    }
+
+    /// sensor-log.csv has no header — row 0 begins with a numeric Unix
+    /// timestamp, so the heuristic must classify it as data.
+    #[test]
+    fn fixture_sensor_log_no_header() {
+        let data = CsvData::open(&fixture("test-data/sensor-log.csv"), CsvFormat::Csv).unwrap();
+        assert!(!data.header_heuristic, "row 0 typed → no header");
+        assert_eq!(data.column_count(), 5);
+    }
+
+    /// books.csv carries two records with an embedded `\n` in their
+    /// description cell — the reader must keep them as single records with
+    /// the newline inside one cell.
+    #[test]
+    fn fixture_books_preserves_embedded_newline_cells() {
+        let data = CsvData::open(&fixture("test-data/books.csv"), CsvFormat::Csv).unwrap();
+        let multi = data
+            .seed
+            .iter()
+            .filter(|r| !r.malformed)
+            .filter(|r| {
+                r.cells
+                    .iter()
+                    .any(|c| c.as_deref().is_some_and(|s| s.contains('\n')))
+            })
+            .count();
+        assert_eq!(multi, 2, "books.csv should have two multi-line cells");
+    }
 }
