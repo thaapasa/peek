@@ -10,11 +10,11 @@ use crate::input::detect::Detected;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
 
-use super::keys::{self, Action, HelpEntry, Outcome};
-use super::prompt::{Prompt, PromptOutcome};
-use super::screen::ScreenBuffer;
-use super::{content_rows, make_peek_theme, terminal_cols};
 use crate::extract::Extracted;
+use crate::viewer::ui::keys::{self, Action, Outcome};
+use crate::viewer::ui::prompt::{Prompt, PromptOutcome};
+use crate::viewer::ui::screen::ScreenBuffer;
+use crate::viewer::ui::{content_rows, make_peek_theme, terminal_cols};
 
 /// One mode's most recent windowed render. The `lines` field is the
 /// exact slice that should be drawn at the top of the viewport; the
@@ -37,35 +37,6 @@ fn render_failure_cause(err: &anyhow::Error) -> String {
         .last()
         .map_or_else(|| err.to_string(), |c| c.to_string())
 }
-
-/// Global actions that work in every mode (unless the mode shadows the
-/// key via its own `extra_actions`). Used for both key dispatch and the
-/// help screen.
-pub(crate) const GLOBAL_ACTIONS: &[HelpEntry] = &[
-    (&[Action::Quit], "Quit"),
-    (&[Action::Back], "Back / close current peek"),
-    (&[Action::ScrollUp, Action::ScrollDown], "Scroll up / down"),
-    (&[Action::PageUp, Action::PageDown], "Page up / down"),
-    (&[Action::Top, Action::Bottom], "Jump to top / bottom"),
-    (
-        &[Action::CycleView, Action::CycleViewBack],
-        "Cycle file's view modes (fwd / back)",
-    ),
-    (&[Action::SwitchInfo], "File info"),
-    (&[Action::ToggleHelp], "Toggle help"),
-    (&[Action::SwitchToHex], "Hex dump mode"),
-    (&[Action::SwitchToAbout], "About / status screen"),
-    (
-        &[Action::CycleTheme, Action::CycleThemeBack],
-        "Next / previous theme",
-    ),
-    (
-        &[Action::CycleColorMode, Action::CycleColorModeBack],
-        "Next / previous color mode",
-    ),
-    (&[Action::Extract], "Extract selected entry / current frame"),
-    (&[Action::Descend], "Descend into selected entry / frame"),
-];
 
 /// Hard cap on session-stack depth. Real listings rarely nest beyond
 /// 3–4 levels; the cap exists so a hostile container that recursively
@@ -284,7 +255,7 @@ impl ViewerState {
     pub(crate) fn dispatch_key(&self, key: KeyEvent) -> Option<Action> {
         let f = self.frame();
         let extras = f.modes[f.active].extra_actions();
-        keys::dispatch(key, GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
+        keys::dispatch(key, keys::GLOBAL_ACTIONS).or_else(|| keys::dispatch(key, extras))
     }
 
     pub(crate) fn prompt_active(&self) -> bool {

@@ -15,7 +15,6 @@ pub mod cell_size;
 pub mod hex;
 pub mod highlight;
 pub(crate) mod image_render;
-pub mod interactive;
 pub(crate) mod listing;
 pub(crate) mod modes;
 pub(crate) mod paged;

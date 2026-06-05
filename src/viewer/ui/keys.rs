@@ -302,6 +302,35 @@ impl Action {
 /// only actions that read naturally together (e.g. next / previous).
 pub(crate) type HelpEntry = (&'static [Action], &'static str);
 
+/// Global actions that work in every mode (unless the mode shadows the
+/// key via its own `extra_actions`). Used for both key dispatch and the
+/// help screen.
+pub(crate) const GLOBAL_ACTIONS: &[HelpEntry] = &[
+    (&[Action::Quit], "Quit"),
+    (&[Action::Back], "Back / close current peek"),
+    (&[Action::ScrollUp, Action::ScrollDown], "Scroll up / down"),
+    (&[Action::PageUp, Action::PageDown], "Page up / down"),
+    (&[Action::Top, Action::Bottom], "Jump to top / bottom"),
+    (
+        &[Action::CycleView, Action::CycleViewBack],
+        "Cycle file's view modes (fwd / back)",
+    ),
+    (&[Action::SwitchInfo], "File info"),
+    (&[Action::ToggleHelp], "Toggle help"),
+    (&[Action::SwitchToHex], "Hex dump mode"),
+    (&[Action::SwitchToAbout], "About / status screen"),
+    (
+        &[Action::CycleTheme, Action::CycleThemeBack],
+        "Next / previous theme",
+    ),
+    (
+        &[Action::CycleColorMode, Action::CycleColorModeBack],
+        "Next / previous color mode",
+    ),
+    (&[Action::Extract], "Extract selected entry / current frame"),
+    (&[Action::Descend], "Descend into selected entry / frame"),
+];
+
 /// Find the first action this viewer allows whose bindings match `key`.
 /// Linear scan over a small `&'static` slice — sub-microsecond.
 pub(crate) fn dispatch(key: KeyEvent, allowed: &[HelpEntry]) -> Option<Action> {

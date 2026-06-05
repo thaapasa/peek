@@ -6,7 +6,7 @@
 //! and returns; there's no event loop here.
 //!
 //! For the interactive TTY path (alternate screen, mode stack, key
-//! dispatch, animation ticks), see [`crate::viewer::interactive`].
+//! dispatch, animation ticks), see [`crate::viewer_session::interactive`].
 
 use std::io::{self, Write};
 

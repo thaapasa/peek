@@ -18,6 +18,7 @@ use peek_theme as theme;
 mod types;
 mod update;
 mod viewer;
+mod viewer_session;
 mod xml;
 
 pub use cli::Args;
@@ -180,11 +181,11 @@ fn run_view(
         // path is uniform across file types.
         let viewers = std::rc::Rc::new(viewers);
         let viewers_for_builder = viewers.clone();
-        let mode_builder: viewer::ui::state::ModeBuilder =
+        let mode_builder: viewer_session::ModeBuilder =
             Box::new(move |s, d| viewers_for_builder.compose_modes(s, d));
         let theme_name = viewers.theme_name();
         let source_name = source.name().to_string();
-        viewer::interactive::run(
+        viewer_session::interactive::run(
             source.clone(),
             detected.clone(),
             theme_name,
