@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [workspace]
-members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme"]
+members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation"]
 
 # Shared package metadata for the bin + every member crate (`field.workspace
 # = true` to inherit). One version line for the whole workspace — the release
@@ -38,6 +38,7 @@ homepage = "https://github.com/thaapasa/peek"
 peek-io = { path = "crates/peek-io" }
 peek-detect = { path = "crates/peek-detect" }
 peek-theme = { path = "crates/peek-theme" }
+peek-foundation = { path = "crates/peek-foundation" }
 
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
@@ -217,6 +218,7 @@ id3 = "1"
 peek-io = { workspace = true }
 peek-detect = { workspace = true }
 peek-theme = { workspace = true }
+peek-foundation = { workspace = true }
 clap = { workspace = true }
 crossterm = { workspace = true }
 syntect = { workspace = true }
@@ -273,6 +275,12 @@ libc = { workspace = true }
 windows-sys = { workspace = true }
 
 [dev-dependencies]
+# Turn on the foundation's test-helper surface (downcast_extras,
+# SearchState match_count, terminal-size override) for the bin's test
+# builds only — see peek-foundation's `testing` feature. Off for normal
+# / release builds, so the scaffolding never ships.
+peek-foundation = { workspace = true, features = ["testing"] }
+
 # Snapshot testing for image rendering output
 insta = { workspace = true }
 

@@ -3,23 +3,29 @@ use std::io::IsTerminal;
 use anyhow::{Context, Result};
 use clap::Parser;
 
-mod base64;
 mod cli;
 mod compose;
 mod extract;
 mod gather;
-mod info;
 mod input;
 mod output;
+mod types;
+mod update;
+mod viewer_session;
+
+// The reader/viewer foundation lives in the `peek-foundation` crate. Re-
+// exported here so the historical `crate::viewer` / `crate::info` /
+// `crate::base64` / `crate::xml` paths across the bin (compose / gather /
+// viewer_session / extract / types) stay unchanged — mirrors the `input`
+// façade and the `theme` alias below.
+pub use peek_foundation::{base64, info, viewer, xml};
+// `#[macro_export]` puts the macro at the foundation crate root; re-export
+// it so the per-type modules' `crate::impl_info_extras!` invocations resolve.
+pub use peek_foundation::impl_info_extras;
 // Theming lives in the `peek-theme` crate (a leaf, like peek-io). Aliased
 // here so the historical `crate::theme::*` paths across the tree are
 // unchanged — mirrors the `input` façade over peek-io / peek-detect.
 use peek_theme as theme;
-mod types;
-mod update;
-mod viewer;
-mod viewer_session;
-mod xml;
 
 pub use cli::Args;
 
