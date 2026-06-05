@@ -109,12 +109,12 @@ doc that should reflect it does**. A user-visible or structural change
 with no matching doc update is a finding. Relevant docs, when applicable:
 
 - **README.md** — outward feature summary / usage examples.
-- **CLAUDE.md** — top-level architecture map (when top-level structure
-  changed) and the workflow/north-star norms.
+- **CLAUDE.md** — top-level file map (when files / modules added, moved,
+  removed) and the workflow/north-star norms.
+- **per-file `//!` doc-comments** — a moved or substantially-changed
+  module's header still describes the current code.
 - **docs/architecture.md** — design, data flow, key abstractions, "how to
   extend".
-- **docs/architecture-map.md** — full file/module breakdown (when files /
-  modules added, moved, removed).
 - **docs/features.md** — shipped features (✅ / ◐). New behaviour that
   shipped belongs here.
 - **docs/planned.md** — planned items (☐ / ❓). An item that shipped must
@@ -123,7 +123,7 @@ with no matching doc update is a finding. Relevant docs, when applicable:
   feature (new flag, keybinding, file type, view mode).
 
 Judge *appropriateness* — not every change touches every doc. A pure
-internal refactor may need only `architecture-map.md`; a new CLI flag
+internal refactor may need only a `//!` header + the CLAUDE.md tree; a new CLI flag
 needs `cli-reference.md` + README. Flag the docs that genuinely should
 have changed and didn't.
 

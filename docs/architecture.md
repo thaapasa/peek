@@ -68,8 +68,8 @@ Why these cuts:
   of `peek_foundation::{viewer, info, …}` and `peek_types::types`) so the hubs' `crate::*` paths are
   unchanged.
 
-The detailed per-file breakdown of all five crates lives in
-[architecture-map.md](architecture-map.md).
+The top-level file map lives in [CLAUDE.md](../CLAUDE.md); the per-file detail (what each module
+does and why) lives in each file's `//!` module doc-comment.
 
 ## Data flow
 
@@ -95,7 +95,7 @@ detect::detect(source) --> FileType
 ### InputSource (`crates/peek-io/src/source.rs`)
 
 The input layer is its own crate, `peek-io` — the dependency-free foundation everything builds on
-(see [the workspace note in architecture-map.md](architecture-map.md)). The binary reaches it through
+(see the crate structure section above). The binary reaches it through
 the `crate::input` façade, so the paths below are also reachable as `crate::input::*`.
 
 Decouples "where data comes from" from "how it's displayed". Four variants: `File` (path on

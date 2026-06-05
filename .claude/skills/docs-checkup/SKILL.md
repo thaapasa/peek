@@ -28,7 +28,8 @@ what the code actually does:
   rules under "Documentation". These rules are the floor for Step 2.
 - `docs/architecture.md` — design, key abstractions, "how to add a new
   file type" reference.
-- `docs/architecture-map.md` — full file/module breakdown.
+- `CLAUDE.md` file map + per-file `//!` module doc-comments — the
+  file/module breakdown (no separate map doc).
 - `docs/features.md` — currently shipped features (✅ + ◐).
 - `docs/planned.md` — planned features / open ideas (☐ + ❓).
 - `docs/conventions.md`, `docs/release.md` — supporting reference.
@@ -80,11 +81,11 @@ Check the rules CLAUDE.md → Documentation → "Docs hygiene" lays down:
   `Archived` for snapshots). Title stays the same; the blockquote is
   the marker.
 - **Cross-references point at the right path.** When a file moves to
-  `docs/archived/`, every linker (`docs/planned.md`,
-  `docs/architecture-map.md`, `CLAUDE.md`, `README.md`, manual
-  chapters, sibling docs) must follow. Grep for stale relative paths.
-- **`docs/architecture-map.md` does not list archived files.** Archive
-  is a graveyard; the map covers live docs only.
+  `docs/archived/`, every linker (`docs/planned.md`, `CLAUDE.md`,
+  `README.md`, manual chapters, sibling docs) must follow. Grep for
+  stale relative paths.
+- **CLAUDE.md's file map does not list archived files.** Archive
+  is a graveyard; the map covers live code only.
 - **Active instructions are not buried inside plans.** "How to add a
   new X" / "the rule for Y" content must live in a general doc
   (`architecture.md`, `conventions.md`, or its own top-level doc), not
@@ -114,17 +115,18 @@ planned.md is what isn't (☐/❓). Items must appear in exactly one.
   file type" steps still match the actual `compose_modes` / detection /
   `FileExtras` shape; example code blocks compile mentally against the
   current API.
-- **`architecture-map.md`** — every entry under `src/` matches a real
-  file/module; every real top-level module under `src/` is mentioned.
-  The map is the most rot-prone doc — file splits, renames, and new
-  modules all silently invalidate entries.
+- **Per-file `//!` doc-comments + CLAUDE.md file map** — when a file
+  moved, split, or was renamed, its `//!` header still describes the
+  current code and the CLAUDE.md tree still lists it. The tree is the
+  rot-prone half — file splits, renames, and new top-level modules all
+  silently invalidate it; the `//!` headers can't drift from their file.
 - **`README.md`** — feature summary matches `features.md` (no version
   skew); usage examples still work (CLI flag spelling, behaviour);
   install / build instructions match `release.md` and `install.sh`.
-- **`CLAUDE.md`** — top-level architecture map under `src/` matches
-  reality (it's a condensed version of architecture-map.md, but
-  condensation rots independently). North stars and workflow rules
-  still reflect collaboration norms.
+- **`CLAUDE.md`** — top-level file map (the `crates/` + `src/` tree)
+  matches reality; it's the only census, so a moved/renamed/added module
+  must show up here. North stars and workflow rules still reflect
+  collaboration norms.
 
 ## Step 4: Manual accuracy
 
@@ -184,8 +186,8 @@ as shipped in README). Then group:
   promotion to features.md, manual chapters missing capabilities that
   were added.
 - **Low** — wording drift, outdated screenshots / examples, minor
-  consistency nits between `architecture-map.md` and `CLAUDE.md`
-  condensed map.
+  consistency nits between a module's `//!` header and the `CLAUDE.md`
+  file map.
 
 Each finding: `path:line — what's wrong, why it matters, concrete
 fix`. For accuracy findings, cite both the doc claim and the code

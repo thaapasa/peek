@@ -24,8 +24,9 @@ release tarball, loaded dynamically at startup. Ghostscript available if found o
 
 ## Architecture map
 
-Top-level only. Full file/module breakdown: [docs/architecture-map.md](docs/architecture-map.md) —
-read when adding files, modifying module, or unsure where logic lives.
+Top-level only. The tree below is the file map. Per-file detail (what a module does and *why*)
+lives in each file's `//!` module doc-comment — read the file's header when unsure where logic
+lives or how a piece works. No separate map doc to keep in sync.
 
 Cargo workspace, five library crates under the thin `peek` binary. The layering is
 Cargo-enforced: detection and the parser layer are barred from naming the binary's session layer
@@ -96,7 +97,7 @@ src/                   — the bin: the thin session layer (CLI + the three disp
   extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)
   viewer_session/      — ViewerState (mode stack + scroll/view cache + extract/descend dispatch +
                          prompt slot) + the interactive event loop
-docs/                  — Builder / agent reference (see architecture-map.md for the index)
+docs/                  — Builder / agent reference (architecture.md = design + index)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
 .github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +
                          manual.yml (mdbook → Pages)
@@ -157,8 +158,8 @@ Keep in sync with code changes:
 - **manual/src/** — user-facing manual (mdbook). Update relevant chapter when user-visible feature
   changes
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/architecture-map.md** — full file/module breakdown. Update when files / modules added,
-  moved, or removed
+- **CLAUDE.md file map + module `//!` doc-comments** — the per-file breakdown. When you add / move /
+  remove a file, update the tree above and the moved file's `//!` header; there is no separate map doc
 - **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of manual;
   manual stays concise
 - **docs/planned.md** — planned features and open ideas (☐ + ❓)
@@ -174,8 +175,8 @@ Keep in sync with code changes:
     - If lasting historical value (design rationale, why-we-rejected, postmortem), move to
       `docs/archived/`. Add status blockquote right under title:
       `> **Status: Completed YYYY-MM-DD.** Archived for reference.` Title stays same. Linked
-      references in other docs must point at archived path. No entry in `architecture-map.md` —
-      archived files are graveyard, not part of live map.
+      references in other docs must point at archived path. No entry in CLAUDE.md's file map —
+      archived files are graveyard, not part of the live map.
     - Otherwise, delete it.
     - Either way, must not stay in `docs/` root as "landed" plan.
 - **Active instructions belong in own doc** (or as section of existing general doc like
