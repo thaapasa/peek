@@ -37,4 +37,3 @@ pub(crate) use crate::viewer::image_render::{scroll, zoom, zoom_pan};
 
 pub(crate) use animation_mode::AnimationMode;
 pub(crate) use mode::{ImageKind, ImageRenderMode};
-pub use pipeline::{Background, FitMode, ImageConfig, ImageMode};

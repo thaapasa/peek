@@ -164,7 +164,7 @@ src/
       xml_props.rs     — read core document properties from the zip: docProps/core.xml (OOXML) or meta.xml (ODS), parsed by one Dublin-Core reader keyed on prefixed element names covering both vocabularies → DocumentMetadata
       info.rs / info_gather.rs / info_render.rs — SpreadsheetInfo { format, sheets, metadata, error }; gather lists sheets + reads metadata; render shows Sheets count / Names / core props
     image/
-      mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
+      mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode + the foundation `image_render` geometry modules (scroll/zoom/zoom_pan) at the old paths
       compose.rs       — compose(): push AnimationMode for animated GIF/WebP, ImageRenderMode for static raster
       info.rs          — ImageStats + AnimationStats + LoopCount (animation summary)
       info_gather.rs   — gather_extras (dimensions, color, ICC, HDR) + IMAGE_HEAD_SCAN/read_head

@@ -750,7 +750,7 @@ mod tests {
         use crate::types::binary::info::BinaryInfo;
         use crate::types::comic::CbzPageRenderer;
         use crate::types::comic::cbz;
-        use crate::types::image::zoom::ZoomLevel;
+        use crate::viewer::image_render::ZoomLevel;
         use std::path::PathBuf;
 
         let cbz_path =

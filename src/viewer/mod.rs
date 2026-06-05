@@ -301,8 +301,8 @@ impl ComposeCtx {
 /// Build the image-render configuration from CLI args. A free function,
 /// not a `ComposeCtx` method — it reads only `args`, nothing the
 /// `ComposeCtx` bundle carries.
-pub fn image_config(args: &Args) -> crate::types::image::ImageConfig {
-    use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
+pub fn image_config(args: &Args) -> crate::viewer::image_render::ImageConfig {
+    use crate::viewer::image_render::{Background, FitMode, ImageConfig, ImageMode};
     ImageConfig {
         mode: ImageMode::from_str(&args.image_mode),
         width: args.width,
