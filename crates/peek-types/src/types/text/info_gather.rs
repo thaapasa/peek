@@ -31,6 +31,27 @@ pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
     stream_utf8(bs.as_ref(), encoding, offset, total)
 }
 
+/// Cap on bytes read for a sidecar whole-file parse (markdown / SQL /
+/// CSS). Above this we keep only the streaming text stats and skip the
+/// language-specific pass — so multi-GB dumps stay openable without
+/// burning RAM on a parse that would just be noise anyway.
+pub const SIDECAR_TEXT_LIMIT: u64 = 64 * 1024 * 1024;
+
+/// Capped whole-file read for a sidecar parser. Returns the streaming
+/// [`TextStats`] paired with the full decoded text, or `None` when the
+/// source is over [`SIDECAR_TEXT_LIMIT`], isn't valid UTF-8, or can't be
+/// read — in which case the caller drops to the generic text/binary
+/// fallback.
+pub fn gather_capped_text(source: &InputSource) -> Option<(TextStats, String)> {
+    let bs = source.open_byte_source().ok()?;
+    if bs.len() > SIDECAR_TEXT_LIMIT {
+        return None;
+    }
+    let stats = gather_text_stats(source)?;
+    let text = source.read_text().ok()?;
+    Some((stats, text))
+}
+
 fn empty_stats() -> TextStats {
     TextStats {
         line_count: 0,

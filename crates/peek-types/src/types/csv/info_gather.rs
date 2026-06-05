@@ -1,8 +1,20 @@
 //! Build `CsvStats` from a `CsvData` seed scan.
 
+use crate::info::Extras;
+use crate::input::InputSource;
+
 use super::CsvFormat;
 use super::info::{ColumnStats, ColumnType, CsvStats};
 use super::parse::{CellKind, CsvData, SEED_RECORD_LIMIT, classify_cell};
+
+/// Collect the CSV Info sidecar by opening a seed scan over the source.
+/// A source that won't open as CSV falls back to the generic binary view.
+pub fn gather_extras(source: &InputSource, fmt: CsvFormat) -> Extras {
+    match CsvData::open(source, fmt) {
+        Ok(data) => Box::new(gather(&data, fmt)),
+        Err(_) => crate::types::binary::info::gather_extras(None),
+    }
+}
 
 /// Match the table view's display-collapse so the reported max width
 /// equals the rendered column width (no `\n` inflation).

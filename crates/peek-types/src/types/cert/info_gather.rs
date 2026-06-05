@@ -13,11 +13,45 @@ use x509_parser::prelude::{
 };
 use x509_parser::public_key::{ECPoint, PublicKey};
 
+use crate::info::Extras;
+use crate::input::InputSource;
+use crate::input::detect::CertFormat;
 use crate::types::cert::info::{
     CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, KeyEntry, KeyType, SshPubKeyEntry,
     UnknownEntry,
 };
 use crate::types::text::info::TextStats;
+use crate::types::text::info_gather::{SIDECAR_TEXT_LIMIT, gather_text_stats};
+
+/// Collect the cert/key Info sidecar. PEM/JWK read the source text
+/// (falling back to text stats / binary if it isn't valid UTF-8 — that
+/// handles a `.pem` extension misapplied to a DER blob); DER reads the
+/// raw bytes and decodes by structure. Capped at [`SIDECAR_TEXT_LIMIT`]:
+/// a multi-GB file claiming either format would otherwise pull the whole
+/// blob into memory.
+pub fn gather_extras(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) -> Extras {
+    if let Ok(bs) = source.open_byte_source()
+        && bs.len() > SIDECAR_TEXT_LIMIT
+    {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    }
+    if fmt == CertFormat::Der {
+        return match source.read_bytes() {
+            Ok(der) => Box::new(gather_der(&der)),
+            Err(_) => crate::types::binary::info::gather_extras(magic_mime),
+        };
+    }
+    let Some(text_stats) = gather_text_stats(source) else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    let Ok(text) = source.read_text() else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    Box::new(match fmt {
+        CertFormat::Jwk => gather_jwk(&text, text_stats),
+        _ => gather(&text, text_stats),
+    })
+}
 
 /// Build [`CertInfo`] for a PEM-or-SSH-pubkey text. The text-stats
 /// sidecar is supplied by the caller (already collected in the

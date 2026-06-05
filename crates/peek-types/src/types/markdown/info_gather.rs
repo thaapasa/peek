@@ -6,9 +6,24 @@
 //! tracked so heading-like text inside ` ``` ` blocks isn't counted as a
 //! heading. Reading time uses 230 wpm — middle of common estimates.
 
-use crate::types::markdown::info::{FrontmatterKind, MarkdownStats};
+use crate::info::Extras;
+use crate::input::InputSource;
+use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
+use crate::types::text::info_gather::gather_capped_text;
 
 const READING_WPM: u32 = 230;
+
+/// Collect the Markdown Info sidecar: streaming text stats plus a capped
+/// whole-file document scan. Returns `None` when the source is over the
+/// sidecar cap or can't be read as text, so the gather falls back to the
+/// generic text/binary path.
+pub fn gather_extras(source: &InputSource) -> Option<Extras> {
+    let (text_stats, text) = gather_capped_text(source)?;
+    Some(Box::new(MarkdownInfo {
+        text: text_stats,
+        stats: gather(&text),
+    }))
+}
 
 pub fn gather(text: &str) -> MarkdownStats {
     let mut stats = MarkdownStats {

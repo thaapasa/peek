@@ -7,9 +7,7 @@
 //! stdout, recursive peek).
 
 use crate::input::InputSource;
-use crate::input::detect::{
-    AudioFormat, ComicFormat, Detected, DocumentFormat, EbookFormat, FileType,
-};
+use crate::input::detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
 use peek_foundation::extract::{ExtractError, ExtractOptions, Extracted};
 
 /// Dispatch to the per-type extractor. Containers without an
@@ -47,7 +45,7 @@ pub fn extract(
             crate::types::spreadsheet::extract::extract(source, key, *fmt, opts)
         }
         FileType::Directory => crate::types::directory::extract::extract(source, key),
-        FileType::Audio(fmt) => audio_extract(source, *fmt, key),
+        FileType::Audio(fmt) => crate::types::audio::extract::extract(source, *fmt, key),
         FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),
         FileType::Notebook => crate::types::notebook::extract::extract(source, key),
         FileType::Email(_) => crate::types::email::extract::extract(source, key),
@@ -67,14 +65,6 @@ pub fn extract(
             "this file type has no inner items",
         )),
     }
-}
-
-fn audio_extract(
-    source: &InputSource,
-    fmt: AudioFormat,
-    key: &str,
-) -> Result<Extracted, ExtractError> {
-    crate::types::audio::extract::extract(source, fmt, key)
 }
 
 #[cfg(test)]

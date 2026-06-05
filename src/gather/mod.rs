@@ -20,8 +20,7 @@ use anyhow::Result;
 use crate::info::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
-    CertFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
-    EbookFormat, FileType, FontFormat,
+    ComicFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
 };
 use crate::input::mime;
 
@@ -30,78 +29,41 @@ mod tests;
 
 use crate::types::text::info_gather::gather_text_stats;
 
-/// Cap on bytes parsed for the per-language sidecar stats (markdown / SQL).
-/// Above this we keep the streaming text stats and skip the language-specific
-/// pass — so multi-GB SQL dumps stay openable without burning RAM on a parse
-/// that would just be noise anyway.
-const LANG_STATS_BYTE_LIMIT: u64 = 64 * 1024 * 1024;
-
-fn is_sql_syntax(syntax: Option<&str>) -> bool {
-    matches!(syntax, Some("sql" | "ddl" | "dml" | "psql" | "pgsql"))
+/// Generic per-source fallback: the streaming text stats when the bytes
+/// are valid text, else the binary label. This is the bin's dispatch
+/// policy — the type modules own their own format parsing, and only the
+/// "nothing type-specific applied" tail lands here.
+fn text_or_binary(source: &InputSource, magic_mime: Option<&str>) -> Extras {
+    match gather_text_stats(source) {
+        Some(stats) => Box::new(stats),
+        None => crate::types::binary::info::gather_extras(magic_mime),
+    }
 }
 
-fn is_css_syntax(syntax: Option<&str>) -> bool {
-    // Plain CSS only — `.scss` / `.less` are different grammars and keep
-    // the generic text-stats fallback.
-    matches!(syntax, Some("css"))
+/// Resolve a type module's optional sidecar to concrete [`Extras`],
+/// dropping to [`text_or_binary`] when the type-specific parse declined
+/// (unparsable, or over its size cap).
+fn or_text(extras: Option<Extras>, source: &InputSource, magic_mime: Option<&str>) -> Extras {
+    extras.unwrap_or_else(|| text_or_binary(source, magic_mime))
 }
 
-fn syntax_of(file_type: &FileType) -> Option<&str> {
-    match file_type {
-        FileType::SourceCode { syntax } => syntax.as_deref(),
+/// Dispatch a SourceCode file to its language sidecar (SQL / CSS) by
+/// syntax tag, falling back to the generic text/binary path.
+fn source_code_extras(
+    source: &InputSource,
+    syntax: Option<&str>,
+    magic_mime: Option<&str>,
+) -> Extras {
+    let sidecar = match syntax {
+        Some("sql" | "ddl" | "dml" | "psql" | "pgsql") => {
+            crate::types::sql::info_gather::gather_extras(source)
+        }
+        // Plain CSS only — `.scss` / `.less` are different grammars and
+        // keep the generic text-stats fallback.
+        Some("css") => crate::types::css::info_gather::gather_extras(source),
         _ => None,
-    }
-}
-
-/// Try the language-specific sidecar parse for a SourceCode file. Returns
-/// `None` if `file_type` isn't a recognised flavour, the source is too big,
-/// or the read fails.
-fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<Extras> {
-    let syntax = syntax_of(file_type)?;
-    let is_sql = is_sql_syntax(Some(syntax));
-    let is_css = is_css_syntax(Some(syntax));
-    if !is_sql && !is_css {
-        return None;
-    }
-
-    let bs = source.open_byte_source().ok()?;
-    if bs.len() > LANG_STATS_BYTE_LIMIT {
-        return None;
-    }
-
-    let text_stats = gather_text_stats(source)?;
-    let text = source.read_text().ok()?;
-
-    if is_sql {
-        let stats = crate::types::sql::info_gather::gather(&text);
-        Some(Box::new(crate::types::sql::info::SqlInfo {
-            text: text_stats,
-            stats,
-        }))
-    } else {
-        let stats = crate::types::css::info_gather::gather(&text);
-        Some(Box::new(crate::types::css::info::CssInfo {
-            text: text_stats,
-            stats,
-        }))
-    }
-}
-
-/// Markdown sidecar parse. Reads the file once, runs both the generic
-/// text stats and the markdown-specific scanner. Capped at
-/// `LANG_STATS_BYTE_LIMIT` — over the cap the binary fallback applies.
-fn gather_markdown_extras(source: &InputSource) -> Option<Extras> {
-    let bs = source.open_byte_source().ok()?;
-    if bs.len() > LANG_STATS_BYTE_LIMIT {
-        return None;
-    }
-    let text_stats = gather_text_stats(source)?;
-    let text = source.read_text().ok()?;
-    let stats = crate::types::markdown::info_gather::gather(&text);
-    Some(Box::new(crate::types::markdown::info::MarkdownInfo {
-        text: text_stats,
-        stats,
-    }))
+    };
+    or_text(sidecar, source, magic_mime)
 }
 
 /// Gather metadata for the given input source and detection result.
@@ -227,43 +189,29 @@ fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
 /// arm needing a real path, and it only ever arrives via a `File` source.
 fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<&str>) -> Extras {
     match file_type {
-        FileType::SourceCode { .. } => {
-            if let Some(extras) = gather_code_extras(source, file_type) {
-                return extras;
-            }
-            match gather_text_stats(source) {
-                Some(stats) => Box::new(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            }
+        FileType::SourceCode { syntax } => {
+            source_code_extras(source, syntax.as_deref(), magic_mime)
         }
-        FileType::Markdown => match gather_markdown_extras(source) {
-            Some(extras) => extras,
-            None => match gather_text_stats(source) {
-                Some(stats) => Box::new(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            },
-        },
-        FileType::Notebook => match crate::types::notebook::info_gather::gather_extras(source) {
-            Some(extras) => extras,
-            None => match gather_text_stats(source) {
-                Some(stats) => Box::new(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            },
-        },
-        FileType::Email(fmt) => match crate::types::email::info::gather_extras(source, *fmt) {
-            Some(extras) => extras,
-            None => match gather_text_stats(source) {
-                Some(stats) => Box::new(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            },
-        },
-        FileType::VObject(fmt) => match crate::types::vobject::info::gather_extras(source, *fmt) {
-            Some(extras) => extras,
-            None => match gather_text_stats(source) {
-                Some(stats) => Box::new(stats),
-                None => crate::types::binary::info::gather_extras(magic_mime),
-            },
-        },
+        FileType::Markdown => or_text(
+            crate::types::markdown::info_gather::gather_extras(source),
+            source,
+            magic_mime,
+        ),
+        FileType::Notebook => or_text(
+            crate::types::notebook::info_gather::gather_extras(source),
+            source,
+            magic_mime,
+        ),
+        FileType::Email(fmt) => or_text(
+            crate::types::email::info::gather_extras(source, *fmt),
+            source,
+            magic_mime,
+        ),
+        FileType::VObject(fmt) => or_text(
+            crate::types::vobject::info::gather_extras(source, *fmt),
+            source,
+            magic_mime,
+        ),
         FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
             (Some(stats), Ok(bytes)) => {
                 crate::types::svg::info_gather::gather_extras(stats, &bytes)
@@ -314,10 +262,14 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
             crate::types::disk_image::info_gather::gather_extras(source, *fmt)
         }
         FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
-        FileType::Csv(fmt) => csv_gather(source, *fmt),
+        FileType::Csv(fmt) => crate::types::csv::info_gather::gather_extras(source, *fmt),
         FileType::Sqlite(_) => crate::types::sqlite::info_gather::gather_extras(source),
-        FileType::Cert(fmt) => cert_gather(source, *fmt, magic_mime),
-        FileType::Font(fmt) => font_gather(source, *fmt, magic_mime),
+        FileType::Cert(fmt) => {
+            crate::types::cert::info_gather::gather_extras(source, *fmt, magic_mime)
+        }
+        FileType::Font(fmt) => {
+            crate::types::font::info_gather::gather_extras(source, *fmt, magic_mime)
+        }
         FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
         FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
         FileType::Directory => match source {
@@ -328,64 +280,4 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
         },
         FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
     }
-}
-
-fn csv_gather(source: &InputSource, fmt: CsvFormat) -> Extras {
-    match crate::types::csv::parse::CsvData::open(source, fmt) {
-        Ok(data) => Box::new(crate::types::csv::info_gather::gather(&data, fmt)),
-        Err(_) => crate::types::binary::info::gather_extras(None),
-    }
-}
-
-/// Parse the source as a cert/key container. PEM reads the source text
-/// (falling back to text stats / binary if it isn't valid UTF-8 — that
-/// handles a `.pem` extension misapplied to a DER blob); DER reads the
-/// raw bytes and decodes by structure. Capped at `LANG_STATS_BYTE_LIMIT`:
-/// a multi-GB file claiming either format would otherwise pull the whole
-/// blob into memory.
-fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) -> Extras {
-    if let Ok(bs) = source.open_byte_source()
-        && bs.len() > LANG_STATS_BYTE_LIMIT
-    {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    }
-    if fmt == CertFormat::Der {
-        return match source.read_bytes() {
-            Ok(der) => Box::new(crate::types::cert::info_gather::gather_der(&der)),
-            Err(_) => crate::types::binary::info::gather_extras(magic_mime),
-        };
-    }
-    let Some(text_stats) = gather_text_stats(source) else {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    };
-    let Ok(text) = source.read_text() else {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    };
-    Box::new(match fmt {
-        CertFormat::Jwk => crate::types::cert::info_gather::gather_jwk(&text, text_stats),
-        _ => crate::types::cert::info_gather::gather(&text, text_stats),
-    })
-}
-
-/// Cap on bytes read for font parsing. The largest fonts in the wild —
-/// Noto CJK supersets, Apple's San Francisco collection — sit around
-/// 30–50 MB; 256 MB leaves comfortable headroom for the worst case
-/// without putting an absurd buffer at the mercy of a hostile input.
-const FONT_BYTE_LIMIT: u64 = 256 * 1024 * 1024;
-
-fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) -> Extras {
-    if let Ok(bs) = source.open_byte_source()
-        && bs.len() > FONT_BYTE_LIMIT
-    {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    }
-    let Ok(bytes) = source.read_bytes() else {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    };
-    // Unwrap WOFF to its inner sfnt before parsing; bare sfnt borrows
-    // through. A malformed wrapper falls back to the binary view.
-    let Ok(sfnt) = crate::types::font::sfnt::decode(&bytes, fmt) else {
-        return crate::types::binary::info::gather_extras(magic_mime);
-    };
-    Box::new(crate::types::font::info_gather::gather(&sfnt, fmt))
 }

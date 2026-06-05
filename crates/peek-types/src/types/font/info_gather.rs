@@ -4,8 +4,35 @@
 
 use ttf_parser::{Face, fonts_in_collection};
 
+use crate::info::Extras;
+use crate::input::InputSource;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
+
+/// Cap on bytes read for font parsing. The largest fonts in the wild —
+/// Noto CJK supersets, Apple's San Francisco collection — sit around
+/// 30–50 MB; 256 MB leaves comfortable headroom for the worst case
+/// without putting an absurd buffer at the mercy of a hostile input.
+const FONT_BYTE_LIMIT: u64 = 256 * 1024 * 1024;
+
+/// Collect the font Info sidecar: unwrap a WOFF wrapper to its inner
+/// sfnt (bare sfnt borrows through), then parse every face. Capped at
+/// [`FONT_BYTE_LIMIT`]; an over-cap or malformed source falls back to
+/// the generic binary view.
+pub fn gather_extras(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) -> Extras {
+    if let Ok(bs) = source.open_byte_source()
+        && bs.len() > FONT_BYTE_LIMIT
+    {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    }
+    let Ok(bytes) = source.read_bytes() else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    let Ok(sfnt) = super::sfnt::decode(&bytes, fmt) else {
+        return crate::types::binary::info::gather_extras(magic_mime);
+    };
+    Box::new(gather(&sfnt, fmt))
+}
 
 /// Parse `bytes` as a font of the given container `format` and produce
 /// a [`FontInfo`]. Every face in a collection is gathered so the Info

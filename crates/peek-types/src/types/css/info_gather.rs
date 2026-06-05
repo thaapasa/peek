@@ -19,7 +19,22 @@ use cssparser::{
 };
 use cssparser_color::{Color, hsl_to_rgb, hwb_to_rgb};
 
-use crate::types::css::info::{ColorSwatch, CssImport, CssStats, SelectorKindCounts};
+use crate::info::Extras;
+use crate::input::InputSource;
+use crate::types::css::info::{ColorSwatch, CssImport, CssInfo, CssStats, SelectorKindCounts};
+use crate::types::text::info_gather::gather_capped_text;
+
+/// Collect the CSS Info sidecar: streaming text stats plus a capped
+/// whole-file rule/declaration parse. Returns `None` when the source is
+/// over the sidecar cap or can't be read as text, so the gather falls
+/// back to the generic text/binary path.
+pub fn gather_extras(source: &InputSource) -> Option<Extras> {
+    let (text_stats, text) = gather_capped_text(source)?;
+    Some(Box::new(CssInfo {
+        text: text_stats,
+        stats: gather(&text),
+    }))
+}
 
 /// Cap on palette swatches kept — an info panel shouldn't scroll forever
 /// on a machine-generated stylesheet.
