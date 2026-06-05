@@ -1,14 +1,38 @@
 [package]
 name = "peek"
+description = "Modern terminal file viewer — preview any file, any format"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[workspace]
+members = ["crates/peek-io", "crates/peek-detect"]
+
+# Shared package metadata for the bin + every member crate (`field.workspace
+# = true` to inherit). One version line for the whole workspace — the release
+# pipeline bumps this; see docs/release.md.
+[workspace.package]
 version = "0.2.12"
 edition = "2024"
 authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
-description = "Modern terminal file viewer — preview any file, any format"
 license = "MIT"
 repository = "https://github.com/thaapasa/peek"
 homepage = "https://github.com/thaapasa/peek"
 
-[dependencies]
+# Single source of truth for dependency versions + features across the
+# workspace. Member crates and the root bin reference these with
+# `{ workspace = true }`; features are additive, so a crate that needs an
+# extra feature adds `features = [...]` alongside the inherit.
+[workspace.dependencies]
+# Input layer (InputSource, streaming byte/line sources, single-stream codecs)
+# and file-type detection, split into their own crates so detection can be
+# reviewed/hardened in isolation and can't depend on the reader/viewer layer.
+peek-io = { path = "crates/peek-io" }
+peek-detect = { path = "crates/peek-detect" }
+
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 
@@ -77,6 +101,8 @@ lz4_flex = { version = "0.11", default-features = false, features = ["frame"] }
 # magic header, so `.br` is extension-only detection — unlike every
 # other codec it can't be sniffed from stdin.
 brotli-decompressor = "5"
+# Runtime: decode-only (default-features = false). The root bin's
+# dev-dependencies re-add the `compress` feature for the extract test.
 sevenz-rust2 = { version = "0.21", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 
@@ -101,11 +127,6 @@ pdfium-render = "0.9"
 # task-lists, strikethrough, footnotes ship as `Options` flags off the
 # base CommonMark grammar — no extra crate features needed.
 pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
-
-# DOCX is parsed via a hand-rolled `quick_xml` walker (existing dep) over
-# `word/document.xml` — full WordprocessingML deserializers (`docx-rust`,
-# `docx-rs`) reject real-world Word documents because numeric attributes
-# routinely carry non-numeric values like "auto" / "none".
 
 # Audio metadata via symphonia. Pure Rust, no system deps. We use the
 # probe + format readers only — no audio decoding — so the info path
@@ -133,6 +154,8 @@ cssparser-color = "0.5"
 # base64 blocks; `x509-parser` decodes the DER body for X.509 certs,
 # CSRs, and CRLs. `ssh-key` handles OpenSSH public-key text format
 # (`.pub` files). `sha1` / `sha2` produce certificate fingerprints.
+# `x509-parser` is also a `peek-detect` dependency: DER-cert detection
+# content-verifies the ASN.1 rather than trusting magic bytes.
 pem = "3"
 x509-parser = "0.18"
 ssh-key = { version = "0.6", default-features = false, features = ["alloc", "ecdsa"] }
@@ -168,13 +191,11 @@ calamine = "0.35.0"
 mail-parser = "0.11"
 
 # /dev/tty reopen after consuming piped stdin (Unix only)
-[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
 # CONIN$ reopen after consuming piped stdin (Windows only). Scoped to
-# `src/input/stdin.rs::reopen_stdin_from_tty` — no other module touches
+# `peek-io::stdin::reopen_stdin_from_tty` — no other module touches
 # Win32 console handles.
-[target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_Security",
@@ -182,19 +203,81 @@ windows-sys = { version = "0.59", features = [
     "Win32_System_Console",
 ] }
 
+# Dev-only
+insta = "1"
+id3 = "1"
+
+[dependencies]
+peek-io = { workspace = true }
+peek-detect = { workspace = true }
+clap = { workspace = true }
+crossterm = { workspace = true }
+syntect = { workspace = true }
+two-face = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+json5 = { workspace = true }
+toml = { workspace = true }
+quick-xml = { workspace = true }
+image = { workspace = true }
+resvg = { workspace = true }
+kamadak-exif = { workspace = true }
+anyhow = { workspace = true }
+unicode-width = { workspace = true }
+gif = { workspace = true }
+bytes = { workspace = true }
+tempfile = { workspace = true }
+zip = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
+bzip2 = { workspace = true }
+liblzma = { workspace = true }
+zstd = { workspace = true }
+lz4_flex = { workspace = true }
+brotli-decompressor = { workspace = true }
+sevenz-rust2 = { workspace = true }
+html2text = { workspace = true }
+rtf-parser = { workspace = true }
+csv = { workspace = true }
+pdfium-render = { workspace = true }
+pulldown-cmark = { workspace = true }
+symphonia = { workspace = true }
+object = { workspace = true }
+cafebabe = { workspace = true }
+cssparser = { workspace = true }
+cssparser-color = { workspace = true }
+pem = { workspace = true }
+x509-parser = { workspace = true }
+ssh-key = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+rusqlite = { workspace = true }
+ttf-parser = { workspace = true }
+fontdue = { workspace = true }
+wuff = { workspace = true }
+calamine = { workspace = true }
+mail-parser = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
 [dev-dependencies]
 # Snapshot testing for image rendering output
-insta = "1"
+insta = { workspace = true }
 
 # ID3v2 tag writer used by `examples/gen_audio_fixture.rs` to synthesise
 # the tagged MP3 test fixture (cover art + lyrics + tag fields). Dev-
 # only — runtime probe path goes through symphonia.
-id3 = "1"
+id3 = { workspace = true }
 
 # 7z writer (compress feature) for the multi-block extract test only.
 # The runtime dep keeps `default-features = false` (decode-only); this
 # enables the encoder solely for test builds via feature unification.
-sevenz-rust2 = { version = "0.21", default-features = false, features = ["compress"] }
+sevenz-rust2 = { workspace = true, features = ["compress"] }
 
 # Optimize image processing dependencies even in dev builds —
 # these are unusably slow without at least -O2

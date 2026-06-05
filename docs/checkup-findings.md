@@ -33,8 +33,8 @@ then a `trait FileTypeRegistry` registering all of them at one site
 beats the explicit dispatches.
 
 **Trigger fired, remedy declined.** The `Notebook` type (2026-05-30) was
-the 6th-type proof. One new type touched six sites: `input/detect.rs`
-(variant + `classify_by_name` + content sniff), `input/mime.rs` (mime
+the 6th-type proof. One new type touched six sites: `crates/peek-detect/src/detect.rs`
+(variant + `classify_by_name` + content sniff), `crates/peek-detect/src/mime.rs` (mime
 arm + extensions arm), `viewer/mod.rs` `compose_modes`, `extract/extract.rs`,
 `info/gather/mod.rs`, and `info/render/mod.rs` + the `FileExtras` enum in
 `info/mod.rs`. On inspection the registry does not pay:

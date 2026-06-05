@@ -14,7 +14,7 @@ use zip::ZipArchive;
 use crate::input::InputSource;
 use crate::types::document::DocumentMetadata;
 
-use super::format::SpreadsheetFormat;
+use super::SpreadsheetFormat;
 
 /// Read + parse the container's metadata XML. `None` on any failure
 /// (unreadable zip, missing entry) — metadata is best-effort.

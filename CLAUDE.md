@@ -23,17 +23,30 @@ release tarball, loaded dynamically at startup. Ghostscript available if found o
 Top-level only. Full file/module breakdown: [docs/architecture-map.md](docs/architecture-map.md) —
 read when adding files, modifying module, or unsure where logic lives.
 
+Cargo workspace. Two leaf crates sit below the `peek` binary so detection can be
+reviewed/hardened in isolation and is barred (by Cargo) from depending on the reader/viewer layer:
+
 ```
+crates/
+  peek-io/             — input foundation: InputSource (File / Memory / FileRange / TempFile) +
+                         ByteSource + LineSource (streaming, anchor-indexed) + ByteStream; the
+                         bare single-stream codecs (gz/bz2/xz/zst/lz4/br) + CompressionFormat;
+                         stdin read + /dev/tty reopen. Depends on nothing in-tree.
+  peek-detect/         — file-type detection: FileType + every per-type format enum +
+                         magic-byte / extension / content-sniff classification (detect/) + mime
+                         (RFC 6838) + transparent decompress-then-redetect (resolve_transparent).
+                         types/<type>.rs = one module per file type (format enum + pure sniff
+                         helpers). Depends on peek-io only — NOT the readers.
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
   base64.rs            — shared standard-alphabet base64 decoder (crate-wide; notebook image extract is first user)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   xml.rs               — shared XML attribute-unescape helper (docx / odt / epub / structured-xml / spreadsheet)
-  input/               — InputSource (File / Memory / FileRange / TempFile) + ByteSource +
-                         LineSource (streaming, anchor-indexed); detect (magic-byte / extension /
-                         sniff); mime (RFC 6838 classification); stream (ByteSource → io::Read /
-                         io::BufRead); compression (gz/bz2/xz/zst/lz4/br); stdin reopen
+  input/               — thin façade re-exporting peek-io + peek-detect under the historical
+                         `crate::input::*` paths (so the reader layer is unchanged); plus the
+                         CLI-level stdin/source dispatch (build_source, needs Args) that stays
+                         in the binary
   extract/             — FileType → per-type extractor dispatch; Extracted / Options / Error;
                          path sanitiser; stdout-stream or file write
   output/              — PrintOutput (write-once stdout for --print / pipes / --info);
@@ -43,7 +56,9 @@ src/
   theme/               — PeekTheme semantic roles + paint helpers; PeekThemeName + embedded
                          .tmTheme data; StyleMode (truecolor/256/16/grayscale/plain); SGR
                          encoders + tokenizer + ActiveStyle; ThemeManager
-  types/               — Per-file-type modules (each owns reader + info + view-mode):
+  types/               — Per-file-type modules (each owns reader + info + view-mode; the format
+                         enum + detection helpers live in `peek-detect`, re-exported at each
+                         module root):
                          binary, text, markdown, notebook (ipynb — cells rendered
                          via the markdown pipeline + JSON source), sql, sqlite
                          (read-only via bundled rusqlite — schema listing +

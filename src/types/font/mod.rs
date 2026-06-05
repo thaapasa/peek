@@ -6,8 +6,6 @@
 //! land in later phases.
 
 pub mod compose;
-pub mod detect;
-pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
@@ -15,3 +13,7 @@ pub mod sfnt;
 pub mod specimen;
 pub mod specimen_mode;
 pub mod woff;
+
+/// Format enum, re-exported from `peek_detect` at the module root so
+/// reader code keeps a local `crate::types::font::FontFormat` path.
+pub use peek_detect::types::font::FontFormat;

@@ -16,10 +16,8 @@
 //! `gs` degrades to source + info.
 
 pub mod compose;
-pub mod detect;
 pub mod dos_eps;
 pub mod dsc;
-pub mod format;
 pub mod gs;
 pub mod image_renderer;
 pub mod info;
@@ -41,3 +39,7 @@ fn postscript_text(bytes: &[u8], header: Option<&DosEps>) -> String {
     };
     String::from_utf8_lossy(slice).into_owned()
 }
+
+/// Format enum, re-exported from `peek_detect` at the module root so
+/// reader code keeps a local `crate::types::eps::PostScriptFormat` path.
+pub use peek_detect::types::eps::PostScriptFormat;

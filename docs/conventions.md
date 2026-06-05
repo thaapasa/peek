@@ -50,8 +50,13 @@ Modes that re-render on resize override `rerender_on_resize`. Modes that own scr
 ## File types
 
 Each file type is a self-contained subdirectory under `src/types/<name>/`. The directory
-owns **all** type-specific logic — input read, info gather, info render, view mode(s).
-Code outside `types/<name>/` only **wires** the type into the central dispatchers.
+owns the reader-side logic — input read, info gather, info render, view mode(s).
+**Detection** (the format enum + the extension/MIME/content-sniff helpers) lives in the
+`peek-detect` crate at `crates/peek-detect/src/types/<name>.rs`, *not* the reader — that
+keeps detection independent of the reader/viewer layer (a compile-time guarantee via the
+crate split). The reader module re-exports its format enum at the module root
+(`mod.rs`: `pub use peek_detect::types::<name>::<Name>Format;`). Code outside `types/<name>/`
+only **wires** the type into the central dispatchers.
 
 Owned by the type module:
 
@@ -68,7 +73,8 @@ Owned by the type module:
 
 Wired in (centralized — never duplicated inside `types/<name>/`):
 
-- `input/detect.rs` — extension + magic-byte detection → `FileType::<Variant>`.
+- `crates/peek-detect/src/detect.rs` — the `FileType::<Variant>` + orchestrator wiring;
+  `crates/peek-detect/src/types/<name>.rs` — the format enum + per-type sniff helpers.
 - `info/mod.rs` — `FileType` + `FileExtras` enum variants.
 - `info/gather/mod.rs` — dispatches `FileType` → `types::<name>::info_gather::gather_extras`.
 - `info/render/mod.rs` — dispatches `FileExtras` → `types::<name>::info_render::render_section`.

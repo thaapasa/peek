@@ -84,10 +84,12 @@ jobs:
           BRANCH='${{ steps.version.outputs.branch }}'
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          # Bump the package version in Cargo.toml (first occurrence) and the
-          # matching peek entry in Cargo.lock so --locked builds stay valid.
+          # Bump the workspace version in Cargo.toml (the single `version`
+          # line, under [workspace.package]; [package] inherits it) and the
+          # peek / peek-io / peek-detect entries in Cargo.lock so --locked
+          # builds stay valid. All three crates share the workspace version.
           sed -i -E '0,/^version = "[^"]+"/s//version = "'"$VERSION"'"/' Cargo.toml
-          perl -0pi -e 's/(name = "peek"\nversion = ")[^"]+/${1}'"$VERSION"'/' Cargo.lock
+          perl -0pi -e 's/(name = "(?:peek|peek-io|peek-detect)"\nversion = ")[^"]+/${1}'"$VERSION"'/g' Cargo.lock
           git checkout -B "$BRANCH"
           git add Cargo.toml Cargo.lock
           # When highlights are supplied, attach them as the commit body so

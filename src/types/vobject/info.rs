@@ -7,9 +7,9 @@ use crate::info::{FileExtras, paint_count, push_field, push_section_header};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 
+use super::VObjectFormat;
 use super::calendar::{self, CalendarSummary};
 use super::contact::{self, ContactSummary};
-use super::format::VObjectFormat;
 
 /// Cap on bytes parsed for the Info summary. iCalendar / vCard are
 /// line-oriented text; a multi-GB file claiming the format would otherwise

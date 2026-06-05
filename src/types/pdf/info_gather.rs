@@ -7,7 +7,7 @@
 use crate::info::FileExtras;
 use crate::input::InputSource;
 
-use super::format::PdfFlavor;
+use super::PdfFlavor;
 use super::info::PdfStats;
 use super::package;
 

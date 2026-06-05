@@ -4,7 +4,7 @@
 //! DOCX and RTF.
 
 use crate::types::document::DocumentMetadata;
-use crate::types::pdf::format::PdfFlavor;
+use crate::types::pdf::PdfFlavor;
 
 #[derive(Debug, Clone)]
 pub struct PdfStats {

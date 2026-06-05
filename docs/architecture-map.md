@@ -3,22 +3,51 @@
 Full file/module breakdown. Read when adding files, modifying a module, or unsure where logic lives.
 CLAUDE.md keeps a condensed top-level version; this is the detailed reference.
 
+Cargo workspace: the `peek` binary at the repo root plus two leaf crates under `crates/`. The split
+makes the architectural rule "detection must not depend on the reader/viewer layer" a compile-time
+guarantee (Cargo dependency edges) rather than convention.
+
 ```
+crates/
+  peek-io/             — input foundation crate. Depends on nothing in-tree.
+    src/lib.rs         — re-exports InputSource, ByteSource, LineSource, ByteStream
+    src/source.rs      — InputSource (File / Memory{Bytes} / FileRange{base,offset,len} / TempFile{Arc<NamedTempFile>}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource / TempFileByteSource (holds the Arc so reads outlive the source). read_bytes() returns bytes::Bytes; Memory arm is a refcount clone
+    src/lines.rs       — LineSource: streaming, anchor-indexed line view over InputSource
+    src/stream.rs      — ByteStream: io::Read / io::BufRead / io::Seek wrapper over any ByteSource so callers can use io::copy / read_until / lines (tar / cpio / etc. go through this seam); Seek is relative to the range start so a post-BOM range is a clean 0-based seekable stream. `ReadSeek` (Read + Seek) trait alias lets a reader carry either a ByteStream or a Cursor behind one Box (csv seekable reader)
+    src/compression.rs — CompressionFormat (gz/bz2/xz/zst/lz4/br) + codec_label/suffix + decompress_bytes (brotli is extension-only, no magic) + stripped_name; MAX_DECOMPRESS_BYTES = 256 MiB. The transparent-decompression orchestration (resolve_transparent) lives in peek-detect because it re-runs detection
+    src/stdin.rs       — read_stdin (read piped stdin into a Memory InputSource) + reopen fd 0 from /dev/tty after the pipe is consumed. The CLI-level "file vs stdin" decision (needs Args) stays in the binary
+  peek-detect/         — file-type detection crate. Depends on peek-io only — never the readers.
+    src/lib.rs         — re-exports the detection surface + resolve_transparent
+    src/detect.rs      — detection orchestrator (magic-byte / extension / content-sniff priority) + FileType + Detected + DecompressionContext; CompressionFormat re-exported from peek-io; per-type format enums re-exported from `types::<x>`
+    src/mime.rs        — MimeCategory + MimeInfo: RFC 6838 classification (Registered / Vendor / x-prefix / unknown) used by the Info screen MIME row
+    src/transparent.rs — resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content): decompress via peek-io, then re-run detect on the inner bytes
+    src/types/          — one module per file type: the format enum + the pure ext/MIME/content-sniff helpers the orchestrator calls (the former bin-side `types/<x>/{format,detect}.rs`, merged). No reader/viewer code. cert pulls x509-parser (DER content-verify); the rest are dependency-light. Readers re-export each format enum at their module root (`crate::types::<x>::<X>Format`).
+      archive.rs       — ArchiveFormat enum + label; format_from_name + format_from_mime (handles double-extensions `.tar.gz` etc. before bare compression)
+      audio.rs         — AudioFormat enum + label; format_from_ext + format_from_mime (audio container routing)
+      cert.rs          — CertFormat enum (Pem / Der / Jwk; PKCS#12 planned); format_from_ext (`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` → Pem, `.der` → Der, `.jwk` / `.jwks` → Jwk) + sniff_pem (`-----BEGIN ` header / `ssh-rsa…` content) + sniff_der (leading `0x30 0x82` SEQUENCE that fully parses as X509Certificate — parse, not just magic; the one heavy detection dep) + sniff_jwk (`kty` is a known type, or a `keys` array of such — looks_like_jwk inlined here). `.crt` / `.cer` left to content sniff (either encoding)
+      comic.rs         — ComicFormat enum + label; format_from_ext: `.cbz` → Cbz
+      csv.rs           — CsvFormat enum (Csv / Tsv) + default_delimiter; format_from_ext: `.csv` / `.tsv`
+      disk_image.rs    — DiskImageFormat enum (Iso / Dmg / Raw) + label; format_from_ext + Raw → Iso upgrade (cheap 6-byte PVD probe at offset 32768)
+      document.rs      — DocumentFormat enum (Docx / Odt / Rtf) + label; format_from_ext + format_from_mime (RTF magic-byte route)
+      ebook.rs         — EbookFormat enum; format_from_ext: `.epub` → Epub
+      email.rs         — EmailFormat { Eml, Mbox } + label; format_from_ext (eml → Eml, mbox → Mbox) + sniff_text (`From ` separator → Mbox; RFC822 header block with a recognised mail header → Eml; guards against arbitrary `key: value` files)
+      eps.rs           — PostScriptFormat { Eps, Ps } + label + crop_to_bbox (EPS → gs -dEPSCrop); format_from_ext (eps/epsf/epsi → Eps, ps → Ps) + format_from_mime (application/postscript → Eps) + sniff_text (`%!PS…`, EPSF token → Eps else Ps) + is_dos_eps (inline 4-byte magic check; the full DOS-EPS header parse stays in the reader's `dos_eps`)
+      font.rs          — FontFormat enum (TrueType / OpenType / Collection / Woff / Woff2) + label; format_from_ext (`.ttf` / `.otf` / `.ttc` / `.otc` / `.woff` / `.woff2`) + sniff_font_bytes (4-byte magic: `00 01 00 00` / `true` / `OTTO` / `ttcf` / `wOFF` / `wOF2`)
+      objfile.rs       — is_bare_coff: full COFF-header validation (known machine + no optional header + sane section count + executable flag clear) so bare `.obj` routes here without misclaiming Wavefront 3D `.obj`. No format enum — `ObjectFile` is a unit `FileType` variant
+      pdf.rs           — PdfFlavor { Pdf, Illustrator } + label: `.ai` is PDF-compatible Illustrator (same render path); flavour drives the Info label + extension-mismatch allow-list. No detect helpers — PDF is magic-routed in the orchestrator
+      spreadsheet.rs   — SpreadsheetFormat { Xlsx, Xlsm, Ods } + label + is_ooxml (picks docProps/core.xml vs meta.xml + the calamine reader); format_from_ext + format_from_mime (magic is application/zip → extension-routed like docx)
+      sqlite.rs        — SqliteFormat enum (single Sqlite variant today; SQLCipher / WAL flavours would slot in); format_from_ext (`.sqlite` / `.sqlite3` / `.db` / `.db3`) + format_from_mime (`application/vnd.sqlite3` / `application/x-sqlite3`)
+      structured.rs    — StructuredFormat enum (JSON / JSONC / JSON5 / JSONL / YAML / TOML / XML); format_from_ext. (JSON / SVG / HTML / XML / YAML content sniff for unnamed sources lives in the orchestrator's detect_bytes)
+      vobject.rs       — VObjectFormat { ICal, VCard } + label (iCalendar / vCard); format_from_ext (ics/ical/ifb → ICal, vcf/vcard → VCard) + sniff_text (leading `BEGIN:VCALENDAR` / `BEGIN:VCARD` marker, BOM/blank-line tolerant)
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
   base64.rs            — shared crate-wide base64 codec: decode (standard + URL alphabet, both tables in one) + decoded_len + encode_url (URL-safe, no padding — for the JWK thumbprint); hand-rolled, no crate dep; first consumer was the notebook image extractor
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
   xml.rs               — shared XML helper: `unescape_attr_value` decodes a quick-xml attribute's raw UTF-8 bytes + resolves escapes via `quick_xml::escape::unescape` (feature-flag-independent — calamine enables quick-xml's `encoding` feature, which removes `Attribute::unescape_value`). Used by docx / odt / epub / structured-xml / spreadsheet props
-  input/
-    mod.rs             — re-exports InputSource, ByteSource, LineSource, ByteStream
-    source.rs          — InputSource (File / Memory{Bytes} / FileRange{base,offset,len} / TempFile{Arc<NamedTempFile>}) + ByteSource trait + FileByteSource / BytesByteSource / RangeByteSource / TempFileByteSource (holds the Arc so reads outlive the source). read_bytes() returns bytes::Bytes; Memory arm is a refcount clone
-    lines.rs           — LineSource: streaming, anchor-indexed line view over InputSource
-    detect.rs          — File-type detection orchestrator (magic-byte / extension / content-sniff priority + Detected / FileType / CompressionFormat); per-type format enums + detection helpers live alongside their types under `types/<x>/{format,detect}.rs` and are re-exported here
-    mime.rs            — MimeCategory + MimeInfo: RFC 6838 classification (Registered / Vendor / x-prefix / unknown) used by the Info screen MIME row
-    stream.rs          — ByteStream: io::Read / io::BufRead / io::Seek wrapper over any ByteSource so callers can use io::copy / read_until / lines (tar / cpio / etc. go through this seam); Seek is relative to the range start so a post-BOM range is a clean 0-based seekable stream. `ReadSeek` (Read + Seek) trait alias lets a reader carry either a ByteStream or a Cursor behind one Box (csv seekable reader)
-    compression.rs     — decompress_bytes (6 codecs: gz/bz2/xz/zst/lz4/br — brotli is extension-only, no magic) + stripped_name + resolve_transparent (called at every (source, Detected) entry boundary so bare wrappers open straight to inner content); MAX_DECOMPRESS_BYTES = 256 MiB
-    stdin.rs           — Build the input source from CLI args, reopen fd 0 from /dev/tty after pipe
+  input/               — thin façade over peek-io + peek-detect (keeps the historical `crate::input::*` paths) + the CLI-level source dispatch
+    mod.rs             — re-exports peek-io (InputSource, ByteSource, LineSource, source, stream) and peek-detect (as `detect`, `mime`, and `compression::resolve_transparent`) under `crate::input::*`
+    stdin.rs           — build_source(&Args): pick file vs stdin from the CLI args (delegates the actual stdin read + tty reopen to peek_io::stdin)
   extract/
     mod.rs             — Module declarations + re-exports (Extracted, ExtractOptions, ExtractError, extract, sanitize_entry_path)
     extract.rs         — Top-level dispatch (FileType → per-type extractor) + Extracted/Options/Error types + path sanitiser
@@ -87,8 +116,6 @@ src/
       info_render.rs   — Render CSS info section (Content + CSS blocks + Colors swatch grid)
     cert/
       mod.rs           — Module wiring
-      format.rs        — CertFormat enum (Pem / Der / Jwk; PKCS#12 planned)
-      detect.rs        — format_from_ext (`.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` → Pem, `.der` → Der, `.jwk` / `.jwks` → Jwk) + sniff_pem (`-----BEGIN ` header / `ssh-rsa…` content sniff) + sniff_der (leading `0x30 0x82` SEQUENCE that fully parses as X509Certificate — parse, not just magic) + sniff_jwk (JSON value whose `kty` is a known type, or a `keys` array of such — delegates to jwk::looks_like_jwk). `.crt` / `.cer` left to content sniff because they carry either PEM or DER
       compose.rs       — compose(fmt): PEM → paired Source ContentMode (no syntax token); JWK → structured JSON content mode (pretty + highlight, reusing FileType::Structured(Json)); DER → no source view (binary), just the universal Info + hex tail. Info aux mode renders the cert sidecar in every case
       info.rs          — CertInfo { text: Option<TextStats> (None for binary DER), source_label: &'static str ("PEM" / "DER" / "JWK"), entries: Vec<CertEntry>, parse_errors: Vec<String> } + CertEntry variants (Certificate / CSR / CRL / PrivateKey / PublicKey / SshPublicKey / JsonWebKey / Unknown — heavy variants boxed) + per-entry shapes (incl. JwkEntry { kty / crv / alg / use / kid / key_ops / key_size_bits / thumbprint }) + KeyType (Rsa / Ec(curve) / Ed25519 / Dsa / Other)
       info_gather.rs   — gather(text): pem::parse_many → per-block dispatch by PEM label. gather_der(der): label-less DER recovered by structure (classify_der tries cert → CRL → CSR → PKCS#8 / SPKI key, first decode wins, else Unknown). gather_jwk(text): serde_json → jwk::parse. X.509 cert / CSR / CRL via x509-parser; SSH pubkey lines (outside any PEM fence) via ssh-key. Keys: hand-rolled ASN.1 TLV walker over PKCS#1 / SEC1 / PKCS#8 / SPKI envelopes recovers key type + bit size without a fourth crypto crate. SHA-1 + SHA-256 fingerprints over the cert DER (sha1 / sha2)
@@ -96,8 +123,6 @@ src/
       info_render.rs   — Render cert info section (Content text-stats block only when `text` is Some; entries section headed by source_label, per-entry blocks: cert Subject / Issuer / Serial / validity / Public Key / SANs / fingerprints; JWK Type / Bits / Algorithm / Use / Key Ops / Key ID / Thumbprint). Days-Left ≤ 30 painted as warning; expired painted as warning with negative day count
     font/
       mod.rs           — Module wiring
-      format.rs        — FontFormat enum (TrueType / OpenType / Collection / Woff / Woff2) + label
-      detect.rs        — format_from_ext (`.ttf` / `.otf` / `.ttc` / `.otc` / `.woff` / `.woff2`) + sniff_font_bytes (4-byte magic: `00 01 00 00` / `true` / `OTTO` / `ttcf` / `wOFF` / `wOF2`)
       sfnt.rs          — decode(bytes, format) → Cow<[u8]>: single entry point handing every consumer raw sfnt. Bare TrueType/OpenType/Collection borrow through (no copy); Woff unwraps in-tree (woff.rs), Woff2 delegates to the `wuff` crate. Called first by both info_gather (font_gather) and compose
       woff.rs          — decode(): WOFF 1.0 → sfnt. Rebuilds the offset table + directory, inflates each table (zlib via in-tree flate2, or copies verbatim when stored uncompressed), 4-byte-aligns table data. Bounds-checked against hostile input; metadata/private blocks dropped. No new dep. (WOFF2's brotli + glyf/loca transform is handled by `wuff` in sfnt.rs, not here)
       compose.rs       — compose(): unwrap to sfnt (sfnt::decode) → rasterise specimen → SpecimenMode (primary view). Best-effort — a font fontdue can't parse (or a malformed WOFF) skips the specimen push and falls through to the Info + Hex tail
@@ -108,14 +133,10 @@ src/
       specimen_mode.rs — SpecimenMode: parallel to image::ImageRenderMode but owns a pre-decoded DynamicImage instead of a source. Same ImageView wiring (cycle background / image-mode / fit, FitHeight horizontal pan, single-slot cache invalidated on resize / margin / bg / fit change). For collections, holds the original `Bytes` + face count + current face index; `n` / `p` (NextFace / PrevFace) re-rasterise the next face in place with wrap, status segment surfaces `Face N/M`. Pipe path uses capped_for_image_pipe so font specimens don't dominate piped output
     structured/
       mod.rs           — Module wiring
-      format.rs        — StructuredFormat enum (JSON/JSONC/JSON5/JSONL/YAML/TOML/XML)
-      detect.rs        — format_from_ext: extension → StructuredFormat
       info.rs          — StructuredInfo / StructuredStats / TopLevelKind + gather_extras (per-format stats) + render_section (Format)
       pretty.rs        — JSON / YAML / TOML / XML pretty-printers (used by ContentMode)
     csv/
       mod.rs           — Module wiring; re-exports CsvStats
-      format.rs        — CsvFormat enum (Csv/Tsv) + default_delimiter
-      detect.rs        — format_from_ext: `.csv` / `.tsv` → CsvFormat
       parse.rs         — Streaming, bounded-memory CSV reader over `csv::Reader<Box<dyn ReadSeek>>`. Two resident tiers: a retained `seed` (first 1000 records → widths + header heuristic + type sample + top-of-file rows) and a sliding `window` (WINDOW_SIZE records) for everything past it. Window refills seek the reader to the nearest sparse `anchors` entry (one `csv::Position` per ANCHOR_STRIDE=256 records) and re-parse forward. `total` is unknown until `ensure_all` runs a count pass that discards cells (O(1) mem); `loaded()` = total-or-frontier. malformed counted once per record (gated on first discovery). UTF-16 LE/BE transcoded eagerly to a fully-resident UTF-8 Cursor (window bound N/A there). Malformed guard: > 4 MiB per record OR > 10 000 physical lines OR csv-crate error → `<error>` row + counter; reader resyncs on next newline.
       compose.rs       — compose(): RowsTableMode (via build_csv_mode — wraps CsvData in a Box<dyn RowSource>) + paired Source ContentMode + infer_alignments helper (Int/Float seed-body inference, shared with the table-mode tests)
       info.rs          — CsvStats { format, delimiter, encoding, has_bom, header_detected, columns: Vec<ColumnStats>, loaded_records, total_records, malformed_count, sampled } + ColumnStats / ColumnType (Int/Float/Bool/Date/String/Mixed)
@@ -123,8 +144,6 @@ src/
       info_render.rs   — render_section (CSV + Columns blocks)
     sqlite/
       mod.rs           — Module wiring
-      format.rs        — SqliteFormat enum (single Sqlite variant today; SQLCipher / WAL flavours would slot in here)
-      detect.rs        — format_from_ext (`.sqlite` / `.sqlite3` / `.db` / `.db3`) + format_from_mime (`application/vnd.sqlite3` / `application/x-sqlite3`)
       reader.rs        — SqliteReader: read-only `rusqlite::Connection`; spools Memory / FileRange / TempFile sources to a `NamedTempFile` held in an `Arc` for the connection's lifetime so piped DBs work too
       catalog.rs       — sqlite_master walker → SqliteCatalog { tables, views, indexes, triggers } with `Entity { name, tbl_name, sql, row_count }`; internal `sqlite_*` tables filtered out, COUNT(*) attached per table/view
       compose.rs       — compose(): builds the Entry tree (kind-grouped Dirs, `<name>.sql` for every entity, `<name>.csv` extra leaf for tables/views), pushes a ListingMode with a descend handler installed via `with_descend_handler`. Handler parses `<kind>/<name>.csv` rows and pushes a streaming SqliteTableMode + Info + About frame over the current DB; `.sql` / non-row-bearing rows return None → standard extract path. Holds `parse_contents_key` + `build_contents_frame`
@@ -136,8 +155,6 @@ src/
       info_render.rs   — render_section: SQLite block (page / encoding / journal / integrity / counts / total rows) + Biggest tables block (omitted when there are no row-bearing tables)
     spreadsheet/         — `.xlsx` / `.xlsm` / `.ods` workbooks. Same shape as sqlite (sheets → listing → drill into a streaming table)
       mod.rs           — Module wiring; re-exports SpreadsheetInfo
-      format.rs        — SpreadsheetFormat { Xlsx, Xlsm, Ods } + label() + is_ooxml() (picks docProps/core.xml vs meta.xml + the calamine reader)
-      detect.rs        — format_from_ext (xlsx / xlsm / ods) + format_from_mime (OOXML / ODS spreadsheet MIMEs). Magic is application/zip → extension-routed like docx
       workbook.rs      — calamine wrapper: opens via a `Cursor<Bytes>` (whole container read in for random access; per-format `Reader::new` dispatch avoids the Clone-requiring auto-opener); `sheet_names()` cheap, `materialize(name)` parses one sheet's Range whole. `Sheet` impls RowSource (resident rows, total known); alignment from native Data variants (Int/Float → right), header via all-text row-0 heuristic. cell_string maps Data→Option<String> (Empty→None)
       compose.rs       — compose(): Sheets ListingMode (`<sheet>.csv` rows) + descend handler → RowsTableMode + Info + About frame per sheet; secondary ZIP-entry ListingMode via archive::reader::list_entries. SHEET_SUFFIX shared with extract
       extract.rs       — `<sheet>.csv` keys → materialize + stream the sheet through csv::Writer into a NamedTempFile; any other key is a raw container path → delegate to archive::extract (ArchiveFormat::Zip)
@@ -186,8 +203,6 @@ src/
     ebook/
       mod.rs           — Module wiring; re-exports EbookStats / Metadata
       compose.rs       — compose(): push EpubReadMode (chapters) + ZIP TOC ListingMode; OPF failure leaves listing-only
-      detect.rs        — format_from_ext: `.epub` → EbookFormat::Epub
-      format.rs        — EbookFormat enum
       info.rs          — Shared ebook info shape (universal across EPUB / MOBI / FB2): EbookStats { metadata: Metadata, chapter_count }
       epub/
         mod.rs         — Module wiring; re-exports EpubReadMode
@@ -198,8 +213,6 @@ src/
     email/
       mod.rs           — Module wiring; re-exports EmailInfo
       compose.rs       — compose(fmt): `.eml` → [rendered Message (unless --plain) + raw Source + Attachments ListingMode]; `.mbox` → Messages ListingMode with descend handler (subrange one message → reuse the .eml stack) + raw Source. Source precedes the attachments listing so the print/pipe first-data-mode pick is the message, not the listing
-      detect.rs        — format_from_ext (eml → Eml, mbox → Mbox) + sniff_text (`From ` separator → Mbox; RFC822 header block with a recognised mail header → Eml; guards against arbitrary `key: value` files)
-      format.rs        — EmailFormat { Eml, Mbox } + label()
       message.rs       — Single parse site over mail-parser: parse(bytes) → owned ParsedEmail { from/to/cc/subject/date/message_id, Body (Html preferred over Text), attachments }; attachment_base() (declared filename or `attachment-N.<ext>`) + dedupe_keys() (unique names pass through clean for CLI extract, collisions get a `-N` stem suffix) shared with the extractor; content_type() helper
       mbox.rs          — split(bytes) → Vec<MboxEntry { offset, len, subject, date_secs }> by scanning `From ` line-start separators; ranges point past the separator so each slice parses standalone; lightweight Subject + Date scan (Date via mail_parser::DateTime::parse_rfc822 → epoch) avoids a full parse per row
       renderer.rs      — EmailRenderer: TextRenderer rendering a themed header block + body (HTML via html::render::render, plain text word-wrapped); re-parses per render like HtmlRenderer (RenderedTextMode caches)
@@ -209,8 +222,6 @@ src/
     vobject/
       mod.rs           — Module wiring; re-exports VObjectInfo. iCalendar (.ics) + vCard (.vcf): the two IETF vObject text formats, one shared content-line parser, format-specific renderers
       compose.rs       — compose(fmt): rendered read view (CalendarRenderer for ICal / ContactRenderer for VCard) unless --plain, then raw Source via text_content_mode. No inner items
-      detect.rs        — format_from_ext (ics/ical/ifb → ICal, vcf/vcard → VCard) + sniff_text (leading `BEGIN:VCALENDAR` / `BEGIN:VCARD` marker, BOM/blank-line tolerant)
-      format.rs        — VObjectFormat { ICal, VCard } + label() (iCalendar / vCard)
       line.rs          — Shared hand-rolled content-line parser (no dependency): unfold (line folding + CRLF/LF), parse_line (NAME;PARAM=VAL:VALUE, quoted-param-aware colon/`;` splitting), parse_components (BEGIN/END → Component tree). ContentLine { name, params, value } + Component { name, props, children } with param/value/props_named accessors; unescape_text, split_structured (`;` fields), format_list (`,` list → ", "-joined)
       datetime.rs      — format_datetime (ISO-basic / dashed / UTC-Z / date-only → `YYYY-MM-DD HH:MM`, raw passthrough on no match) + date_key (sortable YYYY-MM-DD). Pure string reshaping, no date crate / no zone math
       calendar.rs      — CalendarRenderer: TextRenderer rendering a VCALENDAR agenda (name header + per-VEVENT/VTODO blocks: when-span, location, humanised RRULE, organizer/attendees, status, categories, description). humanize_rrule (FREQ/BYDAY/COUNT/UNTIL/INTERVAL) + format_when (same-day end-date collapse). summarize(text) → CalendarSummary (name/version/product, event+todo counts, date range) for Info
@@ -220,10 +231,8 @@ src/
     eps/
       mod.rs           — Module wiring; re-exports EpsInfo; `postscript_text(bytes, header)` helper (PS section slice for DOS-EPS, whole file otherwise; lossy UTF-8)
       compose.rs       — compose(): [Preview: PagedImageMode<EpsImageRenderer> when a DOS-EPS TIFF preview exists] + [Render: PagedImageMode<EpsImageRenderer> when gs::find() succeeds, lazy] + Source (text_content_mode over the PS-section slice). `--plain` drops both image views. First-pushed = default, so Preview leads when present
-      detect.rs        — format_from_ext (eps/epsf/epsi → Eps, ps → Ps) + format_from_mime (application/postscript → Eps) + sniff_text (`%!PS…`, EPSF token → Eps else Ps) + is_dos_eps (magic check)
       dos_eps.rs       — Binary DOS-EPS container parse: MAGIC `C5 D0 D3 C6`, 30-byte LE header → PostScript Section + optional preview (TIFF preferred over WMF); offsets clamped to file length
       dsc.rs           — DSC comment parser: line-prefix scan to `%%EndComments`/body → DscInfo { title, creator, creation_date, for_whom, bounding_box, language_level, pages }
-      format.rs        — PostScriptFormat { Eps, Ps } + label() + crop_to_bbox() (EPS → gs -dEPSCrop)
       gs.rs            — Optional Ghostscript bridge (never bundled): find() probes gs/gswin64c/gswin32c on PATH via `--version`; render(exe, postscript, crop_to_bbox) pipes PS on stdin → png16m on stdout (-dSAFER, page 1, 150 DPI), decodes via image crate
       image_renderer.rs — EpsImageRenderer: PageRenderer (1 page) over EpsImageSource { Preview(Arc<DynamicImage>) decoded eagerly at compose (so an undecodable TIFF never becomes a dead tab) | Ghostscript { exe, postscript, crop_to_bbox } rendered lazily on first draw }; single-slot cache of the render *outcome* (Ok or Err) so a failing gs render runs exactly once, not per redraw; defers to render_image_window
       info.rs          — EpsInfo { format, dsc: DscInfo, preview: Option<PreviewMeta { kind, bytes, dimensions }>, gs_available }
@@ -232,8 +241,6 @@ src/
     document/
       mod.rs           — Module wiring; re-exports DocumentStats / DocumentMetadata / DocRenderer
       compose.rs       — compose(): DOCX/ODT → RenderedTextMode<DocRenderer> + ZIP TOC ListingMode; RTF → RenderedTextMode<RtfRenderer> + inline-embed listing when any \pict groups parsed
-      detect.rs        — format_from_ext + format_from_mime (RTF magic-byte route)
-      format.rs        — DocumentFormat enum (Docx/Odt/Rtf) + label
       ast.rs           — Shared word-processing AST (Doc / Block::{Paragraph,Table} / Paragraph / Run + count_words + merge_paragraphs). Populated by both docx::package and odt::package; RTF stays separate because its on-the-wire shape is a flat painter-tagged text stream
       render.rs        — Shared render(&Doc, width, theme, style_mode) -> Vec<String>: width-aware word wrap, per-run SGR (bold/italic/underline/strike + custom fg color), heading bold + theme.heading colour, bullet prefix "• ", table rows joined " | ". Used by both DOCX and ODT
       renderer.rs      — DocRenderer: TextRenderer impl over the shared AST via render::render. Format-agnostic; per-format wiring only supplies the parsed Doc
@@ -257,7 +264,6 @@ src/
         info_gather.rs — Populate DocumentStats via parse::open_source
     pdf/
       mod.rs           — Module wiring; re-exports PdfStats, PdfPageRenderer, PdfTextRenderer
-      format.rs        — PdfFlavor { Pdf, Illustrator }: `.ai` is PDF-compatible Illustrator (same render path); flavour drives the Info section label (`label()`) + extension-mismatch allow-list only
       compose.rs       — compose(): PagedImageMode<PdfPageRenderer> (fit forced to FitWidth) + RenderedTextMode<PdfTextRenderer> (only when Doc::has_extractable_text — skipped for scans / outlined `.ai`) + /EmbeddedFiles ListingMode
       package.rs       — Lazy global Pdfium init (exe-dir → .pdfium/lib dev fallback → system); load_pdf_from_byte_vec → Arc-backed Doc with page_count / render_page (RGBA via image feature) / page_text / has_extractable_text (probes first 8 pages) / metadata / list_embeds / read_embed; list_embeds returns one tree under `attachments/<name>` (/EmbeddedFiles) plus `pages/page{N}/image{M}.{ext}` (inline image XObjects); read_embed dispatches by prefix and falls back to `get_raw_image` → PNG re-encode for codecs `get_raw_image_data` doesn't surface as a usable file. PDF date `D:YYYYMMDDHHMMSSZ` → `YYYY-MM-DD HH:MM:SS UTC` formatter
       page_renderer.rs — PdfPageRenderer: PageRenderer impl — rasterizes a page via Pdfium (single-slot bitmap cache, ~4096px cap) then defers to `viewer::paged::render_image_window`. Wrapped in the generic `viewer::paged::PagedImageMode`
@@ -269,8 +275,6 @@ src/
     comic/
       mod.rs           — Module wiring; re-exports ComicStats / CbzPageRenderer
       compose.rs       — compose(): PagedImageMode<CbzPageRenderer> (paged images) + ZIP TOC ListingMode
-      detect.rs        — format_from_ext: `.cbz` → ComicFormat::Cbz
-      format.rs        — ComicFormat enum + label
       info.rs          — Shared comic-archive info shape (only CBZ ships today; the shape is sized for CBR / CB7 / CBT if they're ever added): ComicStats { format, page_count, total_image_bytes }
       cbz/
         mod.rs         — Module wiring; re-exports CbzPageRenderer
@@ -289,8 +293,6 @@ src/
     audio/
       mod.rs           — Module wiring; re-exports AudioStats
       compose.rs       — compose(): Info → optional Cover (ImageRenderMode) → optional Lyrics (ContentMode) → optional Embeds ListingMode
-      detect.rs        — format_from_ext + format_from_mime (audio container routing)
-      format.rs        — AudioFormat enum + label
       info.rs          — Shared audio info shape: AudioStats { format, codec, duration_secs, sample_rate, channels, channel_layout, bits_per_sample, bitrate, metadata: AudioMetadata, has_lyrics, has_album_art, error } + AudioMetadata { title, artist, album, album_artist, track_number, disc_number, date, genre, composer, comment }
       package.rs       — Central symphonia probe. `probe(source, format)` → `Probed { codec/track params, AudioMetadata, visuals: Vec<EmbedVisual>, lyrics: Option<String> }`. Walks both `format.metadata().current()` (Vorbis on Ogg/FLAC) and `probed.metadata.get().current()` (ID3v2 sidecar on MP3/AIFF); embedded visuals carried as raw bytes + media_type + canonical `usage_root` (front_cover / back_cover / artist / …). Lyrics joined across USLT/SYLT/`LYRICS=` sources. `to_stats(&Probed)` projects onto AudioStats for InfoMode. `primary_cover(&Probed)` picks the FrontCover-tagged visual (fallback first) for the dedicated Cover tab; `visual_filename` builds its suggested name. `build_listing(&Probed)` synthesises `pictures/<usage>.<ext>` (with `_N` suffix on dup roots) + `lyrics/lyrics.txt`; empty when nothing embedded. `read_embed(&Probed, key)` returns `(Vec<u8>, suggested_name)` for extract. Re-probes per call (header + tag walk, ms-cheap)
       info_gather.rs   — Thin shim: calls `package::probe` + `package::to_stats`; failures land as `error` field
@@ -299,8 +301,6 @@ src/
     archive/
       mod.rs           — Module wiring (no re-exports; consumers reach in via reader / info / extract)
       compose.rs       — compose(): list TOC entries → ListingMode under the format's label
-      detect.rs        — format_from_name + format_from_mime (handles double-extensions `.tar.gz` etc. before bare compression)
-      format.rs        — ArchiveFormat enum + label
       reader.rs        — list_entries dispatcher (returns Vec<Entry>) + ReadSeek helper + open_seekable (streams File/TempFile/Memory; RangeReadSeek windows a FileRange over its backing file — no slurp)
       info.rs          — ArchiveStats + gather_extras (TOC stats via Stats::from_root) + render_section (Archive info section); static_lib_summary adds a Static library section (object-member count + arch) when an `ar` archive's members are objects
       extract.rs       — Per-format entry extract via materialise(reader, declared_size, opts): entries ≥ SPOOL_THRESHOLD (16 MiB) or unknown size land in InputSource::TempFile ($TMPDIR/peek-*, RAII unlink via Arc<NamedTempFile>); smaller stay in Bytes. --no-tempfile forces Vec path and drops the 256 MiB MAX_EXTRACT_BYTES cap. zip/tar[gz/bz2/xz/zst/lz4/br]/7z/cpio[gz]/ar. Stored zip / uncompressed tar members → zero-copy InputSource::subrange view (no spool). tar/cpio/ar/7z stream the walk over open_seekable (walk_tar; compressed via backends::tar::decode_compressed; 7z via for_each_entries draining preceding solid-block entries) — never reads the whole archive into RAM, matched body streams to spool
@@ -321,8 +321,6 @@ src/
     disk_image/
       mod.rs           — Module wiring (ISO + DMG)
       compose.rs       — compose(): ISO → directory-tree ListingMode; DMG / Raw → InfoMode (no filesystem walker available)
-      detect.rs        — format_from_ext + Raw → Iso upgrade (cheap 6-byte PVD probe at offset 32768)
-      format.rs        — DiskImageFormat enum (Iso/Dmg/Raw) + label
       info.rs          — DiskImageInfo + DiskImageMeta { Iso | Dmg | Raw } + IsoVolumeMeta / IsoDateTime / DmgMeta / DmgPartition / DmgVariant / DmgChecksumKind / RawImageMeta / MbrTable / MbrPartition
       iso_pvd.rs       — Hand-rolled ISO 9660 Primary Volume Descriptor parser + Joliet / El Torito scan + root-extent locator
       iso_listing.rs   — ISO 9660 directory walker → Listing tree (Joliet preferred; depth/entry caps; no Rock Ridge) + lookup_file_range for extract
@@ -336,7 +334,6 @@ src/
     objfile/
       mod.rs           — Module wiring
       compose.rs       — compose(): InfoMode landing view + Sections / Symbols TableMode (no extract path)
-      detect.rs        — is_bare_coff: full COFF-header validation (known machine + no optional header + sane section count + executable flag clear) so bare `.obj` routes here without misclaiming Wavefront 3D `.obj`
       load.rs          — Fat-aware load: object::FileKind probe → universal Mach-O slice select (host arch, else first) → object::File::parse; carries the parsed slice bytes; FatSummary lists every slice
       links.rs         — linked_libraries: per-format dependency walk (ELF DT_NEEDED / Mach-O LC_LOAD_DYLIB family / PE import table) — the unified imports() reports symbols, not the soname list
       info.rs          — ObjectInfo { meta: Option<ObjectMeta>, error } + ObjectMeta (semantic `object` enums: BinaryFormat / Architecture / ObjectKind / Endianness — not pre-formatted) + BuildIdKind + linked libraries

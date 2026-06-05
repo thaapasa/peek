@@ -45,7 +45,7 @@ use crate::input::stream::{ByteStream, ReadSeek};
 use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 
-use super::format::CsvFormat;
+use super::CsvFormat;
 
 /// Seed scan record cap. First 1000 records build initial column widths,
 /// drive the header heuristic, and provide the type-inference sample.

@@ -19,7 +19,7 @@ use crate::input::InputSource;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
 
-use super::format::SpreadsheetFormat;
+use super::SpreadsheetFormat;
 
 pub(crate) struct Workbook {
     sheets: Sheets<Cursor<Bytes>>,

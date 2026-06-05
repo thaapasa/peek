@@ -13,7 +13,6 @@
 
 pub mod compose;
 pub mod extract;
-pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
@@ -24,3 +23,7 @@ pub mod text_renderer;
 pub use info::PdfStats;
 pub(crate) use page_renderer::PdfPageRenderer;
 pub(crate) use text_renderer::PdfTextRenderer;
+
+/// Format enum, re-exported from `peek_detect` at the module root so
+/// reader code keeps a local `crate::types::pdf::PdfFlavor` path.
+pub use peek_detect::types::pdf::PdfFlavor;

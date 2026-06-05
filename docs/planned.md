@@ -4,6 +4,28 @@ Status legend: ☐ planned · ❓ idea / open
 
 For implemented (✅) and partial (◐) features, see [features.md](features.md).
 
+## Detection hardening ☐
+
+The `peek-detect` crate split (see the archived
+[crate-split plan](archived/crate-split-plan.md)) was built to make these tractable: detection is now
+a small, reader-free, fuzzable surface. Full rationale + file/line references live in that plan's
+"Follow-up backlog" section; summary, ordered by value:
+
+- ☐ **Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG, `.csv` holding a zip)
+  routes by name; the only correction (`detect_ignore_name`) fires reactively on render failure, so
+  silent mis-routes never self-correct. Prefer magic when it strongly disagrees — minding the
+  deliberate `.ai`/`.pdf` ambiguity.
+- ☐ **Unify the two detection paths.** File path and in-memory path differ in order *and* UTF-8 rigor;
+  collapse to one core over a `Read`, parity-test both entry points.
+- ☐ **Bound the UTF-8 text/binary scan.** `is_utf8_streaming` reads the whole file to decide
+  text-vs-binary; cap at the first N MB.
+- ☐ **Truncated-head JSON sniff.** Large extensionless/stdin JSON fails to parse on the head and falls
+  through to plain text; use a structural brace-sniff / valid-prefix instead of a full parse.
+- ☐ **Tighten loose heuristics.** YAML `---` prefix over-matches; extension-routed binary types and
+  `.br` aren't magic-verified.
+- ☐ **Fuzz / property-test the pure surface** now that no reader crates are in the way (never-panic,
+  magic-byte corpus round-trips, two-path parity).
+
 ## File Types
 
 ### SQL ◐
@@ -207,9 +229,10 @@ Follow-up to the types-colocation refactor — see
 [archived/refactor-types-colocation-plan.md](archived/refactor-types-colocation-plan.md) for the
 underlying restructuring and the rejected-trait-dispatch rationale.
 
-Once every file type owns its `format.rs`, `detect.rs`, `info.rs`, and `compose.rs`, the central
-dispatch sites (`Registry::compose_modes` match, `input/detect.rs::DETECTORS` list, `info::render`
-match) could collapse into trait-dispatch loops:
+Each file type already owns its detection module (`crates/peek-detect/src/types/<x>.rs`) and its
+reader modules (`info.rs`, `compose.rs`). The central dispatch sites (`Registry::compose_modes`
+match, the `peek-detect` orchestrator's per-type calls, `info::render` match) could collapse into
+trait-dispatch loops:
 
 ```rust
 trait TypeSupport {

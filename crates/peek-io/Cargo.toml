@@ -1,0 +1,29 @@
+[package]
+name = "peek-io"
+description = "peek input layer — InputSource, streaming byte/line sources, single-stream codecs"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+bytes = { workspace = true }
+tempfile = { workspace = true }
+
+# Single-stream decompression codecs (transparent .gz/.bz2/.xz/.zst/.lz4/.br).
+flate2 = { workspace = true }
+bzip2 = { workspace = true }
+liblzma = { workspace = true }
+zstd = { workspace = true }
+lz4_flex = { workspace = true }
+brotli-decompressor = { workspace = true }
+
+# /dev/tty reopen after consuming piped stdin (Unix only)
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+# CONIN$ reopen after consuming piped stdin (Windows only).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }

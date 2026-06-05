@@ -5,7 +5,7 @@
 //! file is larger than the seed window so the rendered info row carries
 //! the qualifier.
 
-use super::format::CsvFormat;
+use super::CsvFormat;
 use super::parse::CellKind;
 
 #[derive(Debug, Clone)]

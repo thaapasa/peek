@@ -9,8 +9,10 @@ How peek is packaged and published. User-facing install: [README.md](../README.m
 bumped or committed locally. Three jobs:
 
 1. **`prepare`** (ubuntu-24.04) — reads the current version from `Cargo.toml`, applies the `bump`
-   level to compute `vX.Y.Z`, fails fast if that tag exists on `origin`. Bumps `Cargo.toml` +
-   the `peek` entry in `Cargo.lock`, commits as `github-actions[bot]` on a fresh
+   level to compute `vX.Y.Z`, fails fast if that tag exists on `origin`. The version is the single
+   workspace version under `[workspace.package]` (the `peek` bin + `peek-io` + `peek-detect` crates
+   all inherit it via `version.workspace = true`). Bumps that one line in `Cargo.toml` + all three
+   crate entries in `Cargo.lock`, commits as `github-actions[bot]` on a fresh
    `release/vX.Y.Z` branch, and force-pushes that branch. Outputs the new version, tag, previous
    tag (for release notes), branch name, and the branch commit SHA.
 2. **`build`** — 5-target matrix, all built from the release-branch SHA:

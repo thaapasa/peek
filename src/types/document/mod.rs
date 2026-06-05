@@ -17,9 +17,7 @@
 
 pub mod ast;
 pub mod compose;
-pub mod detect;
 pub mod docx;
-pub mod format;
 pub mod info;
 pub mod info_render;
 pub mod odt;

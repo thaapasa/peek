@@ -21,6 +21,46 @@ rules: [conventions.md](conventions.md).
    render-preview, hex, info, …) and hand it to one event loop, instead of forking a new interactive
    viewer per type.
 
+## Crate structure
+
+peek is a Cargo workspace: the `peek` **binary** at the repo root, plus leaf **library crates** under
+`crates/`. The crates are layers — each depends only on the ones below it, and Cargo enforces that no
+edge points back up. This turns architectural rules ("detection must not depend on the readers") from
+convention into compile errors.
+
+```
+peek (bin)        readers, viewer, theme, info, extract, CLI — the whole interactive/print app
+  ▲
+peek-detect       file-type detection: FileType + format enums + magic/extension/content
+  │               classification + MIME + transparent decompress-then-redetect. Depends on peek-io.
+  ▲
+peek-io           input foundation: InputSource + streaming byte/line sources + bare codecs +
+                  stdin/tty. Depends on nothing in-tree.
+```
+
+Why these cuts:
+
+- **`peek-io`** is the "stream, don't load" foundation (principle in CLAUDE.md). Everything reads
+  through `InputSource`; isolating it keeps the IO primitives reviewable and reusable, and guarantees
+  they carry no knowledge of file types or rendering.
+- **`peek-detect`** is the layer we most want to review and harden in isolation: a small, mostly
+  dependency-light surface that maps bytes/names to a `FileType`. Because it can't reach the reader
+  crates, `cargo tree -p peek-detect` is the litmus — it must stay free of the heavy reader deps
+  (calamine, rusqlite, pdfium, symphonia, object, image…). The lone heavy detection dep is
+  `x509-parser`, which cert detection uses to content-verify DER certs.
+- The **binary** keeps the reader/viewer layer and reaches the crates through a thin `crate::input`
+  façade (`src/input/mod.rs`) that re-exports them under the historical `crate::input::*` paths, so
+  reader code is insulated from the physical split.
+
+This is expected to keep growing: as the binary accretes cohesive, dependency-heavy subsystems
+(candidates: the theme/styling layer, the image/rasterisation pipeline, the viewer/mode engine), peel
+each into its own crate below the bin once its boundary is clean and its public surface is small.
+Same test each time: a new crate earns its place by **narrowing a dependency edge** and shrinking the
+surface a reader of the layer above must hold in their head — not merely by moving files.
+
+The detailed per-file breakdown of all three crates lives in
+[architecture-map.md](architecture-map.md).
+
 ## Data flow
 
 ```
@@ -42,7 +82,11 @@ detect::detect(source) --> FileType
                       Mode::render_to_pipe(ctx) --> PrintOutput --> stdout
 ```
 
-### InputSource (`input/source.rs`)
+### InputSource (`crates/peek-io/src/source.rs`)
+
+The input layer is its own crate, `peek-io` — the dependency-free foundation everything builds on
+(see [the workspace note in architecture-map.md](architecture-map.md)). The binary reaches it through
+the `crate::input` façade, so the paths below are also reachable as `crate::input::*`.
 
 Decouples "where data comes from" from "how it's displayed". Four variants: `File` (path on
 disk, reads on demand), `Memory { bytes: Bytes, name }` (stdin, small extracted archive
@@ -62,18 +106,20 @@ seeking handle. `HexMode` uses this to read just the visible window per scroll. 
 reader with offset translation. The `TempFile` byte source carries its own `Arc<NamedTempFile>`
 clone so reads outlive any drop of the source.
 
-For line-oriented streaming, `open_line_source() -> LineSource` (in `input/lines.rs`) does one pass
+For line-oriented streaming, `open_line_source() -> LineSource` (in `crates/peek-io/src/lines.rs`) does one pass
 of the source to count newlines and capture sparse byte-offset anchors (every 1024 lines), then
 serves windowed line lookups in O(stride) — `ContentMode` uses this so multi-GB text files never
 materialize. Stdin and file go through the same path: stdin's `Arc<[u8]>` backing makes "streaming"
 a zero-cost slice; file seeks per chunk via `FileByteSource`.
 
-When stdin is consumed (`-` argument or no args + piped stdin), `input/stdin.rs` reopens fd 0 from
-the controlling terminal so the event loop can still read keystrokes. Resolved via `ttyname()` on
-stderr/stdout, not `/dev/tty` directly — macOS kqueue rejects the latter with EINVAL.
+When stdin is consumed (`-` argument or no args + piped stdin), `peek_io::stdin::read_stdin` reads it
+into a `Memory` source and reopens fd 0 from the controlling terminal so the event loop can still
+read keystrokes (resolved via `ttyname()` on stderr/stdout, not `/dev/tty` directly — macOS kqueue
+rejects the latter with EINVAL). The CLI-level "file vs stdin" decision (`build_source`, needs `Args`)
+stays in the binary at `src/input/stdin.rs`.
 
 Stdin detection: magic bytes (images, binary) → content sniffing (leading `{`/`[` → JSON, `<` →
-XML/SVG, `---` → YAML), in `input::detect::detect_bytes()`.
+XML/SVG, `---` → YAML), in `peek-detect`'s `detect_bytes()` (`crates/peek-detect/src/detect.rs`).
 
 ## Key abstractions
 
@@ -441,8 +487,12 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 See [conventions.md → File types](conventions.md#file-types) for the complete owned-files /
 wiring-sites checklist. Quick summary:
 
-1. Add a `FileType` variant in `input/detect.rs` and wire detection. Per-type format and detection
-   helpers live alongside the type under `types/<x>/{format,detect}.rs`.
+1. Add a `FileType` variant in `crates/peek-detect/src/detect.rs` and wire detection. The per-type
+   format enum + extension/MIME/content-sniff helpers live in `crates/peek-detect/src/types/<x>.rs`
+   (the `peek-detect` crate, NOT the reader). Re-export the format enum from the reader module root
+   (`src/types/<x>/mod.rs`: `pub use peek_detect::types::<x>::<X>Format;`) so reader code keeps a
+   local `crate::types::<x>::<X>Format` path. Detection must stay reader-free — that boundary is now
+   enforced by the crate split (see the workspace note in [architecture-map.md](architecture-map.md)).
 2. Create the `types/<x>/` module and build the type's `Mode` impls there. Generic, reusable modes
    — `ContentMode`, `RenderedTextMode`, `PagedImageMode`, `ListingMode` — already live in `viewer/`;
    prefer wrapping one over a bespoke `Mode`. Add a `ModeId` variant if a mode must be toggleable by

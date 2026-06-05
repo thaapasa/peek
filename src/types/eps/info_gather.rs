@@ -5,9 +5,9 @@
 use crate::info::FileExtras;
 use crate::input::InputSource;
 
+use super::PostScriptFormat;
 use super::dos_eps::{self, PreviewKind};
 use super::dsc;
-use super::format::PostScriptFormat;
 use super::info::{EpsInfo, PreviewMeta};
 use super::{gs, postscript_text};
 

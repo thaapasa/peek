@@ -18,9 +18,7 @@
 //! also yields the byte offsets the subrange descend relies on.
 
 pub mod compose;
-pub mod detect;
 pub mod extract;
-pub mod format;
 pub mod info;
 pub mod info_render;
 mod mbox;
@@ -31,3 +29,7 @@ mod renderer;
 mod tests;
 
 pub use info::EmailInfo;
+
+/// Format enum, re-exported from `peek_detect` at the module root so
+/// reader code keeps a local `crate::types::email::EmailFormat` path.
+pub use peek_detect::types::email::EmailFormat;

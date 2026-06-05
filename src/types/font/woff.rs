@@ -257,16 +257,12 @@ mod tests {
         // Rebuilt header must be a TrueType sfnt (flavor 0x00010000).
         assert_eq!(&sfnt[0..4], &[0x00, 0x01, 0x00, 0x00]);
 
-        let woff_info = crate::types::font::info_gather::gather(
-            &sfnt,
-            crate::types::font::format::FontFormat::Woff,
-        );
+        let woff_info =
+            crate::types::font::info_gather::gather(&sfnt, crate::types::font::FontFormat::Woff);
         let ttf = std::fs::read("test-data/fonts/sacramento/Sacramento-Regular.ttf")
             .expect("ttf fixture present");
-        let ttf_info = crate::types::font::info_gather::gather(
-            &ttf,
-            crate::types::font::format::FontFormat::TrueType,
-        );
+        let ttf_info =
+            crate::types::font::info_gather::gather(&ttf, crate::types::font::FontFormat::TrueType);
 
         assert!(
             woff_info.parse_errors.is_empty(),

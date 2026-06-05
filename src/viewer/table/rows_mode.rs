@@ -916,8 +916,8 @@ mod tests {
     use crate::info::RenderOptions;
     use crate::input::{InputSource, detect};
     use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use crate::types::csv::CsvFormat;
     use crate::types::csv::compose::{build_csv_mode, infer_alignments};
-    use crate::types::csv::format::CsvFormat;
     use crate::types::csv::parse::CsvData;
     use crate::viewer::ui::strip_ansi_width;
     use bytes::Bytes;

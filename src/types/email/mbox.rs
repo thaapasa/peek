@@ -1,7 +1,7 @@
 //! Mbox splitting. An mbox file concatenates messages, each preceded by
 //! a `From ` separator line (the "From_" line, distinct from the `From:`
 //! header). The splitter streams the source one line at a time via the
-//! [`ByteStream`](crate::input::ByteStream) `BufRead`, tracking byte
+//! [`ByteStream`](crate::input::stream::ByteStream) `BufRead`, tracking byte
 //! offsets and doing a lightweight Subject/Date header scan inline — it
 //! never holds more than a single line, so even a multi-GB mailbox lists
 //! without loading. Each [`MboxEntry`] points at the message *body*

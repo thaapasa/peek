@@ -4,7 +4,7 @@
 use crate::info::FileExtras;
 use crate::input::InputSource;
 
-use super::format::SpreadsheetFormat;
+use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;
 use super::workbook::Workbook;
 use super::xml_props;

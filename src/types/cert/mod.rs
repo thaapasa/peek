@@ -5,8 +5,6 @@
 //! across all forms is the parsed Info section.
 
 pub mod compose;
-pub mod detect;
-pub mod format;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;

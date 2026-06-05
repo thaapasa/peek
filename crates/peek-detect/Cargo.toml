@@ -1,0 +1,22 @@
+[package]
+name = "peek-detect"
+description = "peek file-type detection — FileType + format enums + magic/extension/content classification"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+peek-io = { workspace = true }
+
+anyhow = { workspace = true }
+bytes = { workspace = true }
+
+# Magic-byte detection + extension→MIME lookup.
+infer = { workspace = true }
+mime_guess = { workspace = true }
+
+# JSON content sniff (notebook / JWK) and DER cert content-verification.
+serde_json = { workspace = true }
+x509-parser = { workspace = true }

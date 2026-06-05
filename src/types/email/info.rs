@@ -3,7 +3,7 @@
 use crate::info::FileExtras;
 use crate::input::InputSource;
 
-use super::format::EmailFormat;
+use super::EmailFormat;
 use super::message::ParsedEmail;
 use super::{mbox, message};
 
