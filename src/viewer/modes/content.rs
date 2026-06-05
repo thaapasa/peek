@@ -7,7 +7,6 @@ use super::content_rendering::{RenderingMode, Showing};
 use super::gutter::Gutter;
 use super::pretty_view::{PrettyView, SyntaxRef};
 use super::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window};
-use crate::input::detect::StructuredFormat;
 use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
 use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
@@ -87,10 +86,12 @@ pub(crate) struct ContentModeConfig {
     pub label: &'static str,
     /// syntect token for raw-mode highlighting. `None` → no highlighting.
     pub syntax_token: Option<String>,
-    /// Structured format to pretty-print as. `None` → no pretty form,
-    /// and `r` (raw/pretty toggle) is inert.
-    pub pretty_target: Option<StructuredFormat>,
-    /// Start in pretty view. Ignored when `pretty_target` is `None`.
+    /// Pre-built pretty-print branch, or `None` → no pretty form and `r`
+    /// (raw/pretty toggle) is inert. Built by the compose hub (which holds
+    /// the structured knowledge) and injected so this shared mode stays
+    /// type-agnostic. See [`PrettyView`].
+    pub pretty: Option<PrettyView>,
+    /// Start in pretty view. Ignored when `pretty` is `None`.
     pub start_pretty: bool,
     /// Start with the line-number gutter visible.
     pub line_numbers: bool,
@@ -101,7 +102,7 @@ impl Default for ContentModeConfig {
         Self {
             label: "Content",
             syntax_token: None,
-            pretty_target: None,
+            pretty: None,
             start_pretty: false,
             line_numbers: false,
         }
@@ -160,14 +161,14 @@ impl ContentMode {
         let highlighter = cfg.syntax_token.as_ref().map(|t| {
             LineStreamHighlighter::new(t.clone(), Rc::clone(&theme_manager), initial_theme)
         });
-        let rendering = match cfg.pretty_target {
-            Some(target) => RenderingMode::Either {
+        let rendering = match cfg.pretty {
+            Some(pretty) => RenderingMode::Either {
                 showing: if cfg.start_pretty {
                     Showing::Pretty
                 } else {
                     Showing::Raw
                 },
-                pretty: PrettyView::new(target),
+                pretty,
             },
             None => RenderingMode::RawOnly,
         };

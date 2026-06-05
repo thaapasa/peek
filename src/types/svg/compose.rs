@@ -3,18 +3,18 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::image::{ImageKind, ImageRenderMode};
 use crate::types::svg::SvgAnimationMode;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
@@ -39,6 +39,14 @@ pub fn compose(
         }
     }
     // Pair the SVG view with its XML source (the only view in `--plain`).
-    modes.push(ctx.text_content_mode(source, &crate::input::detect::FileType::Svg, args)?);
+    modes.push(ctx.text_content_mode(
+        source,
+        &crate::input::detect::FileType::Svg,
+        args,
+        crate::types::structured::pretty_view_for(
+            &crate::input::detect::FileType::Svg,
+            ctx.plain_mode,
+        ),
+    )?);
     Ok(())
 }

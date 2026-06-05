@@ -3,18 +3,18 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected};
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    _args: &Args,
+    _args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: ArchiveFormat,

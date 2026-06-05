@@ -11,17 +11,17 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::types::markdown::MarkdownRenderer;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
@@ -31,7 +31,7 @@ pub fn compose(
             Rc::clone(&ctx.theme_manager),
         )))
     });
-    let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args)?;
+    let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args, None)?;
 
     match (rendered, args.raw) {
         (Some(r), false) => {

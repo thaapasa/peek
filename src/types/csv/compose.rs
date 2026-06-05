@@ -6,19 +6,19 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::csv::CsvFormat;
 use crate::types::csv::parse::{CellKind, CsvData, classify_cell};
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 use crate::viewer::table::rows_mode::{Alignment, RowsTableMode};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: CsvFormat,

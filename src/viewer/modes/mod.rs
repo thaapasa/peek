@@ -37,6 +37,7 @@ pub(crate) use content::{ContentMode, ContentModeConfig};
 pub(crate) use help::HelpMode;
 pub(crate) use hex::HexMode;
 pub(crate) use info::InfoMode;
+pub(crate) use pretty_view::PrettyView;
 pub(crate) use rendered_text::{RenderedTextMode, TextRenderer};
 
 /// Stable identifier for a mode. Used to look up modes in a stack and

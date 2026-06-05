@@ -37,6 +37,10 @@ crates/
                          (RFC 6838) + transparent decompress-then-redetect (resolve_transparent).
                          types/<type>.rs = one module per file type (format enum + pure sniff
                          helpers). Depends on peek-io only — NOT the readers.
+  peek-theme/          — theming leaf: PeekTheme semantic roles + paint helpers; PeekThemeName +
+                         embedded .tmTheme data (themes/); StyleMode + SGR encoders/tokenizer +
+                         ActiveStyle; ThemeManager. Depends on nothing in-tree (parallel to
+                         peek-io). Aliased into the bin as `crate::theme` via `use peek_theme as theme`.
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
@@ -54,9 +58,8 @@ src/
   info/                — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); gather/
                          (per-source collection) + render/ (dynamic trait dispatch, themed
                          section rendering); per-type impls in types/info_impls.rs; time fmt
-  theme/               — PeekTheme semantic roles + paint helpers; PeekThemeName + embedded
-                         .tmTheme data; StyleMode (truecolor/256/16/grayscale/plain); SGR
-                         encoders + tokenizer + ActiveStyle; ThemeManager
+  theme                — alias (`use peek_theme as theme`) for the peek-theme crate above;
+                         keeps the historical `crate::theme::*` paths working
   types/               — Per-file-type modules (each owns reader + info + view-mode; the format
                          enum + detection helpers live in `peek-detect`, re-exported at each
                          module root):
@@ -88,7 +91,7 @@ src/
     ui/                — alternate-screen / status line / term-size; ViewerState (mode stack +
                          extract dispatch + prompt slot); Prompt overlay; ScreenBuffer (diff
                          redraw); Action keybindings; help screen
-themes/                — Embedded .tmTheme files (idea-dark default + vscode variants)
+crates/peek-theme/themes/ — Embedded .tmTheme files (idea-dark default + vscode variants)
 docs/                  — Builder / agent reference (see architecture-map.md for the index)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
 .github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +

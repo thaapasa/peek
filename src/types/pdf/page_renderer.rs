@@ -20,10 +20,9 @@ use std::sync::Arc;
 use anyhow::Result;
 use image::DynamicImage;
 
+use crate::types::image::paged_render::render_image_window;
 use crate::types::image::pipeline::ImageConfig;
-use crate::viewer::paged::{
-    PageRenderer, PagedRender, RenderArgs, image_placeholder, render_image_window,
-};
+use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placeholder};
 
 use super::package::Doc;
 

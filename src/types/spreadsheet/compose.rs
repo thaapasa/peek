@@ -5,11 +5,11 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected, SpreadsheetFormat};
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 use crate::viewer::table::rows_mode::RowsTableMode;
@@ -25,7 +25,7 @@ pub(crate) const SHEET_SUFFIX: &str = ".csv";
 pub fn compose(
     source: &InputSource,
     detected: &Detected,
-    _args: &Args,
+    _args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: SpreadsheetFormat,

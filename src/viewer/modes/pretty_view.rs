@@ -17,7 +17,6 @@ use std::rc::Rc;
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::StructuredFormat;
 use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::highlight_lines;
 
@@ -26,6 +25,11 @@ use crate::viewer::highlight_lines;
 /// raw streamed view takes over, so a multi-GB JSON-shaped log stays
 /// openable.
 pub(crate) const PRETTY_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
+/// Injected whole-document pretty-printer: raw text → re-indented text,
+/// or a parse error whose `Display` becomes a warning. Boxed so the
+/// shared mode carries no specific format / type-module dependency.
+type PrettyPrinter = Box<dyn Fn(&str) -> Result<String>>;
 
 /// Outcome of the one-shot parse.
 enum Parsed {
@@ -45,7 +49,19 @@ pub(crate) struct SyntaxRef<'a> {
 
 /// The lazily-built pretty-print branch. See the module docs.
 pub(crate) struct PrettyView {
-    target: StructuredFormat,
+    /// Whole-document pretty-printer, injected by the caller so this
+    /// shared mode stays ignorant of any specific structured format or
+    /// type module. Returns the re-indented text, or a parse error whose
+    /// `Display` is surfaced as a warning.
+    pretty_print: PrettyPrinter,
+    /// Format display name for the parse-failure warning (e.g. "JSON").
+    format_name: &'static str,
+    /// Whether this branch should be the *default* view (pretty over raw)
+    /// when the user hasn't forced `--raw`. False for lossy formats
+    /// (JSONC / JSON5) that drop content on the pretty round-trip. Set by
+    /// the caller that knows the format, so the foundation never reasons
+    /// about which formats are lossy.
+    starts_default: bool,
     /// `None` until the first parse attempt.
     parsed: Option<Parsed>,
     /// Rendered lines + the `(theme, colour)` they were produced for.
@@ -55,12 +71,23 @@ pub(crate) struct PrettyView {
 }
 
 impl PrettyView {
-    pub(crate) fn new(target: StructuredFormat) -> Self {
+    pub(crate) fn new(
+        pretty_print: impl Fn(&str) -> Result<String> + 'static,
+        format_name: &'static str,
+        starts_default: bool,
+    ) -> Self {
         Self {
-            target,
+            pretty_print: Box::new(pretty_print),
+            format_name,
+            starts_default,
             parsed: None,
             rendered: None,
         }
+    }
+
+    /// Whether to open in pretty view by default (absent `--raw`).
+    pub(crate) fn starts_default(&self) -> bool {
+        self.starts_default
     }
 
     /// Parse the document on the first call; a no-op afterwards.
@@ -96,20 +123,18 @@ impl PrettyView {
                 return;
             }
         };
-        self.parsed = Some(
-            match crate::types::structured::pretty::pretty_print(&raw, self.target) {
-                Ok(text) => Parsed::Text(text),
-                Err(e) => {
-                    let format_name = crate::types::structured::info::format_name(self.target);
-                    warnings.push(format!(
-                        "{format_name} parse failed ({e}); showing raw source"
-                    ));
-                    Parsed::Failed {
-                        cap_exceeded: false,
-                    }
+        self.parsed = Some(match (self.pretty_print)(&raw) {
+            Ok(text) => Parsed::Text(text),
+            Err(e) => {
+                warnings.push(format!(
+                    "{} parse failed ({e}); showing raw source",
+                    self.format_name
+                ));
+                Parsed::Failed {
+                    cap_exceeded: false,
                 }
-            },
-        );
+            }
+        });
     }
 
     /// Whether the parse succeeded — the pretty view is renderable.
@@ -188,10 +213,26 @@ mod tests {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))
     }
 
+    /// Stand-in pretty-printer: splits on commas (so valid input spreads
+    /// onto multiple lines) and fails on anything containing "not json".
+    /// Exercises `PrettyView`'s state machine without a real parser.
+    fn pv() -> PrettyView {
+        PrettyView::new(
+            |raw: &str| {
+                if raw.contains("not json") {
+                    anyhow::bail!("parse error");
+                }
+                Ok(raw.replace(',', ",\n"))
+            },
+            "JSON",
+            true,
+        )
+    }
+
     #[test]
     fn parses_then_renders_plain_split() {
         let src = source(r#"{"b":2,"a":1}"#);
-        let mut pv = PrettyView::new(StructuredFormat::Json);
+        let mut pv = pv();
         let mut warnings = Vec::new();
         pv.ensure_parsed(&src, src.read_bytes().unwrap().len() as u64, &mut warnings);
 
@@ -206,7 +247,7 @@ mod tests {
     #[test]
     fn size_cap_refuses_and_warns() {
         let src = source("{}");
-        let mut pv = PrettyView::new(StructuredFormat::Json);
+        let mut pv = pv();
         let mut warnings = Vec::new();
         // Lie about the size to trip the cap without a huge fixture.
         pv.ensure_parsed(&src, PRETTY_MAX_BYTES + 1, &mut warnings);
@@ -220,7 +261,7 @@ mod tests {
     #[test]
     fn parse_error_fails_without_cap_flag() {
         let src = source("not json at all");
-        let mut pv = PrettyView::new(StructuredFormat::Json);
+        let mut pv = pv();
         let mut warnings = Vec::new();
         pv.ensure_parsed(&src, src.read_bytes().unwrap().len() as u64, &mut warnings);
 

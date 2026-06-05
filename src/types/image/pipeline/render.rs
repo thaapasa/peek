@@ -8,21 +8,9 @@ use super::glyph_atlas::{
 use super::{Background, FitMode, ImageConfig, ImageMode};
 use crate::input::InputSource;
 use crate::theme::StyleMode;
-
-/// Terminal dimensions in characters. The image renderer is fed sizes
-/// from `RenderCtx` rather than querying the terminal itself, so the
-/// same code path serves both interactive (live terminal size) and
-/// pipe (`$COLUMNS or 80`, unbounded rows) rendering.
-#[derive(Debug, Clone, Copy)]
-pub struct TermSize {
-    pub cols: u32,
-    pub rows: u32,
-    /// Terminal cell aspect (height ÷ width). Conventional fonts hit
-    /// ~2.0; tighter programming fonts run ~1.6–2.4. Auto-detected
-    /// from the running terminal at startup, with a `--cell-aspect`
-    /// CLI override.
-    pub cell_h_over_w: f64,
-}
+// TermSize moved to the foundation with the rest of the render vocab;
+// re-exported so engine-internal `render::TermSize` paths are unchanged.
+pub use crate::viewer::image_render::TermSize;
 
 /// Compute the rendered grid size `(cols, rows)` for an image. Aspect
 /// ratio is always preserved; the `fit` argument decides which axis

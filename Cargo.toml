@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [workspace]
-members = ["crates/peek-io", "crates/peek-detect"]
+members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme"]
 
 # Shared package metadata for the bin + every member crate (`field.workspace
 # = true` to inherit). One version line for the whole workspace — the release
@@ -37,6 +37,7 @@ homepage = "https://github.com/thaapasa/peek"
 # reviewed/hardened in isolation and can't depend on the reader/viewer layer.
 peek-io = { path = "crates/peek-io" }
 peek-detect = { path = "crates/peek-detect" }
+peek-theme = { path = "crates/peek-theme" }
 
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
@@ -215,6 +216,7 @@ id3 = "1"
 [dependencies]
 peek-io = { workspace = true }
 peek-detect = { workspace = true }
+peek-theme = { workspace = true }
 clap = { workspace = true }
 crossterm = { workspace = true }
 syntect = { workspace = true }

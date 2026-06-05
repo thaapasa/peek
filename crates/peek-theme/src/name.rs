@@ -7,10 +7,10 @@ use syntect::highlighting::{Theme, ThemeSet};
 // Embedded theme data
 // ---------------------------------------------------------------------------
 
-const THEME_IDEA_DARK: &str = include_str!("../../themes/idea-dark.tmTheme");
-const THEME_VSCODE_DARK_MODERN: &str = include_str!("../../themes/vscode-dark-modern.tmTheme");
-const THEME_VSCODE_DARK_2026: &str = include_str!("../../themes/vscode-dark-2026.tmTheme");
-const THEME_VSCODE_MONOKAI: &str = include_str!("../../themes/vscode-monokai.tmTheme");
+const THEME_IDEA_DARK: &str = include_str!("../themes/idea-dark.tmTheme");
+const THEME_VSCODE_DARK_MODERN: &str = include_str!("../themes/vscode-dark-modern.tmTheme");
+const THEME_VSCODE_DARK_2026: &str = include_str!("../themes/vscode-dark-2026.tmTheme");
+const THEME_VSCODE_MONOKAI: &str = include_str!("../themes/vscode-monokai.tmTheme");
 
 /// Supported built-in themes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

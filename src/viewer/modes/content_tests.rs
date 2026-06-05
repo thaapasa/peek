@@ -2,13 +2,20 @@
 //! file but is loaded as a child module of `content` via `#[path]` so
 //! it can reach private fields.
 
-use super::super::pretty_view::PRETTY_MAX_BYTES;
+use super::super::pretty_view::{PRETTY_MAX_BYTES, PrettyView};
 use super::*;
 use crate::info::RenderOptions;
 use crate::input::detect;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use bytes::Bytes;
 use std::path::PathBuf;
+
+/// A pretty branch standing in for the structured pretty-printer: splits
+/// on commas so valid input spreads onto multiple lines. Keeps these mode
+/// tests independent of `types::structured`.
+fn json_pretty() -> PrettyView {
+    PrettyView::new(|raw: &str| Ok(raw.replace(',', ",\n")), "JSON", true)
+}
 
 fn fixture(name: &str) -> InputSource {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -134,7 +141,7 @@ fn pretty_cap_falls_back_to_raw_with_warning() {
         PeekThemeName::IdeaDark,
         ContentModeConfig {
             syntax_token: Some("JSON".to_string()),
-            pretty_target: Some(StructuredFormat::Json),
+            pretty: Some(json_pretty()),
             start_pretty: true,
             ..Default::default()
         },
@@ -364,7 +371,7 @@ fn toggle_raw_source_clears_search() {
         PeekThemeName::IdeaDark,
         ContentModeConfig {
             syntax_token: Some("JSON".to_string()),
-            pretty_target: Some(StructuredFormat::Json),
+            pretty: Some(json_pretty()),
             start_pretty: false, // start raw
             ..Default::default()
         },

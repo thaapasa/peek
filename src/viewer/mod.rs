@@ -2,12 +2,11 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
+use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{
-    AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode,
+    AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode, PrettyView,
 };
 use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
@@ -15,6 +14,7 @@ use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 pub mod cell_size;
 pub mod hex;
 pub mod highlight;
+pub(crate) mod image_render;
 pub mod interactive;
 pub(crate) mod listing;
 pub(crate) mod modes;
@@ -37,17 +37,22 @@ pub struct Registry {
     plain_mode: bool,
     theme_name: PeekThemeName,
     peek_theme: PeekTheme,
+    /// CLI-derived compose options, read by `compose_modes` and the
+    /// per-type compose fns. Held here so neither the dispatcher nor the
+    /// builder closures have to thread `&Args` (clap) through.
+    opts: ComposeOpts,
 }
 
 impl Registry {
-    pub fn new(args: &Args) -> Result<Self> {
-        let theme = Rc::new(ThemeManager::new(args.theme, args.color));
+    pub fn new(opts: &ComposeOpts) -> Result<Self> {
+        let theme = Rc::new(ThemeManager::new(opts.theme, opts.color));
         let peek_theme = theme.peek_theme().clone();
         Ok(Self {
             theme_manager: theme,
-            plain_mode: args.plain,
-            theme_name: args.theme,
+            plain_mode: opts.plain,
+            theme_name: opts.theme,
             peek_theme,
+            opts: opts.clone(),
         })
     }
 
@@ -73,9 +78,9 @@ impl Registry {
         &self,
         source: &InputSource,
         detected: &Detected,
-        args: &Args,
     ) -> Result<Vec<Box<dyn Mode>>> {
         let file_type = &detected.file_type;
+        let args = &self.opts;
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
         let ctx = self.compose_ctx();
 
@@ -87,7 +92,12 @@ impl Registry {
         // composing — they degrade through `StyleMode::Plain` on their own.
         match file_type {
             FileType::SourceCode { .. } | FileType::Structured(_) => {
-                modes.push(ctx.text_content_mode(source, file_type, args)?);
+                modes.push(ctx.text_content_mode(
+                    source,
+                    file_type,
+                    args,
+                    crate::types::structured::pretty_view_for(file_type, ctx.plain_mode),
+                )?);
             }
             FileType::Html => {
                 crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
@@ -224,6 +234,29 @@ pub struct ComposeCtx {
     pub plain_mode: bool,
 }
 
+/// CLI-derived configuration the compose path reads — the subset of
+/// `cli::Args` that mode construction needs, as plain values. The bin
+/// builds it (`Args::compose_opts`) and threads `&ComposeOpts` through
+/// `Registry::new` / `compose_modes` / every `types::<x>::compose`, so
+/// the reader/compose layer never depends on clap. (clap stays in the
+/// bin; this is what keeps it out of `peek-types`, where the per-type
+/// `compose` functions live.)
+#[derive(Clone)]
+pub struct ComposeOpts {
+    pub theme: PeekThemeName,
+    pub color: StyleMode,
+    pub plain: bool,
+    pub raw: bool,
+    pub line_numbers: bool,
+    pub no_svg_anim: bool,
+    pub language: Option<String>,
+    pub width: u32,
+    pub margin: u32,
+    pub image_mode: String,
+    pub background: String,
+    pub edge_density: f32,
+}
+
 impl ComposeCtx {
     /// Build a `ContentMode` for text-based file types: source code,
     /// structured (lazy pretty-print), plain text, or SVG XML.
@@ -232,23 +265,19 @@ impl ComposeCtx {
     /// count lines and capture sparse anchors — instead of reading the
     /// whole file into memory. Pretty-print is deferred to the first
     /// time pretty view is rendered, capped at `PRETTY_MAX_BYTES`.
+    /// `pretty` is the pre-built pretty-print branch (or `None`), supplied
+    /// by the caller via `types::structured::pretty_view_for`. That branch
+    /// carries its own default-view intent (`starts_default`), so this
+    /// method does no format reasoning — it names no `types::*` reader
+    /// module and never matches on which formats pretty-print.
     pub fn text_content_mode(
         &self,
         source: &InputSource,
         file_type: &FileType,
-        args: &Args,
+        args: &ComposeOpts,
+        pretty: Option<PrettyView>,
     ) -> Result<Box<dyn Mode>> {
         let line_source = source.open_line_source()?;
-
-        let pretty_target = if !self.plain_mode {
-            match file_type {
-                FileType::Structured(fmt) => Some(*fmt),
-                FileType::Svg => Some(StructuredFormat::Xml),
-                _ => None,
-            }
-        } else {
-            None
-        };
 
         let syntax_token = if self.plain_mode {
             None
@@ -256,13 +285,10 @@ impl ComposeCtx {
             syntax_token_for(args.language.as_deref(), source, file_type)
         };
 
-        // Pretty-print is the default whenever it's available *and* the
-        // round-trip is lossless. `--raw` always flips structured/SVG views
-        // back to the raw source. JSONC and JSON5 have lossy pretty paths
-        // (comments dropped, JSON5 syntax collapsed) so they default to raw —
-        // `r` still toggles for users who want the strict-JSON view.
-        let start_pretty =
-            pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
+        // Pretty is the default view whenever the branch opts into it
+        // (available + lossless round-trip — the reader decides) and the
+        // user hasn't forced `--raw`. `r` still toggles either way.
+        let start_pretty = pretty.as_ref().is_some_and(PrettyView::starts_default) && !args.raw;
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
@@ -279,7 +305,7 @@ impl ComposeCtx {
             ContentModeConfig {
                 label,
                 syntax_token,
-                pretty_target,
+                pretty,
                 start_pretty,
                 line_numbers: args.line_numbers,
             },
@@ -290,8 +316,8 @@ impl ComposeCtx {
 /// Build the image-render configuration from CLI args. A free function,
 /// not a `ComposeCtx` method — it reads only `args`, nothing the
 /// `ComposeCtx` bundle carries.
-pub fn image_config(args: &Args) -> crate::types::image::ImageConfig {
-    use crate::types::image::{Background, FitMode, ImageConfig, ImageMode};
+pub fn image_config(args: &ComposeOpts) -> crate::viewer::image_render::ImageConfig {
+    use crate::viewer::image_render::{Background, FitMode, ImageConfig, ImageMode};
     ImageConfig {
         mode: ImageMode::from_str(&args.image_mode),
         width: args.width,
@@ -361,10 +387,4 @@ pub(crate) fn append_universal_modes(
     }
     modes.push(Box::new(HelpMode::new(help_sections)));
     Ok(())
-}
-
-/// True when pretty-printing the format drops information from the source
-/// (comments / JSON5 features / etc.), so raw should be the default view.
-fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
-    matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5)
 }

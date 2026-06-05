@@ -11,18 +11,18 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, StructuredFormat};
 use crate::types::notebook::{NotebookRenderer, listing};
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
@@ -32,8 +32,15 @@ pub fn compose(
             Rc::clone(&ctx.theme_manager),
         )))
     });
-    let source_mode =
-        ctx.text_content_mode(source, &FileType::Structured(StructuredFormat::Json), args)?;
+    let source_mode = ctx.text_content_mode(
+        source,
+        &FileType::Structured(StructuredFormat::Json),
+        args,
+        crate::types::structured::pretty_view_for(
+            &FileType::Structured(StructuredFormat::Json),
+            ctx.plain_mode,
+        ),
+    )?;
 
     match (rendered, args.raw) {
         (Some(r), false) => {

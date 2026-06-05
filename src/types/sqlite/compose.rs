@@ -6,7 +6,6 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::sqlite::SqliteFormat;
@@ -14,6 +13,7 @@ use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::table_mode::build as build_table_mode;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 
@@ -37,7 +37,7 @@ pub(crate) const KIND_TRIGGERS: &str = "triggers";
 pub fn compose(
     source: &InputSource,
     detected: &Detected,
-    _args: &Args,
+    _args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: SqliteFormat,

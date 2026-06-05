@@ -37,8 +37,8 @@ pub fn cell_aspect_h_over_w() -> f64 {
 /// construction point for the aspect field, so a placeholder (e.g. a
 /// stray `1.0`) can't drift into it across the several call sites that
 /// build a `TermSize`.
-pub fn term_size(cols: u32, rows: u32) -> crate::types::image::pipeline::render::TermSize {
-    crate::types::image::pipeline::render::TermSize {
+pub fn term_size(cols: u32, rows: u32) -> crate::viewer::image_render::TermSize {
+    crate::viewer::image_render::TermSize {
         cols,
         rows,
         cell_h_over_w: cell_aspect_h_over_w(),

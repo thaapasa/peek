@@ -9,16 +9,16 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{CertFormat, Detected, FileType, StructuredFormat};
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: CertFormat,
@@ -29,11 +29,9 @@ pub fn compose(
         // JWK is JSON: reuse the structured content mode so the source view
         // pretty-prints + highlights exactly like a standalone `.json`.
         CertFormat::Jwk => {
-            modes.push(ctx.text_content_mode(
-                source,
-                &FileType::Structured(StructuredFormat::Json),
-                args,
-            )?);
+            let ft = FileType::Structured(StructuredFormat::Json);
+            let pretty = crate::types::structured::pretty_view_for(&ft, ctx.plain_mode);
+            modes.push(ctx.text_content_mode(source, &ft, args, pretty)?);
         }
         CertFormat::Pem => {
             let line_source = source.open_line_source()?;

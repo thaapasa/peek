@@ -39,6 +39,14 @@ crates/
       sqlite.rs        — SqliteFormat enum (single Sqlite variant today; SQLCipher / WAL flavours would slot in); format_from_ext (`.sqlite` / `.sqlite3` / `.db` / `.db3`) + format_from_mime (`application/vnd.sqlite3` / `application/x-sqlite3`)
       structured.rs    — StructuredFormat enum (JSON / JSONC / JSON5 / JSONL / YAML / TOML / XML); format_from_ext. (JSON / SVG / HTML / XML / YAML content sniff for unnamed sources lives in the orchestrator's detect_bytes)
       vobject.rs       — VObjectFormat { ICal, VCard } + label (iCalendar / vCard); format_from_ext (ics/ical/ifb → ICal, vcf/vcard → VCard) + sniff_text (leading `BEGIN:VCALENDAR` / `BEGIN:VCARD` marker, BOM/blank-line tolerant)
+  peek-theme/          — theming leaf crate. Depends on nothing in-tree (parallel to peek-io). Aliased into the bin as `crate::theme` via `use peek_theme as theme` (façade like `src/input/`).
+    src/lib.rs         — re-exports ThemeManager / PeekThemeName / load_embedded_theme / PeekTheme / lerp_color / ActiveStyle / Attr / Sgr / StyleMode / display_width / scan
+    src/name.rs        — PeekThemeName + embedded .tmTheme data (include_str! over ../themes/) + load_embedded_theme + ValueEnum impl
+    src/sgr.rs         — low-level SGR escape mechanics (color encoders, Attr, ActiveStyle, display_width/scan tokenizer)
+    src/style_mode.rs  — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion + ValueEnum impl
+    src/peek_theme.rs  — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
+    src/manager.rs     — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
+    themes/            — Embedded .tmTheme files (idea-dark default + vscode-dark-modern / vscode-dark-2026 / vscode-monokai)
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
@@ -65,13 +73,7 @@ src/
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
-  theme/
-    mod.rs             — re-exports PeekThemeName, StyleMode, PeekTheme, ThemeManager, helpers
-    name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme
-    sgr.rs             — Low-level SGR mechanics: color/attr encoders, RESET_* consts, palette quantization, escape tokenizer (scan/Sgr) + classify + ActiveStyle (fg/bg tracked across a styled stream)
-    style_mode.rs      — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
-    peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
-    manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
+  theme                — alias for the `peek-theme` crate (see crates/ above); `use peek_theme as theme` keeps `crate::theme::*` paths working
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
     info_impls.rs      — Central registry: one impl_info_extras! row per type binding its stats struct to the `info::InfoExtras` trait (replaces the old FileExtras enum + render match). Only `types → info` edge is the trait itself
@@ -162,7 +164,7 @@ src/
       xml_props.rs     — read core document properties from the zip: docProps/core.xml (OOXML) or meta.xml (ODS), parsed by one Dublin-Core reader keyed on prefixed element names covering both vocabularies → DocumentMetadata
       info.rs / info_gather.rs / info_render.rs — SpreadsheetInfo { format, sheets, metadata, error }; gather lists sheets + reads metadata; render shows Sheets count / Names / core props
     image/
-      mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode, ImageConfig
+      mod.rs           — Module wiring; re-exports ImageRenderMode, AnimationMode + the foundation `image_render` geometry modules (scroll/zoom/zoom_pan) at the old paths
       compose.rs       — compose(): push AnimationMode for animated GIF/WebP, ImageRenderMode for static raster
       info.rs          — ImageStats + AnimationStats + LoopCount (animation summary)
       info_gather.rs   — gather_extras (dimensions, color, ICC, HDR) + IMAGE_HEAD_SCAN/read_head
@@ -172,15 +174,13 @@ src/
       xmp.rs           — XMP packet scrape (Dublin Core / xmp tags)
       animation_stats.rs — GIF/WebP animation stats (frames, duration, loop)
       view.rs          — ImageView: shared image-grid scroll + zoom + cycleable config for every Mode that scrolls through a PreparedImage (ImageRenderMode + AnimationMode + SvgAnimationMode + SpecimenMode). Holds (config, scroll_x, scroll_y, zoom); exposes view_bounds (effective grid - viewport per axis), render_prepared (clamp pan + zoom dispatch + render), pipe_snapshot/restore (force-Contain + zoom=1 wrapper for `--print`), scroll, handle_config_cycle (b/m/f keys + pan reset on fit change), handle_zoom (+/-/0/1-9 with viewport-centre anchor), status_segments
-      zoom.rs          — ZoomLevel: multiplicative zoom factor on top of fit-mode base grid. 1.25× per +/- step, 1×..16× clamp, preset() for digit keys, label() for status bar
       anim_frame.rs    — AnimFrameState: shared frame-playback state (current / playing / last_advance) for animated image Modes (AnimationMode + SvgAnimationMode). play_pause / step / tick / next_tick / status_segment / extract_target
-      scroll.rs        — Shared scroll-action handler for image-grid modes (ImageRenderMode + AnimationMode + SvgAnimationMode): arrows / PgUp / PgDn / Home / End → (scroll_x, scroll_y) deltas with Bounds clamping
       mode.rs          — ImageRenderMode: static raster + rasterized SVG view; embeds ImageView, owns InputSource + single-slot CachedFrame
       animation_mode.rs — AnimationMode: GIF/WebP playback (next_tick / tick driven); embeds ImageView + AnimFrameState, owns decoded frame list (no per-frame cache — frames change every tick)
+      paged_render.rs  — render_image_window: shared single-bitmap decode→fit→window-crop→ASCII (zoom fast path + zoomed path) every PageRenderer (PDF/CBZ/EPS) defers to. Lives here (beside the engine it drives) not in foundation `viewer::paged`; takes PagedRender/RenderArgs back from the foundation. zoom/scroll/zoom_pan geometry + the render-config vocab (ImageMode/Background/FitMode/ImageConfig/TermSize) now live in `viewer::image_render`; re-exported at the old `image::{zoom,scroll,zoom_pan}` / `pipeline::*` paths
       pipeline/        — Rasterization → ASCII-art rendering core
-        mod.rs         — Module wiring + Background / FitMode / ImageConfig
-        image_mode.rs  — ImageMode enum (full/block/geo/ascii/contour palette selection)
-        render.rs      — Image → glyph-matched ASCII art with true color
+        mod.rs         — Module wiring; re-exports the render-config vocab from `viewer::image_render`
+        render.rs      — Image → glyph-matched ASCII art with true color (TermSize re-exported from `viewer::image_render`)
         animate.rs     — GIF/WebP frame decoding + frame counting + render_frame
         glyph_atlas.rs — Precomputed glyph bitmaps + atlas indexing
         glyph_atlas_data.rs — Generated companion to `glyph_atlas.rs`: the raw bitmap data table (kept in its own file so the API stays in `glyph_atlas.rs` and the codegen blob doesn't drown it)
@@ -352,13 +352,19 @@ src/
       bytecode_mode.rs — BytecodeMode: caller-scrolled `javap -c` view; themed lines cached per (width, style, theme) with per-method header anchors; `n`/`p` jump methods (YesScrollTo), `/` searches
       tables.rs        — build(): Fields / Methods as shared `viewer::table::Table` data
   viewer/
-    mod.rs             — Registry, compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), free `image_config`. Re-exports highlight_lines / LineStreamHighlighter from `highlight`
+    mod.rs             — Registry (holds ComposeOpts), compose_modes (single-file dispatch table delegating to `types::<x>::compose::compose`), ComposeCtx (theme manager / name / plain mode — the `text_content_mode` bundle), ComposeOpts (the 12-field clap-free view of `cli::Args` the compose path reads; built by `Args::compose_opts()` in the bin), free `image_config`. Re-exports highlight_lines / LineStreamHighlighter from `highlight`
     highlight.rs       — Syntect highlighting: highlight_lines (whole-text), LineStreamHighlighter (forward-only streaming feeder used by ContentMode), syntax_token_for (FileType + filename → syntect syntax token, honors `--language`), fallback_syntax_token (extensions syntect doesn't natively support)
     cell_size.rs       — Terminal cell aspect-ratio detection: cell_aspect_h_over_w reads cell pixel dims from TIOCGWINSZ (cached on first call), falls back to 1:2 when the terminal can't report; set_override for an explicit user override. Used by the image pipeline to preserve source aspect across fonts
+    image_render/      — Foundation render vocabulary shared by PagedImageMode + cell_size + the types/image engine (moved out of types/image so the shared mode doesn't depend on the reader). The only types/image → here edge is re-exporting these back.
+      config.rs        — Background / FitMode / ImageConfig / TermSize value types (render config + terminal dims)
+      image_mode.rs    — ImageMode enum (full/block/geo/ascii/contour palette selection)
+      zoom.rs          — ZoomLevel: multiplicative zoom factor on top of fit-mode base grid (1.25× per step, 1×..16× clamp, preset/label)
+      scroll.rs        — Shared scroll-action handler for image-grid modes: arrows / PgUp / PgDn / Home / End → (scroll_x, scroll_y) deltas with Bounds clamping
+      zoom_pan.rs      — ViewBounds + ZoomPanState: zoom/pan state machine (anchor-preserving zoom, pan clamping) over ScrollBounds + ZoomLevel
     interactive.rs     — Unified event loop driving a Vec<Box<dyn Mode>> stack; routes raw keys to active prompt overlay when one is open
     search.rs          — Text-search primitives: smart_case_sensitive, find_matches (exact substring), overlay_matches (paint match backgrounds onto a styled line), SearchState (scan/step/line_overlay/status_segment — shared by every searchable mode), reveal_h_scroll (minimal-pan offset to bring a match on screen) + overlay_window
     wrap_scroll.rs     — WrapScroll: wrap-aware scroll position (logical line / visual sub-row / horizontal pan) + LineView enum (Raw(&LineSource) | Pretty(&[String])). ContentMode's scroll geometry — step / page / clamp / bottom-find over wrapped lines — lives here, branch-agnostic via LineView
-    paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / pipe_rows. Image-config cycling: cycle_image_config handler + the CYCLE_BACKGROUND/IMAGE_MODE/FIT_HELP rows it dispatches, pinned together by a unit test so help and handling can't drift (shared by paged / image / animation / svg-anim / epub modes). Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); ::new defaults the tab label to "Read", ::with_label overrides it (EPS uses "Preview"/"Render"). PDF / CBZ / EPS each supply a small PageRenderer impl. `render_image_window(img, config, args)` is the shared decode→fit→window-crop→ASCII (zoom fast path + zoomed path) every single-bitmap renderer defers to; `image_placeholder` the shared failure line. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
+    paged.rs           — Shared paged-render mechanism: PageCacheKey / CachedRender / render_cached / step_paged / pipe_rows. Image-config cycling: cycle_image_config handler + the CYCLE_BACKGROUND/IMAGE_MODE/FIT_HELP rows it dispatches, pinned together by a unit test so help and handling can't drift (shared by paged / image / animation / svg-anim / epub modes). Plus PagedImageMode<R> — generic one-page-at-a-time image Mode over the PageRenderer trait (page_count + render_page); ::new defaults the tab label to "Read", ::with_label overrides it (EPS uses "Preview"/"Render"). PDF / CBZ / EPS each supply a small PageRenderer impl. The shared decode→fit→window-crop→ASCII (`render_image_window`) lives in `types::image::paged_render` beside the engine it drives — only the type-side renderers call it; `image_placeholder` here is the shared failure line. Mirrors RenderedTextMode<R>. EPUB stays separate (adds chapter search + cover render)
     listing/
       mod.rs           — Re-exports: Entry, EntryMtime, FlatEntry, Stats, ListingMode, from_flat_paths, time_from_epoch_secs
       entry.rs         — Entry / EntryKind { File | Dir { children } } / EntryMtime + epoch helper
@@ -393,11 +399,6 @@ src/
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
-themes/
-  idea-dark.tmTheme           — JetBrains IDEA default Dark theme (default)
-  vscode-dark-modern.tmTheme  — VS Code Dark Modern theme
-  vscode-dark-2026.tmTheme    — VS Code Dark 2026 theme
-  vscode-monokai.tmTheme      — VS Code Monokai theme
 docs/                  — Builder / agent reference (architecture, conventions, planning)
   architecture.md      — Design, data flow, key abstractions, extension guide
   architecture-map.md  — This file: full file/module breakdown
