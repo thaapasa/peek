@@ -51,8 +51,9 @@ src/
                          path sanitiser; stdout-stream or file write
   output/              — PrintOutput (write-once stdout for --print / pipes / --info);
                          CLI help and version screens
-  info/                — FileInfo + FileExtras (per-type stat wrappers); gather/ (per-source
-                         collection) + render/ (themed terminal section rendering); time fmt
+  info/                — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); gather/
+                         (per-source collection) + render/ (dynamic trait dispatch, themed
+                         section rendering); per-type impls in types/info_impls.rs; time fmt
   theme/               — PeekTheme semantic roles + paint helpers; PeekThemeName + embedded
                          .tmTheme data; StyleMode (truecolor/256/16/grayscale/plain); SGR
                          encoders + tokenizer + ActiveStyle; ThemeManager

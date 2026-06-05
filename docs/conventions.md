@@ -61,11 +61,14 @@ only **wires** the type into the central dispatchers.
 Owned by the type module:
 
 - `mod.rs` — module declarations + brief overview comment. No logic.
-- `info_gather.rs` — `gather_extras(...)` returns the type's `FileExtras::<Variant>`
-  payload. Single entry point called from `info::gather` dispatch. (Tiny types may
-  combine gather + render into one `info.rs`.)
-- `info_render.rs` — `render_section(...)` takes the matching `FileExtras::<Variant>`
-  and theme, returns themed lines. Single entry point called from `info::render`.
+- `info_gather.rs` — `gather_extras(...)` returns the type's metadata as
+  `Extras` (`Box<dyn InfoExtras>`), built with `Box::new(<Stats>)`. Single entry
+  point called from `info::gather` dispatch. (Tiny types may combine gather +
+  render into one `info.rs`.)
+- `info_render.rs` — `render_section(lines, &<Stats>, theme)` appends themed
+  lines for the type's own stats struct. Bound to the `InfoExtras` trait by a
+  single `impl_info_extras!` row in `src/types/info_impls.rs`; `info::render`
+  invokes it dynamically — there is no per-type render match.
 - `reader.rs` / `backends/` (optional) — format-specific parsing, streaming where
   possible (see CLAUDE.md "Stream, don't load").
 - `mode.rs` / `animation_mode.rs` (optional) — `Mode` impl(s), wired into
@@ -75,17 +78,19 @@ Wired in (centralized — never duplicated inside `types/<name>/`):
 
 - `crates/peek-detect/src/detect.rs` — the `FileType::<Variant>` + orchestrator wiring;
   `crates/peek-detect/src/types/<name>.rs` — the format enum + per-type sniff helpers.
-- `info/mod.rs` — `FileType` + `FileExtras` enum variants.
 - `info/gather/mod.rs` — dispatches `FileType` → `types::<name>::info_gather::gather_extras`.
-- `info/render/mod.rs` — dispatches `FileExtras` → `types::<name>::info_render::render_section`.
+- `src/types/info_impls.rs` — one `impl_info_extras!(<Stats>, ...::render_section)`
+  row binding the stats struct to the `InfoExtras` trait. Replaces the old
+  `FileExtras` enum variant + render match; `info::render` dispatches dynamically.
 - `viewer/mod.rs::compose_modes` — dispatches `FileType` → mode stack.
 
-Adding a new type: create the directory, add the four enum/dispatch wiring entries
-above, fill in gather + render. Mode is optional (text-like types reuse `ContentMode`).
+Adding a new type: create the directory, add the wiring entries above (detection,
+the gather arm, one `info_impls.rs` row), fill in gather + render. Mode is optional
+(text-like types reuse `ContentMode`).
 
-Anti-pattern: a `match file_type` inside `types/<name>/` or anywhere besides the four
-wiring sites. If logic needs to branch on the active file type, the dispatch belongs
-at a wiring site and the per-arm body belongs in the corresponding type module.
+Anti-pattern: a `match file_type` inside `types/<name>/` or anywhere besides the
+wiring sites above. If logic needs to branch on the active file type, the dispatch
+belongs at a wiring site and the per-arm body belongs in the corresponding type module.
 
 ## Module organization
 

@@ -8,14 +8,14 @@ use ::image::ImageDecoder;
 use bytes::Bytes;
 
 use super::{animation_stats, exif, xmp};
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 use crate::types::image::info::{AnimationStats, ImageStats};
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
 pub(crate) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
 
-pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> FileExtras {
+pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> Extras {
     let Some(decoder) = image_decoder_for(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
@@ -63,7 +63,7 @@ fn image_extras_from_decoder(
     mut decoder: Box<dyn ImageDecoder>,
     head: &[u8],
     animation: Option<AnimationStats>,
-) -> FileExtras {
+) -> Extras {
     let (width, height) = decoder.dimensions();
     let ct = decoder.color_type();
     let color_type = format!("{ct:?}");
@@ -79,7 +79,7 @@ fn image_extras_from_decoder(
     let exif = exif::exif_fields_from_bytes(head);
     let xmp = xmp::xmp_fields_from_bytes(head);
 
-    FileExtras::Image(ImageStats {
+    Box::new(ImageStats {
         width,
         height,
         color_type,

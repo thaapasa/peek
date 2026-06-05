@@ -2,6 +2,7 @@ use std::fs;
 use std::time::SystemTime;
 
 use crate::input::mime::MimeInfo;
+use crate::theme::PeekTheme;
 
 mod gather;
 mod render;
@@ -11,37 +12,6 @@ pub use gather::gather;
 pub use render::{RenderOptions, render, thousands_sep};
 pub(crate) use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;
-
-// Re-exports of the per-type info shapes so the central `FileExtras`
-// enum below can stay one-line-per-variant. Each type owns its own
-// struct under `types/<x>/info.rs`.
-pub use crate::types::archive::info::ArchiveStats;
-pub use crate::types::audio::AudioStats;
-pub use crate::types::binary::info::BinaryInfo;
-pub use crate::types::cert::info::CertInfo;
-pub use crate::types::classfile::info::ClassfileInfo;
-pub use crate::types::comic::ComicStats;
-pub use crate::types::css::info::CssInfo;
-pub use crate::types::csv::CsvStats;
-pub use crate::types::directory::info::DirectoryStats;
-pub use crate::types::disk_image::info::DiskImageInfo;
-pub use crate::types::document::DocumentStats;
-pub use crate::types::ebook::EbookStats;
-pub use crate::types::email::EmailInfo;
-pub use crate::types::eps::EpsInfo;
-pub use crate::types::font::info::FontInfo;
-pub use crate::types::image::info::ImageStats;
-pub use crate::types::markdown::info::MarkdownInfo;
-pub use crate::types::notebook::NotebookInfo;
-pub use crate::types::objfile::info::ObjectInfo;
-pub use crate::types::pdf::PdfStats;
-pub use crate::types::spreadsheet::SpreadsheetInfo;
-pub use crate::types::sql::info::SqlInfo;
-pub use crate::types::sqlite::info::SqliteInfo;
-pub use crate::types::structured::info::StructuredInfo;
-pub use crate::types::svg::info::SvgStats;
-pub use crate::types::text::info::TextStats;
-pub use crate::types::vobject::VObjectInfo;
 
 /// Collected file metadata.
 pub struct FileInfo {
@@ -63,7 +33,7 @@ pub struct FileInfo {
     /// (`.gz` / `.bz2` / `.xz` / `.zst` / `.lz4`). Drives a
     /// Compression row in the File section.
     pub compression: Option<CompressionInfo>,
-    pub extras: FileExtras,
+    pub extras: Extras,
 }
 
 /// Snapshot of a transparent decompression for the info view.
@@ -82,36 +52,54 @@ pub struct CompressionInfo {
     pub error: Option<String>,
 }
 
-/// Type-specific metadata. Each variant wraps a single struct owned by
-/// the corresponding `types/<x>/info.rs` module.
-pub enum FileExtras {
-    Image(ImageStats),
-    Text(TextStats),
-    Svg(SvgStats),
-    Structured(StructuredInfo),
-    Markdown(MarkdownInfo),
-    Notebook(NotebookInfo),
-    Email(EmailInfo),
-    Sql(SqlInfo),
-    Css(CssInfo),
-    Binary(BinaryInfo),
-    ObjectFile(ObjectInfo),
-    Classfile(ClassfileInfo),
-    Archive(ArchiveStats),
-    DiskImage(DiskImageInfo),
-    Directory(DirectoryStats),
-    Ebook(EbookStats),
-    Comic(ComicStats),
-    Document(DocumentStats),
-    Pdf(PdfStats),
-    Eps(EpsInfo),
-    Spreadsheet(SpreadsheetInfo),
-    Audio(AudioStats),
-    Csv(CsvStats),
-    Sqlite(SqliteInfo),
-    Cert(CertInfo),
-    Font(FontInfo),
-    VObject(VObjectInfo),
+/// Type-specific metadata, rendered into the Info view's lower section.
+///
+/// Each file type owns one stats struct under `types/<x>/info.rs` and
+/// implements this trait there (normally via [`impl_info_extras!`]).
+/// `gather` returns a boxed `dyn InfoExtras` so the info layer never has
+/// to name the concrete per-type structs — the dispatch is dynamic, the
+/// same shape as the [`crate::viewer::modes::Mode`] trait. This keeps the
+/// per-type modules a leaf: they depend on this trait, not the reverse.
+///
+/// The `Any` supertrait exists only so the tests can downcast a gathered
+/// payload back to its concrete struct (asserting parsed fields directly
+/// is more precise than asserting rendered strings). Production never
+/// downcasts — the bound is test-driven, not part of the domain.
+pub trait InfoExtras: std::any::Any {
+    /// Append this type's Info-view section to `lines`.
+    fn render_section(&self, lines: &mut Vec<String>, theme: &PeekTheme);
+}
+
+/// Boxed per-type info payload carried by [`FileInfo::extras`].
+pub type Extras = Box<dyn InfoExtras>;
+
+/// Recover the concrete stats struct from an [`Extras`] payload, panicking
+/// if it isn't a `T`. Upcasts the trait object to `dyn Any` (stable trait
+/// upcasting, Rust ≥ 1.86). Test-only — see the `Any` note on [`InfoExtras`].
+#[cfg(test)]
+pub(crate) fn downcast_extras<T: 'static>(extras: &Extras) -> &T {
+    (extras.as_ref() as &dyn std::any::Any)
+        .downcast_ref::<T>()
+        .expect("unexpected extras type")
+}
+
+/// Implement [`InfoExtras`] for a stats struct by delegating its section
+/// render to a free function with the signature
+/// `render_section(&mut Vec<String>, &Self, &PeekTheme)` — the `$render`
+/// path. The struct and the function need not share a module.
+#[macro_export]
+macro_rules! impl_info_extras {
+    ($ty:ty, $render:path) => {
+        impl $crate::info::InfoExtras for $ty {
+            fn render_section(
+                &self,
+                lines: &mut ::std::vec::Vec<::std::string::String>,
+                theme: &$crate::theme::PeekTheme,
+            ) {
+                $render(lines, self, theme);
+            }
+        }
+    };
 }
 
 #[cfg(unix)]

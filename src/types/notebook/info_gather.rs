@@ -1,6 +1,6 @@
 //! Build [`NotebookInfo`] from a notebook source for the Info section.
 
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
 use super::info::NotebookInfo;
@@ -11,8 +11,8 @@ use super::model::Notebook;
 /// that justifies structured pretty-print applies here. Returns `None`
 /// when the bytes don't parse as a notebook, so the gather falls back to
 /// the generic binary/text path.
-pub fn gather_extras(source: &InputSource) -> Option<FileExtras> {
+pub fn gather_extras(source: &InputSource) -> Option<Extras> {
     let text = source.read_text().ok()?;
     let nb = Notebook::parse(&text)?;
-    Some(FileExtras::Notebook(NotebookInfo::from_notebook(&nb)))
+    Some(Box::new(NotebookInfo::from_notebook(&nb)))
 }

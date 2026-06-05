@@ -1,6 +1,6 @@
 use syntect::highlighting::Color;
 
-use super::{FileExtras, FileInfo};
+use super::FileInfo;
 use crate::theme::{PeekTheme, lerp_color};
 
 mod file;
@@ -22,7 +22,7 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
     let mut lines = Vec::new();
 
     file::render_section(&mut lines, info, theme, opts.utc);
-    render_extras(&mut lines, &info.extras, theme);
+    info.extras.render_section(&mut lines, theme);
 
     if !info.warnings.is_empty() {
         lines.push(String::new());
@@ -33,92 +33,6 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
     }
 
     lines
-}
-
-fn render_extras(lines: &mut Vec<String>, extras: &FileExtras, theme: &PeekTheme) {
-    match extras {
-        FileExtras::Image(stats) => {
-            crate::types::image::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Text(stats) => {
-            crate::types::text::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Svg(stats) => {
-            crate::types::svg::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Structured(info) => {
-            crate::types::structured::info::render_section(lines, info, theme);
-        }
-        FileExtras::Markdown(info) => {
-            crate::types::markdown::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Notebook(info) => {
-            crate::types::notebook::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Email(info) => {
-            crate::types::email::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Sql(info) => {
-            crate::types::sql::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Css(info) => {
-            crate::types::css::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Binary(info) => {
-            crate::types::binary::info::render_section(lines, info, theme);
-        }
-        FileExtras::ObjectFile(info) => {
-            crate::types::objfile::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Classfile(info) => {
-            crate::types::classfile::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Archive(stats) => {
-            crate::types::archive::info::render_section(lines, stats, theme);
-        }
-        FileExtras::DiskImage(info) => {
-            crate::types::disk_image::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Ebook(stats) => {
-            crate::types::ebook::epub::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Comic(stats) => {
-            crate::types::comic::cbz::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Document(stats) => {
-            crate::types::document::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Pdf(stats) => {
-            crate::types::pdf::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Eps(info) => {
-            crate::types::eps::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Spreadsheet(info) => {
-            crate::types::spreadsheet::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Audio(stats) => {
-            crate::types::audio::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Csv(stats) => {
-            crate::types::csv::info_render::render_section(lines, stats, theme);
-        }
-        FileExtras::Sqlite(info) => {
-            crate::types::sqlite::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Cert(info) => {
-            crate::types::cert::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::Font(info) => {
-            crate::types::font::info_render::render_section(lines, info, theme);
-        }
-        FileExtras::VObject(info) => {
-            crate::types::vobject::info::render_section(lines, info, theme);
-        }
-        FileExtras::Directory(stats) => {
-            crate::types::directory::info::render_section(lines, stats, theme);
-        }
-    }
 }
 
 pub(crate) fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) {

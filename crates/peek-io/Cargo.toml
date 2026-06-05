@@ -3,6 +3,7 @@ name = "peek-io"
 description = "peek input layer — InputSource, streaming byte/line sources, single-stream codecs"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

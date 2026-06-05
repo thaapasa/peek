@@ -7,11 +7,11 @@ use object::Object;
 
 use super::info::{BuildIdKind, ObjectInfo, ObjectMeta};
 use super::load;
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
-pub fn gather_extras(source: &InputSource) -> FileExtras {
-    FileExtras::ObjectFile(gather(source))
+pub fn gather_extras(source: &InputSource) -> Extras {
+    Box::new(gather(source))
 }
 
 fn gather(source: &InputSource) -> ObjectInfo {

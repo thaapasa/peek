@@ -4,7 +4,7 @@
 //! additionally records the root element name and any namespaces
 //! declared on the root.
 
-use crate::info::{FileExtras, paint_count, push_field, push_section_header};
+use crate::info::{Extras, paint_count, push_field, push_section_header};
 use crate::input::detect::StructuredFormat;
 use crate::theme::PeekTheme;
 
@@ -43,7 +43,7 @@ pub fn format_name(fmt: StructuredFormat) -> &'static str {
     }
 }
 
-pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
+pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> Extras {
     let format_name = format_name(fmt);
     let stats = match std::str::from_utf8(bytes) {
         Ok(s) => match fmt {
@@ -57,7 +57,7 @@ pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> FileExtras {
         },
         Err(_) => None,
     };
-    FileExtras::Structured(StructuredInfo { format_name, stats })
+    Box::new(StructuredInfo { format_name, stats })
 }
 
 pub fn render_section(lines: &mut Vec<String>, info: &StructuredInfo, theme: &PeekTheme) {

@@ -2,16 +2,16 @@
 //! Substring-based extraction — quick_xml would be stricter than necessary
 //! for what amounts to "is the script tag here".
 
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::types::image::pipeline::svg_anim::{self, ParseOutcome};
 use crate::types::svg::info::{SvgAnimationStats, SvgStats};
 use crate::types::text::info::TextStats;
 
-pub fn gather_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
+pub fn gather_extras(text: TextStats, bytes: &[u8]) -> Extras {
     let s = match std::str::from_utf8(bytes) {
         Ok(s) => s,
         Err(_) => {
-            return FileExtras::Svg(SvgStats {
+            return Box::new(SvgStats {
                 text,
                 view_box: None,
                 declared_width: None,
@@ -52,7 +52,7 @@ pub fn gather_extras(text: TextStats, bytes: &[u8]) -> FileExtras {
         ParseOutcome::NotAnimated => (None, None),
     };
 
-    FileExtras::Svg(SvgStats {
+    Box::new(SvgStats {
         text,
         view_box,
         declared_width,

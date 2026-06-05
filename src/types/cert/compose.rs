@@ -3,7 +3,7 @@
 //! (via the shared structured content mode); raw DER is binary and has no
 //! text source — Info + the universal hex tail carry it. The rich decode
 //! lives in the Info aux mode (appended by `Registry::compose_modes`,
-//! populated from `FileExtras::Cert`) for every container.
+//! populated from the cert `CertInfo` extras) for every container.
 
 use std::rc::Rc;
 

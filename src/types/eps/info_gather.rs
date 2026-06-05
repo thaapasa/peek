@@ -2,7 +2,7 @@
 //! embedded-preview descriptor (binary DOS-EPS only), and Ghostscript
 //! availability.
 
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
 use super::PostScriptFormat;
@@ -11,11 +11,11 @@ use super::dsc;
 use super::info::{EpsInfo, PreviewMeta};
 use super::{gs, postscript_text};
 
-pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> FileExtras {
+pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> Extras {
     let bytes = match source.read_bytes() {
         Ok(b) => b,
         Err(_) => {
-            return FileExtras::Eps(EpsInfo {
+            return Box::new(EpsInfo {
                 format,
                 dsc: dsc::DscInfo::default(),
                 preview: None,
@@ -48,7 +48,7 @@ pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> FileExtr
     let ps = postscript_text(&bytes, header.as_ref());
     let dsc = dsc::parse(&ps);
 
-    FileExtras::Eps(EpsInfo {
+    Box::new(EpsInfo {
         format,
         dsc,
         preview,

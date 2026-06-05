@@ -6,7 +6,7 @@
 use bytes::Bytes;
 
 use super::{dmg_plist, dmg_trailer, iso_pvd, mbr, mish};
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 use crate::input::detect::DiskImageFormat;
 use crate::types::disk_image::info::{
@@ -18,7 +18,7 @@ use crate::types::disk_image::info::{
 /// record + terminator with comfortable headroom.
 const ISO_DESCRIPTOR_READ_BYTES: usize = 8 * 2048;
 
-pub fn gather_extras(source: &InputSource, fmt: DiskImageFormat) -> FileExtras {
+pub fn gather_extras(source: &InputSource, fmt: DiskImageFormat) -> Extras {
     let format_name = fmt.label();
     match fmt {
         DiskImageFormat::Iso => gather_iso(source, format_name),
@@ -27,7 +27,7 @@ pub fn gather_extras(source: &InputSource, fmt: DiskImageFormat) -> FileExtras {
     }
 }
 
-fn gather_raw(source: &InputSource, format_name: &'static str) -> FileExtras {
+fn gather_raw(source: &InputSource, format_name: &'static str) -> Extras {
     // Read just one boot sector (512 bytes) — that's enough for an
     // MBR partition table. Anything bigger would be needed only by
     // a GPT walker, which isn't implemented here.
@@ -36,22 +36,22 @@ fn gather_raw(source: &InputSource, format_name: &'static str) -> FileExtras {
         .ok()
         .and_then(|bs| bs.read_range(0, mbr::BOOT_SECTOR_BYTES).ok())
         .and_then(|buf| mbr::parse(&buf));
-    FileExtras::DiskImage(DiskImageInfo {
+    Box::new(DiskImageInfo {
         format_name,
         meta: Some(DiskImageMeta::Raw(RawImageMeta { mbr })),
         error: None,
     })
 }
 
-fn gather_iso(source: &InputSource, format_name: &'static str) -> FileExtras {
+fn gather_iso(source: &InputSource, format_name: &'static str) -> Extras {
     match read_iso_descriptors(source) {
         Ok(buf) => match iso_pvd::parse(&buf) {
-            Some(iso) => FileExtras::DiskImage(DiskImageInfo {
+            Some(iso) => Box::new(DiskImageInfo {
                 format_name,
                 meta: Some(DiskImageMeta::Iso(iso)),
                 error: None,
             }),
-            None => FileExtras::DiskImage(DiskImageInfo {
+            None => Box::new(DiskImageInfo {
                 format_name,
                 meta: None,
                 error: Some(
@@ -59,7 +59,7 @@ fn gather_iso(source: &InputSource, format_name: &'static str) -> FileExtras {
                 ),
             }),
         },
-        Err(e) => FileExtras::DiskImage(DiskImageInfo {
+        Err(e) => Box::new(DiskImageInfo {
             format_name,
             meta: None,
             error: Some(format!("{e:#}")),
@@ -67,7 +67,7 @@ fn gather_iso(source: &InputSource, format_name: &'static str) -> FileExtras {
     }
 }
 
-fn gather_dmg(source: &InputSource, format_name: &'static str) -> FileExtras {
+fn gather_dmg(source: &InputSource, format_name: &'static str) -> Extras {
     match read_dmg_trailer(source) {
         Ok(buf) => match dmg_trailer::parse(&buf) {
             Some(mut dmg) => {
@@ -76,19 +76,19 @@ fn gather_dmg(source: &InputSource, format_name: &'static str) -> FileExtras {
                 if dmg.plist_present {
                     dmg.partitions = read_dmg_partitions(source, &dmg).unwrap_or_default();
                 }
-                FileExtras::DiskImage(DiskImageInfo {
+                Box::new(DiskImageInfo {
                     format_name,
                     meta: Some(DiskImageMeta::Dmg(dmg)),
                     error: None,
                 })
             }
-            None => FileExtras::DiskImage(DiskImageInfo {
+            None => Box::new(DiskImageInfo {
                 format_name,
                 meta: None,
                 error: Some("not a UDIF disk image (koly trailer signature missing)".into()),
             }),
         },
-        Err(e) => FileExtras::DiskImage(DiskImageInfo {
+        Err(e) => Box::new(DiskImageInfo {
             format_name,
             meta: None,
             error: Some(format!("{e:#}")),
@@ -317,10 +317,9 @@ mod tests {
         file.extend_from_slice(&koly(plist_offset, plist.len() as u64, 2089));
 
         let source = InputSource::memory(file, "synthetic.dmg");
-        let FileExtras::DiskImage(info) = gather_extras(&source, DiskImageFormat::Dmg) else {
-            panic!("expected DiskImage extras");
-        };
-        let Some(DiskImageMeta::Dmg(dmg)) = info.meta else {
+        let extras = gather_extras(&source, DiskImageFormat::Dmg);
+        let info = crate::info::downcast_extras::<DiskImageInfo>(&extras);
+        let Some(DiskImageMeta::Dmg(dmg)) = &info.meta else {
             panic!("expected Dmg meta, error = {:?}", info.error);
         };
 

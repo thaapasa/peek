@@ -3,7 +3,7 @@
 //! Surfaces the at-a-glance metadata the plan calls for: event / contact
 //! counts, the calendar's date range, and the format version.
 
-use crate::info::{FileExtras, paint_count, push_field, push_section_header};
+use crate::info::{Extras, paint_count, push_field, push_section_header};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 
@@ -31,7 +31,7 @@ pub enum Detail {
 
 /// Collect the Info sidecar. Returns `None` when the bytes don't parse as
 /// the claimed format (gather falls back to text/binary).
-pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<FileExtras> {
+pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<Extras> {
     if let Ok(bs) = source.open_byte_source()
         && bs.len() > SUMMARY_BYTE_LIMIT
     {
@@ -43,7 +43,7 @@ pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<FileExt
         VObjectFormat::ICal => Detail::Calendar(calendar::summarize(&text)?),
         VObjectFormat::VCard => Detail::Contact(contact::summarize(&text)?),
     };
-    Some(FileExtras::VObject(VObjectInfo {
+    Some(Box::new(VObjectInfo {
         format: fmt,
         detail,
     }))

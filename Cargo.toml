@@ -3,6 +3,7 @@ name = "peek"
 description = "Modern terminal file viewer — preview any file, any format"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -17,6 +18,10 @@ members = ["crates/peek-io", "crates/peek-detect"]
 [workspace.package]
 version = "0.2.12"
 edition = "2024"
+# Honest floor: the tree already calls stdlib items stabilized in 1.87
+# (lines.rs, csv/parse.rs, font, glyph_atlas const ctx). The Info-view
+# trait upcasting only needs 1.86, so it sits below this and moves nothing.
+rust-version = "1.87"
 authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/thaapasa/peek"

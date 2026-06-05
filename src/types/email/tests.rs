@@ -148,9 +148,7 @@ fn duplicate_attachment_filenames_stay_distinct() {
 fn gather_eml_info() {
     let source = InputSource::memory(EML.to_vec(), "sample.eml");
     let extras = info::gather_extras(&source, EmailFormat::Eml).expect("gather");
-    let crate::info::FileExtras::Email(i) = extras else {
-        panic!("expected Email extras");
-    };
+    let i = crate::info::downcast_extras::<info::EmailInfo>(&extras);
     assert_eq!(i.message_count, None);
     assert_eq!(i.attachment_count, 1);
     assert_eq!(i.subject.as_deref(), Some("Project Peek — sample message"));
@@ -187,8 +185,6 @@ fn mbox_message_frame_has_full_view_stack() {
 fn gather_mbox_info() {
     let source = InputSource::memory(MBOX.to_vec(), "sample.mbox");
     let extras = info::gather_extras(&source, EmailFormat::Mbox).expect("gather");
-    let crate::info::FileExtras::Email(i) = extras else {
-        panic!("expected Email extras");
-    };
+    let i = crate::info::downcast_extras::<info::EmailInfo>(&extras);
     assert_eq!(i.message_count, Some(3));
 }

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use crate::info::{FileExtras, push_field, push_section_header, thousands_sep};
+use crate::info::{Extras, push_field, push_section_header, thousands_sep};
 use crate::theme::PeekTheme;
 
 use super::read::{DirEntryKind, read_dir_entries};
@@ -13,7 +13,7 @@ pub struct DirectoryStats {
     pub dir_count: usize,
 }
 
-pub fn gather_extras(path: &Path) -> FileExtras {
+pub fn gather_extras(path: &Path) -> Extras {
     let entries = read_dir_entries(path).unwrap_or_default();
     let dir_count = entries
         .iter()
@@ -23,7 +23,7 @@ pub fn gather_extras(path: &Path) -> FileExtras {
         .iter()
         .filter(|e| e.kind == DirEntryKind::File)
         .count();
-    FileExtras::Directory(DirectoryStats {
+    Box::new(DirectoryStats {
         entry_count: entries.len(),
         file_count,
         dir_count,

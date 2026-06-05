@@ -46,9 +46,19 @@ arm + extensions arm), `viewer/mod.rs` `compose_modes`, `extract/extract.rs`,
 2. **Format sub-enums break a 1:1 type→impl map.** `Archive(fmt)`,
    `Document(fmt)`, `Audio(fmt)`, `Cert(fmt)` dispatch on the inner
    format too; a uniform per-type trait fits these awkwardly.
-3. **`render` dispatches on `FileExtras`, not `FileType`** — a different
-   axis. Folding it in needs `gather` to return a boxed trait object
-   instead of the `FileExtras` enum, losing that enum's exhaustiveness.
+3. **`render` dispatched on `FileExtras`, not `FileType`** — a different
+   axis. ~~Folding it in needs `gather` to return a boxed trait object
+   instead of the `FileExtras` enum, losing that enum's exhaustiveness.~~
+   **Superseded 2026-06-05.** This axis *was* converted: `gather` now
+   returns `Extras` (`Box<dyn InfoExtras>`) and `info::render` dispatches
+   through the trait, per-type impls collected in `types/info_impls.rs`.
+   Exhaustiveness was *not* lost — `render_section` is a *required* trait
+   method, so a type with no impl fails to compile (the same guarantee
+   the enum gave; contra point 4's "silent no-op" worry, which applies to
+   *defaulted* methods, not this one). Done to break the `info → types`
+   cycle that blocks hoisting `types/` into its own crate. The other axes
+   (detect, compose, extract, the `gather` `FileType` hub) still decline
+   the registry for the reasons in 1–2 and 4.
 4. **The explicit form's assets outweigh the typing cost.** The
    non-exhaustive `match` in `compose`/`extract`/`gather` is
    compiler-enforced completeness — the `extract.rs` arm was *forced* by
@@ -65,12 +75,12 @@ today the compiler blocks that on `compose`/`extract`/`gather`, and a
 missing `mime`/`render` arm surfaces as a visible `?` / absent Info
 section, not a crash.
 
-**On the cited "drift" — not a defect.** `info/render` has no
-`Compressed` arm because it keys on `FileExtras`, and
-`Compressed → gather → binary::gather_extras → FileExtras::Binary`,
-which render *does* handle. `Compressed` is a transparent-resolve
-pseudo-type that degrades to Binary by design; the dispatchers
-enumerating different `FileType` sets is correct, not inconsistent.
+**On the cited "drift" — not a defect.** `info/render` needs no
+`Compressed` case because `Compressed → gather → binary::gather_extras`
+produces a `BinaryInfo` payload, which renders through its `InfoExtras`
+impl like any binary. `Compressed` is a transparent-resolve pseudo-type
+that degrades to Binary by design; the dispatchers enumerating different
+`FileType` sets is correct, not inconsistent.
 
 ### M12. `--plain` mutates `args.color` — wontfix, kept as analysis record
 

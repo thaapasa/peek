@@ -4,6 +4,10 @@
 //! theme, viewer event loop) live elsewhere; type-specific code lives
 //! here.
 
+/// `InfoExtras` trait impls wiring each type's stats struct to its
+/// `render_section`. Replaces the old central `FileExtras` enum.
+mod info_impls;
+
 pub mod archive;
 pub mod audio;
 pub mod binary;

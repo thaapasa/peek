@@ -9,15 +9,15 @@
 //! * `svg`       — SVG files (image + text dual nature)
 //! * `binary`    — fallback labelling for unrecognised binary content
 //!
-//! All submodules return [`FileExtras`] payloads. This module only chooses
-//! which one to call.
+//! All submodules return [`Extras`] payloads (a boxed `dyn InfoExtras`).
+//! This module only chooses which one to call.
 
 use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
 
-use super::{CompressionInfo, FileExtras, FileInfo, format_permissions_from_meta};
+use super::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
 use crate::input::InputSource;
 use crate::input::detect::{
     CertFormat, ComicFormat, CsvFormat, DecompressionContext, Detected, DocumentFormat,
@@ -56,7 +56,7 @@ fn syntax_of(file_type: &FileType) -> Option<&str> {
 /// Try the language-specific sidecar parse for a SourceCode file. Returns
 /// `None` if `file_type` isn't a recognised flavour, the source is too big,
 /// or the read fails.
-fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<FileExtras> {
+fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<Extras> {
     let syntax = syntax_of(file_type)?;
     let is_sql = is_sql_syntax(Some(syntax));
     let is_css = is_css_syntax(Some(syntax));
@@ -74,13 +74,13 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
 
     if is_sql {
         let stats = crate::types::sql::info_gather::gather(&text);
-        Some(FileExtras::Sql(crate::types::sql::info::SqlInfo {
+        Some(Box::new(crate::types::sql::info::SqlInfo {
             text: text_stats,
             stats,
         }))
     } else {
         let stats = crate::types::css::info_gather::gather(&text);
-        Some(FileExtras::Css(crate::types::css::info::CssInfo {
+        Some(Box::new(crate::types::css::info::CssInfo {
             text: text_stats,
             stats,
         }))
@@ -90,7 +90,7 @@ fn gather_code_extras(source: &InputSource, file_type: &FileType) -> Option<File
 /// Markdown sidecar parse. Reads the file once, runs both the generic
 /// text stats and the markdown-specific scanner. Capped at
 /// `LANG_STATS_BYTE_LIMIT` — over the cap the binary fallback applies.
-fn gather_markdown_extras(source: &InputSource) -> Option<FileExtras> {
+fn gather_markdown_extras(source: &InputSource) -> Option<Extras> {
     let bs = source.open_byte_source().ok()?;
     if bs.len() > LANG_STATS_BYTE_LIMIT {
         return None;
@@ -98,12 +98,10 @@ fn gather_markdown_extras(source: &InputSource) -> Option<FileExtras> {
     let text_stats = gather_text_stats(source)?;
     let text = source.read_text().ok()?;
     let stats = crate::types::markdown::info_gather::gather(&text);
-    Some(FileExtras::Markdown(
-        crate::types::markdown::info::MarkdownInfo {
-            text: text_stats,
-            stats,
-        },
-    ))
+    Some(Box::new(crate::types::markdown::info::MarkdownInfo {
+        text: text_stats,
+        stats,
+    }))
 }
 
 /// Gather metadata for the given input source and detection result.
@@ -221,52 +219,48 @@ fn collect_warnings(name: &str, detected: &Detected) -> Vec<String> {
     warnings
 }
 
-/// Gather the per-type `FileExtras` payload for an already-detected file.
+/// Gather the per-type [`Extras`] payload for an already-detected file.
 ///
 /// Every file type goes through `&InputSource` — `InputSource::File` reads
 /// on demand, so a real file and a virtual (Memory / FileRange) source share
 /// the same arms with no duplicated dispatch table. `Directory` is the lone
 /// arm needing a real path, and it only ever arrives via a `File` source.
-fn gather_extras(
-    source: &InputSource,
-    file_type: &FileType,
-    magic_mime: Option<&str>,
-) -> FileExtras {
+fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<&str>) -> Extras {
     match file_type {
         FileType::SourceCode { .. } => {
             if let Some(extras) = gather_code_extras(source, file_type) {
                 return extras;
             }
             match gather_text_stats(source) {
-                Some(stats) => FileExtras::Text(stats),
+                Some(stats) => Box::new(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             }
         }
         FileType::Markdown => match gather_markdown_extras(source) {
             Some(extras) => extras,
             None => match gather_text_stats(source) {
-                Some(stats) => FileExtras::Text(stats),
+                Some(stats) => Box::new(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             },
         },
         FileType::Notebook => match crate::types::notebook::info_gather::gather_extras(source) {
             Some(extras) => extras,
             None => match gather_text_stats(source) {
-                Some(stats) => FileExtras::Text(stats),
+                Some(stats) => Box::new(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             },
         },
         FileType::Email(fmt) => match crate::types::email::info::gather_extras(source, *fmt) {
             Some(extras) => extras,
             None => match gather_text_stats(source) {
-                Some(stats) => FileExtras::Text(stats),
+                Some(stats) => Box::new(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             },
         },
         FileType::VObject(fmt) => match crate::types::vobject::info::gather_extras(source, *fmt) {
             Some(extras) => extras,
             None => match gather_text_stats(source) {
-                Some(stats) => FileExtras::Text(stats),
+                Some(stats) => Box::new(stats),
                 None => crate::types::binary::info::gather_extras(magic_mime),
             },
         },
@@ -278,7 +272,7 @@ fn gather_extras(
         },
         FileType::Structured(fmt) => match source.read_bytes() {
             Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
+            Err(_) => Box::new(crate::types::structured::info::StructuredInfo {
                 format_name: crate::types::structured::info::format_name(*fmt),
                 stats: None,
             }),
@@ -288,7 +282,7 @@ fn gather_extras(
                 crate::input::detect::StructuredFormat::Xml,
                 &bytes,
             ),
-            Err(_) => FileExtras::Structured(crate::types::structured::info::StructuredInfo {
+            Err(_) => Box::new(crate::types::structured::info::StructuredInfo {
                 format_name: "HTML",
                 stats: None,
             }),
@@ -336,9 +330,9 @@ fn gather_extras(
     }
 }
 
-fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
+fn csv_gather(source: &InputSource, fmt: CsvFormat) -> Extras {
     match crate::types::csv::parse::CsvData::open(source, fmt) {
-        Ok(data) => FileExtras::Csv(crate::types::csv::info_gather::gather(&data, fmt)),
+        Ok(data) => Box::new(crate::types::csv::info_gather::gather(&data, fmt)),
         Err(_) => crate::types::binary::info::gather_extras(None),
     }
 }
@@ -349,7 +343,7 @@ fn csv_gather(source: &InputSource, fmt: CsvFormat) -> FileExtras {
 /// raw bytes and decodes by structure. Capped at `LANG_STATS_BYTE_LIMIT`:
 /// a multi-GB file claiming either format would otherwise pull the whole
 /// blob into memory.
-fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) -> FileExtras {
+fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) -> Extras {
     if let Ok(bs) = source.open_byte_source()
         && bs.len() > LANG_STATS_BYTE_LIMIT
     {
@@ -357,7 +351,7 @@ fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) 
     }
     if fmt == CertFormat::Der {
         return match source.read_bytes() {
-            Ok(der) => FileExtras::Cert(crate::types::cert::info_gather::gather_der(&der)),
+            Ok(der) => Box::new(crate::types::cert::info_gather::gather_der(&der)),
             Err(_) => crate::types::binary::info::gather_extras(magic_mime),
         };
     }
@@ -367,7 +361,7 @@ fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) 
     let Ok(text) = source.read_text() else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    FileExtras::Cert(match fmt {
+    Box::new(match fmt {
         CertFormat::Jwk => crate::types::cert::info_gather::gather_jwk(&text, text_stats),
         _ => crate::types::cert::info_gather::gather(&text, text_stats),
     })
@@ -379,7 +373,7 @@ fn cert_gather(source: &InputSource, fmt: CertFormat, magic_mime: Option<&str>) 
 /// without putting an absurd buffer at the mercy of a hostile input.
 const FONT_BYTE_LIMIT: u64 = 256 * 1024 * 1024;
 
-fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) -> FileExtras {
+fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) -> Extras {
     if let Ok(bs) = source.open_byte_source()
         && bs.len() > FONT_BYTE_LIMIT
     {
@@ -393,5 +387,5 @@ fn font_gather(source: &InputSource, fmt: FontFormat, magic_mime: Option<&str>) 
     let Ok(sfnt) = crate::types::font::sfnt::decode(&bytes, fmt) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    FileExtras::Font(crate::types::font::info_gather::gather(&sfnt, fmt))
+    Box::new(crate::types::font::info_gather::gather(&sfnt, fmt))
 }

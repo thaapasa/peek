@@ -10,7 +10,7 @@ use rusqlite::Connection;
 use super::catalog;
 use super::info::{SqliteInfo, SqliteStats};
 use super::reader::SqliteReader;
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
 /// Cap on the number of biggest tables surfaced in the Info section.
@@ -18,8 +18,8 @@ use crate::input::InputSource;
 /// browsing the whole schema.
 const TOP_TABLES_CAP: usize = 5;
 
-pub fn gather_extras(source: &InputSource) -> FileExtras {
-    FileExtras::Sqlite(gather(source))
+pub fn gather_extras(source: &InputSource) -> Extras {
+    Box::new(gather(source))
 }
 
 fn gather(source: &InputSource) -> SqliteInfo {

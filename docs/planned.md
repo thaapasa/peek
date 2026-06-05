@@ -230,9 +230,11 @@ Follow-up to the types-colocation refactor — see
 underlying restructuring and the rejected-trait-dispatch rationale.
 
 Each file type already owns its detection module (`crates/peek-detect/src/types/<x>.rs`) and its
-reader modules (`info.rs`, `compose.rs`). The central dispatch sites (`Registry::compose_modes`
-match, the `peek-detect` orchestrator's per-type calls, `info::render` match) could collapse into
-trait-dispatch loops:
+reader modules (`info.rs`, `compose.rs`). The **info-render axis already collapsed** into trait
+dispatch (2026-06-05): `info::render` calls `InfoExtras::render_section` with per-type impls in
+`types/info_impls.rs` — so this parked item is now narrower, covering the **compose + detection**
+axes only. The remaining central dispatch sites (`Registry::compose_modes` match, the
+`peek-detect` orchestrator's per-type calls) could similarly collapse into trait-dispatch loops:
 
 ```rust
 trait TypeSupport {
@@ -240,7 +242,7 @@ trait TypeSupport {
     fn compose(&self, ctx: &ComposeCtx, modes: &mut Vec<Box<dyn Mode>>) -> Result<()>;
     fn detect_by_extension(&self, ext: &str) -> Option<FileType>;
     fn detect_by_magic(&self, head: &[u8]) -> Option<FileType>;
-    fn render_info(&self, extras: &FileExtras, theme: &PeekTheme, opts: RenderOptions) -> Vec<String>;
+    // info rendering already lives on the `InfoExtras` trait (see info_impls.rs).
 }
 
 fn all_types() -> Vec<Box<dyn TypeSupport>> { /* one entry per type */ }

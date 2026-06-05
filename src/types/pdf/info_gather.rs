@@ -4,14 +4,14 @@
 //! view can show why pdfium couldn't read the file (corrupt header,
 //! encrypted, missing library) without crashing.
 
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
 use super::PdfFlavor;
 use super::info::PdfStats;
 use super::package;
 
-pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> FileExtras {
+pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> Extras {
     match package::open_doc(source) {
         Ok(doc) => {
             let embeds = doc.list_embeds();
@@ -33,13 +33,13 @@ pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> FileExtras {
                 pdf_version: doc.pdf_version().to_string(),
                 error: None,
             };
-            FileExtras::Pdf(stats)
+            Box::new(stats)
         }
         Err(e) => {
             let mut stats = PdfStats::empty();
             stats.flavor = flavor;
             stats.error = Some(format!("{e:#}"));
-            FileExtras::Pdf(stats)
+            Box::new(stats)
         }
     }
 }

@@ -2,15 +2,15 @@
 //! if the type is genuinely unknown. Render emits a single Format
 //! section when a label is available.
 
-use crate::info::{FileExtras, push_field, push_section_header};
+use crate::info::{Extras, push_field, push_section_header};
 use crate::theme::PeekTheme;
 
 pub struct BinaryInfo {
     pub format: Option<String>,
 }
 
-pub fn gather_extras(magic_mime: Option<&str>) -> FileExtras {
-    FileExtras::Binary(BinaryInfo {
+pub fn gather_extras(magic_mime: Option<&str>) -> Extras {
+    Box::new(BinaryInfo {
         format: magic_mime.map(format_label_for_mime),
     })
 }

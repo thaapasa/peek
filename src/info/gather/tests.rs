@@ -5,7 +5,6 @@
 
 use std::path::PathBuf;
 
-use super::super::FileExtras;
 use super::gather;
 use crate::input::InputSource;
 use crate::input::detect;
@@ -35,9 +34,7 @@ fn gather_fixture(rel: &str) -> super::super::FileInfo {
 #[test]
 fn jpeg_cozy_room_has_dimensions_icc_and_exif() {
     let info = gather_fixture("test-images/cozy-room.jpg");
-    let FileExtras::Image(stats) = &info.extras else {
-        panic!("expected Image extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::image::info::ImageStats>(&info.extras);
     assert_eq!(stats.width, 1500);
     assert_eq!(stats.height, 1000);
     assert_eq!(stats.bit_depth, 8);
@@ -57,9 +54,7 @@ fn jpeg_cozy_room_has_dimensions_icc_and_exif() {
 #[test]
 fn jpeg_river_woods_is_ultra_hdr_with_camera_metadata() {
     let info = gather_fixture("test-images/river-woods-hdr.jpg");
-    let FileExtras::Image(stats) = &info.extras else {
-        panic!("expected Image extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::image::info::ImageStats>(&info.extras);
     assert_eq!(
         stats.hdr_format.as_deref(),
         Some("Ultra HDR (gain map)"),
@@ -83,9 +78,7 @@ fn jpeg_river_woods_is_ultra_hdr_with_camera_metadata() {
 #[test]
 fn png_clover_has_dimensions() {
     let info = gather_fixture("test-images/clover.png");
-    let FileExtras::Image(stats) = &info.extras else {
-        panic!("expected Image extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::image::info::ImageStats>(&info.extras);
     assert_eq!(stats.width, 640);
     assert_eq!(stats.height, 599);
     assert!(stats.animation.is_none(), "static PNG must not be animated");
@@ -94,9 +87,7 @@ fn png_clover_has_dimensions() {
 #[test]
 fn gif_lightning_animation_stats() {
     let info = gather_fixture("test-images/lightning.gif");
-    let FileExtras::Image(stats) = &info.extras else {
-        panic!("expected animated GIF extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::image::info::ImageStats>(&info.extras);
     let Some(AnimationStats {
         frame_count,
         total_duration_ms,
@@ -117,9 +108,7 @@ fn gif_lightning_animation_stats() {
 #[test]
 fn webp_rickroll_animation_stats() {
     let info = gather_fixture("test-images/rickroll.webp");
-    let FileExtras::Image(stats) = &info.extras else {
-        panic!("expected animated WebP extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::image::info::ImageStats>(&info.extras);
     let Some(AnimationStats {
         frame_count,
         total_duration_ms,
@@ -136,9 +125,7 @@ fn webp_rickroll_animation_stats() {
 #[test]
 fn svg_calendar_extras() {
     let info = gather_fixture("test-images/calendar.svg");
-    let FileExtras::Svg(stats) = &info.extras else {
-        panic!("expected SVG extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::svg::info::SvgStats>(&info.extras);
     assert_eq!(stats.view_box.as_deref(), Some("-1 -1 18 18"));
     assert_eq!(stats.declared_width.as_deref(), Some("50"));
     assert_eq!(stats.declared_height.as_deref(), Some("50"));
@@ -156,9 +143,9 @@ fn svg_calendar_extras() {
 #[test]
 fn json_config_top_level_object() {
     let info = gather_fixture("test-data/config.json");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected Structured JSON extras with stats");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(info.format_name, "JSON");
     assert!(matches!(stats.top_level_kind, TopLevelKind::Object));
@@ -170,9 +157,9 @@ fn json_config_top_level_object() {
 #[test]
 fn yaml_servers_is_object() {
     let info = gather_fixture("test-data/servers.yaml");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected YAML stats");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(info.format_name, "YAML");
     assert!(matches!(stats.top_level_kind, TopLevelKind::Object));
@@ -182,9 +169,9 @@ fn yaml_servers_is_object() {
 #[test]
 fn toml_project_is_table() {
     let info = gather_fixture("test-data/project.toml");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected TOML stats");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(info.format_name, "TOML");
     assert!(matches!(stats.top_level_kind, TopLevelKind::Table));
@@ -194,9 +181,9 @@ fn toml_project_is_table() {
 #[test]
 fn xml_bookstore_root_element_and_namespaces_empty() {
     let info = gather_fixture("test-data/bookstore.xml");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected XML stats");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(info.format_name, "XML");
     assert_eq!(stats.xml_root.as_deref(), Some("bookstore"));
@@ -206,9 +193,9 @@ fn xml_bookstore_root_element_and_namespaces_empty() {
 #[test]
 fn xml_feed_records_namespaces() {
     let info = gather_fixture("test-data/feed.xml");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected XML stats");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(stats.xml_root.as_deref(), Some("rss"));
     assert!(
@@ -224,9 +211,9 @@ fn html_dashboard_parses_with_lenient_xml() {
     // still return stats with `html` as the root element rather than
     // bailing out entirely.
     let info = gather_fixture("test-data/dashboard.html");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!("expected XML stats for dashboard.html");
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     let stats = info.stats.as_ref().expect("expected stats");
     assert_eq!(stats.xml_root.as_deref(), Some("html"));
     assert!(stats.total_nodes > 0);
@@ -244,9 +231,7 @@ fn html_dashboard_parses_with_lenient_xml() {
 #[test]
 fn rust_theme_text_metrics() {
     let info = gather_fixture("test-data/theme.rs");
-    let FileExtras::Text(stats) = &info.extras else {
-        panic!("expected Text extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::text::info::TextStats>(&info.extras);
     assert_eq!(stats.line_count, 104);
     assert!(matches!(stats.line_endings, LineEndings::Lf));
     assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(4))));
@@ -256,9 +241,7 @@ fn rust_theme_text_metrics() {
 #[test]
 fn typescript_event_bus_uses_two_space_indent() {
     let info = gather_fixture("test-data/event-bus.ts");
-    let FileExtras::Text(stats) = &info.extras else {
-        panic!("expected Text extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::text::info::TextStats>(&info.extras);
     assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(2))));
     assert!(stats.line_count > 0);
 }
@@ -266,30 +249,23 @@ fn typescript_event_bus_uses_two_space_indent() {
 #[test]
 fn java_http_server_indent_eight_spaces() {
     let info = gather_fixture("test-data/HttpServer.java");
-    let FileExtras::Text(stats) = &info.extras else {
-        panic!("expected Text extras");
-    };
+    let stats = crate::info::downcast_extras::<crate::types::text::info::TextStats>(&info.extras);
     assert!(matches!(stats.indent_style, Some(IndentStyle::Spaces(8))));
 }
 
 #[test]
 fn tsconfig_json5_routed_as_structured() {
     let info = gather_fixture("test-data/tsconfig.json5");
-    let FileExtras::Structured(info) = &info.extras else {
-        panic!(
-            "expected Structured extras, got {:?}",
-            std::mem::discriminant(&info.extras)
-        );
-    };
+    let info = crate::info::downcast_extras::<crate::types::structured::info::StructuredInfo>(
+        &info.extras,
+    );
     assert_eq!(info.format_name, "JSON5");
 }
 
 #[test]
 fn css_styles_sidecar_stats() {
     let info = gather_fixture("test-data/styles.css");
-    let FileExtras::Css(css) = &info.extras else {
-        panic!("expected Css extras");
-    };
+    let css = crate::info::downcast_extras::<crate::types::css::info::CssInfo>(&info.extras);
     let stats = &css.stats;
     // Three `@media` blocks, three `@keyframes`; the two `@container`
     // rules must not be miscounted as media queries.
@@ -332,9 +308,8 @@ fn sqlite_library_catalogue_stats() {
     );
 
     let info = gather(&source, &detected).expect("gather");
-    let FileExtras::Sqlite(sqlite) = &info.extras else {
-        panic!("expected Sqlite extras");
-    };
+    let sqlite =
+        crate::info::downcast_extras::<crate::types::sqlite::info::SqliteInfo>(&info.extras);
     let stats = sqlite.stats.as_ref().expect("scrape succeeded");
     // 8 user tables, 1 view, 5 user indexes (sqlite_* shadow entities
     // are filtered out by the catalogue walker).
@@ -352,9 +327,8 @@ fn sqlite_library_catalogue_stats() {
 #[test]
 fn java_classfile_sample_metadata() {
     let info = gather_fixture("test-data/Sample.class");
-    let FileExtras::Classfile(cf) = &info.extras else {
-        panic!("expected Classfile extras");
-    };
+    let cf =
+        crate::info::downcast_extras::<crate::types::classfile::info::ClassfileInfo>(&info.extras);
     let meta = cf.meta.as_ref().expect("classfile parsed");
     assert_eq!(meta.class_name, "Sample");
     assert_eq!(meta.super_class.as_deref(), Some("java.lang.Object"));
@@ -393,9 +367,7 @@ fn postscript_sample_ps_dsc_and_no_preview() {
     );
 
     let info = gather(&source, &detected).expect("gather");
-    let FileExtras::Eps(eps) = &info.extras else {
-        panic!("expected Eps extras");
-    };
+    let eps = crate::info::downcast_extras::<crate::types::eps::EpsInfo>(&info.extras);
     assert_eq!(eps.format, PostScriptFormat::Ps);
     assert_eq!(eps.dsc.title.as_deref(), Some("peek PostScript sample"));
     assert_eq!(eps.dsc.creator.as_deref(), Some("peek test suite"));
@@ -414,9 +386,7 @@ fn postscript_sample_ps_dsc_and_no_preview() {
 #[test]
 fn tropical_jungle_eps_has_undecodable_tiff_preview() {
     let info = gather_fixture("test-images/tropical-jungle.eps");
-    let FileExtras::Eps(eps) = &info.extras else {
-        panic!("expected Eps extras");
-    };
+    let eps = crate::info::downcast_extras::<crate::types::eps::EpsInfo>(&info.extras);
     assert_eq!(eps.format, PostScriptFormat::Eps);
     assert_eq!(eps.dsc.creator.as_deref(), Some("Adobe Illustrator(R) 12"));
     // The bare-`\r` line ending bug used to swallow `%%For` — guard it.
@@ -436,9 +406,7 @@ fn tropical_jungle_eps_has_undecodable_tiff_preview() {
 #[test]
 fn tropical_jungle_rgbpreview_eps_decodes_preview() {
     let info = gather_fixture("test-images/tropical-jungle-rgbpreview.eps");
-    let FileExtras::Eps(eps) = &info.extras else {
-        panic!("expected Eps extras");
-    };
+    let eps = crate::info::downcast_extras::<crate::types::eps::EpsInfo>(&info.extras);
     assert_eq!(eps.format, PostScriptFormat::Eps);
     let preview = eps.preview.as_ref().expect("preview present");
     assert_eq!(preview.kind, PreviewKind::Tiff);
@@ -450,9 +418,7 @@ fn tropical_jungle_rgbpreview_eps_decodes_preview() {
 #[test]
 fn tropical_jungle_nopreview_eps_has_no_preview() {
     let info = gather_fixture("test-images/tropical-jungle-nopreview.eps");
-    let FileExtras::Eps(eps) = &info.extras else {
-        panic!("expected Eps extras");
-    };
+    let eps = crate::info::downcast_extras::<crate::types::eps::EpsInfo>(&info.extras);
     assert_eq!(eps.format, PostScriptFormat::Eps);
     assert_eq!(eps.dsc.title.as_deref(), Some("tropical-jungle.eps"));
     assert!(eps.preview.is_none());
@@ -478,9 +444,7 @@ fn bonfire_nature_ai_is_illustrator_pdf() {
         "`.ai` over %PDF magic must not warn, got {:?}",
         info.warnings,
     );
-    let FileExtras::Pdf(pdf) = &info.extras else {
-        panic!("expected Pdf extras");
-    };
+    let pdf = crate::info::downcast_extras::<crate::types::pdf::PdfStats>(&info.extras);
     assert_eq!(pdf.flavor, PdfFlavor::Illustrator);
     // Page/version stats need a live pdfium handle. CI runners don't ship
     // the bundled dylib, so `open_doc` fails there and the stats carry an
@@ -516,9 +480,8 @@ fn xlsx_people_workbook_lists_sheets_and_metadata() {
         "`.xlsx` over application/zip magic must not warn, got {:?}",
         info.warnings,
     );
-    let FileExtras::Spreadsheet(wb) = &info.extras else {
-        panic!("expected Spreadsheet extras");
-    };
+    let wb =
+        crate::info::downcast_extras::<crate::types::spreadsheet::SpreadsheetInfo>(&info.extras);
     assert_eq!(wb.sheets, vec!["people".to_string(), "totals".to_string()]);
     assert_eq!(wb.metadata.creator.as_deref(), Some("openpyxl"));
 }
@@ -536,9 +499,8 @@ fn ods_people_workbook_lists_sheets() {
     );
 
     let info = gather(&source, &detected).expect("gather");
-    let FileExtras::Spreadsheet(wb) = &info.extras else {
-        panic!("expected Spreadsheet extras");
-    };
+    let wb =
+        crate::info::downcast_extras::<crate::types::spreadsheet::SpreadsheetInfo>(&info.extras);
     assert_eq!(wb.sheets, vec!["people".to_string(), "totals".to_string()]);
 }
 
@@ -553,9 +515,7 @@ fn eml_sample_detects_and_gathers() {
     assert_eq!(detected.file_type, FileType::Email(EmailFormat::Eml));
 
     let info = gather(&source, &detected).expect("gather");
-    let FileExtras::Email(email) = &info.extras else {
-        panic!("expected Email extras");
-    };
+    let email = crate::info::downcast_extras::<crate::types::email::EmailInfo>(&info.extras);
     assert_eq!(email.attachment_count, 1);
     assert_eq!(email.message_count, None);
     assert_eq!(
@@ -572,8 +532,6 @@ fn mbox_sample_detects_and_counts_messages() {
     assert_eq!(detected.file_type, FileType::Email(EmailFormat::Mbox));
 
     let info = gather(&source, &detected).expect("gather");
-    let FileExtras::Email(email) = &info.extras else {
-        panic!("expected Email extras");
-    };
+    let email = crate::info::downcast_extras::<crate::types::email::EmailInfo>(&info.extras);
     assert_eq!(email.message_count, Some(3));
 }

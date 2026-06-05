@@ -6,11 +6,11 @@ use cafebabe::attributes::AttributeData;
 use cafebabe::{ParseOptions, parse_class_with_options};
 
 use super::info::{ClassfileInfo, ClassfileMeta};
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
-pub fn gather_extras(source: &InputSource) -> FileExtras {
-    FileExtras::Classfile(gather(source))
+pub fn gather_extras(source: &InputSource) -> Extras {
+    Box::new(gather(source))
 }
 
 fn gather(source: &InputSource) -> ClassfileInfo {

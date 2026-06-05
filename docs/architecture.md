@@ -501,10 +501,13 @@ wiring-sites checklist. Quick summary:
 3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then a `compose_modes`
    arm delegating to it. Hex / Info / About / Help are appended automatically; pipe mode picks the
    first non-aux mode (or first, if all are aux).
-4. Add `types/<x>/info_gather.rs` (`gather_extras(...)`) and `types/<x>/info_render.rs`
-   (`render_section(...)`) for type-specific metadata, then add the matching `FileExtras`
-   variant in `info/mod.rs` and wire dispatch in `info/gather/mod.rs` + `info/render/mod.rs`.
-   Tiny types may combine gather + render into one `info.rs`.
+4. Add `types/<x>/info_gather.rs` (`gather_extras(...)` returning `Extras`, i.e.
+   `Box::new(<Stats>)`) and `types/<x>/info_render.rs` (`render_section(lines, &<Stats>,
+   theme)`) for type-specific metadata. Wire the gather arm in `info/gather/mod.rs`, then
+   add one `impl_info_extras!(<Stats>, ...::render_section)` row in `src/types/info_impls.rs`
+   binding the stats struct to the `InfoExtras` trait — `info::render` dispatches through
+   the trait, so there is no per-type render match. Tiny types may combine gather + render
+   into one `info.rs`.
 
 Example — PDF (`src/types/pdf/compose.rs`):
 

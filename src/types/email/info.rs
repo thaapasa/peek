@@ -1,6 +1,6 @@
 //! Email Info sidecar — header summary + attachment / message tallies.
 
-use crate::info::FileExtras;
+use crate::info::Extras;
 use crate::input::InputSource;
 
 use super::EmailFormat;
@@ -60,10 +60,10 @@ impl EmailInfo {
 /// (no whole-file load); `.eml` parses the single message. Returns `None`
 /// when the bytes don't parse as mail, so the gather falls back to
 /// text/binary.
-pub fn gather_extras(source: &InputSource, fmt: EmailFormat) -> Option<FileExtras> {
+pub fn gather_extras(source: &InputSource, fmt: EmailFormat) -> Option<Extras> {
     let info = match fmt {
         EmailFormat::Eml => EmailInfo::from_message(&message::parse(&source.read_bytes().ok()?)?),
         EmailFormat::Mbox => EmailInfo::mbox(mbox::split(source).ok()?.len()),
     };
-    Some(FileExtras::Email(info))
+    Some(Box::new(info))
 }

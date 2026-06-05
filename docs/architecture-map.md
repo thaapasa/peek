@@ -57,7 +57,7 @@ src/
     print.rs           — PrintOutput: write-once stdout for --print / pipes / --info
     help.rs            — CLI help and version screens
   info/
-    mod.rs             — FileInfo + FileExtras enum (single-field wrappers around per-type stats from `types/<x>/info.rs`) + shared permission helpers
+    mod.rs             — FileInfo + InfoExtras trait + Extras (`Box<dyn InfoExtras>` payload) + impl_info_extras! macro + test-only downcast_extras + shared permission helpers
     gather/            — FileInfo collection, split per general file type
       mod.rs           — Per-source dispatch (gather() entry point)
       tests.rs         — Fixture-based tests against test-images / test-data
@@ -74,6 +74,7 @@ src/
     manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
+    info_impls.rs      — Central registry: one impl_info_extras! row per type binding its stats struct to the `info::InfoExtras` trait (replaces the old FileExtras enum + render match). Only `types → info` edge is the trait itself
     binary/
       mod.rs           — Module wiring
       info.rs          — BinaryInfo struct + gather_extras (friendly format label) + render_section (Format)

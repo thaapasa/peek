@@ -709,7 +709,7 @@ mod tests {
     /// on the next call.
     #[test]
     fn paged_mode_horizontal_scroll_under_zoom() {
-        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::info::{FileInfo, RenderOptions};
         use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
         use crate::types::binary::info::BinaryInfo;
         use std::cell::Cell;
@@ -768,7 +768,7 @@ mod tests {
             created: None,
             permissions: None,
             compression: None,
-            extras: FileExtras::Binary(BinaryInfo { format: None }),
+            extras: Box::new(BinaryInfo { format: None }),
         };
         let ctx = RenderCtx {
             file_info: &file_info,
@@ -803,7 +803,7 @@ mod tests {
     /// advance scroll_x.
     #[test]
     fn cbz_horizontal_scroll_at_zoom_2x() {
-        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::info::{FileInfo, RenderOptions};
         use crate::input::InputSource;
         use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
         use crate::types::binary::info::BinaryInfo;
@@ -847,7 +847,7 @@ mod tests {
             created: None,
             permissions: None,
             compression: None,
-            extras: FileExtras::Binary(BinaryInfo { format: None }),
+            extras: Box::new(BinaryInfo { format: None }),
         };
         let ctx = RenderCtx {
             file_info: &file_info,
@@ -887,7 +887,7 @@ mod tests {
     /// Pressing Right must pan horizontally.
     #[test]
     fn cbz_horizontal_scroll_fit_height_zoom_one() {
-        use crate::info::{FileExtras, FileInfo, RenderOptions};
+        use crate::info::{FileInfo, RenderOptions};
         use crate::input::InputSource;
         use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
         use crate::types::binary::info::BinaryInfo;
@@ -926,7 +926,7 @@ mod tests {
             created: None,
             permissions: None,
             compression: None,
-            extras: FileExtras::Binary(BinaryInfo { format: None }),
+            extras: Box::new(BinaryInfo { format: None }),
         };
         let ctx = RenderCtx {
             file_info: &file_info,

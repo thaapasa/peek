@@ -3,7 +3,7 @@
 //! error is surfaced as a warning row.
 
 use super::reader::list_entries;
-use crate::info::{FileExtras, paint_count, push_field, push_section_header, thousands_sep};
+use crate::info::{Extras, paint_count, push_field, push_section_header, thousands_sep};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::theme::PeekTheme;
@@ -31,11 +31,11 @@ pub struct StaticLibSummary {
     pub architecture: Option<String>,
 }
 
-pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> FileExtras {
+pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
     match list_entries(source, format) {
         Ok(entries) => {
             let stats = Stats::from_root(format.label(), &entries);
-            FileExtras::Archive(ArchiveStats {
+            Box::new(ArchiveStats {
                 format_name: stats.format_name,
                 entry_count: stats.entry_count,
                 file_count: stats.file_count,
@@ -45,7 +45,7 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> FileExtras 
                 static_lib: static_lib_summary(source, format),
             })
         }
-        Err(e) => FileExtras::Archive(ArchiveStats {
+        Err(e) => Box::new(ArchiveStats {
             format_name: format.label(),
             entry_count: 0,
             file_count: 0,
