@@ -1891,6 +1891,7 @@ dependencies = [
  "pdfium-render",
  "peek-detect",
  "peek-io",
+ "peek-theme",
  "pem",
  "pulldown-cmark",
  "quick-xml",
@@ -1947,6 +1948,16 @@ dependencies = [
  "tempfile",
  "windows-sys 0.59.0",
  "zstd",
+]
+
+[[package]]
+name = "peek-theme"
+version = "0.2.12"
+dependencies = [
+ "clap",
+ "syntect",
+ "two-face",
+ "unicode-width",
 ]
 
 [[package]]

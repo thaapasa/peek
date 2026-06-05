@@ -9,7 +9,10 @@ mod extract;
 mod info;
 mod input;
 mod output;
-mod theme;
+// Theming lives in the `peek-theme` crate (a leaf, like peek-io). Aliased
+// here so the historical `crate::theme::*` paths across the tree are
+// unchanged — mirrors the `input` façade over peek-io / peek-detect.
+use peek_theme as theme;
 mod types;
 mod update;
 mod viewer;

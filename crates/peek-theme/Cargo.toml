@@ -1,0 +1,21 @@
+[package]
+name = "peek-theme"
+description = "peek theming — semantic color roles, SGR encoding, StyleMode, embedded .tmTheme data"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Syntax-highlighting resources + .tmTheme parsing (Theme / ThemeSet /
+# SyntaxSet / Scope / Color).
+syntect = { workspace = true }
+# Extra no-newline syntax set bundled for the highlighter.
+two-face = { workspace = true }
+# Hand-rolled ValueEnum impls for PeekThemeName / StyleMode (the `--theme`
+# and `--color` CLI value types).
+clap = { workspace = true }
+# Display-width measurement in the SGR tokenizer.
+unicode-width = { workspace = true }

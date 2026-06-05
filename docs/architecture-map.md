@@ -39,6 +39,14 @@ crates/
       sqlite.rs        — SqliteFormat enum (single Sqlite variant today; SQLCipher / WAL flavours would slot in); format_from_ext (`.sqlite` / `.sqlite3` / `.db` / `.db3`) + format_from_mime (`application/vnd.sqlite3` / `application/x-sqlite3`)
       structured.rs    — StructuredFormat enum (JSON / JSONC / JSON5 / JSONL / YAML / TOML / XML); format_from_ext. (JSON / SVG / HTML / XML / YAML content sniff for unnamed sources lives in the orchestrator's detect_bytes)
       vobject.rs       — VObjectFormat { ICal, VCard } + label (iCalendar / vCard); format_from_ext (ics/ical/ifb → ICal, vcf/vcard → VCard) + sniff_text (leading `BEGIN:VCALENDAR` / `BEGIN:VCARD` marker, BOM/blank-line tolerant)
+  peek-theme/          — theming leaf crate. Depends on nothing in-tree (parallel to peek-io). Aliased into the bin as `crate::theme` via `use peek_theme as theme` (façade like `src/input/`).
+    src/lib.rs         — re-exports ThemeManager / PeekThemeName / load_embedded_theme / PeekTheme / lerp_color / ActiveStyle / Attr / Sgr / StyleMode / display_width / scan
+    src/name.rs        — PeekThemeName + embedded .tmTheme data (include_str! over ../themes/) + load_embedded_theme + ValueEnum impl
+    src/sgr.rs         — low-level SGR escape mechanics (color encoders, Attr, ActiveStyle, display_width/scan tokenizer)
+    src/style_mode.rs  — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion + ValueEnum impl
+    src/peek_theme.rs  — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
+    src/manager.rs     — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
+    themes/            — Embedded .tmTheme files (idea-dark default + vscode-dark-modern / vscode-dark-2026 / vscode-monokai)
 src/
   main.rs              — CLI entry point: dispatches inputs to viewers
   cli.rs               — Args struct (clap derive)
@@ -65,13 +73,7 @@ src/
       mod.rs           — render() entry, RenderOptions, shared push_field/section_header/paint_count
       file.rs          — File section: name, path, size, MIME, timestamps, permissions
     time.rs            — UTC ISO / local-with-offset timestamp formatting (libc::localtime_r)
-  theme/
-    mod.rs             — re-exports PeekThemeName, StyleMode, PeekTheme, ThemeManager, helpers
-    name.rs            — PeekThemeName + embedded .tmTheme data + load_embedded_theme
-    sgr.rs             — Low-level SGR mechanics: color/attr encoders, RESET_* consts, palette quantization, escape tokenizer (scan/Sgr) + classify + ActiveStyle (fg/bg tracked across a styled stream)
-    style_mode.rs      — StyleMode (truecolor/256/16/grayscale/plain) + RGB→palette conversion
-    peek_theme.rs      — PeekTheme semantic roles + paint helpers + lerp_color/blend + rgb↔hsl + search-match colors
-    manager.rs         — ThemeManager: shared SyntaxSet/ThemeSet + active PeekTheme
+  theme                — alias for the `peek-theme` crate (see crates/ above); `use peek_theme as theme` keeps `crate::theme::*` paths working
   types/
     mod.rs             — Per-file-type modules (each owns reader + info + view-mode)
     info_impls.rs      — Central registry: one impl_info_extras! row per type binding its stats struct to the `info::InfoExtras` trait (replaces the old FileExtras enum + render match). Only `types → info` edge is the trait itself
@@ -393,11 +395,6 @@ src/
       keys.rs          — Action enum (centralized keybindings), Outcome
       help.rs          — Keyboard-shortcut help screen renderer
     hex.rs             — Hex layout primitives + format_row (used by HexMode)
-themes/
-  idea-dark.tmTheme           — JetBrains IDEA default Dark theme (default)
-  vscode-dark-modern.tmTheme  — VS Code Dark Modern theme
-  vscode-dark-2026.tmTheme    — VS Code Dark 2026 theme
-  vscode-monokai.tmTheme      — VS Code Monokai theme
 docs/                  — Builder / agent reference (architecture, conventions, planning)
   architecture.md      — Design, data flow, key abstractions, extension guide
   architecture-map.md  — This file: full file/module breakdown
