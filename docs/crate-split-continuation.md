@@ -134,15 +134,33 @@ bin-side / types-side integration test in step D, since foundation tests can't r
 
 ### Step C — hub relocation
 
-- **Up to bin:** `info/gather/mod.rs` dispatch (56 edges — the `FileType → types::X::gather`
-  match), `viewer/mod.rs::compose_modes`, the interactive event loop, `ViewerState`.
-- **Down to foundation:** info base (InfoExtras trait, FileInfo, CompressionInfo, `render`
-  entry, push_field/section helpers, time fmt), viewer shared modes + ui toolkit
-  (wrap/Action/search/ScreenBuffer/cell_size/append_universal_modes).
-- The per-type gather submodules stay in `types`; only the dispatch hub moves up.
+**Refined after the A/B measurement (2026-06-05).** With the foundation toolkit now
+types-clean, the only types-touching code is three dispatch hubs + `ViewerState`. The
+original plan put the hubs in the bin; measurement shows a cleaner home — all three
+dispatch `FileType → types::X::*`, so they belong **in the `peek-types` crate** as its
+public dispatch API, depending down on the foundation, called down-into by the bin. No
+extra inversions needed.
 
-**Risk:** medium, mostly mechanical once A/B land. **Verify:** full suite; info view +
-mode composition for every type.
+- **`peek-types` crate (with the per-type modules):**
+  - `info/gather/` — the `FileType → types::X::gather` dispatch (56 edges) + per-type gather
+  - `viewer/mod.rs::compose_modes` + `Registry` — the `FileType → types::X::compose` dispatch
+  - `extract/` — the `FileType → types::X::extract` dispatch
+- **`peek-foundation` crate (types-clean toolkit):** Mode trait / ModeId / RenderCtx /
+  ComposeCtx; shared modes (content/hex/pretty/table/listing/paged/rendered_text); ui
+  primitives (Action / wrap / search / ScreenBuffer); `image_render`; info base (InfoExtras /
+  FileInfo / CompressionInfo / `render` entry / helpers / time); highlight / wrap_scroll /
+  cell_size.
+- **`peek` bin:** `ViewerState`, the interactive event loop (`interactive.rs`), `main`,
+  `cli`, `update`, `output`. Calls `peek-types`' `gather()` / `compose_modes()` /
+  `extract()`; `ViewerState → extract` becomes a clean bin → types edge (no inversion).
+
+The split runs *through* `viewer/mod.rs` (ComposeCtx/RenderCtx/Mode-infra → foundation;
+Registry/compose_modes → types) and `viewer/ui/` (primitives → foundation; ViewerState →
+bin). Those two file/dir splits are the bulk of the mechanical work.
+
+**Risk:** medium-high — large volume (split mod.rs + ui/, relocate gather + extract,
+pub(crate)→pub across the new boundary). Lower intellectual risk than A (edges are already
+one-way), but high churn. **Verify:** full suite; info view + mode composition for every type.
 
 ### Step D — draw the crate boundary
 
