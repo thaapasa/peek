@@ -1,0 +1,89 @@
+[package]
+name = "peek-types"
+description = "peek per-file-type readers — one module per type (parse + info + view-mode), barred from the bin's session layer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+peek-io = { workspace = true }
+peek-detect = { workspace = true }
+peek-theme = { workspace = true }
+peek-foundation = { workspace = true }
+
+anyhow = { workspace = true }
+bytes = { workspace = true }
+crossterm = { workspace = true }
+syntect = { workspace = true }
+unicode-width = { workspace = true }
+
+# Structured data (JSON / YAML / TOML / XML / JSON5)
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+json5 = { workspace = true }
+toml = { workspace = true }
+quick-xml = { workspace = true }
+
+# Images + SVG + EXIF + GIF anim
+image = { workspace = true }
+resvg = { workspace = true }
+kamadak-exif = { workspace = true }
+gif = { workspace = true }
+
+# Archives / compression backends (extract + listing)
+tempfile = { workspace = true }
+zip = { workspace = true }
+tar = { workspace = true }
+flate2 = { workspace = true }
+bzip2 = { workspace = true }
+liblzma = { workspace = true }
+zstd = { workspace = true }
+lz4_flex = { workspace = true }
+brotli-decompressor = { workspace = true }
+sevenz-rust2 = { workspace = true }
+
+# Documents / markup
+html2text = { workspace = true }
+rtf-parser = { workspace = true }
+pulldown-cmark = { workspace = true }
+
+# Tabular / databases
+csv = { workspace = true }
+rusqlite = { workspace = true }
+calamine = { workspace = true }
+
+# PDF / audio / object / class / fonts
+pdfium-render = { workspace = true }
+symphonia = { workspace = true }
+object = { workspace = true }
+cafebabe = { workspace = true }
+ttf-parser = { workspace = true }
+fontdue = { workspace = true }
+wuff = { workspace = true }
+
+# CSS
+cssparser = { workspace = true }
+cssparser-color = { workspace = true }
+
+# Certificates / keys
+pem = { workspace = true }
+x509-parser = { workspace = true }
+ssh-key = { workspace = true }
+sha1 = { workspace = true }
+sha2 = { workspace = true }
+
+# Email
+mail-parser = { workspace = true }
+
+[dev-dependencies]
+# Turn on the foundation's test-helper surface (downcast_extras,
+# SearchState match_count) for this crate's test builds only.
+peek-foundation = { workspace = true, features = ["testing"] }
+# Snapshot testing for the image-pipeline render output.
+insta = { workspace = true }
+# 7z writer (compress feature) for the multi-block archive extract test.
+sevenz-rust2 = { workspace = true, features = ["compress"] }

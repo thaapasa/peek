@@ -46,6 +46,7 @@ pub mod input {
 }
 
 pub mod base64;
+pub mod extract;
 pub mod info;
 pub mod output;
 pub mod viewer;

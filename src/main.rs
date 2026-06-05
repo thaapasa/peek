@@ -9,9 +9,13 @@ mod extract;
 mod gather;
 mod input;
 mod output;
-mod types;
 mod update;
 mod viewer_session;
+
+// Per-file-type readers live in the `peek-types` crate. Re-exported so the
+// bin's dispatch hubs (compose / gather / extract) keep using
+// `crate::types::*` unchanged.
+pub use peek_types::types;
 
 // The reader/viewer foundation lives in the `peek-foundation` crate. Re-
 // exported here so the historical `crate::viewer` / `crate::info` /

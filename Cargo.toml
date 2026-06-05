@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [workspace]
-members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation"]
+members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation", "crates/peek-types"]
 
 # Shared package metadata for the bin + every member crate (`field.workspace
 # = true` to inherit). One version line for the whole workspace — the release
@@ -39,6 +39,7 @@ peek-io = { path = "crates/peek-io" }
 peek-detect = { path = "crates/peek-detect" }
 peek-theme = { path = "crates/peek-theme" }
 peek-foundation = { path = "crates/peek-foundation" }
+peek-types = { path = "crates/peek-types" }
 
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
@@ -214,65 +215,24 @@ windows-sys = { version = "0.59", features = [
 insta = "1"
 id3 = "1"
 
+# The binary is now the thin session layer: CLI + the compose / gather /
+# extract dispatch hubs + the interactive event loop. The parser deps moved
+# to peek-types; the reader/viewer toolkit to peek-foundation. The bin keeps
+# only what its own code touches.
 [dependencies]
 peek-io = { workspace = true }
 peek-detect = { workspace = true }
 peek-theme = { workspace = true }
 peek-foundation = { workspace = true }
+peek-types = { workspace = true }
 clap = { workspace = true }
 crossterm = { workspace = true }
-syntect = { workspace = true }
-two-face = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_yaml = { workspace = true }
-json5 = { workspace = true }
-toml = { workspace = true }
-quick-xml = { workspace = true }
-image = { workspace = true }
-resvg = { workspace = true }
-kamadak-exif = { workspace = true }
 anyhow = { workspace = true }
-unicode-width = { workspace = true }
-gif = { workspace = true }
 bytes = { workspace = true }
-tempfile = { workspace = true }
-zip = { workspace = true }
-tar = { workspace = true }
-flate2 = { workspace = true }
-bzip2 = { workspace = true }
-liblzma = { workspace = true }
-zstd = { workspace = true }
-lz4_flex = { workspace = true }
-brotli-decompressor = { workspace = true }
-sevenz-rust2 = { workspace = true }
-html2text = { workspace = true }
-rtf-parser = { workspace = true }
-csv = { workspace = true }
-pdfium-render = { workspace = true }
-pulldown-cmark = { workspace = true }
-symphonia = { workspace = true }
-object = { workspace = true }
-cafebabe = { workspace = true }
-cssparser = { workspace = true }
-cssparser-color = { workspace = true }
-pem = { workspace = true }
-x509-parser = { workspace = true }
-ssh-key = { workspace = true }
-sha1 = { workspace = true }
-sha2 = { workspace = true }
-rusqlite = { workspace = true }
-ttf-parser = { workspace = true }
-fontdue = { workspace = true }
-wuff = { workspace = true }
-calamine = { workspace = true }
-mail-parser = { workspace = true }
-
-[target.'cfg(unix)'.dependencies]
-libc = { workspace = true }
-
-[target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true }
+# Status-line segment colors (syntect::highlighting::Color).
+syntect = { workspace = true }
+# GitHub Releases JSON parse in the `--update` flow.
+serde_json = { workspace = true }
 
 [dev-dependencies]
 # Turn on the foundation's test-helper surface (downcast_extras,
@@ -281,18 +241,15 @@ windows-sys = { workspace = true }
 # / release builds, so the scaffolding never ships.
 peek-foundation = { workspace = true, features = ["testing"] }
 
-# Snapshot testing for image rendering output
-insta = { workspace = true }
-
 # ID3v2 tag writer used by `examples/gen_audio_fixture.rs` to synthesise
 # the tagged MP3 test fixture (cover art + lyrics + tag fields). Dev-
 # only — runtime probe path goes through symphonia.
 id3 = { workspace = true }
 
-# 7z writer (compress feature) for the multi-block extract test only.
-# The runtime dep keeps `default-features = false` (decode-only); this
-# enables the encoder solely for test builds via feature unification.
-sevenz-rust2 = { workspace = true, features = ["compress"] }
+# Fixture-generator examples (gen_test_image / gen_glyphs) rasterise
+# images + glyphs; dev-only.
+image = { workspace = true }
+fontdue = { workspace = true }
 
 # Optimize image processing dependencies even in dev builds —
 # these are unusably slow without at least -O2

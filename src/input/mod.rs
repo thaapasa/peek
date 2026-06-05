@@ -9,8 +9,7 @@
 //! - [`peek-detect`](peek_detect): `FileType` + format enums + magic /
 //!   extension / content classification + transparent decompression.
 
-pub use peek_io::{ByteSource, InputSource};
-pub use peek_io::{source, stream};
+pub use peek_io::InputSource;
 
 pub mod stdin;
 
