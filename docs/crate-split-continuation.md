@@ -1,11 +1,17 @@
 # Crate split continuation — reader/viewer layer
 
-> **Status: in progress.** Extends the completed io/detect split
-> ([archived/crate-split-plan.md](archived/crate-split-plan.md)). Goal: hoist the
-> reader/viewer layer into `peek-foundation` + `peek-types` crates below the `peek`
-> binary, so type modules (which parse untrusted file bytes) are barred by Cargo from
-> reaching the event loop / terminal / process control — the same hardening rationale
-> that justified `peek-detect`.
+> **Status: in progress — inversions done, carve pending.** Extends the completed io/detect
+> split ([archived/crate-split-plan.md](archived/crate-split-plan.md)). Goal: hoist the
+> reader/viewer layer into `peek-foundation` + `peek-types` crates below the `peek` binary,
+> so type modules (which parse untrusted file bytes) are barred by Cargo from reaching the
+> event loop / terminal / process control — the same hardening rationale that justified
+> `peek-detect`.
+>
+> **This doc is the *why* + the inversion record.** The remaining mechanical execution
+> (hub relocation + crate manifests) lives in
+> [crate-split-carve.md](crate-split-carve.md) — that is the source of truth for the carve;
+> do not duplicate execution detail here. Archive this doc (rationale has lasting value)
+> when the carve lands.
 
 ## Why
 
@@ -179,45 +185,17 @@ All foundation→types *toolkit* edges are now removed. Verified: **zero** non-h
 What remains is **purely mechanical**: relocate the two dispatch hubs, then draw the crate
 manifests + facade aliases + visibility bumps. No more design work.
 
-### Step C — hub relocation
+### Steps C & D — hub relocation + crate boundary → see the carve doc
 
-**Refined after the A/B measurement (2026-06-05).** With the foundation toolkit now
-types-clean, the only types-touching code is three dispatch hubs + `ViewerState`. The
-original plan put the hubs in the bin; measurement shows a cleaner home — all three
-dispatch `FileType → types::X::*`, so they belong **in the `peek-types` crate** as its
-public dispatch API, depending down on the foundation, called down-into by the bin. No
-extra inversions needed.
+The remaining work (relocate the `compose_modes` / `gather` hubs, create
+`peek-foundation` + `peek-types`, facade aliases, `pub(crate)→pub` bumps, test
+relocation) is mechanical and lives in **[crate-split-carve.md](crate-split-carve.md)** —
+the execution source of truth. Not duplicated here to avoid drift.
 
-- **`peek-types` crate (with the per-type modules):**
-  - `info/gather/` — the `FileType → types::X::gather` dispatch (56 edges) + per-type gather
-  - `viewer/mod.rs::compose_modes` + `Registry` — the `FileType → types::X::compose` dispatch
-  - `extract/` — the `FileType → types::X::extract` dispatch
-- **`peek-foundation` crate (types-clean toolkit):** Mode trait / ModeId / RenderCtx /
-  ComposeCtx; shared modes (content/hex/pretty/table/listing/paged/rendered_text); ui
-  primitives (Action / wrap / search / ScreenBuffer); `image_render`; info base (InfoExtras /
-  FileInfo / CompressionInfo / `render` entry / helpers / time); highlight / wrap_scroll /
-  cell_size.
-- **`peek` bin:** `ViewerState`, the interactive event loop (`interactive.rs`), `main`,
-  `cli`, `update`, `output`. Calls `peek-types`' `gather()` / `compose_modes()` /
-  `extract()`; `ViewerState → extract` becomes a clean bin → types edge (no inversion).
-
-The split runs *through* `viewer/mod.rs` (ComposeCtx/RenderCtx/Mode-infra → foundation;
-Registry/compose_modes → types) and `viewer/ui/` (primitives → foundation; ViewerState →
-bin). Those two file/dir splits are the bulk of the mechanical work.
-
-**Risk:** medium-high — large volume (split mod.rs + ui/, relocate gather + extract,
-pub(crate)→pub across the new boundary). Lower intellectual risk than A (edges are already
-one-way), but high churn. **Verify:** full suite; info view + mode composition for every type.
-
-### Step D — draw the crate boundary
-
-Split the foundation cluster + `types/` into `peek-foundation` + `peek-types` crates.
-Edges already point one way after A–C, so this is near-mechanical: create the crates,
-move modules, add a `src/` façade re-exporting under historical paths where churn would
-otherwise be large (mirror `src/input/`).
-
-**Risk:** low. **Verify:** `cargo build` + `cargo test`; confirm Cargo bars `peek-types`
-from naming the bin (no event-loop/process-control symbols reachable).
+> **Decision corrected:** an earlier draft of this doc put the three dispatch hubs *in
+> `peek-types`*. That was reversed — the hubs are **session-orchestration glue and live in
+> the bin**; `peek-types` stays pure parsers (per-type `compose`/`extract`/`gather_extras`
+> functions, no `FileType` matching). The carve doc reflects the final decision.
 
 ## Notes
 
