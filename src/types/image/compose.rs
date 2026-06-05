@@ -2,10 +2,10 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
 
@@ -15,7 +15,7 @@ use crate::viewer::{ComposeCtx, image_config};
 pub fn compose(
     source: &InputSource,
     detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {

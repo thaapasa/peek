@@ -7,10 +7,10 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType, VObjectFormat};
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{Mode, RenderedTextMode};
 
 use super::calendar::CalendarRenderer;
@@ -19,7 +19,7 @@ use super::contact::ContactRenderer;
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: VObjectFormat,

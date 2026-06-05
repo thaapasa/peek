@@ -2,10 +2,9 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
+use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode, PrettyView,
 };
@@ -38,17 +37,22 @@ pub struct Registry {
     plain_mode: bool,
     theme_name: PeekThemeName,
     peek_theme: PeekTheme,
+    /// CLI-derived compose options, read by `compose_modes` and the
+    /// per-type compose fns. Held here so neither the dispatcher nor the
+    /// builder closures have to thread `&Args` (clap) through.
+    opts: ComposeOpts,
 }
 
 impl Registry {
-    pub fn new(args: &Args) -> Result<Self> {
-        let theme = Rc::new(ThemeManager::new(args.theme, args.color));
+    pub fn new(opts: &ComposeOpts) -> Result<Self> {
+        let theme = Rc::new(ThemeManager::new(opts.theme, opts.color));
         let peek_theme = theme.peek_theme().clone();
         Ok(Self {
             theme_manager: theme,
-            plain_mode: args.plain,
-            theme_name: args.theme,
+            plain_mode: opts.plain,
+            theme_name: opts.theme,
             peek_theme,
+            opts: opts.clone(),
         })
     }
 
@@ -74,9 +78,9 @@ impl Registry {
         &self,
         source: &InputSource,
         detected: &Detected,
-        args: &Args,
     ) -> Result<Vec<Box<dyn Mode>>> {
         let file_type = &detected.file_type;
+        let args = &self.opts;
         let mut modes: Vec<Box<dyn Mode>> = Vec::new();
         let ctx = self.compose_ctx();
 
@@ -225,6 +229,28 @@ pub struct ComposeCtx {
     pub plain_mode: bool,
 }
 
+/// CLI-derived configuration the compose path reads — the subset of
+/// `cli::Args` that mode construction needs, as plain values. The bin
+/// builds it (`Args::compose_opts`) and threads `&ComposeOpts` through
+/// `Registry::new` / `compose_modes` / every `types::<x>::compose`, so
+/// the reader/compose layer never depends on clap. (clap stays in the
+/// bin; this is what lets `compose_modes` live in `peek-types`.)
+#[derive(Clone)]
+pub struct ComposeOpts {
+    pub theme: PeekThemeName,
+    pub color: StyleMode,
+    pub plain: bool,
+    pub raw: bool,
+    pub line_numbers: bool,
+    pub no_svg_anim: bool,
+    pub language: Option<String>,
+    pub width: u32,
+    pub margin: u32,
+    pub image_mode: String,
+    pub background: String,
+    pub edge_density: f32,
+}
+
 impl ComposeCtx {
     /// Build a `ContentMode` for text-based file types: source code,
     /// structured (lazy pretty-print), plain text, or SVG XML.
@@ -237,7 +263,7 @@ impl ComposeCtx {
         &self,
         source: &InputSource,
         file_type: &FileType,
-        args: &Args,
+        args: &ComposeOpts,
     ) -> Result<Box<dyn Mode>> {
         let line_source = source.open_line_source()?;
 
@@ -301,7 +327,7 @@ impl ComposeCtx {
 /// Build the image-render configuration from CLI args. A free function,
 /// not a `ComposeCtx` method — it reads only `args`, nothing the
 /// `ComposeCtx` bundle carries.
-pub fn image_config(args: &Args) -> crate::viewer::image_render::ImageConfig {
+pub fn image_config(args: &ComposeOpts) -> crate::viewer::image_render::ImageConfig {
     use crate::viewer::image_render::{Background, FitMode, ImageConfig, ImageMode};
     ImageConfig {
         mode: ImageMode::from_str(&args.image_mode),

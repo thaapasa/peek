@@ -1150,12 +1150,11 @@ mod tests {
 
     fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> ViewerState {
         let args = Args::parse_from(args_argv);
-        let registry = Rc::new(Registry::new(&args).unwrap());
-        let modes = registry.compose_modes(&source, &detected, &args).unwrap();
+        let registry = Rc::new(Registry::new(&args.compose_opts()).unwrap());
+        let modes = registry.compose_modes(&source, &detected).unwrap();
         let registry_for_builder = registry.clone();
-        let args_for_builder = args.clone();
         let mode_builder: ModeBuilder =
-            Box::new(move |s, d| registry_for_builder.compose_modes(s, d, &args_for_builder));
+            Box::new(move |s, d| registry_for_builder.compose_modes(s, d));
         ViewerState::new(
             source,
             detected,

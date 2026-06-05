@@ -9,10 +9,10 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, EmailFormat, FileType};
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, EntryMtime, ListingMode, time_from_epoch_secs};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
 
@@ -23,7 +23,7 @@ use super::{EmailFormat as Fmt, mbox};
 pub fn compose(
     source: &InputSource,
     detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: EmailFormat,

@@ -125,7 +125,7 @@ fn run_view(
 
     let interactive = !args.print && std::io::stdout().is_terminal();
 
-    let viewers = viewer::Registry::new(args)?;
+    let viewers = viewer::Registry::new(&args.compose_opts())?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
     // --info mode: a fixed-size summary, written straight to stdout. For
@@ -143,7 +143,7 @@ fn run_view(
     }
 
     let mut modes = viewers
-        .compose_modes(source, detected, args)
+        .compose_modes(source, detected)
         .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
 
     // --list: render the listing-mode TOC to stdout (no viewer). Errors
@@ -178,9 +178,8 @@ fn run_view(
         // path is uniform across file types.
         let viewers = std::rc::Rc::new(viewers);
         let viewers_for_builder = viewers.clone();
-        let args_for_builder = args.clone();
         let mode_builder: viewer::ui::state::ModeBuilder =
-            Box::new(move |s, d| viewers_for_builder.compose_modes(s, d, &args_for_builder));
+            Box::new(move |s, d| viewers_for_builder.compose_modes(s, d));
         let theme_name = viewers.theme_name();
         let source_name = source.name().to_string();
         viewer::interactive::run(

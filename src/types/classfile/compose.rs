@@ -4,17 +4,17 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{InfoMode, Mode};
 use crate::viewer::table::TableMode;
 
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    _args: &Args,
+    _args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {

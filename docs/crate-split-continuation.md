@@ -158,6 +158,12 @@ path are `RenderArgs`, unrelated.)
 **Verify:** every type's compose path; CLI flags still take effect (`--raw`, `--line-numbers`,
 `--theme`, `--image-mode`, etc.).
 
+**Done 2026-06-05.** `ComposeOpts` (12 fields) defined in `viewer/mod.rs`; `Args::compose_opts()`
+in the bin (`cli.rs`) is the projection seam. The `Registry` now *holds* the `ComposeOpts`, so
+`compose_modes` dropped its `args` param entirely (reads `self.opts`) — and the two builder
+closures (main + state) no longer capture a cloned `Args`. All 23 `types/*/compose.rs` take
+`&ComposeOpts`; `types/` is now fully clap-free (`grep` confirms zero `cli::Args` references).
+
 ### Step C — hub relocation
 
 **Refined after the A/B measurement (2026-06-05).** With the foundation toolkit now

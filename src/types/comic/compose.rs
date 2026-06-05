@@ -2,11 +2,11 @@
 
 use anyhow::Result;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{ArchiveFormat, Detected};
 use crate::types::archive;
 use crate::types::comic::{CbzPageRenderer, cbz};
+use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
@@ -15,7 +15,7 @@ use crate::viewer::{ComposeCtx, image_config};
 pub fn compose(
     source: &InputSource,
     _detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {

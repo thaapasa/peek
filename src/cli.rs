@@ -153,3 +153,26 @@ pub struct Args {
     #[arg(long = "cell-aspect", value_name = "RATIO", hide_short_help = true)]
     pub cell_aspect: Option<f64>,
 }
+
+impl Args {
+    /// Project the clap-parsed args down to the plain `ComposeOpts` the
+    /// compose path consumes — the seam that keeps clap out of the
+    /// reader/compose layer (and, after the crate split, out of
+    /// `peek-types`).
+    pub fn compose_opts(&self) -> crate::viewer::ComposeOpts {
+        crate::viewer::ComposeOpts {
+            theme: self.theme,
+            color: self.color,
+            plain: self.plain,
+            raw: self.raw,
+            line_numbers: self.line_numbers,
+            no_svg_anim: self.no_svg_anim,
+            language: self.language.clone(),
+            width: self.width,
+            margin: self.margin,
+            image_mode: self.image_mode.clone(),
+            background: self.background.clone(),
+            edge_density: self.edge_density,
+        }
+    }
+}

@@ -13,13 +13,13 @@ use std::borrow::Cow;
 use anyhow::Result;
 use bytes::Bytes;
 
-use crate::Args;
 use crate::input::InputSource;
 use crate::input::detect::{Detected, FileType};
 use crate::types::font::info_gather;
 use crate::types::font::specimen;
 use crate::types::font::specimen_mode::SpecimenMode;
 use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 
 /// Vertical pixel budget for the rendered specimen canvas. Chosen so
@@ -32,7 +32,7 @@ const SPECIMEN_TARGET_HEIGHT_PX: u32 = 320;
 pub fn compose(
     source: &InputSource,
     detected: &Detected,
-    args: &Args,
+    args: &ComposeOpts,
     _ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
