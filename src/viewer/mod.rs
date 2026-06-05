@@ -7,7 +7,7 @@ use crate::input::InputSource;
 use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
 use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::modes::{
-    AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode,
+    AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode, PrettyView,
 };
 use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
@@ -264,6 +264,16 @@ impl ComposeCtx {
         let start_pretty =
             pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
 
+        // Build the pretty branch here, in the compose hub that holds the
+        // structured knowledge, and inject it — `ContentMode` / `PrettyView`
+        // stay type-agnostic (no reach into `types::structured`).
+        let pretty = pretty_target.map(|fmt| {
+            PrettyView::new(
+                move |raw: &str| crate::types::structured::pretty::pretty_print(raw, fmt),
+                crate::types::structured::info::format_name(fmt),
+            )
+        });
+
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
             FileType::Svg | FileType::Html | FileType::Markdown => "Source",
@@ -279,7 +289,7 @@ impl ComposeCtx {
             ContentModeConfig {
                 label,
                 syntax_token,
-                pretty_target,
+                pretty,
                 start_pretty,
                 line_numbers: args.line_numbers,
             },
