@@ -3,7 +3,7 @@ use std::rc::Rc;
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType, StructuredFormat};
+use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode, PrettyView,
@@ -239,7 +239,8 @@ pub struct ComposeCtx {
 /// builds it (`Args::compose_opts`) and threads `&ComposeOpts` through
 /// `Registry::new` / `compose_modes` / every `types::<x>::compose`, so
 /// the reader/compose layer never depends on clap. (clap stays in the
-/// bin; this is what lets `compose_modes` live in `peek-types`.)
+/// bin; this is what keeps it out of `peek-types`, where the per-type
+/// `compose` functions live.)
 #[derive(Clone)]
 pub struct ComposeOpts {
     pub theme: PeekThemeName,
@@ -264,11 +265,11 @@ impl ComposeCtx {
     /// count lines and capture sparse anchors — instead of reading the
     /// whole file into memory. Pretty-print is deferred to the first
     /// time pretty view is rendered, capped at `PRETTY_MAX_BYTES`.
-    /// `pretty` is the pre-built pretty-print branch (or `None`). The
-    /// caller supplies it via `types::structured::pretty_view_for` so the
-    /// `types::structured` dependency stays on the reader side — this
-    /// foundation method never names it. Must match `pretty_target` below
-    /// (both key on the same `file_type` + plain state).
+    /// `pretty` is the pre-built pretty-print branch (or `None`), supplied
+    /// by the caller via `types::structured::pretty_view_for`. That branch
+    /// carries its own default-view intent (`starts_default`), so this
+    /// method does no format reasoning — it names no `types::*` reader
+    /// module and never matches on which formats pretty-print.
     pub fn text_content_mode(
         &self,
         source: &InputSource,
@@ -278,29 +279,16 @@ impl ComposeCtx {
     ) -> Result<Box<dyn Mode>> {
         let line_source = source.open_line_source()?;
 
-        let pretty_target = if !self.plain_mode {
-            match file_type {
-                FileType::Structured(fmt) => Some(*fmt),
-                FileType::Svg => Some(StructuredFormat::Xml),
-                _ => None,
-            }
-        } else {
-            None
-        };
-
         let syntax_token = if self.plain_mode {
             None
         } else {
             syntax_token_for(args.language.as_deref(), source, file_type)
         };
 
-        // Pretty-print is the default whenever it's available *and* the
-        // round-trip is lossless. `--raw` always flips structured/SVG views
-        // back to the raw source. JSONC and JSON5 have lossy pretty paths
-        // (comments dropped, JSON5 syntax collapsed) so they default to raw —
-        // `r` still toggles for users who want the strict-JSON view.
-        let start_pretty =
-            pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
+        // Pretty is the default view whenever the branch opts into it
+        // (available + lossless round-trip — the reader decides) and the
+        // user hasn't forced `--raw`. `r` still toggles either way.
+        let start_pretty = pretty.as_ref().is_some_and(PrettyView::starts_default) && !args.raw;
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",
@@ -399,10 +387,4 @@ pub(crate) fn append_universal_modes(
     }
     modes.push(Box::new(HelpMode::new(help_sections)));
     Ok(())
-}
-
-/// True when pretty-printing the format drops information from the source
-/// (comments / JSON5 features / etc.), so raw should be the default view.
-fn is_lossy_pretty(fmt: StructuredFormat) -> bool {
-    matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5)
 }

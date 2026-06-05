@@ -56,6 +56,12 @@ pub(crate) struct PrettyView {
     pretty_print: PrettyPrinter,
     /// Format display name for the parse-failure warning (e.g. "JSON").
     format_name: &'static str,
+    /// Whether this branch should be the *default* view (pretty over raw)
+    /// when the user hasn't forced `--raw`. False for lossy formats
+    /// (JSONC / JSON5) that drop content on the pretty round-trip. Set by
+    /// the caller that knows the format, so the foundation never reasons
+    /// about which formats are lossy.
+    starts_default: bool,
     /// `None` until the first parse attempt.
     parsed: Option<Parsed>,
     /// Rendered lines + the `(theme, colour)` they were produced for.
@@ -68,13 +74,20 @@ impl PrettyView {
     pub(crate) fn new(
         pretty_print: impl Fn(&str) -> Result<String> + 'static,
         format_name: &'static str,
+        starts_default: bool,
     ) -> Self {
         Self {
             pretty_print: Box::new(pretty_print),
             format_name,
+            starts_default,
             parsed: None,
             rendered: None,
         }
+    }
+
+    /// Whether to open in pretty view by default (absent `--raw`).
+    pub(crate) fn starts_default(&self) -> bool {
+        self.starts_default
     }
 
     /// Parse the document on the first call; a no-op afterwards.
@@ -212,6 +225,7 @@ mod tests {
                 Ok(raw.replace(',', ",\n"))
             },
             "JSON",
+            true,
         )
     }
 

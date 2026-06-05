@@ -26,8 +26,12 @@ pub fn pretty_view_for(file_type: &FileType, plain_mode: bool) -> Option<PrettyV
         FileType::Svg => StructuredFormat::Xml,
         _ => return None,
     };
+    // Lossy formats (JSONC / JSON5 drop comments / collapse syntax on the
+    // round-trip) default to the raw view; everyone else opens pretty.
+    let starts_default = !matches!(fmt, StructuredFormat::Jsonc | StructuredFormat::Json5);
     Some(PrettyView::new(
         move |raw: &str| pretty::pretty_print(raw, fmt),
         info::format_name(fmt),
+        starts_default,
     ))
 }

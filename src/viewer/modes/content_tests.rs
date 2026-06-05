@@ -14,7 +14,7 @@ use std::path::PathBuf;
 /// on commas so valid input spreads onto multiple lines. Keeps these mode
 /// tests independent of `types::structured`.
 fn json_pretty() -> PrettyView {
-    PrettyView::new(|raw: &str| Ok(raw.replace(',', ",\n")), "JSON")
+    PrettyView::new(|raw: &str| Ok(raw.replace(',', ",\n")), "JSON", true)
 }
 
 fn fixture(name: &str) -> InputSource {
