@@ -4,11 +4,27 @@
 
 use super::super::pretty_view::{PRETTY_MAX_BYTES, PrettyView};
 use super::*;
-use crate::info::RenderOptions;
-use crate::input::detect;
+use crate::info::{FileInfo, NoExtras, RenderOptions};
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use bytes::Bytes;
 use std::path::PathBuf;
+
+/// Minimal `FileInfo` for building a `RenderCtx` without the `gather`
+/// hub — these mode tests never read its fields, only need the struct.
+fn synthetic_file_info() -> FileInfo {
+    FileInfo {
+        file_name: String::new(),
+        path: String::new(),
+        size_bytes: 0,
+        mimes: Vec::new(),
+        warnings: Vec::new(),
+        modified: None,
+        created: None,
+        permissions: None,
+        compression: None,
+        extras: Box::new(NoExtras),
+    }
+}
 
 /// A pretty branch standing in for the structured pretty-printer: splits
 /// on commas so valid input spreads onto multiple lines. Keeps these mode
@@ -42,8 +58,7 @@ fn make_ctx<'a>(file_info: &'a crate::info::FileInfo, peek_theme: &'a PeekTheme)
 #[test]
 fn render_window_matches_whole_file_highlight() {
     let source = fixture("theme.rs");
-    let detected = detect::detect(&source).unwrap();
-    let file_info = crate::gather::gather(&source, &detected).unwrap();
+    let file_info = synthetic_file_info();
     let tm = Rc::new(ThemeManager::new(
         PeekThemeName::IdeaDark,
         StyleMode::TrueColor,
@@ -434,8 +449,7 @@ fn status_segments_show_search_position() {
 /// through those width helpers, which expand tabs to 4-col tab stops.
 #[test]
 fn tab_indented_line_expands_to_spaces_in_render() {
-    let source = InputSource::stdin(Bytes::from_static(b"\tindented\n"));
-    let file_info = crate::gather::gather(&source, &detect::detect(&source).unwrap()).unwrap();
+    let file_info = synthetic_file_info();
     let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
     let peek_theme = tm.peek_theme().clone();
     let ctx = make_ctx(&file_info, &peek_theme);

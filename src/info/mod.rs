@@ -71,6 +71,18 @@ pub trait InfoExtras: std::any::Any {
 /// Boxed per-type info payload carried by [`FileInfo::extras`].
 pub type Extras = Box<dyn InfoExtras>;
 
+/// No-op [`InfoExtras`] for synthetic `FileInfo` fixtures in tests.
+/// Lets viewer-mode unit tests build a `RenderCtx` without running the
+/// full `gather` hub (or naming any concrete per-type stats struct), so
+/// those tests stay pure mechanics — no dependency on the reader crate.
+#[cfg(test)]
+pub(crate) struct NoExtras;
+
+#[cfg(test)]
+impl InfoExtras for NoExtras {
+    fn render_section(&self, _lines: &mut Vec<String>, _theme: &PeekTheme) {}
+}
+
 /// Recover the concrete stats struct from an [`Extras`] payload, panicking
 /// if it isn't a `T`. Upcasts the trait object to `dyn Any` (stable trait
 /// upcasting, Rust ≥ 1.86). Test-only — see the `Any` note on [`InfoExtras`].
