@@ -5,6 +5,7 @@ use clap::Parser;
 
 mod base64;
 mod cli;
+mod compose;
 mod extract;
 mod gather;
 mod info;
@@ -126,7 +127,7 @@ fn run_view(
 
     let interactive = !args.print && std::io::stdout().is_terminal();
 
-    let viewers = viewer::Registry::new(&args.compose_opts())?;
+    let viewers = compose::Registry::new(&args.compose_opts())?;
     let render_opts = info::RenderOptions { utc: args.utc };
 
     // --info mode: a fixed-size summary, written straight to stdout. For
@@ -275,7 +276,7 @@ fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
 /// and `term_cols` comes from `--width` or the detected terminal.
 fn pipe_render_ctx<'a>(
     file_info: &'a info::FileInfo,
-    viewers: &'a viewer::Registry,
+    viewers: &'a compose::Registry,
     render_opts: info::RenderOptions,
     args: &Args,
 ) -> viewer::modes::RenderCtx<'a> {

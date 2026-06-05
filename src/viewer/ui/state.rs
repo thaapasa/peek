@@ -1134,7 +1134,7 @@ fn restore_position(f: &mut SessionFrame) {
 mod tests {
     use super::*;
     use crate::Args;
-    use crate::viewer::Registry;
+    use crate::compose::Registry;
     use clap::Parser;
     use crossterm::event::{KeyCode, KeyEventKind, KeyEventState, KeyModifiers};
     use std::rc::Rc;
