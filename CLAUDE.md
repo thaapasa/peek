@@ -23,8 +23,10 @@ release tarball, loaded dynamically at startup. Ghostscript available if found o
 Top-level only. Full file/module breakdown: [docs/architecture-map.md](docs/architecture-map.md) —
 read when adding files, modifying module, or unsure where logic lives.
 
-Cargo workspace. Two leaf crates sit below the `peek` binary so detection can be
-reviewed/hardened in isolation and is barred (by Cargo) from depending on the reader/viewer layer:
+Cargo workspace, five library crates under the thin `peek` binary. The layering is
+Cargo-enforced: detection and the parser layer are barred from naming the binary's session layer
+(the compose / gather / extract dispatch hubs + the interactive event loop), so a bug parsing
+hostile bytes can't reach process / terminal control.
 
 ```
 crates/
@@ -40,58 +42,56 @@ crates/
   peek-theme/          — theming leaf: PeekTheme semantic roles + paint helpers; PeekThemeName +
                          embedded .tmTheme data (themes/); StyleMode + SGR encoders/tokenizer +
                          ActiveStyle; ThemeManager. Depends on nothing in-tree (parallel to
-                         peek-io). Aliased into the bin as `crate::theme` via `use peek_theme as theme`.
-src/
-  main.rs              — CLI entry point: dispatches inputs to viewers
-  cli.rs               — Args struct (clap derive)
-  base64.rs            — shared standard-alphabet base64 decoder (crate-wide; notebook image extract is first user)
-  update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
-  xml.rs               — shared XML attribute-unescape helper (docx / odt / epub / structured-xml / spreadsheet)
-  input/               — thin façade re-exporting peek-io + peek-detect under the historical
-                         `crate::input::*` paths (so the reader layer is unchanged); plus the
-                         CLI-level stdin/source dispatch (build_source, needs Args) that stays
-                         in the binary
-  extract/             — FileType → per-type extractor dispatch; Extracted / Options / Error;
-                         path sanitiser; stdout-stream or file write
-  output/              — PrintOutput (write-once stdout for --print / pipes / --info);
-                         CLI help and version screens
-  info/                — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); gather/
-                         (per-source collection) + render/ (dynamic trait dispatch, themed
-                         section rendering); per-type impls in types/info_impls.rs; time fmt
-  theme                — alias (`use peek_theme as theme`) for the peek-theme crate above;
-                         keeps the historical `crate::theme::*` paths working
-  types/               — Per-file-type modules (each owns reader + info + view-mode; the format
-                         enum + detection helpers live in `peek-detect`, re-exported at each
-                         module root):
-                         binary, text, markdown, notebook (ipynb — cells rendered
-                         via the markdown pipeline + JSON source), sql, sqlite
-                         (read-only via bundled rusqlite — schema listing +
-                         streaming row viewer), css,
-                         structured (JSON/YAML/TOML/XML), csv,
-                         spreadsheet (xlsx/xlsm/ods), image (+ ASCII pipeline +
-                         SVG anim), html, email (eml/mbox), ebook (epub),
-                         document (docx/odt/rtf), pdf, eps (eps/ps),
+                         peek-io). Aliased as `crate::theme` via `use peek_theme as theme`.
+  peek-foundation/     — reader/viewer toolkit + info base. Sits above theme/io/detect, below
+                         peek-types; barred from the bin. lib.rs façade: `theme` alias + `input`
+                         re-export of peek-io/peek-detect (so moved modules' `crate::*` resolve).
+                         A `testing` feature exposes a few test helpers to the other crates'
+                         test builds (off in release).
+    viewer/            — Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes
+                         (content / pretty_view / gutter / hex / info / about / rendered_text<R>);
+                         listing/ (tree TOC); table/ (TableMode + RowsTableMode via RowSource);
+                         ui/ primitives (status line / ScreenBuffer / Prompt / Action keys /
+                         term-size); image_render vocab (ImageConfig / ImageMode / zoom / scroll /
+                         ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
+                         primitives; wrap_scroll; cell_size; highlight. NB: compose_modes /
+                         ViewerState / the event loop are NOT here — they're the bin's session layer.
+    info/              — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); render/
+                         (dynamic trait dispatch, themed sections) + time fmt. (gather hub → bin.)
+    output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
+                         theme-gradient logo painter (shared with the bin's help screen).
+    extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path
+                         sanitiser / forward-slash-key helpers. (The dispatch hub → bin.)
+    base64, xml        — shared standard-alphabet base64 + XML attribute-unescape helpers.
+  peek-types/          — per-file-type readers, one module per type (reader + info + view-mode;
+                         the format enum + sniff helpers live in peek-detect, re-exported at each
+                         module root). Depends on foundation/detect/io/theme — Cargo bars it from
+                         naming the bin's session layer. lib.rs façade mirrors foundation's +
+                         `pub mod types`. Owns the parser dependency set (object, cafebabe,
+                         rusqlite, pdfium, calamine, symphonia, ttf-parser, fontdue, mail-parser,
+                         x509-parser, …). Types:
+                         binary, text, markdown, notebook (ipynb), sql, sqlite (read-only via
+                         bundled rusqlite), css, structured (JSON/YAML/TOML/XML), csv,
+                         spreadsheet (xlsx/xlsm/ods), image (+ ASCII pipeline + SVG anim), html,
+                         email (eml/mbox), ebook (epub), document (docx/odt/rtf), pdf, eps (eps/ps),
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
-                         disk_image (iso/dmg), objfile, classfile,
-                         cert (PEM X.509 / CSR / CRL / keys / SSH pubkey),
-                         font (TTF/OTF/TTC — metadata + fontdue-rasterised specimen)
-  viewer/              — Mode trait + ModeId + RenderCtx + ExtractTarget; compose_modes
-                         dispatch table; interactive event loop; search primitives (SearchState,
-                         reveal_h_scroll); wrap_scroll geometry; paged (PagedImageMode<R> +
-                         image-config cycling); cell-size detection
-    listing/           — ListingMode (tree TOC: perms / size / mtime / path) + shared row
-                         primitives + ListingViewport (scroll / selection / sticky chain)
-    modes/             — Shared modes: content (streamed text/syntax/structured/SVG),
-                         pretty_view, gutter, hex, info, help, about, rendered_text<R> (generic
-                         whole-document read mode for DOCX/ODT/RTF/HTML/Markdown/PDF text)
-    table/             — Two aligned-table flavours under one roof: TableMode (materialised:
-                         objfile / classfile) + RowsTableMode (streaming via the RowSource
-                         trait: CSV + SQLite contents). Shared visual shape, separate
-                         data models
-    ui/                — alternate-screen / status line / term-size; ViewerState (mode stack +
-                         extract dispatch + prompt slot); Prompt overlay; ScreenBuffer (diff
-                         redraw); Action keybindings; help screen
-crates/peek-theme/themes/ — Embedded .tmTheme files (idea-dark default + vscode variants)
+                         disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /
+                         keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen)
+  peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + vscode variants)
+src/                   — the bin: the thin session layer (CLI + the three dispatch hubs + the
+                         interactive event loop). Re-exports peek-foundation/peek-types modules so
+                         the hubs keep `crate::{viewer,info,types,extract,base64,xml}` paths.
+  main.rs              — CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe)
+  cli.rs               — Args (clap derive) + `compose_opts()` projection (keeps clap out of the readers)
+  update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
+  input/               — façade re-exporting peek-io + peek-detect under `crate::input::*`, plus
+                         the CLI-level stdin/source dispatch (build_source, needs Args)
+  output/              — CLI help + version screens; re-exports foundation's PrintOutput
+  compose.rs           — Registry + the FileType→types::<x>::compose dispatch hub (holds ComposeOpts)
+  gather/              — the FileType→types::<x> info-gather dispatch hub
+  extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)
+  viewer_session/      — ViewerState (mode stack + scroll/view cache + extract/descend dispatch +
+                         prompt slot) + the interactive event loop
 docs/                  — Builder / agent reference (see architecture-map.md for the index)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
 .github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +

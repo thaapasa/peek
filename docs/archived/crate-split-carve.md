@@ -1,8 +1,13 @@
 # Crate-split carve — execution playbook (peek-foundation + peek-types)
 
-> **Status: ready to execute.** All design-level inversions are done (branch
-> `reader-crate-split`, head `b6a9c92`, PR #16, green). This doc is the mechanical
-> playbook for the remaining physical carve — no design decisions left. Companion:
+> **Status: Completed 2026-06-05.** Archived for reference. The carve landed:
+> `peek-foundation` + `peek-types` exist, the three dispatch hubs (compose /
+> gather / extract) live in the bin, and Cargo bars peek-types from the session
+> layer. Some mechanics differed from the playbook below — notably the bin grew a
+> `viewer_session/` module (ViewerState + event loop), the extract *vocabulary*
+> moved to foundation while only the dispatch stayed in the bin, and cross-crate
+> test helpers sit behind a `testing` cargo feature rather than being relocated.
+> Kept for the rationale + gotchas. Companion:
 > [crate-split-continuation.md](crate-split-continuation.md) (the why + the inversion history).
 
 ## Precondition (already true on the branch)

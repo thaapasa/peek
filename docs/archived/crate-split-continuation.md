@@ -1,17 +1,14 @@
 # Crate split continuation — reader/viewer layer
 
-> **Status: in progress — inversions done, carve pending.** Extends the completed io/detect
-> split ([archived/crate-split-plan.md](archived/crate-split-plan.md)). Goal: hoist the
+> **Status: Completed 2026-06-05.** Archived for reference. Extends the completed io/detect
+> split ([crate-split-plan.md](crate-split-plan.md)). Goal (achieved): hoist the
 > reader/viewer layer into `peek-foundation` + `peek-types` crates below the `peek` binary,
 > so type modules (which parse untrusted file bytes) are barred by Cargo from reaching the
 > event loop / terminal / process control — the same hardening rationale that justified
 > `peek-detect`.
 >
-> **This doc is the *why* + the inversion record.** The remaining mechanical execution
-> (hub relocation + crate manifests) lives in
-> [crate-split-carve.md](crate-split-carve.md) — that is the source of truth for the carve;
-> do not duplicate execution detail here. Archive this doc (rationale has lasting value)
-> when the carve lands.
+> **This doc is the *why* + the inversion record.** The mechanical execution lives in
+> [crate-split-carve.md](crate-split-carve.md).
 
 ## Why
 

@@ -29,12 +29,16 @@ edge points back up. This turns architectural rules ("detection must not depend 
 convention into compile errors.
 
 ```
-peek (bin)        readers, viewer, theme, info, extract, CLI — the whole interactive/print app
-  ▲
-peek-detect       file-type detection: FileType + format enums + magic/extension/content
-  │               classification + MIME + transparent decompress-then-redetect. Depends on peek-io.
-  ▲
-peek-io           input foundation: InputSource + streaming byte/line sources + bare codecs +
+peek (bin)        session layer: CLI + the compose / gather / extract dispatch hubs + the
+  ▲               interactive event loop (viewer_session). Depends on every crate below.
+peek-types        per-file-type readers (one module per type). Owns the parser deps. Depends on
+  ▲               foundation / detect / io / theme.
+peek-foundation   reader/viewer toolkit + info base + output/extract vocab + base64/xml. Depends
+  ▲               on theme / io / detect.
+peek-theme  ◀──┐  theming leaf (PeekTheme + tmThemes + SGR). Parallel to peek-io.
+peek-detect    │  file-type detection: FileType + format enums + magic/extension/content
+  ▲            │  classification + MIME + transparent decompress-then-redetect. Depends on peek-io.
+peek-io  ◀─────┘  input foundation: InputSource + streaming byte/line sources + bare codecs +
                   stdin/tty. Depends on nothing in-tree.
 ```
 
@@ -48,17 +52,23 @@ Why these cuts:
   crates, `cargo tree -p peek-detect` is the litmus — it must stay free of the heavy reader deps
   (calamine, rusqlite, pdfium, symphonia, object, image…). The lone heavy detection dep is
   `x509-parser`, which cert detection uses to content-verify DER certs.
-- The **binary** keeps the reader/viewer layer and reaches the crates through a thin `crate::input`
-  façade (`src/input/mod.rs`) that re-exports them under the historical `crate::input::*` paths, so
-  reader code is insulated from the physical split.
+- **`peek-theme`** is the terminal-styling leaf, parallel to peek-io. Both are pure foundations the
+  layers above build on.
+- **`peek-foundation`** is the shared reader/viewer toolkit (the `Mode` engine, shared view modes,
+  the UI primitives, the image-render vocab, the info base, the output/extract value types). It can
+  reach theme/io/detect but **not** the bin — so the toolkit can't reach the event loop or process
+  control.
+- **`peek-types`** is the layer that parses untrusted file bytes (fonts, PDFs, archives, disk
+  images). Cargo bars it from naming the bin's session layer, so a parser bug is contained to a crate
+  with no I/O-control surface. `cargo tree -p peek-types` must not show the `peek` bin. It owns the
+  heavy parser dependency set.
+- The **binary** is the thin session layer: the CLI plus the three `FileType → types::<x>` dispatch
+  hubs (`compose.rs`, `gather/`, `extract/`) and the interactive event loop (`viewer_session/`). It
+  reaches the lower crates through thin façades (`crate::input` over peek-io/peek-detect; re-exports
+  of `peek_foundation::{viewer, info, …}` and `peek_types::types`) so the hubs' `crate::*` paths are
+  unchanged.
 
-This is expected to keep growing: as the binary accretes cohesive, dependency-heavy subsystems
-(candidates: the theme/styling layer, the image/rasterisation pipeline, the viewer/mode engine), peel
-each into its own crate below the bin once its boundary is clean and its public surface is small.
-Same test each time: a new crate earns its place by **narrowing a dependency edge** and shrinking the
-surface a reader of the layer above must hold in their head — not merely by moving files.
-
-The detailed per-file breakdown of all three crates lives in
+The detailed per-file breakdown of all five crates lives in
 [architecture-map.md](architecture-map.md).
 
 ## Data flow
@@ -490,30 +500,35 @@ wiring-sites checklist. Quick summary:
 1. Add a `FileType` variant in `crates/peek-detect/src/detect.rs` and wire detection. The per-type
    format enum + extension/MIME/content-sniff helpers live in `crates/peek-detect/src/types/<x>.rs`
    (the `peek-detect` crate, NOT the reader). Re-export the format enum from the reader module root
-   (`src/types/<x>/mod.rs`: `pub use peek_detect::types::<x>::<X>Format;`) so reader code keeps a
-   local `crate::types::<x>::<X>Format` path. Detection must stay reader-free — that boundary is now
-   enforced by the crate split (see the workspace note in [architecture-map.md](architecture-map.md)).
-2. Create the `types/<x>/` module and build the type's `Mode` impls there. Generic, reusable modes
-   — `ContentMode`, `RenderedTextMode`, `PagedImageMode`, `ListingMode` — already live in `viewer/`;
-   prefer wrapping one over a bespoke `Mode`. Add a `ModeId` variant if a mode must be toggleable by
-   id. Override `render_to_pipe` if the default (materialize-then-write) wastes memory or violates
-   byte-fidelity for that mode.
-3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then a `compose_modes`
-   arm delegating to it. Hex / Info / About / Help are appended automatically; pipe mode picks the
-   first non-aux mode (or first, if all are aux).
+   (`crates/peek-types/src/types/<x>/mod.rs`: `pub use peek_detect::types::<x>::<X>Format;`) so reader
+   code keeps a local `crate::types::<x>::<X>Format` path. Detection must stay reader-free — that
+   boundary is Cargo-enforced.
+2. Create the `crates/peek-types/src/types/<x>/` module and build the type's `Mode` impls there.
+   Generic, reusable modes — `ContentMode`, `RenderedTextMode`, `PagedImageMode`, `ListingMode` —
+   already live in `peek-foundation` (`viewer/`); prefer wrapping one over a bespoke `Mode`. Add a
+   `ModeId` variant if a mode must be toggleable by id. Override `render_to_pipe` if the default
+   (materialize-then-write) wastes memory or violates byte-fidelity for that mode.
+3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then **one arm in the
+   bin's `src/compose.rs`** (`Registry::compose_modes`) delegating to it. Hex / Info / About / Help
+   are appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).
+   The per-type `compose()` lives in peek-types; only the dispatch arm lives in the bin.
 4. Add `types/<x>/info_gather.rs` (`gather_extras(...)` returning `Extras`, i.e.
    `Box::new(<Stats>)`) and `types/<x>/info_render.rs` (`render_section(lines, &<Stats>,
-   theme)`) for type-specific metadata. Wire the gather arm in `info/gather/mod.rs`, then
-   add one `impl_info_extras!(<Stats>, ...::render_section)` row in `src/types/info_impls.rs`
-   binding the stats struct to the `InfoExtras` trait — `info::render` dispatches through
-   the trait, so there is no per-type render match. Tiny types may combine gather + render
-   into one `info.rs`.
+   theme)`) for type-specific metadata, with one `impl_info_extras!(<Stats>, ...::render_section)`
+   row binding the stats struct to the `InfoExtras` trait (`info::render` dispatches through the
+   trait — no per-type render match). Then wire **one arm in the bin's `src/gather/mod.rs`**
+   calling the type's `gather_extras`. Tiny types may combine gather + render into one `info.rs`.
+5. If the type is a container, add `types/<x>/extract.rs` (returning `peek_foundation::extract`'s
+   `Extracted` / `ExtractError`) and **one arm in the bin's `src/extract/extract.rs`**.
 
-Example — PDF (`src/types/pdf/compose.rs`):
+So a new type is: a peek-detect entry, a peek-types module, and up to three one-line dispatch arms in
+the bin (compose / gather / extract). See [conventions.md → File types](conventions.md#file-types).
+
+Example — PDF (`crates/peek-types/src/types/pdf/compose.rs`):
 
 ```rust
 // fn compose(source, detected, args, ctx, modes) — invoked from the
-// FileType::Pdf arm of Registry::compose_modes
+// FileType::Pdf arm of Registry::compose_modes (in the bin's src/compose.rs)
 let doc = pdf::package::open_doc(source)?;            // Pdfium-backed Doc, Arc-cloneable
 modes.push(Box::new(PagedImageMode::new(PdfPageRenderer::new(doc.clone()), image_config))); // page render
 modes.push(Box::new(RenderedTextMode::new(PdfTextRenderer::new(doc.clone())))); // text extract
