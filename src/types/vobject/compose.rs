@@ -34,6 +34,6 @@ pub fn compose(
             }
         });
     }
-    modes.push(ctx.text_content_mode(source, &FileType::VObject(fmt), args)?);
+    modes.push(ctx.text_content_mode(source, &FileType::VObject(fmt), args, None)?);
     Ok(())
 }

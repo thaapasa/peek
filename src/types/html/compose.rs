@@ -24,6 +24,6 @@ pub fn compose(
             source.clone(),
         ))));
     }
-    modes.push(ctx.text_content_mode(source, &FileType::Html, args)?);
+    modes.push(ctx.text_content_mode(source, &FileType::Html, args, None)?);
     Ok(())
 }

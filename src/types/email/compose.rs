@@ -37,14 +37,14 @@ pub fn compose(
             if !ctx.plain_mode {
                 modes.push(rendered_mode(source));
             }
-            modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Eml), args)?);
+            modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Eml), args, None)?);
             if let Some(listing) = attachments_listing(source) {
                 modes.push(Box::new(listing));
             }
         }
         Fmt::Mbox => {
             compose_mbox(source, detected, ctx.plain_mode, modes);
-            modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Mbox), args)?);
+            modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Mbox), args, None)?);
         }
     }
     Ok(())

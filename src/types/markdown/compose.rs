@@ -31,7 +31,7 @@ pub fn compose(
             Rc::clone(&ctx.theme_manager),
         )))
     });
-    let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args)?;
+    let source_mode = ctx.text_content_mode(source, &FileType::Markdown, args, None)?;
 
     match (rendered, args.raw) {
         (Some(r), false) => {

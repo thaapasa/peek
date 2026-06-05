@@ -39,6 +39,14 @@ pub fn compose(
         }
     }
     // Pair the SVG view with its XML source (the only view in `--plain`).
-    modes.push(ctx.text_content_mode(source, &crate::input::detect::FileType::Svg, args)?);
+    modes.push(ctx.text_content_mode(
+        source,
+        &crate::input::detect::FileType::Svg,
+        args,
+        crate::types::structured::pretty_view_for(
+            &crate::input::detect::FileType::Svg,
+            ctx.plain_mode,
+        ),
+    )?);
     Ok(())
 }

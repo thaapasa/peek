@@ -32,8 +32,15 @@ pub fn compose(
             Rc::clone(&ctx.theme_manager),
         )))
     });
-    let source_mode =
-        ctx.text_content_mode(source, &FileType::Structured(StructuredFormat::Json), args)?;
+    let source_mode = ctx.text_content_mode(
+        source,
+        &FileType::Structured(StructuredFormat::Json),
+        args,
+        crate::types::structured::pretty_view_for(
+            &FileType::Structured(StructuredFormat::Json),
+            ctx.plain_mode,
+        ),
+    )?;
 
     match (rendered, args.raw) {
         (Some(r), false) => {

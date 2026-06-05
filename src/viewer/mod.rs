@@ -92,7 +92,12 @@ impl Registry {
         // composing — they degrade through `StyleMode::Plain` on their own.
         match file_type {
             FileType::SourceCode { .. } | FileType::Structured(_) => {
-                modes.push(ctx.text_content_mode(source, file_type, args)?);
+                modes.push(ctx.text_content_mode(
+                    source,
+                    file_type,
+                    args,
+                    crate::types::structured::pretty_view_for(file_type, ctx.plain_mode),
+                )?);
             }
             FileType::Html => {
                 crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
@@ -259,11 +264,17 @@ impl ComposeCtx {
     /// count lines and capture sparse anchors — instead of reading the
     /// whole file into memory. Pretty-print is deferred to the first
     /// time pretty view is rendered, capped at `PRETTY_MAX_BYTES`.
+    /// `pretty` is the pre-built pretty-print branch (or `None`). The
+    /// caller supplies it via `types::structured::pretty_view_for` so the
+    /// `types::structured` dependency stays on the reader side — this
+    /// foundation method never names it. Must match `pretty_target` below
+    /// (both key on the same `file_type` + plain state).
     pub fn text_content_mode(
         &self,
         source: &InputSource,
         file_type: &FileType,
         args: &ComposeOpts,
+        pretty: Option<PrettyView>,
     ) -> Result<Box<dyn Mode>> {
         let line_source = source.open_line_source()?;
 
@@ -290,16 +301,6 @@ impl ComposeCtx {
         // `r` still toggles for users who want the strict-JSON view.
         let start_pretty =
             pretty_target.is_some() && !args.raw && !pretty_target.is_some_and(is_lossy_pretty);
-
-        // Build the pretty branch here, in the compose hub that holds the
-        // structured knowledge, and inject it — `ContentMode` / `PrettyView`
-        // stay type-agnostic (no reach into `types::structured`).
-        let pretty = pretty_target.map(|fmt| {
-            PrettyView::new(
-                move |raw: &str| crate::types::structured::pretty::pretty_print(raw, fmt),
-                crate::types::structured::info::format_name(fmt),
-            )
-        });
 
         let label: &'static str = match file_type {
             FileType::SourceCode { .. } => "Source",

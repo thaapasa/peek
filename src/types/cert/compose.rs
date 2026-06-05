@@ -29,11 +29,9 @@ pub fn compose(
         // JWK is JSON: reuse the structured content mode so the source view
         // pretty-prints + highlights exactly like a standalone `.json`.
         CertFormat::Jwk => {
-            modes.push(ctx.text_content_mode(
-                source,
-                &FileType::Structured(StructuredFormat::Json),
-                args,
-            )?);
+            let ft = FileType::Structured(StructuredFormat::Json);
+            let pretty = crate::types::structured::pretty_view_for(&ft, ctx.plain_mode);
+            modes.push(ctx.text_content_mode(source, &ft, args, pretty)?);
         }
         CertFormat::Pem => {
             let line_source = source.open_line_source()?;

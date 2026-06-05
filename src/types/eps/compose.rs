@@ -89,6 +89,6 @@ pub fn compose(
         ),
         None => source.clone(),
     };
-    modes.push(ctx.text_content_mode(&source_view, &FileType::PostScript(format), args)?);
+    modes.push(ctx.text_content_mode(&source_view, &FileType::PostScript(format), args, None)?);
     Ok(())
 }
