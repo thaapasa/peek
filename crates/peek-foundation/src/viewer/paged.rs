@@ -18,9 +18,8 @@
 //! and cover-style inline image rendering would have to be lifted into
 //! [`PagedImageMode<R>`] as generic concerns first — neither belongs
 //! in PDF / CBZ. Prior `/checkup` rounds decided that's not worth
-//! doing for one consumer;
-//! `the EPUB read mode` keeps its
-//! own `Mode` impl reusing the navigation / config-cycle building
+//! doing for one consumer, so the EPUB read mode (in `peek-types`) keeps
+//! its own `Mode` impl reusing the navigation / config-cycle building
 //! blocks here ([`render_cached`], [`step_paged`], [`cycle_image_config`],
 //! [`PageCacheKey`]).
 

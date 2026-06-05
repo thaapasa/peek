@@ -8,12 +8,16 @@ concatenation — those belong to other tools.
 ## Build & Run
 
 ```sh
-cargo build                  # debug build
+cargo build --workspace      # debug build (all crates)
 cargo build --release        # release build
 cargo run -- [args]          # run with arguments
-cargo test                   # run all tests
-cargo clippy                 # lint
+cargo test --workspace       # run ALL tests — bare `cargo test` runs only the bin's
+cargo clippy --workspace     # lint ALL crates — bare `cargo clippy` skips the member crates
 ```
+
+**Always pass `--workspace`** for test / clippy. The reader/viewer/parser layers are member
+crates (`peek-foundation`, `peek-types`, …); without `--workspace` cargo touches only the root
+`peek` bin, silently skipping the ~670 library-crate tests.
 
 No external runtime deps. Image rendering built in. PDF support use Pdfium — ships beside binary in
 release tarball, loaded dynamically at startup. Ghostscript available if found on path,
