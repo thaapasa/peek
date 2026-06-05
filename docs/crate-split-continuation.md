@@ -132,6 +132,32 @@ hub in `viewer/mod.rs` (step C). Remaining `paged.rs` `types` references are all
 bin-side / types-side integration test in step D, since foundation tests can't reach
 `types`.
 
+### Step C0 — extract `ComposeOpts` (gates C)
+
+**The blocker the original plan walked past (surfaced in review 2026-06-05).** The 23
+`types/*/compose.rs` fns + `compose_modes` take `args: &crate::cli::Args` — a clap-derived,
+bin-level struct. Step C moves `compose_modes` into `peek-types`, which would drag `Args` +
+clap down into the parser crate. That's wrong: clap is a CLI concern and must stay in the
+bin.
+
+Resolution — a config view-model, the same inversion shape as step B. Measurement shows
+compose reads exactly **12** plain `Args` fields (no clap behaviour, just values):
+`line_numbers, raw, theme, color, width, plain, no_svg_anim, margin, language, image_mode,
+edge_density, background`. (The `term/zoom/scroll_x/scroll_y/style_mode` reads in the image
+path are `RenderArgs`, unrelated.)
+
+- Define `ComposeOpts` in the foundation holding those 12 fields (plain values:
+  `StyleMode` / `PeekThemeName` / numbers / strings — all foundation-reachable).
+- The bin builds `ComposeOpts` from clap `Args` (a field copy) and passes `&ComposeOpts`
+  into `compose_modes`.
+- `compose_modes` + the 23 compose fns take `&ComposeOpts` instead of `&Args`. clap never
+  leaves the bin.
+- `viewer/mod.rs::image_config(&Args)` moves to `image_config(&ComposeOpts)` too.
+
+**Risk:** low-medium — mechanical signature change across ~25 files, no behaviour change.
+**Verify:** every type's compose path; CLI flags still take effect (`--raw`, `--line-numbers`,
+`--theme`, `--image-mode`, etc.).
+
 ### Step C — hub relocation
 
 **Refined after the A/B measurement (2026-06-05).** With the foundation toolkit now
