@@ -61,8 +61,9 @@ crates/
                          ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
                          primitives; wrap_scroll; cell_size; highlight. NB: compose_modes /
                          ViewerState / the event loop are NOT here — they're the bin's session layer.
-    info/              — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); render/
-                         (dynamic trait dispatch, themed sections) + time fmt. (gather hub → bin.)
+    info/              — FileInfo + InfoExtras trait (render_section + json_section) + Extras
+                         (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +
+                         json (typed --info --json encoder) + time fmt. (gather hub → bin.)
     output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
                          theme-gradient logo painter (shared with the bin's help screen).
     extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path
