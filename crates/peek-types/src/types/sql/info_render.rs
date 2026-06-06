@@ -146,11 +146,11 @@ impl crate::info::InfoView for ObjectList {
         }
         vec![
             InfoNode::Row {
-                label: self.label,
+                label: self.label.into(),
                 value: paint_count(self.names.len(), theme),
             },
             InfoNode::Row {
-                label: "  Names",
+                label: "  Names".into(),
                 value: theme.paint_muted(&joined),
             },
         ]

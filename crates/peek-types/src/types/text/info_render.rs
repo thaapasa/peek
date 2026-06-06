@@ -28,7 +28,7 @@ pub fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekT
         if let InfoNode::Block { body, .. } = node {
             for child in body {
                 if let InfoNode::Row { label, value } = child {
-                    push_field(lines, label, &value, theme);
+                    push_field(lines, &label, &value, theme);
                 }
             }
         }
@@ -209,14 +209,14 @@ mod print_tests {
     }
 
     /// The single Content block's `(label, value)` rows.
-    fn content_rows(stats: &TextStats, theme: &PeekTheme) -> Vec<(&'static str, String)> {
+    fn content_rows(stats: &TextStats, theme: &PeekTheme) -> Vec<(String, String)> {
         let mut rows = Vec::new();
         for node in TextView::from(stats).info_nodes(theme) {
             if let InfoNode::Block { title, body } = node {
                 assert_eq!(title, "Content");
                 for child in body {
                     if let InfoNode::Row { label, value } = child {
-                        rows.push((label, value));
+                        rows.push((label.into_owned(), value));
                     }
                 }
             }
@@ -240,12 +240,12 @@ mod print_tests {
             shebang: None, // None → hidden
         };
         let rows = content_rows(&stats, &plain_theme());
-        let labels: Vec<&str> = rows.iter().map(|(l, _)| *l).collect();
+        let labels: Vec<&str> = rows.iter().map(|(l, _)| l.as_str()).collect();
         assert_eq!(
             labels,
             ["Lines", "Words", "Characters", "Line Endings", "Encoding"]
         );
-        let by = |name: &str| rows.iter().find(|(l, _)| *l == name).unwrap().1.clone();
+        let by = |name: &str| rows.iter().find(|(l, _)| l == name).unwrap().1.clone();
         assert_eq!(by("Lines"), "10");
         // Human label, not the JSON token.
         assert_eq!(by("Line Endings"), "CRLF (\\r\\n)");
@@ -266,7 +266,7 @@ mod print_tests {
             shebang: Some("#!/bin/sh".to_string()),
         };
         let rows = content_rows(&stats, &plain_theme());
-        let labels: Vec<&str> = rows.iter().map(|(l, _)| *l).collect();
+        let labels: Vec<&str> = rows.iter().map(|(l, _)| l.as_str()).collect();
         assert_eq!(
             labels,
             [
@@ -281,7 +281,7 @@ mod print_tests {
                 "Shebang"
             ]
         );
-        let by = |name: &str| rows.iter().find(|(l, _)| *l == name).unwrap().1.clone();
+        let by = |name: &str| rows.iter().find(|(l, _)| l == name).unwrap().1.clone();
         assert_eq!(by("Indent"), "4 spaces");
         assert_eq!(by("Shebang"), "#!/bin/sh");
     }

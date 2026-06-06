@@ -117,17 +117,17 @@ impl crate::info::InfoView for Headings {
         }
         let mut nodes = vec![
             InfoNode::Row {
-                label: "Headings",
+                label: "Headings".into(),
                 value: paint_count(total, theme),
             },
             InfoNode::Row {
-                label: "  H1/H2/H3",
+                label: "  H1/H2/H3".into(),
                 value: format_levels(&self.0[..3], theme),
             },
         ];
         if self.0[3..].iter().any(|&n| n > 0) {
             nodes.push(InfoNode::Row {
-                label: "  H4/H5/H6",
+                label: "  H4/H5/H6".into(),
                 value: format_levels(&self.0[3..], theme),
             });
         }
@@ -158,12 +158,12 @@ impl crate::info::InfoView for CodeBlocks {
             return Vec::new();
         }
         let mut nodes = vec![InfoNode::Row {
-            label: "Code Blocks",
+            label: "Code Blocks".into(),
             value: paint_count(self.count, theme),
         }];
         if !self.languages.is_empty() {
             nodes.push(InfoNode::Row {
-                label: "  Languages",
+                label: "  Languages".into(),
                 value: theme.paint_muted(&self.languages.join(", ")),
             });
         }
@@ -200,7 +200,7 @@ impl crate::info::InfoView for Tasks {
             theme.paint_muted(&format!("({pct}%)"))
         );
         vec![InfoNode::Row {
-            label: "Tasks",
+            label: "Tasks".into(),
             value,
         }]
     }

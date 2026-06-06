@@ -109,7 +109,7 @@ fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let action = match &role {
             Role::Scalar(label) => quote! {
                 body.push(::peek_foundation::info::InfoNode::Row {
-                    label: #label,
+                    label: ::std::borrow::Cow::Borrowed(#label),
                     value: ::peek_foundation::info::InfoValue::render_value(&self.#ident, theme),
                 });
             },

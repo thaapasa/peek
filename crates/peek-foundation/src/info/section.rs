@@ -20,6 +20,8 @@
 //! - [`render_info`] walks that tree into themed terminal lines, the shared
 //!   driver that replaces every hand-written `render_section`.
 
+use std::borrow::Cow;
+
 use crate::theme::PeekTheme;
 
 use super::{push_field, push_section_header};
@@ -41,8 +43,13 @@ pub trait InfoValue {
 /// [`Block`]: InfoNode::Block
 /// [`Row`]: InfoNode::Row
 pub enum InfoNode {
-    /// A `Label  value` line.
-    Row { label: &'static str, value: String },
+    /// A `Label  value` line. The label is usually a `&'static str` literal
+    /// (`"Lines"`), but `Cow` lets a hand-built view supply an owned, dynamic
+    /// label (e.g. a CSV column's `" 1: header"`).
+    Row {
+        label: Cow<'static, str>,
+        value: String,
+    },
     /// A `── Title ──` section header followed by its body nodes.
     Block { title: String, body: Vec<InfoNode> },
 }

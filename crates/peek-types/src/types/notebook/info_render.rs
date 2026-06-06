@@ -142,11 +142,11 @@ impl crate::info::InfoView for Cells {
         let total = self.code + self.markdown + self.raw;
         let mut nodes = vec![
             InfoNode::Row {
-                label: "Cells",
+                label: "Cells".into(),
                 value: paint_count(total, theme),
             },
             InfoNode::Row {
-                label: "  Code/Markdown",
+                label: "  Code/Markdown".into(),
                 value: format!(
                     "{}{}{}",
                     paint_count(self.code, theme),
@@ -157,7 +157,7 @@ impl crate::info::InfoView for Cells {
         ];
         if self.raw > 0 {
             nodes.push(InfoNode::Row {
-                label: "  Raw",
+                label: "  Raw".into(),
                 value: paint_count(self.raw, theme),
             });
         }
@@ -192,18 +192,18 @@ impl crate::info::InfoView for Outputs {
             return Vec::new();
         }
         let mut nodes = vec![InfoNode::Row {
-            label: "Outputs",
+            label: "Outputs".into(),
             value: paint_count(self.total, theme),
         }];
         if self.images > 0 {
             nodes.push(InfoNode::Row {
-                label: "  Images",
+                label: "  Images".into(),
                 value: paint_count(self.images, theme),
             });
         }
         if self.errors > 0 {
             nodes.push(InfoNode::Row {
-                label: "  Errors",
+                label: "  Errors".into(),
                 value: paint_count(self.errors, theme),
             });
         }
