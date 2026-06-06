@@ -74,7 +74,6 @@ Macintosh platform in Mac Roman; peek bundles the full Mac Roman upper-half mapp
 
 - The source view is omitted — fonts are binary containers, so the universal hex aux mode
   (`x`) handles raw byte inspection.
-- WOFF / WOFF2 wrappers aren't yet decoded.
 - The specimen sampler is hard-coded ASCII; multi-script samplers keyed on cmap coverage are
   planned.
 - Faces in a `.ttc` cycle through the specimen in place; true recursive peek into a single

@@ -81,7 +81,8 @@ crates/
                          email (eml/mbox), ebook (epub), document (docx/odt/rtf), pdf, eps (eps/ps),
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
                          disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /
-                         keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen)
+                         keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen),
+                         vobject (vcf/ics — vCard / iCalendar)
   peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + vscode variants)
 src/                   — the bin: the thin session layer (CLI + the three dispatch hubs + the
                          interactive event loop). Names member crates directly — `peek_io`,

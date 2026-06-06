@@ -20,7 +20,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing + extract, message-list drill-in
 - **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards with human date-times, grouped fields, recurrence
 - **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
-- **Containers** — ZIP / tar / 7z / cpio archives, ISO disk images, audio metadata
+- **Containers** — ZIP / tar / 7z / cpio / ar archives, ISO disk images, audio metadata
 - **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
 - **Java classfiles** — `.class` header, fields, methods with decoded signatures
 - **Certificates and keys** — PEM / DER X.509 / CSR / CRL / keys / OpenSSH pubkeys / JWK: subject, validity, SANs, fingerprints, thumbprints

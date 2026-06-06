@@ -287,7 +287,7 @@ as `•`.
 
 `.odt` files (OpenDocument Text — a ZIP container with `content.xml` body + `meta.xml` Dublin
 Core metadata) get the same three-mode view as DOCX, backed by a shared AST + renderer in
-`src/types/document/{ast,render,renderer}` plus the generic `RenderedTextMode`. The per-format
+`crates/peek-types/src/types/document/{ast,render,renderer}` plus the generic `RenderedTextMode`. The per-format
 parser is the only piece that differs.
 
 - **Read** (default) — styled body text. Headings (`<text:h text:outline-level="N">`) render

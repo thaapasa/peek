@@ -126,7 +126,7 @@ When stdin is consumed (`-` argument or no args + piped stdin), `peek_io::stdin:
 into a `Memory` source and reopens fd 0 from the controlling terminal so the event loop can still
 read keystrokes (resolved via `ttyname()` on stderr/stdout, not `/dev/tty` directly — macOS kqueue
 rejects the latter with EINVAL). The CLI-level "file vs stdin" decision (`build_source`, needs `Args`)
-stays in the binary at `src/input/stdin.rs`.
+stays in the binary at `src/input.rs`.
 
 Stdin detection: magic bytes (images, binary) → content sniffing (leading `{`/`[` → JSON, `<` →
 XML/SVG, `---` → YAML), in `peek-detect`'s `detect_bytes()` (`crates/peek-detect/src/detect.rs`).
@@ -192,7 +192,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | Mode                  | Used by                                                     | Owns scroll?           | Reacts to resize? |
 |-----------------------|-------------------------------------------------------------|------------------------|-------------------|
 | `ContentMode`         | text, source, structured, SVG XML                           | **yes**                | **yes**           |
-| `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text) | no                     | **yes**           |
+| `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text / vCard / iCalendar) | no                     | **yes**           |
 | `EpubReadMode`        | EPUB chapter-by-chapter read (cover render + chapter search) | no                     | **yes**           |
 | `ListingMode`         | archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic TOC | **yes**                | **yes**           |
 | `DirectoryMode`       | filesystem directory listings                               | **yes**                | **yes**           |
