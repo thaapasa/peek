@@ -9,7 +9,7 @@ use super::read::{DirEntryKind, read_dir_entries};
 /// Directory section view — drives both `--info` print and `--info --json`.
 /// Counts use [`Value::Int`] (flat value colour + thousands separators), not
 /// the count gradient.
-#[derive(serde::Serialize, crate::info::InfoSection)]
+#[derive(serde::Serialize, crate::info::InfoView)]
 #[info(title = "Directory")]
 pub struct DirectoryStats {
     #[info(label = "Entries")]

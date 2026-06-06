@@ -5,7 +5,7 @@
 use crate::info::Extras;
 
 /// Format section view — drives both `--info` print and `--info --json`.
-#[derive(serde::Serialize, crate::info::InfoSection)]
+#[derive(serde::Serialize, crate::info::InfoView)]
 #[info(title = "Format")]
 pub struct BinaryInfo {
     #[info(label = "Type")]

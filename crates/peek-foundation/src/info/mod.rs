@@ -11,12 +11,12 @@ mod time;
 mod value;
 
 pub use json::to_json;
-/// `#[derive(InfoSection)]` — the print-section generator. Shares the trait's
-/// name (macro vs. type namespace) the way serde's `Serialize` does.
-pub use peek_foundation_derive::InfoSection;
+/// `#[derive(InfoView)]` — the print-tree generator. Shares the trait's name
+/// (macro vs. type namespace) the way serde's `Serialize` does.
+pub use peek_foundation_derive::InfoView;
 pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
-pub use section::{InfoSection, InfoValue, MaybeZero, render_info_section};
+pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
 pub use time::format_archive_mtime_zoned;
 pub use value::Value;
 
@@ -121,9 +121,9 @@ pub fn downcast_extras<T: 'static>(extras: &Extras) -> &T {
 #[macro_export]
 macro_rules! impl_info_extras {
     // Derived form: the type derives both `serde::Serialize` and
-    // `#[derive(InfoSection)]`, so one view struct drives both outputs —
-    // print via [`render_info_section`], JSON via `serde_json::to_value`
-    // nested under `$key`. The preferred wiring for migrated flat sections.
+    // `#[derive(InfoView)]`, so one view struct drives both outputs —
+    // print via [`render_info`], JSON via `serde_json::to_value` nested under
+    // `$key`. The preferred wiring for migrated sections.
     ($ty:ty, json = $key:literal) => {
         impl $crate::info::InfoExtras for $ty {
             fn render_section(
@@ -131,7 +131,7 @@ macro_rules! impl_info_extras {
                 lines: &mut ::std::vec::Vec<::std::string::String>,
                 theme: &$crate::theme::PeekTheme,
             ) {
-                $crate::info::render_info_section(lines, self, theme);
+                $crate::info::render_info(lines, self, theme);
             }
 
             fn json_section(&self) -> ::std::option::Option<(&'static str, ::serde_json::Value)> {

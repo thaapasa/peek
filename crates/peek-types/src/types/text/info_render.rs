@@ -1,8 +1,8 @@
 //! The Content/Source info section for text-based files, driven by a single
 //! [`TextView`] that derives *both* `serde::Serialize` (the `--info --json`
-//! form) and [`InfoSection`](crate::info::InfoSection) (the themed print
-//! form). Labels, skip rules, and per-field formatting are declared once on
-//! the view; the two outputs fall out of the derives.
+//! form) and [`InfoView`](crate::info::InfoView) (the themed print form).
+//! Labels, skip rules, and per-field formatting are declared once on the
+//! view; the two outputs fall out of the derives.
 //!
 //! [`TextStats`] stays the streaming-gather accumulator (and the struct
 //! `types::svg` embeds); `TextView` is the presentation projection built from
@@ -11,20 +11,27 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoSection, InfoValue, Value, push_field, render_info_section};
+use crate::info::{InfoNode, InfoValue, InfoView, Value, push_field, render_info};
 use crate::theme::PeekTheme;
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 
 /// Themed terminal Content section for plain text files.
 pub fn render_section(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
-    render_info_section(lines, &TextView::from(stats), theme);
+    render_info(lines, &TextView::from(stats), theme);
 }
 
-/// Push the text-stat rows without a section header — used by `types::svg`,
-/// which folds them under its own "Source" header.
+/// Push the text-stat rows *without* the Content header — used by
+/// `types::svg`, which folds them under its own "Source" header. Pulls the
+/// rows out of the Content block the view produces.
 pub fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
-    for (label, value) in TextView::from(stats).rows(theme) {
-        push_field(lines, label, &value, theme);
+    for node in TextView::from(stats).info_nodes(theme) {
+        if let InfoNode::Block { body, .. } = node {
+            for child in body {
+                if let InfoNode::Row { label, value } = child {
+                    push_field(lines, label, &value, theme);
+                }
+            }
+        }
     }
 }
 
@@ -38,7 +45,7 @@ pub fn json_section(stats: &TextStats) -> (&'static str, serde_json::Value) {
 
 /// One struct, two outputs. Field order is the print order; JSON key order is
 /// serde_json's (alphabetical), so the two never need to agree on order.
-#[derive(Serialize, InfoSection)]
+#[derive(Serialize, InfoView)]
 #[info(title = "Content")]
 struct TextView {
     #[info(label = "Lines")]
@@ -198,8 +205,24 @@ mod print_tests {
         t
     }
 
-    /// The derived `InfoSection` rows: declaration order, zero counts and
-    /// `None` optionals skipped, enum fields rendered as their human label.
+    /// The single Content block's `(label, value)` rows.
+    fn content_rows(stats: &TextStats, theme: &PeekTheme) -> Vec<(&'static str, String)> {
+        let mut rows = Vec::new();
+        for node in TextView::from(stats).info_nodes(theme) {
+            if let InfoNode::Block { title, body } = node {
+                assert_eq!(title, "Content");
+                for child in body {
+                    if let InfoNode::Row { label, value } = child {
+                        rows.push((label, value));
+                    }
+                }
+            }
+        }
+        rows
+    }
+
+    /// The derived rows: declaration order, zero counts and `None` optionals
+    /// skipped, enum fields rendered as their human label.
     #[test]
     fn rows_skip_zero_and_none_and_use_human_labels() {
         let stats = TextStats {
@@ -213,7 +236,7 @@ mod print_tests {
             encoding: Encoding::Utf8Bom,
             shebang: None, // None → hidden
         };
-        let rows = TextView::from(&stats).rows(&plain_theme());
+        let rows = content_rows(&stats, &plain_theme());
         let labels: Vec<&str> = rows.iter().map(|(l, _)| *l).collect();
         assert_eq!(
             labels,
@@ -239,7 +262,7 @@ mod print_tests {
             encoding: Encoding::Utf8,
             shebang: Some("#!/bin/sh".to_string()),
         };
-        let rows = TextView::from(&stats).rows(&plain_theme());
+        let rows = content_rows(&stats, &plain_theme());
         let labels: Vec<&str> = rows.iter().map(|(l, _)| *l).collect();
         assert_eq!(
             labels,
