@@ -88,3 +88,47 @@ fn dialect_label(d: SqlDialect) -> &'static str {
         SqlDialect::TSql => "T-SQL",
     }
 }
+
+/// Typed `--info --json` encoding of the SQL section. The dialect uses a
+/// stable lowercase machine token rather than the display label; the
+/// created-object lists are full (not truncated to the render limit).
+pub fn json_section(info: &SqlInfo) -> (&'static str, serde_json::Value) {
+    let stats = &info.stats;
+    let mut obj = serde_json::json!({
+        "dialect": dialect_token(stats.dialect),
+        "statement_count": stats.statement_count,
+        "ddl_count": stats.ddl_count,
+        "dml_count": stats.dml_count,
+        "dql_count": stats.dql_count,
+        "tcl_count": stats.tcl_count,
+        "other_count": stats.other_count,
+        "comment_lines": stats.comment_lines,
+        "has_dollar_quoted": stats.has_dollar_quoted,
+    });
+    if !stats.created_tables.is_empty() {
+        obj["created_tables"] = serde_json::json!(stats.created_tables);
+    }
+    if !stats.created_views.is_empty() {
+        obj["created_views"] = serde_json::json!(stats.created_views);
+    }
+    if !stats.created_indexes.is_empty() {
+        obj["created_indexes"] = serde_json::json!(stats.created_indexes);
+    }
+    if !stats.created_functions.is_empty() {
+        obj["created_functions"] = serde_json::json!(stats.created_functions);
+    }
+    if !stats.created_triggers.is_empty() {
+        obj["created_triggers"] = serde_json::json!(stats.created_triggers);
+    }
+    ("sql", obj)
+}
+
+fn dialect_token(d: SqlDialect) -> &'static str {
+    match d {
+        SqlDialect::Generic => "generic",
+        SqlDialect::PostgreSql => "postgresql",
+        SqlDialect::MySql => "mysql",
+        SqlDialect::Sqlite => "sqlite",
+        SqlDialect::TSql => "tsql",
+    }
+}

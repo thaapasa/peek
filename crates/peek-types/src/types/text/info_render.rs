@@ -133,3 +133,34 @@ fn indent_json(style: IndentStyle) -> serde_json::Value {
         IndentStyle::Mixed => serde_json::json!({ "style": "mixed" }),
     }
 }
+
+#[cfg(test)]
+mod json_tests {
+    use super::*;
+
+    #[test]
+    fn machine_tokens_and_omitted_optionals() {
+        let stats = TextStats {
+            line_count: 10,
+            word_count: 20,
+            char_count: 100,
+            blank_lines: 2,
+            longest_line_chars: 40,
+            line_endings: LineEndings::Crlf,
+            indent_style: Some(IndentStyle::Spaces(4)),
+            encoding: Encoding::Utf8Bom,
+            shebang: None,
+        };
+        let (key, v) = json_section(&stats);
+        assert_eq!(key, "text");
+        assert_eq!(v["line_count"], serde_json::json!(10));
+        assert_eq!(v["line_endings"], serde_json::json!("crlf"));
+        assert_eq!(v["encoding"], serde_json::json!("utf-8-bom"));
+        assert_eq!(
+            v["indent"],
+            serde_json::json!({ "style": "spaces", "width": 4 })
+        );
+        // None optionals are omitted, not null.
+        assert!(v.get("shebang").is_none());
+    }
+}

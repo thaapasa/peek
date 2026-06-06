@@ -143,6 +143,44 @@ fn push_markdown_section(lines: &mut Vec<String>, stats: &MarkdownStats, theme: 
     }
 }
 
+/// Typed `--info --json` encoding of the Markdown section. Counts are raw
+/// numbers; the per-level heading array is always emitted (H1..H6). The
+/// text-stats sidecar is nested under `text`.
+pub fn json_section(info: &MarkdownInfo) -> (&'static str, serde_json::Value) {
+    let stats = &info.stats;
+    let total_headings: usize = stats.heading_counts.iter().sum();
+    let mut obj = serde_json::json!({
+        "heading_count": total_headings,
+        "heading_counts": stats.heading_counts.to_vec(),
+        "code_block_count": stats.code_block_count,
+        "code_block_languages": stats.code_block_languages.clone(),
+        "inline_code_count": stats.inline_code_count,
+        "link_count": stats.link_count,
+        "image_count": stats.image_count,
+        "table_count": stats.table_count,
+        "list_item_count": stats.list_item_count,
+        "task_done": stats.task_done,
+        "task_total": stats.task_total,
+        "blockquote_lines": stats.blockquote_lines,
+        "footnote_def_count": stats.footnote_def_count,
+        "prose_words": stats.prose_words,
+        "reading_minutes": stats.reading_minutes,
+    });
+    if let Some(kind) = stats.frontmatter {
+        obj["frontmatter"] = serde_json::json!(frontmatter_token(kind));
+    }
+    let (_, text) = crate::types::text::info_render::json_section(&info.text);
+    obj["text"] = text;
+    ("markdown", obj)
+}
+
+fn frontmatter_token(kind: FrontmatterKind) -> &'static str {
+    match kind {
+        FrontmatterKind::Yaml => "yaml",
+        FrontmatterKind::Toml => "toml",
+    }
+}
+
 fn format_levels(counts: &[usize], theme: &PeekTheme) -> String {
     counts
         .iter()

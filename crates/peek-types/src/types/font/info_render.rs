@@ -4,6 +4,7 @@
 
 use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
+use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
 
 pub fn render_section(lines: &mut Vec<String>, info: &FontInfo, theme: &PeekTheme) {
@@ -167,4 +168,67 @@ fn width_label(width: u16) -> &'static str {
         9 => "Ultra-expanded",
         _ => "—",
     }
+}
+
+/// Typed `--info --json` encoding of the Font section. Counts / sizes /
+/// class numbers stay raw; the format enum uses a stable lowercase token.
+/// Empty string fields and zero-valued optional metrics are omitted, the
+/// same as the rendered view.
+pub fn json_section(info: &FontInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "format": format_token(info.format),
+        "face_count": info.face_count,
+    });
+    let faces: Vec<serde_json::Value> = info.faces.iter().map(face_json).collect();
+    obj["faces"] = serde_json::json!(faces);
+    if !info.parse_errors.is_empty() {
+        obj["parse_errors"] = serde_json::json!(info.parse_errors);
+    }
+    ("font", obj)
+}
+
+fn format_token(format: FontFormat) -> &'static str {
+    match format {
+        FontFormat::TrueType => "truetype",
+        FontFormat::OpenType => "opentype",
+        FontFormat::Collection => "collection",
+        FontFormat::Woff => "woff",
+        FontFormat::Woff2 => "woff2",
+    }
+}
+
+fn face_json(face: &FaceInfo) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "index": face.index,
+        "weight": face.weight,
+        "width": face.width,
+        "italic": face.italic,
+        "monospaced": face.monospaced,
+        "hinting_present": face.hinting_present,
+        "glyph_count": face.glyph_count,
+    });
+    let mut put = |key: &str, value: &str| {
+        if !value.is_empty() {
+            obj[key] = serde_json::json!(value);
+        }
+    };
+    put("family", &face.family);
+    put("subfamily", &face.subfamily);
+    put("full_name", &face.full_name);
+    put("postscript_name", &face.postscript_name);
+    put("version", &face.version);
+    put("copyright", &face.copyright);
+    put("designer", &face.designer);
+    put("vendor", &face.vendor);
+    put("license_url", &face.license_url);
+    if face.units_per_em > 0 {
+        obj["units_per_em"] = serde_json::json!(face.units_per_em);
+    }
+    if face.codepoint_count > 0 {
+        obj["codepoint_count"] = serde_json::json!(face.codepoint_count);
+    }
+    if !face.scripts.is_empty() {
+        obj["scripts"] = serde_json::json!(face.scripts);
+    }
+    obj
 }

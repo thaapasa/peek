@@ -193,6 +193,105 @@ fn endianness_label(e: Endianness) -> &'static str {
     }
 }
 
+/// Typed `--info --json` encoding of the Object File section. Enum fields
+/// use stable lowercase machine tokens rather than the display labels.
+/// `error` is present only when parsing failed (then `meta` is absent).
+pub fn json_section(info: &ObjectInfo) -> (&'static str, serde_json::Value) {
+    let Some(meta) = &info.meta else {
+        let mut obj = serde_json::json!({});
+        if let Some(ref err) = info.error {
+            obj["error"] = serde_json::json!(err);
+        }
+        return ("objfile", obj);
+    };
+
+    let mut obj = serde_json::json!({
+        "format": format_token(meta.format),
+        "architecture": arch_token(meta.architecture),
+        "kind": kind_token(meta.kind),
+        "is_64": meta.is_64,
+        "endianness": endianness_token(meta.endianness),
+        "section_count": meta.section_count,
+        "symbol_count": meta.symbol_count,
+        "dynamic_symbol_count": meta.dynamic_symbol_count,
+        "has_debug_info": meta.has_debug_info,
+    });
+    if let Some(entry) = meta.entry {
+        obj["entry"] = serde_json::json!(entry);
+    }
+    if !meta.universal.is_empty() {
+        obj["universal"] = serde_json::json!(
+            meta.universal
+                .iter()
+                .map(|a| arch_token(*a))
+                .collect::<Vec<_>>()
+        );
+        obj["universal_selected"] = serde_json::json!(meta.universal_selected);
+    }
+    if let Some((kind, bytes)) = &meta.build_id {
+        obj["build_id"] = serde_json::json!({
+            "kind": build_id_token(kind),
+            "value": hex(bytes),
+        });
+    }
+    if !meta.linked_libraries.is_empty() {
+        obj["linked_libraries"] = serde_json::json!(meta.linked_libraries);
+    }
+    ("objfile", obj)
+}
+
+fn format_token(f: BinaryFormat) -> &'static str {
+    match f {
+        BinaryFormat::Coff => "coff",
+        BinaryFormat::Elf => "elf",
+        BinaryFormat::MachO => "macho",
+        BinaryFormat::Pe => "pe",
+        BinaryFormat::Wasm => "wasm",
+        BinaryFormat::Xcoff => "xcoff",
+        _ => "unknown",
+    }
+}
+
+fn kind_token(k: ObjectKind) -> &'static str {
+    match k {
+        ObjectKind::Relocatable => "relocatable",
+        ObjectKind::Executable => "executable",
+        ObjectKind::Dynamic => "dynamic",
+        ObjectKind::Core => "core",
+        _ => "unknown",
+    }
+}
+
+fn endianness_token(e: Endianness) -> &'static str {
+    match e {
+        Endianness::Little => "little",
+        Endianness::Big => "big",
+    }
+}
+
+fn build_id_token(kind: &BuildIdKind) -> &'static str {
+    match kind {
+        BuildIdKind::GnuBuildId => "gnu-build-id",
+        BuildIdKind::MachUuid => "mach-uuid",
+        BuildIdKind::PdbGuid => "pdb-guid",
+    }
+}
+
+/// Stable lowercase machine token for an architecture. Falls back to the
+/// `object` enum's debug name (lowercased) for the long tail.
+fn arch_token(a: Architecture) -> String {
+    match a {
+        Architecture::X86_64 => "x86-64".to_string(),
+        Architecture::I386 => "i386".to_string(),
+        Architecture::Aarch64 => "aarch64".to_string(),
+        Architecture::Arm => "arm".to_string(),
+        Architecture::Wasm32 => "wasm32".to_string(),
+        Architecture::Wasm64 => "wasm64".to_string(),
+        Architecture::Unknown => "unknown".to_string(),
+        other => format!("{other:?}").to_lowercase(),
+    }
+}
+
 /// Friendly label for the common architectures; anything else falls
 /// back to the `object` enum's debug name (still readable — `S390x` etc).
 pub(crate) fn arch_label(a: Architecture) -> String {

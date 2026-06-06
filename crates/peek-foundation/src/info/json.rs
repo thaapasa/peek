@@ -5,17 +5,14 @@
 //! (`peek x --info --json | jq .size_bytes`). The encoding is a single JSON
 //! object: the core file metadata is fully typed (numbers stay numbers,
 //! timestamps are ISO-8601 UTC strings, so `jq` can filter and compare them),
-//! while the per-type `extras` section is — for now — surfaced as a `details`
-//! array of the same plain-text lines the terminal view shows.
+//! and each file type contributes a typed object nested under its own key
+//! (`"pdf"`, `"archive"`, …) via [`InfoExtras::json_section`].
 //!
-//! That split is deliberate and incremental. The core fields already exist as
-//! typed struct members, so they serialize losslessly today. The per-type
-//! stats, by contrast, only exist as painted strings ([`InfoExtras`] renders
-//! straight into a `Vec<String>`), so there is no structured value to emit yet
-//! — a later phase teaches each type to expose its fields as data, at which
-//! point `details` graduates to a typed object keyed by file type. Until then
-//! `details` is honest about what it is: the human section, verbatim, not a
-//! structured payload to build tooling against.
+//! A type that hasn't implemented `json_section` falls back to a `details`
+//! array of the rendered section's plain-text lines — the honest "human
+//! section, verbatim" form, not a structured payload. Every shipping type
+//! now provides a typed encoder, so `details` is effectively a safety net
+//! rather than a normal output.
 
 use serde_json::{Map, Value, json};
 

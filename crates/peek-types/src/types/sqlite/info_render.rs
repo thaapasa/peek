@@ -121,3 +121,40 @@ pub fn render_section(lines: &mut Vec<String>, info: &SqliteInfo, theme: &PeekTh
         }
     }
 }
+
+/// Typed `--info --json` encoding of the SQLite section. All sizes /
+/// counts / versions are raw numbers. When the database could not be
+/// read, only the `error` field is present.
+pub fn json_section(info: &SqliteInfo) -> (&'static str, serde_json::Value) {
+    let Some(stats) = &info.stats else {
+        let msg = info
+            .error
+            .as_deref()
+            .unwrap_or("could not read SQLite database");
+        return ("sqlite", serde_json::json!({ "error": msg }));
+    };
+
+    let top_tables: Vec<serde_json::Value> = stats
+        .top_tables
+        .iter()
+        .map(|(name, rows)| serde_json::json!({ "name": name, "rows": rows }))
+        .collect();
+
+    let obj = serde_json::json!({
+        "page_size": stats.page_size,
+        "page_count": stats.page_count,
+        "encoding": stats.encoding,
+        "schema_version": stats.schema_version,
+        "user_version": stats.user_version,
+        "application_id": stats.application_id,
+        "journal_mode": stats.journal_mode,
+        "integrity_ok": stats.integrity_ok,
+        "table_count": stats.table_count,
+        "view_count": stats.view_count,
+        "index_count": stats.index_count,
+        "trigger_count": stats.trigger_count,
+        "total_rows": stats.total_rows,
+        "top_tables": top_tables,
+    });
+    ("sqlite", obj)
+}

@@ -49,6 +49,6 @@ peek report.pdf --info --json | jq .size_bytes
 
 Core metadata is fully typed: `size_bytes` is a number, timestamps are ISO-8601 UTC strings
 (independent of `--utc`), and each MIME entry carries a machine `category`. Absent fields (created
-time, compression, warnings) are omitted rather than emitted as null. The format-specific section is
-currently surfaced as a `details` array of text lines; a future release will replace it with typed
-per-type fields. `--json` requires `--info`.
+time, compression, warnings) are omitted rather than emitted as null. The format-specific stats are
+nested under a per-type key (`pdf`, `archive`, `image`, …) with raw typed values and lowercase
+tokens for enum fields. `--json` requires `--info`.

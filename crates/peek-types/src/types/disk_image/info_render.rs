@@ -448,6 +448,153 @@ fn format_offset(quarters: i8) -> String {
     format!("{sign}{h:02}:{m:02}")
 }
 
+/// Typed `--info --json` encoding of the Disk Image section. `error` is
+/// present only when descriptor parsing failed; `meta` then absent. Enum
+/// fields use stable lowercase machine tokens; timestamps are ISO-8601
+/// strings (via `format_dt`); sizes / counts are raw JSON numbers.
+pub fn json_section(info: &DiskImageInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "format": info.format_name,
+    });
+    if let Some(err) = &info.error {
+        obj["error"] = serde_json::json!(err);
+    }
+    match &info.meta {
+        Some(DiskImageMeta::Iso(iso)) => obj["iso"] = iso_json(iso),
+        Some(DiskImageMeta::Dmg(dmg)) => obj["dmg"] = dmg_json(dmg),
+        Some(DiskImageMeta::Raw(raw)) => obj["raw"] = raw_json(raw),
+        None => {}
+    }
+    ("disk_image", obj)
+}
+
+fn iso_json(iso: &IsoVolumeMeta) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "block_size": iso.block_size,
+        "block_count": iso.block_count,
+        "joliet": iso.joliet,
+        "el_torito": iso.el_torito,
+    });
+    if let Some(v) = &iso.system_id {
+        obj["system_id"] = serde_json::json!(v);
+    }
+    if let Some(v) = &iso.volume_label {
+        obj["volume_label"] = serde_json::json!(v);
+    }
+    if let Some(v) = &iso.volume_set_id {
+        obj["volume_set_id"] = serde_json::json!(v);
+    }
+    if let Some(v) = &iso.publisher {
+        obj["publisher"] = serde_json::json!(v);
+    }
+    if let Some(v) = &iso.data_preparer {
+        obj["data_preparer"] = serde_json::json!(v);
+    }
+    if let Some(v) = &iso.application {
+        obj["application"] = serde_json::json!(v);
+    }
+    if let Some(dt) = &iso.creation {
+        obj["creation"] = serde_json::json!(format_dt(dt));
+    }
+    if let Some(dt) = &iso.modification {
+        obj["modification"] = serde_json::json!(format_dt(dt));
+    }
+    if let Some(dt) = &iso.expiration {
+        obj["expiration"] = serde_json::json!(format_dt(dt));
+    }
+    if let Some(dt) = &iso.effective {
+        obj["effective"] = serde_json::json!(format_dt(dt));
+    }
+    if let Some(v) = &iso.el_torito_id {
+        obj["el_torito_id"] = serde_json::json!(v);
+    }
+    obj
+}
+
+fn dmg_json(dmg: &DmgMeta) -> serde_json::Value {
+    let partitions: Vec<serde_json::Value> =
+        dmg.partitions.iter().map(dmg_partition_json).collect();
+    serde_json::json!({
+        "udif_version": dmg.udif_version,
+        "flags": dmg.flags,
+        "variant": variant_token(dmg.variant),
+        "total_size_bytes": dmg.total_size_bytes,
+        "data_fork_length": dmg.data_fork_length,
+        "plist_present": dmg.plist_present,
+        "plist_length": dmg.plist_length,
+        "plist_offset": dmg.plist_offset,
+        "segment_number": dmg.segment_number,
+        "segment_count": dmg.segment_count,
+        "data_checksum_type": checksum_token(dmg.data_checksum_type),
+        "master_checksum_type": checksum_token(dmg.master_checksum_type),
+        "partitions": partitions,
+    })
+}
+
+fn dmg_partition_json(p: &DmgPartition) -> serde_json::Value {
+    let mut run_histogram = serde_json::Map::new();
+    for (label, n) in &p.run_histogram {
+        run_histogram.insert((*label).to_string(), serde_json::json!(n));
+    }
+    let mut obj = serde_json::json!({
+        "name": p.name,
+        "start_sector": p.start_sector,
+        "size_bytes": p.size_bytes,
+        "stored_bytes": p.stored_bytes,
+        "compression": p.compression,
+        "chunk_count": p.chunk_count,
+        "run_histogram": serde_json::Value::Object(run_histogram),
+    });
+    if let Some(t) = &p.fs_type {
+        obj["fs_type"] = serde_json::json!(t);
+    }
+    obj
+}
+
+fn raw_json(raw: &RawImageMeta) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    if let Some(table) = &raw.mbr {
+        let partitions: Vec<serde_json::Value> = table
+            .partitions
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "bootable": p.bootable,
+                    "type_code": p.type_code,
+                    "start_lba": p.start_lba,
+                    "sectors": p.sectors,
+                })
+            })
+            .collect();
+        obj.insert(
+            "mbr".to_string(),
+            serde_json::json!({ "partitions": partitions }),
+        );
+    }
+    serde_json::Value::Object(obj)
+}
+
+fn variant_token(variant: DmgVariant) -> &'static str {
+    match variant {
+        DmgVariant::Device => "device",
+        DmgVariant::Partition => "partition",
+        DmgVariant::MountedSystem => "mounted-system",
+        DmgVariant::Other(_) => "other",
+    }
+}
+
+fn checksum_token(kind: DmgChecksumKind) -> &'static str {
+    match kind {
+        DmgChecksumKind::None => "none",
+        DmgChecksumKind::Crc32 => "crc32",
+        DmgChecksumKind::Md5 => "md5",
+        DmgChecksumKind::Sha1 => "sha1",
+        DmgChecksumKind::Sha256 => "sha256",
+        DmgChecksumKind::Sha512 => "sha512",
+        DmgChecksumKind::Other(_) => "other",
+    }
+}
+
 fn format_extensions(iso: &IsoVolumeMeta) -> String {
     let mut parts: Vec<&'static str> = Vec::new();
     if iso.joliet {

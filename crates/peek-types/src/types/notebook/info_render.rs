@@ -83,3 +83,33 @@ pub fn render_section(lines: &mut Vec<String>, info: &NotebookInfo, theme: &Peek
         );
     }
 }
+
+/// Typed `--info --json` encoding of the Notebook section. Counts and the
+/// nbformat version are raw numbers; optional metadata is omitted when absent.
+pub fn json_section(info: &NotebookInfo) -> (&'static str, serde_json::Value) {
+    let (major, minor) = info.nbformat;
+    let mut obj = serde_json::json!({
+        "nbformat_major": major,
+        "nbformat_minor": minor,
+        "cell_count": info.cell_count(),
+        "code_cells": info.code_cells,
+        "markdown_cells": info.markdown_cells,
+        "raw_cells": info.raw_cells,
+        "output_count": info.output_count,
+        "image_outputs": info.image_outputs,
+        "error_outputs": info.error_outputs,
+    });
+    if let Some(ref kernel) = info.kernel {
+        obj["kernel"] = serde_json::json!(kernel);
+    }
+    if let Some(ref lang) = info.language {
+        obj["language"] = serde_json::json!(lang);
+    }
+    if let Some(ref version) = info.language_version {
+        obj["language_version"] = serde_json::json!(version);
+    }
+    if let Some(n) = info.max_exec_count {
+        obj["max_exec_count"] = serde_json::json!(n);
+    }
+    ("notebook", obj)
+}

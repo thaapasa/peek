@@ -39,3 +39,36 @@ pub fn render_section(lines: &mut Vec<String>, stats: &EbookStats, theme: &PeekT
         push_field(lines, "Description", &theme.paint_muted(v), theme);
     }
 }
+
+/// Typed `--info --json` encoding of the EPUB section. Metadata members
+/// are nested under `metadata`, each omitted when absent.
+pub fn json_section(stats: &EbookStats) -> (&'static str, serde_json::Value) {
+    let m = &stats.metadata;
+    let mut meta = serde_json::Map::new();
+    if let Some(ref v) = m.title {
+        meta.insert("title".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.creator {
+        meta.insert("creator".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.language {
+        meta.insert("language".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.publisher {
+        meta.insert("publisher".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.date {
+        meta.insert("date".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.identifier {
+        meta.insert("identifier".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.description {
+        meta.insert("description".to_string(), serde_json::json!(v));
+    }
+    let obj = serde_json::json!({
+        "metadata": serde_json::Value::Object(meta),
+        "chapter_count": stats.chapter_count,
+    });
+    ("ebook", obj)
+}

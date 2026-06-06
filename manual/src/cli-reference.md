@@ -41,7 +41,8 @@
 - `--print` / `-p` forces print mode regardless of TTY.
 - `--json` (with `--info`) prints the info screen as a single JSON object for shell pipelines —
   `peek file.pdf --info --json | jq .size_bytes`. Core metadata is typed (numbers stay numbers,
-  timestamps are ISO-8601 UTC); per-type stats currently appear as a `details` text array.
+  timestamps are ISO-8601 UTC); per-type stats are nested under a key named for the file type
+  (`peek book.pdf --info --json | jq .pdf.page_count`).
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 
 ## Help screens

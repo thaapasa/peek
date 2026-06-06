@@ -3,6 +3,7 @@
 use crate::info::{format_size_human, paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
 
+use super::EmailFormat;
 use super::info::EmailInfo;
 
 pub fn render_section(lines: &mut Vec<String>, info: &EmailInfo, theme: &PeekTheme) {
@@ -55,4 +56,44 @@ fn truncate(s: &str, max: usize) -> String {
     }
     let head: String = s.chars().take(max.saturating_sub(1)).collect();
     format!("{head}…")
+}
+
+/// Typed `--info --json` encoding of the Email section. Header fields are
+/// emitted in full (the truncation is a display concern only) and omitted when
+/// absent; the format uses a stable lowercase token.
+pub fn json_section(info: &EmailInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "format": format_token(info.format),
+        "attachment_count": info.attachment_count,
+        "attachment_bytes": info.attachment_bytes,
+    });
+    if let Some(count) = info.message_count {
+        obj["message_count"] = serde_json::json!(count);
+    }
+    if let Some(ref from) = info.from {
+        obj["from"] = serde_json::json!(from);
+    }
+    if let Some(ref to) = info.to {
+        obj["to"] = serde_json::json!(to);
+    }
+    if let Some(ref cc) = info.cc {
+        obj["cc"] = serde_json::json!(cc);
+    }
+    if let Some(ref subject) = info.subject {
+        obj["subject"] = serde_json::json!(subject);
+    }
+    if let Some(ref date) = info.date {
+        obj["date"] = serde_json::json!(date);
+    }
+    if let Some(ref message_id) = info.message_id {
+        obj["message_id"] = serde_json::json!(message_id);
+    }
+    ("email", obj)
+}
+
+fn format_token(fmt: EmailFormat) -> &'static str {
+    match fmt {
+        EmailFormat::Eml => "eml",
+        EmailFormat::Mbox => "mbox",
+    }
 }

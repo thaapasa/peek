@@ -119,6 +119,76 @@ fn push_colors_section(lines: &mut Vec<String>, stats: &CssStats, theme: &PeekTh
     }
 }
 
+/// Typed `--info --json` encoding of the CSS + Colors sections. Selector
+/// kinds become a nested object keyed by kind (only non-zero kinds kept);
+/// imports and the colour palette become arrays of objects.
+pub fn json_section(info: &CssInfo) -> (&'static str, serde_json::Value) {
+    let stats = &info.stats;
+    let mut obj = serde_json::json!({
+        "rule_count": stats.rule_count,
+        "selector_count": stats.selector_count,
+    });
+
+    let k = &stats.selector_kinds;
+    let mut kinds = serde_json::Map::new();
+    let mut add_kind = |key: &str, count: usize| {
+        if count > 0 {
+            kinds.insert(key.to_string(), serde_json::json!(count));
+        }
+    };
+    add_kind("class", k.class);
+    add_kind("id", k.id);
+    add_kind("element", k.element);
+    add_kind("pseudo", k.pseudo);
+    add_kind("attribute", k.attribute);
+    add_kind("universal", k.universal);
+    if !kinds.is_empty() {
+        obj["selector_kinds"] = serde_json::Value::Object(kinds);
+    }
+
+    if stats.custom_property_count > 0 {
+        obj["custom_property_count"] = serde_json::json!(stats.custom_property_count);
+    }
+    if stats.media_query_count > 0 {
+        obj["media_query_count"] = serde_json::json!(stats.media_query_count);
+    }
+    if stats.keyframes_count > 0 {
+        obj["keyframes_count"] = serde_json::json!(stats.keyframes_count);
+    }
+
+    if !stats.imports.is_empty() {
+        let imports: Vec<serde_json::Value> = stats
+            .imports
+            .iter()
+            .map(|imp| {
+                serde_json::json!({
+                    "url": imp.url,
+                    "external": imp.external,
+                })
+            })
+            .collect();
+        obj["imports"] = serde_json::json!(imports);
+    }
+
+    if !stats.palette.is_empty() {
+        let palette: Vec<serde_json::Value> = stats
+            .palette
+            .iter()
+            .map(|sw| {
+                serde_json::json!({
+                    "hex": sw.hex,
+                    "rgb": [sw.rgb.0, sw.rgb.1, sw.rgb.2],
+                    "count": sw.count,
+                })
+            })
+            .collect();
+        obj["palette"] = serde_json::json!(palette);
+        obj["total_colors"] = serde_json::json!(stats.total_colors);
+    }
+
+    ("css", obj)
+}
+
 fn swatch_row(row: &[ColorSwatch], theme: &PeekTheme) -> String {
     let mut line = String::from("    ");
     for sw in row {

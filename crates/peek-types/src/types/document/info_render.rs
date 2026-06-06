@@ -58,3 +58,48 @@ pub fn render_section(lines: &mut Vec<String>, stats: &DocumentStats, theme: &Pe
         push_field(lines, "Description", &theme.paint_muted(v), theme);
     }
 }
+
+/// Typed `--info --json` encoding of the document section. The format is a
+/// stable lowercase token; metadata members nest under `metadata`, each
+/// omitted when absent.
+pub fn json_section(stats: &DocumentStats) -> (&'static str, serde_json::Value) {
+    let m = &stats.metadata;
+    let mut meta = serde_json::Map::new();
+    if let Some(ref v) = m.title {
+        meta.insert("title".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.creator {
+        meta.insert("creator".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.subject {
+        meta.insert("subject".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.keywords {
+        meta.insert("keywords".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.created {
+        meta.insert("created".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.modified {
+        meta.insert("modified".to_string(), serde_json::json!(v));
+    }
+    if let Some(ref v) = m.description {
+        meta.insert("description".to_string(), serde_json::json!(v));
+    }
+    let obj = serde_json::json!({
+        "format": format_token(stats.format),
+        "metadata": serde_json::Value::Object(meta),
+        "paragraph_count": stats.paragraph_count,
+        "word_count": stats.word_count,
+        "image_count": stats.image_count,
+    });
+    ("document", obj)
+}
+
+fn format_token(format: crate::input::detect::DocumentFormat) -> &'static str {
+    match format {
+        crate::input::detect::DocumentFormat::Docx => "docx",
+        crate::input::detect::DocumentFormat::Odt => "odt",
+        crate::input::detect::DocumentFormat::Rtf => "rtf",
+    }
+}

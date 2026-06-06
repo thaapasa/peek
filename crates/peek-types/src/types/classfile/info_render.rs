@@ -59,6 +59,58 @@ pub fn render_section(lines: &mut Vec<String>, info: &ClassfileInfo, theme: &Pee
     );
 }
 
+/// Typed `--info --json` encoding of the Class File section. `major_version`
+/// and `minor_version` are emitted raw (numbers); the class kind is a stable
+/// machine token plus boolean modifier flags. `error` is present only when
+/// parsing failed (then `meta` is absent).
+pub fn json_section(info: &ClassfileInfo) -> (&'static str, serde_json::Value) {
+    let Some(meta) = &info.meta else {
+        let mut obj = serde_json::json!({});
+        if let Some(ref err) = info.error {
+            obj["error"] = serde_json::json!(err);
+        }
+        return ("classfile", obj);
+    };
+
+    let f = meta.access_flags;
+    let mut obj = serde_json::json!({
+        "class_name": meta.class_name,
+        "kind": class_kind_token(f),
+        "is_public": f.contains(ClassAccessFlags::PUBLIC),
+        "is_final": f.contains(ClassAccessFlags::FINAL),
+        "is_abstract": f.contains(ClassAccessFlags::ABSTRACT),
+        "is_synthetic": f.contains(ClassAccessFlags::SYNTHETIC),
+        "major_version": meta.major_version,
+        "minor_version": meta.minor_version,
+        "field_count": meta.field_count,
+        "method_count": meta.method_count,
+    });
+    if let Some(ref super_class) = meta.super_class {
+        obj["super_class"] = serde_json::json!(super_class);
+    }
+    if !meta.interfaces.is_empty() {
+        obj["interfaces"] = serde_json::json!(meta.interfaces);
+    }
+    if let Some(ref source_file) = meta.source_file {
+        obj["source_file"] = serde_json::json!(source_file);
+    }
+    ("classfile", obj)
+}
+
+/// Stable lowercase machine token for the class kind, mirroring the
+/// declaration noun `kind_label` chooses.
+fn class_kind_token(f: ClassAccessFlags) -> &'static str {
+    if f.contains(ClassAccessFlags::ANNOTATION) {
+        "annotation"
+    } else if f.contains(ClassAccessFlags::INTERFACE) {
+        "interface"
+    } else if f.contains(ClassAccessFlags::ENUM) {
+        "enum"
+    } else {
+        "class"
+    }
+}
+
 /// Modifiers + class kind as a Java-declaration-like phrase —
 /// `public final class`, `public interface`, `public enum`.
 fn kind_label(f: ClassAccessFlags) -> String {

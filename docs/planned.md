@@ -170,20 +170,20 @@ Crates: `pkcs12` (encrypted bags).
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
   auto-picked and the rest only listed in the Info view.
 
-## Info JSON — structured extras ◐
+## Info JSON — collapse render + encode to one model ❓
 
-`--info --json` ships (see features.md): core file metadata is fully typed. The remaining work is
-the per-type extras section. Today each type's `InfoExtras::render_section` paints directly into a
-`Vec<String>`, so the JSON path can only surface those lines verbatim as a `details` string array —
-not real structured data (`jq .pdf.pages` is impossible).
+`--info --json` ships fully (see features.md): core metadata is typed and every file type
+implements `InfoExtras::json_section`, so the `details` text fallback is now a safety net rather
+than a normal output path.
 
-- **Phase 2** — teach each per-type stats struct to expose its fields as data, emitted under a
-  type-named key (`"pdf": { "pages": 12, … }`). Incremental: convert one type at a time, dropping it
-  from the `details` fallback as it graduates.
-- **Phase 3** — collapse the two output paths: have `render_section` return a structured field model
-  (`Section { title, fields: [{ json_key, label, value, kind }] }`) and drive *both* the themed
-  terminal render and the JSON encoder from it, so the ~30 hand-painted section renderers become
-  data + one shared renderer. JSON then falls out for free and the `details` fallback is deleted.
+The two output paths are still independent, though: each type hand-writes a `render_section`
+(paints strings) *and* a `json_section` (builds JSON), and the two can drift — a field added to one
+is easy to forget in the other. The optional cleanup is to collapse them: have a type return a
+structured field model (`Section { title, fields: [{ json_key, label, value, kind }] }`) and drive
+*both* the themed terminal render and the JSON encoder from it, so the ~27 paired renderers become
+data + one shared renderer per output. Lower duplication; the `details` fallback could then be
+deleted. Deferred — the two-function duplication is tolerable and the collapse is a large,
+delicate refactor (bespoke per-field coloring must survive it).
 
 ## Viewer Features
 

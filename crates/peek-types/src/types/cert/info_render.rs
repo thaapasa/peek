@@ -313,3 +313,194 @@ fn key_type_label(kt: &KeyType) -> String {
         KeyType::Other => "opaque".to_string(),
     }
 }
+
+/// Typed `--info --json` encoding of the cert section. Each decoded entry
+/// becomes an object tagged with a stable lowercase `kind` token; dates and
+/// fingerprints are emitted as the already-formatted strings the gather pass
+/// produced (ISO-8601 timestamps, colon-hex digests). Counts and bit sizes
+/// stay raw numbers. Optional fields are omitted when absent; empty SAN /
+/// key-usage lists are omitted.
+pub fn json_section(info: &CertInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "source_label": info.source_label,
+    });
+    let entries: Vec<serde_json::Value> = info.entries.iter().map(entry_json).collect();
+    obj["entries"] = serde_json::json!(entries);
+    if !info.parse_errors.is_empty() {
+        obj["parse_errors"] = serde_json::json!(info.parse_errors);
+    }
+    ("cert", obj)
+}
+
+fn entry_json(entry: &CertEntry) -> serde_json::Value {
+    match entry {
+        CertEntry::Certificate(c) => cert_json(c),
+        CertEntry::CertificateRequest(c) => csr_json(c),
+        CertEntry::CertificateRevocationList(c) => crl_json(c),
+        CertEntry::PrivateKey(k) => key_json(k, "private_key"),
+        CertEntry::PublicKey(k) => key_json(k, "public_key"),
+        CertEntry::SshPublicKey(k) => ssh_pubkey_json(k),
+        CertEntry::JsonWebKey(k) => jwk_json(k),
+        CertEntry::Unknown(u) => serde_json::json!({
+            "kind": "unknown",
+            "label": u.label,
+            "der_bytes": u.der_bytes,
+        }),
+    }
+}
+
+fn cert_json(c: &CertificateEntry) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": "certificate",
+        "label": c.label,
+        "version": c.version,
+        "subject": c.subject,
+        "issuer": c.issuer,
+        "serial_hex": c.serial_hex,
+        "not_before": c.not_before,
+        "not_after": c.not_after,
+        "key_algorithm": c.key_algorithm,
+        "signature_algorithm": c.signature_algorithm,
+        "fingerprint_sha1": c.fingerprint_sha1,
+        "fingerprint_sha256": c.fingerprint_sha256,
+        "is_ca": c.is_ca,
+        "self_signed": c.self_signed,
+    });
+    if let Some(days) = c.days_remaining {
+        obj["days_remaining"] = serde_json::json!(days);
+    }
+    if let Some(bits) = c.key_size_bits {
+        obj["key_size_bits"] = serde_json::json!(bits);
+    }
+    if !c.san_dns.is_empty() {
+        obj["san_dns"] = serde_json::json!(c.san_dns);
+    }
+    if !c.san_ip.is_empty() {
+        obj["san_ip"] = serde_json::json!(c.san_ip);
+    }
+    if !c.san_email.is_empty() {
+        obj["san_email"] = serde_json::json!(c.san_email);
+    }
+    if !c.san_uri.is_empty() {
+        obj["san_uri"] = serde_json::json!(c.san_uri);
+    }
+    if !c.key_usages.is_empty() {
+        obj["key_usages"] = serde_json::json!(c.key_usages);
+    }
+    if !c.extended_key_usages.is_empty() {
+        obj["extended_key_usages"] = serde_json::json!(c.extended_key_usages);
+    }
+    obj
+}
+
+fn csr_json(c: &CsrEntry) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": "csr",
+        "label": c.label,
+        "subject": c.subject,
+        "key_algorithm": c.key_algorithm,
+        "signature_algorithm": c.signature_algorithm,
+    });
+    if let Some(bits) = c.key_size_bits {
+        obj["key_size_bits"] = serde_json::json!(bits);
+    }
+    if !c.san_dns.is_empty() {
+        obj["san_dns"] = serde_json::json!(c.san_dns);
+    }
+    if !c.san_ip.is_empty() {
+        obj["san_ip"] = serde_json::json!(c.san_ip);
+    }
+    if !c.san_email.is_empty() {
+        obj["san_email"] = serde_json::json!(c.san_email);
+    }
+    if !c.san_uri.is_empty() {
+        obj["san_uri"] = serde_json::json!(c.san_uri);
+    }
+    obj
+}
+
+fn crl_json(c: &CrlEntry) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": "crl",
+        "label": c.label,
+        "issuer": c.issuer,
+        "this_update": c.this_update,
+        "revoked_count": c.revoked_count,
+        "signature_algorithm": c.signature_algorithm,
+    });
+    if let Some(ref next) = c.next_update {
+        obj["next_update"] = serde_json::json!(next);
+    }
+    obj
+}
+
+fn key_json(k: &KeyEntry, kind: &str) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": kind,
+        "label": k.label,
+        "key_type": key_type_token(&k.key_type),
+    });
+    if let KeyType::Ec(curve) = &k.key_type
+        && !curve.is_empty()
+    {
+        obj["curve"] = serde_json::json!(curve);
+    }
+    if let Some(bits) = k.key_size_bits {
+        obj["key_size_bits"] = serde_json::json!(bits);
+    }
+    obj
+}
+
+fn ssh_pubkey_json(k: &SshPubKeyEntry) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": "ssh_public_key",
+        "algorithm": k.algorithm,
+        "fingerprint_sha256": k.fingerprint_sha256,
+    });
+    if let Some(bits) = k.bits {
+        obj["bits"] = serde_json::json!(bits);
+    }
+    if !k.comment.is_empty() {
+        obj["comment"] = serde_json::json!(k.comment);
+    }
+    obj
+}
+
+fn jwk_json(k: &JwkEntry) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "kind": "json_web_key",
+        "kty": k.kty,
+    });
+    if let Some(ref crv) = k.crv {
+        obj["crv"] = serde_json::json!(crv);
+    }
+    if let Some(ref alg) = k.alg {
+        obj["alg"] = serde_json::json!(alg);
+    }
+    if let Some(ref use_) = k.use_ {
+        obj["use"] = serde_json::json!(use_);
+    }
+    if let Some(ref kid) = k.kid {
+        obj["kid"] = serde_json::json!(kid);
+    }
+    if !k.key_ops.is_empty() {
+        obj["key_ops"] = serde_json::json!(k.key_ops);
+    }
+    if let Some(bits) = k.key_size_bits {
+        obj["key_size_bits"] = serde_json::json!(bits);
+    }
+    if let Some(ref tp) = k.thumbprint {
+        obj["thumbprint"] = serde_json::json!(tp);
+    }
+    obj
+}
+
+fn key_type_token(kt: &KeyType) -> &'static str {
+    match kt {
+        KeyType::Rsa => "rsa",
+        KeyType::Ec(_) => "ec",
+        KeyType::Ed25519 => "ed25519",
+        KeyType::Dsa => "dsa",
+        KeyType::Other => "other",
+    }
+}

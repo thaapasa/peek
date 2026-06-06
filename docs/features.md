@@ -1149,13 +1149,15 @@ colors, per-character permission coloring).
   script / external-href flags, plus source text stats
 - **Binary** — detected format from magic (Mach-O, ELF, PE, ZIP, SQLite, …)
 
-**JSON output (`--info --json`)** ◐ — emits the info screen as a single JSON object for shell
+**JSON output (`--info --json`)** ✅ — emits the info screen as a single JSON object for shell
 pipelines (`peek x --info --json | jq .size_bytes`). Core metadata is fully typed — `size_bytes`
 stays a number, timestamps are ISO-8601 UTC strings (independent of `--utc`), MIME entries carry a
 machine `category` (`registered` / `vendor` / `convention` / …). Absent optionals (created,
-compression, warnings) are omitted rather than null. The per-type extras section is currently
-surfaced as a `details` array of the rendered plain-text lines; a later phase will replace it with a
-typed object keyed by file type. `--json` requires `--info` and is rejected otherwise.
+compression, warnings) are omitted rather than null. Each file type contributes a typed object
+nested under its own key (`pdf`, `archive`, `image`, `sqlite`, …) with raw typed values and
+lowercase machine tokens for enum fields (`line_endings: "crlf"`, `top_level_kind: "object"`). A
+type with no typed encoder falls back to a `details` text array, but every shipping type provides
+one. `--json` requires `--info` and is rejected otherwise.
 
 EXIF: camera make/model, lens, orientation, resolution/DPI, exposure, aperture, ISO, focal length,
 flash, white balance, date taken, GPS, artist, copyright. ICC profile name parsed from the embedded
@@ -1467,7 +1469,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--image-mode`   | `-m`  | Image rendering mode                                                                                        | ✅      |
 | `--edge-density` |       | Edge density target for `--image-mode contour`                                                              | ✅      |
 | `--info`         | `-i`  | Show file info instead of contents                                                                          | ✅      |
-| `--json`         |       | Emit `--info` as machine-readable JSON (requires `--info`)                                                  | ◐      |
+| `--json`         |       | Emit `--info` as machine-readable JSON (requires `--info`)                                                  | ✅      |
 | `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                            | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                               | ✅      |

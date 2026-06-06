@@ -52,3 +52,14 @@ pub fn render_section(lines: &mut Vec<String>, stats: &DirectoryStats, theme: &P
         theme,
     );
 }
+
+/// Typed `--info --json` encoding of the Directory section. Counts are raw
+/// JSON numbers.
+pub fn json_section(stats: &DirectoryStats) -> (&'static str, serde_json::Value) {
+    let obj = serde_json::json!({
+        "entry_count": stats.entry_count,
+        "file_count": stats.file_count,
+        "dir_count": stats.dir_count,
+    });
+    ("directory", obj)
+}

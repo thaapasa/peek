@@ -3,7 +3,7 @@
 use crate::info::{paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
 
-use super::info::{ColumnStats, CsvStats, delimiter_label};
+use super::info::{ColumnStats, ColumnType, CsvStats, delimiter_label};
 
 pub fn render_section(lines: &mut Vec<String>, stats: &CsvStats, theme: &PeekTheme) {
     lines.push(String::new());
@@ -75,6 +75,54 @@ pub fn render_section(lines: &mut Vec<String>, stats: &CsvStats, theme: &PeekThe
     }
     for (i, col) in stats.columns.iter().enumerate() {
         render_column(lines, i, col, theme);
+    }
+}
+
+/// Typed `--info --json` encoding of the CSV section. Record / column
+/// counts are raw numbers; `total_records` is omitted while only a
+/// partial scan has run (mirrors the `(partial)` render qualifier).
+pub fn json_section(stats: &CsvStats) -> (&'static str, serde_json::Value) {
+    let columns: Vec<serde_json::Value> = stats
+        .columns
+        .iter()
+        .map(|col| {
+            let mut c = serde_json::json!({
+                "inferred_type": column_type_token(col.inferred_type),
+                "empty_count": col.empty_count,
+                "max_width": col.max_width,
+            });
+            if let Some(ref header) = col.header {
+                c["header"] = serde_json::json!(header);
+            }
+            c
+        })
+        .collect();
+
+    let mut obj = serde_json::json!({
+        "delimiter": delimiter_label(stats.delimiter),
+        "encoding": stats.encoding,
+        "has_bom": stats.has_bom,
+        "header_detected": stats.header_detected,
+        "loaded_records": stats.loaded_records,
+        "malformed_count": stats.malformed_count,
+        "sampled": stats.sampled,
+        "column_count": stats.columns.len(),
+        "columns": columns,
+    });
+    if let Some(n) = stats.total_records {
+        obj["total_records"] = serde_json::json!(n);
+    }
+    ("csv", obj)
+}
+
+fn column_type_token(t: ColumnType) -> &'static str {
+    match t {
+        ColumnType::Int => "int",
+        ColumnType::Float => "float",
+        ColumnType::Bool => "bool",
+        ColumnType::Date => "date",
+        ColumnType::String => "string",
+        ColumnType::Mixed => "mixed",
     }
 }
 

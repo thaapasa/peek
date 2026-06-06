@@ -68,6 +68,43 @@ pub fn render_section(lines: &mut Vec<String>, stats: &SvgStats, theme: &PeekThe
     push_text_stats(lines, &stats.text, theme);
 }
 
+/// Typed `--info --json` encoding of the SVG section. Optional dimension
+/// strings and element counts are omitted when absent / zero; the text-stats
+/// sidecar is nested under `source`.
+pub fn json_section(stats: &SvgStats) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "path_count": stats.path_count,
+        "group_count": stats.group_count,
+        "rect_count": stats.rect_count,
+        "circle_count": stats.circle_count,
+        "text_count": stats.text_count,
+        "has_script": stats.has_script,
+        "has_external_href": stats.has_external_href,
+    });
+    if let Some(ref vb) = stats.view_box {
+        obj["view_box"] = serde_json::json!(vb);
+    }
+    if let Some(ref w) = stats.declared_width {
+        obj["declared_width"] = serde_json::json!(w);
+    }
+    if let Some(ref h) = stats.declared_height {
+        obj["declared_height"] = serde_json::json!(h);
+    }
+    if let Some(ref a) = stats.animation {
+        obj["animation"] = serde_json::json!({
+            "frame_count": a.frame_count,
+            "total_duration_ms": a.total_duration_ms,
+            "infinite": a.infinite,
+        });
+    }
+    if let Some(ref warn) = stats.animation_warning {
+        obj["animation_warning"] = serde_json::json!(warn);
+    }
+    let (_, source) = crate::types::text::info_render::json_section(&stats.text);
+    obj["source"] = source;
+    ("svg", obj)
+}
+
 fn push_animation_row(
     lines: &mut Vec<String>,
     animation: Option<&SvgAnimationStats>,

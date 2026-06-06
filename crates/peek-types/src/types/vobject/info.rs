@@ -95,3 +95,53 @@ fn render_contact(lines: &mut Vec<String>, c: &ContactSummary, theme: &PeekTheme
         push_field(lines, "Version", &theme.paint_value(version), theme);
     }
 }
+
+/// Typed `--info --json` encoding of the vObject section. The `format` field
+/// is a stable machine token; the per-format detail is a nested object.
+pub fn json_section(info: &VObjectInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "format": format_token(info.format),
+    });
+    match &info.detail {
+        Detail::Calendar(cal) => obj["calendar"] = calendar_json(cal),
+        Detail::Contact(c) => obj["contact"] = contact_json(c),
+    }
+    ("vobject", obj)
+}
+
+fn format_token(fmt: VObjectFormat) -> &'static str {
+    match fmt {
+        VObjectFormat::ICal => "ical",
+        VObjectFormat::VCard => "vcard",
+    }
+}
+
+fn calendar_json(cal: &CalendarSummary) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "event_count": cal.event_count,
+        "todo_count": cal.todo_count,
+    });
+    if let Some(name) = &cal.name {
+        obj["name"] = serde_json::json!(name);
+    }
+    if let Some(version) = &cal.version {
+        obj["version"] = serde_json::json!(version);
+    }
+    if let Some(product) = &cal.product {
+        obj["product"] = serde_json::json!(product);
+    }
+    if let Some((from, to)) = &cal.date_range {
+        obj["date_range"] = serde_json::json!({ "from": from, "to": to });
+    }
+    obj
+}
+
+fn contact_json(c: &ContactSummary) -> serde_json::Value {
+    let mut obj = serde_json::json!({
+        "contact_count": c.contact_count,
+    });
+    if let Some(version) = &c.version {
+        obj["version"] = serde_json::json!(version);
+    }
+    obj
+}

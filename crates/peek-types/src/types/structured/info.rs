@@ -151,6 +151,45 @@ fn top_level_token(kind: &TopLevelKind) -> &'static str {
     }
 }
 
+#[cfg(test)]
+mod json_tests {
+    use super::*;
+
+    #[test]
+    fn multidoc_token_and_document_count() {
+        let info = StructuredInfo {
+            format_name: "YAML",
+            stats: Some(StructuredStats {
+                top_level_kind: TopLevelKind::MultiDoc(3),
+                top_level_count: 3,
+                max_depth: 2,
+                total_nodes: 9,
+                xml_root: None,
+                xml_namespaces: Vec::new(),
+            }),
+        };
+        let (key, v) = json_section(&info);
+        assert_eq!(key, "structured");
+        assert_eq!(v["format"], serde_json::json!("YAML"));
+        assert_eq!(v["top_level_kind"], serde_json::json!("multi-doc"));
+        assert_eq!(v["document_count"], serde_json::json!(3));
+        // XML-only fields stay absent for non-XML input.
+        assert!(v.get("xml_root").is_none());
+        assert!(v.get("xml_namespaces").is_none());
+    }
+
+    #[test]
+    fn unparsed_document_yields_only_format() {
+        let info = StructuredInfo {
+            format_name: "JSON",
+            stats: None,
+        };
+        let (_, v) = json_section(&info);
+        assert_eq!(v["format"], serde_json::json!("JSON"));
+        assert!(v.get("top_level_kind").is_none());
+    }
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------

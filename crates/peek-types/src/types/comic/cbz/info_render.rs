@@ -16,3 +16,20 @@ pub fn render_section(lines: &mut Vec<String>, stats: &ComicStats, theme: &PeekT
         push_field(lines, "Image bytes", &theme.paint_muted(&label), theme);
     }
 }
+
+/// Typed `--info --json` encoding of the comic section. The container
+/// format is emitted as a stable lowercase token.
+pub fn json_section(stats: &ComicStats) -> (&'static str, serde_json::Value) {
+    let obj = serde_json::json!({
+        "format": format_token(stats.format),
+        "page_count": stats.page_count,
+        "total_image_bytes": stats.total_image_bytes,
+    });
+    ("comic", obj)
+}
+
+fn format_token(format: crate::input::detect::ComicFormat) -> &'static str {
+    match format {
+        crate::input::detect::ComicFormat::Cbz => "cbz",
+    }
+}

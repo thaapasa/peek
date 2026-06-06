@@ -23,6 +23,16 @@ pub fn render_section(lines: &mut Vec<String>, info: &BinaryInfo, theme: &PeekTh
     }
 }
 
+/// Typed `--info --json` encoding of the Format section. The `format`
+/// label is omitted when the type is genuinely unknown.
+pub fn json_section(info: &BinaryInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({});
+    if let Some(ref fmt) = info.format {
+        obj["format"] = serde_json::json!(fmt);
+    }
+    ("binary", obj)
+}
+
 fn format_label_for_mime(mime: &str) -> String {
     match mime {
         "application/zip" => "ZIP archive".to_string(),
