@@ -1,16 +1,10 @@
-//! Per-source dispatch for file-info gathering.
-//!
-//! `gather()` is the only public entry point; the type-specific gathering
-//! lives in submodules grouped by general file type:
-//!
-//! * `image`     — raster images (also pulls in `exif`, `xmp`, `animation`)
-//! * `text`      — source code and other UTF-8 / UTF-16 text content
-//! * `structured` — JSON / YAML / TOML / XML
-//! * `svg`       — SVG files (image + text dual nature)
-//! * `binary`    — fallback labelling for unrecognised binary content
-//!
-//! All submodules return [`Extras`] payloads (a boxed `dyn InfoExtras`).
-//! This module only chooses which one to call.
+//! The `FileType` → info-gather dispatch hub. `gather()` is the only public
+//! entry point; it builds the common [`FileInfo`] frame (name / size / mtime /
+//! permissions / MIME list / warnings / compression row) and delegates the
+//! per-type [`Extras`] payload to the matching `peek_types::types::<type>`
+//! module in [`gather_extras`]. Each type module owns its own format parsing;
+//! this module only chooses which one to call and supplies the text/binary
+//! fallback tail when no type-specific parse applies.
 
 use std::fs;
 use std::path::Path;

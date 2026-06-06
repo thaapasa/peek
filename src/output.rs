@@ -1,3 +1,7 @@
+//! CLI help / version screens. The pipe writer (`PrintOutput`) and the
+//! logo painter live in `peek-foundation` (`peek_foundation::output`);
+//! reference those directly.
+
 use std::io::{self, Write};
 
 use anyhow::Result;

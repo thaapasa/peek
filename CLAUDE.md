@@ -90,9 +90,9 @@ src/                   — the bin: the thin session layer (CLI + the three disp
   main.rs              — CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe)
   cli.rs               — Args (clap derive) + `compose_opts()` projection (keeps clap out of the readers)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
-  input/               — CLI-level stdin/source dispatch (build_source, needs Args). The input
+  input.rs             — CLI-level stdin/source dispatch (build_source, needs Args). The input
                          foundation itself is peek-io / peek-detect, named directly.
-  output/              — CLI help + version screens (PrintOutput / logo come from peek-foundation)
+  output.rs            — CLI help + version screens (PrintOutput / logo come from peek-foundation)
   compose.rs           — Registry + the FileType→types::<x>::compose dispatch hub (holds ComposeOpts)
   gather/              — the FileType→types::<x> info-gather dispatch hub
   extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)

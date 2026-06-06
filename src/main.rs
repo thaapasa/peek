@@ -30,7 +30,7 @@ fn main() -> Result<()> {
     }
 
     if args.version {
-        output::help::render_version()?;
+        output::render_version()?;
         return Ok(());
     }
     if args.update {
@@ -40,7 +40,7 @@ fn main() -> Result<()> {
     let no_input = args.file.is_none() && std::io::stdin().is_terminal();
     if args.short_help || args.help || no_input {
         let theme_manager = theme::ThemeManager::new(args.theme, args.color);
-        output::help::render_help(&theme_manager, !args.help)?;
+        output::render_help(&theme_manager, !args.help)?;
         return Ok(());
     }
 
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
         viewer::cell_size::set_override(aspect);
     }
 
-    let mut source = input::stdin::build_source(&args)?;
+    let mut source = input::build_source(&args)?;
     let mut detected = peek_detect::detect(&source)?;
 
     // --extract: pull an inner item out of a container. With `--print`
