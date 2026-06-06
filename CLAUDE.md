@@ -109,6 +109,9 @@ install.sh             — POSIX installer for curl | sh on macOS/Linux
 ## Workflow
 
 - **Don't commit unless asked.** User decides what and when.
+- **Commit subject style: sentence case, plain prose.** No Conventional Commits prefixes
+  (`feat:` / `fix:` / `docs:` …). Write `Derive binary + directory info sections`, not
+  `feat: derive binary + directory info sections`. Read by intent; capitalise first word.
 - **Don't push, open PRs, or trigger GitHub Actions on own initiative.** Local commits only. User
   pushes / opens PRs / merges themselves so they can amend locally first. Open PR only when user
   explicitly asks.
