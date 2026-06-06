@@ -45,8 +45,9 @@ parsed-selector cache plumbed through `RenderCtx`. Specificity itself is cheap t
 
 #### svg_anim keyframe-parser rewrite
 
-Replace the hand-rolled `types/image/pipeline/svg_anim` CSS parsing (`keyframes.rs` /
-`spec.rs` / transform parsing, ~250 LOC) with a typed parser. Separate concern with real
+Replace the hand-rolled `crates/peek-types/src/types/image/pipeline/svg_anim` CSS parsing
+(`keyframes.rs` / `spec.rs` + transform/selector parsing across `selectors.rs` / `scan.rs`,
+~600 LOC) with a typed parser. Separate concern with real
 SVG-animation regression risk, and the one piece that would actually justify `lightningcss`'s
 typed `Transform` / `Animation` values over the current `cssparser` + `cssparser-color` pair
 (picked for the Info view because it's ~120–200 KB vs ~400–700 KB and covers everything the Info
@@ -250,7 +251,7 @@ fn all_types() -> Vec<Box<dyn TypeSupport>> { /* one entry per type */ }
 
 Adding a new type becomes one new directory plus one line in `all_types()`.
 
-**Trade-off:** loses the single-file dispatch overview. Today, opening `viewer/mod.rs` shows every
+**Trade-off:** loses the single-file dispatch overview. Today, opening `src/compose.rs` shows every
 file type's compose strategy at a glance; with trait dispatch, the reader follows a `Vec` to an
 implementation. IDEs handle the jump fine, but losing the "scan the whole match in one screen"
 property is real.
