@@ -1,6 +1,12 @@
 # Plan: info print-derive — unify info-section render + JSON from one struct
 
-> **Status: Active plan (in progress).** Started 2026-06-06. Delete or archive when done.
+> **Status: Completed 2026-06-06.** Archived for reference. All 27 info
+> sections now derive print + JSON from one view model (`InfoNode` tree +
+> `InfoView` + `#[derive(InfoView)]`, paired with `serde::Serialize`); print
+> output verified byte-identical across the whole fixture corpus. JSON changed
+> only for the metadata-document family (pdf/docx/odt/rtf/epub/xlsx), where the
+> inlined `metadata` fields flatten into the section object — consistent with
+> the "display block ≡ JSON sub-object" rule.
 
 ## Goal
 

@@ -516,11 +516,21 @@ wiring-sites checklist. Quick summary:
    are appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).
    The per-type `compose()` lives in peek-types; only the dispatch arm lives in the bin.
 4. Add `types/<x>/info_gather.rs` (`gather_extras(...)` returning `Extras`, i.e.
-   `Box::new(<Stats>)`) and `types/<x>/info_render.rs` (`render_section(lines, &<Stats>,
-   theme)`) for type-specific metadata, with one `impl_info_extras!(<Stats>, ...::render_section)`
-   row binding the stats struct to the `InfoExtras` trait (`info::render` dispatches through the
-   trait — no per-type render match). Then wire **one arm in the bin's `src/gather/mod.rs`**
-   calling the type's `gather_extras`. Tiny types may combine gather + render into one `info.rs`.
+   `Box::new(<Stats>)`) and `types/<x>/info_render.rs` for type-specific metadata, with one
+   `impl_info_extras!` row binding the stats struct to the `InfoExtras` trait (`info::render`
+   dispatches through the trait — no per-type render match). Then wire **one arm in the bin's
+   `src/gather/mod.rs`** calling the type's `gather_extras`. Tiny types may combine gather + render
+   into one `info.rs`.
+
+   Prefer the **one-view model**: define a `#[derive(serde::Serialize, peek_foundation::info::InfoView)]`
+   view struct (see `info/section.rs`) so print + `--info --json` derive from one definition —
+   `#[info(label/nest/skip/title/title_from)]` for the print tree, `serde` attrs for JSON, per-field
+   paint via `InfoValue` (the `Value` / `Muted` / `Accent` / `Warn` value types cover the common
+   cases). Wire it with `impl_info_extras!(<View>, json = "<key>")`. Irregular types (one-of
+   variants, per-entry tables) wrap their gathered struct and hand-implement `InfoView::info_nodes`
+   (building the `InfoNode` tree, capturing legacy `lines`-based renderers as `Line` nodes when
+   convenient) plus `serde::Serialize`, still wired through the free `render_section` / `json_section`
+   form of `impl_info_extras!`.
 5. If the type is a container, add `types/<x>/extract.rs` (returning `peek_foundation::extract`'s
    `Extracted` / `ExtractError`) and **one arm in the bin's `src/extract/extract.rs`**.
 

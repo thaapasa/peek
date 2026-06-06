@@ -1159,6 +1159,12 @@ lowercase machine tokens for enum fields (`line_endings: "crlf"`, `top_level_kin
 type with no typed encoder falls back to a `details` text array, but every shipping type provides
 one. `--json` requires `--info` and is rejected otherwise.
 
+Both outputs derive from **one view model per type**: a struct that derives `serde::Serialize`
+(JSON) and `#[derive(InfoView)]` (the themed terminal render), so labels, skip rules, and
+per-field formatting are declared once and can't drift between print and JSON. A displayed section
+block corresponds to a nested JSON object; per-field human formatting (sizes, gradients, muted
+secondary text) lives in `InfoValue` impls while the same field serializes its machine value.
+
 EXIF: camera make/model, lens, orientation, resolution/DPI, exposure, aperture, ISO, focal length,
 flash, white balance, date taken, GPS, artist, copyright. ICC profile name parsed from the embedded
 profile's `desc` / `mluc` tag. Animation stats (frame count, total duration, average FPS, loop
