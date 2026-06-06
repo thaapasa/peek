@@ -4,7 +4,10 @@
 //! additionally records the root element name and any namespaces
 //! declared on the root.
 
-use crate::info::{Extras, paint_count, push_field, push_section_header};
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
+
+use crate::info::{Accent, Extras, InfoNode, paint_count, render_info};
 use crate::input::detect::StructuredFormat;
 use crate::theme::PeekTheme;
 
@@ -60,84 +63,155 @@ pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> Extras {
     Box::new(StructuredInfo { format_name, stats })
 }
 
+/// Themed terminal Format section.
 pub fn render_section(lines: &mut Vec<String>, info: &StructuredInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Format", theme);
-    push_field(lines, "Type", &theme.paint_accent(info.format_name), theme);
-    if let Some(stats) = &info.stats {
-        push_structured_stats(lines, stats, theme);
-    }
+    render_info(lines, &StructuredView::from(info), theme);
 }
 
-fn push_structured_stats(lines: &mut Vec<String>, stats: &StructuredStats, theme: &PeekTheme) {
-    let (kind_label, count_label) = match &stats.top_level_kind {
-        TopLevelKind::Object => ("Object", "Keys"),
-        TopLevelKind::Array => ("Array", "Items"),
-        TopLevelKind::Scalar => ("Scalar", "Items"),
-        TopLevelKind::Table => ("Table", "Keys"),
-        TopLevelKind::MultiDoc(_) => ("Multi-doc", "Top-level"),
-        TopLevelKind::Document => ("Document", "Top-level"),
-    };
-    let kind_text = match &stats.top_level_kind {
-        TopLevelKind::MultiDoc(n) => format!("Multi-doc ({n})"),
-        _ => kind_label.to_string(),
-    };
-    push_field(lines, "Top-level", &theme.paint_value(&kind_text), theme);
-    if stats.top_level_count > 0 {
-        push_field(
-            lines,
-            count_label,
-            &paint_count(stats.top_level_count, theme),
-            theme,
-        );
-    }
-    if stats.max_depth > 0 {
-        push_field(
-            lines,
-            "Max Depth",
-            &paint_count(stats.max_depth, theme),
-            theme,
-        );
-    }
-    if stats.total_nodes > 0 {
-        push_field(
-            lines,
-            "Total Nodes",
-            &paint_count(stats.total_nodes, theme),
-            theme,
-        );
-    }
-    if let Some(root) = &stats.xml_root {
-        push_field(lines, "Root Element", &theme.paint_accent(root), theme);
-    }
-    if !stats.xml_namespaces.is_empty() {
-        for (i, ns) in stats.xml_namespaces.iter().enumerate() {
-            let label = if i == 0 { "Namespaces" } else { "" };
-            push_field(lines, label, &theme.paint_muted(ns), theme);
-        }
-    }
-}
-
-/// Typed `--info --json` encoding of the Format section. Stats are present
-/// only when the document parsed; an unparseable file yields just `format`.
+/// Typed `--info --json` view of the Format section, nested under
+/// `"structured"`. Stats are present only when the document parsed; an
+/// unparseable file yields just `format`.
 pub fn json_section(info: &StructuredInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({ "format": info.format_name });
-    if let Some(ref s) = info.stats {
-        obj["top_level_kind"] = serde_json::json!(top_level_token(&s.top_level_kind));
-        if let TopLevelKind::MultiDoc(n) = &s.top_level_kind {
-            obj["document_count"] = serde_json::json!(n);
-        }
-        obj["top_level_count"] = serde_json::json!(s.top_level_count);
-        obj["max_depth"] = serde_json::json!(s.max_depth);
-        obj["total_nodes"] = serde_json::json!(s.total_nodes);
-        if let Some(ref root) = s.xml_root {
-            obj["xml_root"] = serde_json::json!(root);
-        }
-        if !s.xml_namespaces.is_empty() {
-            obj["xml_namespaces"] = serde_json::json!(s.xml_namespaces);
+    (
+        "structured",
+        serde_json::to_value(StructuredView::from(info)).expect("structured info view serializes"),
+    )
+}
+
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title = "Format")]
+struct StructuredView {
+    #[info(label = "Type")]
+    #[serde(rename = "format")]
+    format: Accent,
+    #[info(nest)]
+    #[serde(flatten)]
+    stats: Option<StructuredStatsView>,
+}
+
+impl From<&StructuredInfo> for StructuredView {
+    fn from(info: &StructuredInfo) -> Self {
+        StructuredView {
+            format: Accent(info.format_name.to_string()),
+            stats: info.stats.as_ref().map(StructuredStatsView::from),
         }
     }
-    ("structured", obj)
+}
+
+/// The parsed-document stats, inlined into the Format block. Top-level kind
+/// fixes both the displayed kind text and the (dynamic) count-row label.
+struct StructuredStatsView {
+    kind_token: &'static str,
+    kind_text: String,
+    document_count: Option<usize>,
+    count_label: &'static str,
+    top_level_count: usize,
+    max_depth: usize,
+    total_nodes: usize,
+    xml_root: Option<String>,
+    xml_namespaces: Vec<String>,
+}
+
+impl From<&StructuredStats> for StructuredStatsView {
+    fn from(s: &StructuredStats) -> Self {
+        let (kind_label, count_label) = match &s.top_level_kind {
+            TopLevelKind::Object => ("Object", "Keys"),
+            TopLevelKind::Array => ("Array", "Items"),
+            TopLevelKind::Scalar => ("Scalar", "Items"),
+            TopLevelKind::Table => ("Table", "Keys"),
+            TopLevelKind::MultiDoc(_) => ("Multi-doc", "Top-level"),
+            TopLevelKind::Document => ("Document", "Top-level"),
+        };
+        let kind_text = match &s.top_level_kind {
+            TopLevelKind::MultiDoc(n) => format!("Multi-doc ({n})"),
+            _ => kind_label.to_string(),
+        };
+        let document_count = match &s.top_level_kind {
+            TopLevelKind::MultiDoc(n) => Some(*n),
+            _ => None,
+        };
+        StructuredStatsView {
+            kind_token: top_level_token(&s.top_level_kind),
+            kind_text,
+            document_count,
+            count_label,
+            top_level_count: s.top_level_count,
+            max_depth: s.max_depth,
+            total_nodes: s.total_nodes,
+            xml_root: s.xml_root.clone(),
+            xml_namespaces: s.xml_namespaces.clone(),
+        }
+    }
+}
+
+impl crate::info::InfoView for StructuredStatsView {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let mut nodes = vec![InfoNode::Row {
+            label: "Top-level".into(),
+            value: theme.paint_value(&self.kind_text),
+        }];
+        if self.top_level_count > 0 {
+            nodes.push(InfoNode::Row {
+                label: self.count_label.into(),
+                value: paint_count(self.top_level_count, theme),
+            });
+        }
+        if self.max_depth > 0 {
+            nodes.push(InfoNode::Row {
+                label: "Max Depth".into(),
+                value: paint_count(self.max_depth, theme),
+            });
+        }
+        if self.total_nodes > 0 {
+            nodes.push(InfoNode::Row {
+                label: "Total Nodes".into(),
+                value: paint_count(self.total_nodes, theme),
+            });
+        }
+        if let Some(root) = &self.xml_root {
+            nodes.push(InfoNode::Row {
+                label: "Root Element".into(),
+                value: theme.paint_accent(root),
+            });
+        }
+        for (i, ns) in self.xml_namespaces.iter().enumerate() {
+            nodes.push(InfoNode::Row {
+                label: if i == 0 { "Namespaces" } else { "" }.into(),
+                value: theme.paint_muted(ns),
+            });
+        }
+        nodes
+    }
+}
+
+impl Serialize for StructuredStatsView {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut len = 4; // kind, count, depth, nodes
+        if self.document_count.is_some() {
+            len += 1;
+        }
+        if self.xml_root.is_some() {
+            len += 1;
+        }
+        if !self.xml_namespaces.is_empty() {
+            len += 1;
+        }
+        let mut st = ser.serialize_struct("structured_stats", len)?;
+        st.serialize_field("top_level_kind", self.kind_token)?;
+        if let Some(n) = self.document_count {
+            st.serialize_field("document_count", &n)?;
+        }
+        st.serialize_field("top_level_count", &self.top_level_count)?;
+        st.serialize_field("max_depth", &self.max_depth)?;
+        st.serialize_field("total_nodes", &self.total_nodes)?;
+        if let Some(root) = &self.xml_root {
+            st.serialize_field("xml_root", root)?;
+        }
+        if !self.xml_namespaces.is_empty() {
+            st.serialize_field("xml_namespaces", &self.xml_namespaces)?;
+        }
+        st.end()
+    }
 }
 
 fn top_level_token(kind: &TopLevelKind) -> &'static str {
