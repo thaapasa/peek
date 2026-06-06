@@ -1,50 +1,160 @@
-//! Themed render for a `FontInfo`. Family / subfamily / weight /
-//! glyph count / script coverage. Face 0 always emits its full block;
-//! collection faces beyond 0 surface as a separate header in Phase 3.
+//! Renders a [`FontInfo`] via a single [`FontView`] driving both the themed
+//! terminal output ([`InfoView`](crate::info::InfoView)) and the
+//! `--info --json` form (`serde::Serialize`).
+//!
+//! The per-face headers aren't standard section rules (`── Title` with no
+//! trailing dashes), so faces emit as a blank `Line` + a custom header `Line`
+//! followed by top-level field rows rather than `Block`s.
 
-use crate::info::{paint_count, push_field, push_section_header};
+use serde::{Serialize, Serializer};
+
+use crate::info::{InfoNode, paint_count, render_info};
 use crate::theme::PeekTheme;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
 
+/// Themed terminal Font section.
 pub fn render_section(lines: &mut Vec<String>, info: &FontInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Font", theme);
-    push_field(
-        lines,
-        "Format",
-        &theme.paint_value(info.format.label()),
-        theme,
-    );
-    if info.face_count > 1 {
-        push_field(
-            lines,
-            "Faces",
-            &paint_count(info.face_count as usize, theme),
-            theme,
-        );
-    }
+    render_info(lines, &FontView(info), theme);
+}
 
-    for face in &info.faces {
-        lines.push(String::new());
-        let title = face_title(face, info.face_count);
-        lines.push(format!(
-            "{} {}",
-            theme.paint_muted("\u{2500}\u{2500}"),
-            theme.paint_heading(&title),
-        ));
-        render_face(lines, face, theme);
-    }
+/// Typed `--info --json` view of the Font section, nested under `"font"`.
+pub fn json_section(info: &FontInfo) -> (&'static str, serde_json::Value) {
+    (
+        "font",
+        serde_json::to_value(FontView(info)).expect("font info view serializes"),
+    )
+}
 
-    for err in &info.parse_errors {
-        lines.push(String::new());
-        push_field(
-            lines,
-            "Parse error",
-            &theme.paint(err, theme.warning),
-            theme,
-        );
+struct FontView<'a>(&'a FontInfo);
+
+impl crate::info::InfoView for FontView<'_> {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let info = self.0;
+        let mut nodes = Vec::new();
+
+        let mut head = vec![InfoNode::Row {
+            label: "Format".into(),
+            value: theme.paint_value(info.format.label()),
+        }];
+        if info.face_count > 1 {
+            head.push(InfoNode::Row {
+                label: "Faces".into(),
+                value: paint_count(info.face_count as usize, theme),
+            });
+        }
+        nodes.push(InfoNode::Block {
+            title: "Font".to_string(),
+            body: head,
+        });
+
+        for face in &info.faces {
+            nodes.push(InfoNode::Line(String::new()));
+            let title = face_title(face, info.face_count);
+            nodes.push(InfoNode::Line(format!(
+                "{} {}",
+                theme.paint_muted("\u{2500}\u{2500}"),
+                theme.paint_heading(&title),
+            )));
+            nodes.extend(face_rows(face, theme));
+        }
+
+        for err in &info.parse_errors {
+            nodes.push(InfoNode::Line(String::new()));
+            nodes.push(InfoNode::Row {
+                label: "Parse error".into(),
+                value: theme.paint(err, theme.warning),
+            });
+        }
+        nodes
     }
+}
+
+impl Serialize for FontView<'_> {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let info = self.0;
+        let mut obj = serde_json::json!({
+            "format": format_token(info.format),
+            "face_count": info.face_count,
+        });
+        let faces: Vec<serde_json::Value> = info.faces.iter().map(face_json).collect();
+        obj["faces"] = serde_json::json!(faces);
+        if !info.parse_errors.is_empty() {
+            obj["parse_errors"] = serde_json::json!(info.parse_errors);
+        }
+        obj.serialize(ser)
+    }
+}
+
+/// Push a `label  value` row, skipping empty values.
+fn named(rows: &mut Vec<InfoNode>, label: &'static str, value: &str, theme: &PeekTheme) {
+    if !value.is_empty() {
+        rows.push(InfoNode::Row {
+            label: label.into(),
+            value: theme.paint_value(value),
+        });
+    }
+}
+
+fn face_rows(face: &FaceInfo, theme: &PeekTheme) -> Vec<InfoNode> {
+    let mut rows = Vec::new();
+    named(&mut rows, "Family", &face.family, theme);
+    named(&mut rows, "Subfamily", &face.subfamily, theme);
+    named(&mut rows, "Postscript", &face.postscript_name, theme);
+    named(&mut rows, "Version", &face.version, theme);
+    rows.push(InfoNode::Row {
+        label: "Weight".into(),
+        value: paint_weight(face.weight, theme),
+    });
+    rows.push(InfoNode::Row {
+        label: "Width".into(),
+        value: theme.paint_value(width_label(face.width)),
+    });
+    if face.italic {
+        rows.push(InfoNode::Row {
+            label: "Style".into(),
+            value: theme.paint_value("Italic"),
+        });
+    }
+    if face.monospaced {
+        rows.push(InfoNode::Row {
+            label: "Pitch".into(),
+            value: theme.paint_value("Monospaced"),
+        });
+    }
+    rows.push(InfoNode::Row {
+        label: "Glyphs".into(),
+        value: paint_count(face.glyph_count as usize, theme),
+    });
+    if face.units_per_em > 0 {
+        rows.push(InfoNode::Row {
+            label: "Units / em".into(),
+            value: paint_count(face.units_per_em as usize, theme),
+        });
+    }
+    if face.codepoint_count > 0 {
+        rows.push(InfoNode::Row {
+            label: "Codepoints".into(),
+            value: paint_count(face.codepoint_count as usize, theme),
+        });
+    }
+    if !face.scripts.is_empty() {
+        rows.push(InfoNode::Row {
+            label: "Scripts".into(),
+            value: theme.paint_value(&face.scripts.join(", ")),
+        });
+    }
+    if face.hinting_present {
+        rows.push(InfoNode::Row {
+            label: "Hinting".into(),
+            value: theme.paint_value("present"),
+        });
+    }
+    named(&mut rows, "Designer", &face.designer, theme);
+    named(&mut rows, "Vendor", &face.vendor, theme);
+    named(&mut rows, "Copyright", &face.copyright, theme);
+    named(&mut rows, "License", &face.license_url, theme);
+    rows
 }
 
 fn face_title(face: &FaceInfo, face_count: u32) -> String {
@@ -69,72 +179,8 @@ fn face_title(face: &FaceInfo, face_count: u32) -> String {
     format!("{base}{suffix}")
 }
 
-fn render_face(lines: &mut Vec<String>, face: &FaceInfo, theme: &PeekTheme) {
-    push_named(lines, "Family", &face.family, theme);
-    push_named(lines, "Subfamily", &face.subfamily, theme);
-    push_named(lines, "Postscript", &face.postscript_name, theme);
-    push_named(lines, "Version", &face.version, theme);
-    push_field(lines, "Weight", &paint_weight(face.weight, theme), theme);
-    push_field(
-        lines,
-        "Width",
-        &theme.paint_value(width_label(face.width)),
-        theme,
-    );
-    if face.italic {
-        push_field(lines, "Style", &theme.paint_value("Italic"), theme);
-    }
-    if face.monospaced {
-        push_field(lines, "Pitch", &theme.paint_value("Monospaced"), theme);
-    }
-    push_field(
-        lines,
-        "Glyphs",
-        &paint_count(face.glyph_count as usize, theme),
-        theme,
-    );
-    if face.units_per_em > 0 {
-        push_field(
-            lines,
-            "Units / em",
-            &paint_count(face.units_per_em as usize, theme),
-            theme,
-        );
-    }
-    if face.codepoint_count > 0 {
-        push_field(
-            lines,
-            "Codepoints",
-            &paint_count(face.codepoint_count as usize, theme),
-            theme,
-        );
-    }
-    if !face.scripts.is_empty() {
-        push_field(
-            lines,
-            "Scripts",
-            &theme.paint_value(&face.scripts.join(", ")),
-            theme,
-        );
-    }
-    if face.hinting_present {
-        push_field(lines, "Hinting", &theme.paint_value("present"), theme);
-    }
-    push_named(lines, "Designer", &face.designer, theme);
-    push_named(lines, "Vendor", &face.vendor, theme);
-    push_named(lines, "Copyright", &face.copyright, theme);
-    push_named(lines, "License", &face.license_url, theme);
-}
-
-fn push_named(lines: &mut Vec<String>, label: &str, value: &str, theme: &PeekTheme) {
-    if value.is_empty() {
-        return;
-    }
-    push_field(lines, label, &theme.paint_value(value), theme);
-}
-
-/// Format a numeric weight as `<class> (<name>)` when it matches a
-/// canonical OS/2 class, or bare number otherwise.
+/// Format a numeric weight as `<class> (<name>)` when it matches a canonical
+/// OS/2 class, or bare number otherwise.
 fn paint_weight(weight: u16, theme: &PeekTheme) -> String {
     let name = match weight {
         100 => Some("Thin"),
@@ -168,23 +214,6 @@ fn width_label(width: u16) -> &'static str {
         9 => "Ultra-expanded",
         _ => "—",
     }
-}
-
-/// Typed `--info --json` encoding of the Font section. Counts / sizes /
-/// class numbers stay raw; the format enum uses a stable lowercase token.
-/// Empty string fields and zero-valued optional metrics are omitted, the
-/// same as the rendered view.
-pub fn json_section(info: &FontInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "format": format_token(info.format),
-        "face_count": info.face_count,
-    });
-    let faces: Vec<serde_json::Value> = info.faces.iter().map(face_json).collect();
-    obj["faces"] = serde_json::json!(faces);
-    if !info.parse_errors.is_empty() {
-        obj["parse_errors"] = serde_json::json!(info.parse_errors);
-    }
-    ("font", obj)
 }
 
 fn format_token(format: FontFormat) -> &'static str {
