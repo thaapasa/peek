@@ -321,178 +321,271 @@ fn key_type_label(kt: &KeyType) -> String {
 /// stay raw numbers. Optional fields are omitted when absent; empty SAN /
 /// key-usage lists are omitted.
 pub fn json_section(info: &CertInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "source_label": info.source_label,
-    });
-    let entries: Vec<serde_json::Value> = info.entries.iter().map(entry_json).collect();
-    obj["entries"] = serde_json::json!(entries);
-    if !info.parse_errors.is_empty() {
-        obj["parse_errors"] = serde_json::json!(info.parse_errors);
-    }
-    ("cert", obj)
+    let view = CertJsonView {
+        source_label: info.source_label,
+        entries: info.entries.iter().map(CertEntryJson::from_entry).collect(),
+        parse_errors: info.parse_errors.clone(),
+    };
+    (
+        "cert",
+        serde_json::to_value(view).expect("cert info view serializes"),
+    )
 }
 
-fn entry_json(entry: &CertEntry) -> serde_json::Value {
-    match entry {
-        CertEntry::Certificate(c) => cert_json(c),
-        CertEntry::CertificateRequest(c) => csr_json(c),
-        CertEntry::CertificateRevocationList(c) => crl_json(c),
-        CertEntry::PrivateKey(k) => key_json(k, "private_key"),
-        CertEntry::PublicKey(k) => key_json(k, "public_key"),
-        CertEntry::SshPublicKey(k) => ssh_pubkey_json(k),
-        CertEntry::JsonWebKey(k) => jwk_json(k),
-        CertEntry::Unknown(u) => serde_json::json!({
-            "kind": "unknown",
-            "label": u.label,
-            "der_bytes": u.der_bytes,
-        }),
+#[derive(serde::Serialize)]
+struct CertJsonView {
+    source_label: &'static str,
+    entries: Vec<CertEntryJson>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parse_errors: Vec<String>,
+}
+
+/// Internally-tagged entry: the variant name becomes the `kind` token and
+/// the inner struct's fields merge alongside it. serde reproduces the
+/// per-variant shape that was previously hand-built object by object.
+#[derive(serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+enum CertEntryJson {
+    // Heavy variants boxed to keep the enum compact — mirrors the domain
+    // `CertEntry` and silences clippy's large_enum_variant. `Box<T>`
+    // serializes transparently, so the JSON shape is unchanged.
+    Certificate(Box<CertJson>),
+    Csr(Box<CsrJson>),
+    Crl(Box<CrlJson>),
+    PrivateKey(KeyJson),
+    PublicKey(KeyJson),
+    SshPublicKey(SshJson),
+    JsonWebKey(JwkJson),
+    Unknown(UnknownJson),
+}
+
+impl CertEntryJson {
+    fn from_entry(entry: &CertEntry) -> Self {
+        match entry {
+            CertEntry::Certificate(c) => {
+                CertEntryJson::Certificate(Box::new(CertJson::from(c.as_ref())))
+            }
+            CertEntry::CertificateRequest(c) => {
+                CertEntryJson::Csr(Box::new(CsrJson::from(c.as_ref())))
+            }
+            CertEntry::CertificateRevocationList(c) => {
+                CertEntryJson::Crl(Box::new(CrlJson::from(c.as_ref())))
+            }
+            CertEntry::PrivateKey(k) => CertEntryJson::PrivateKey(KeyJson::from(k)),
+            CertEntry::PublicKey(k) => CertEntryJson::PublicKey(KeyJson::from(k)),
+            CertEntry::SshPublicKey(k) => CertEntryJson::SshPublicKey(SshJson::from(k)),
+            CertEntry::JsonWebKey(k) => CertEntryJson::JsonWebKey(JwkJson::from(k)),
+            CertEntry::Unknown(u) => CertEntryJson::Unknown(UnknownJson {
+                label: u.label.clone(),
+                der_bytes: u.der_bytes,
+            }),
+        }
     }
 }
 
-fn cert_json(c: &CertificateEntry) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": "certificate",
-        "label": c.label,
-        "version": c.version,
-        "subject": c.subject,
-        "issuer": c.issuer,
-        "serial_hex": c.serial_hex,
-        "not_before": c.not_before,
-        "not_after": c.not_after,
-        "key_algorithm": c.key_algorithm,
-        "signature_algorithm": c.signature_algorithm,
-        "fingerprint_sha1": c.fingerprint_sha1,
-        "fingerprint_sha256": c.fingerprint_sha256,
-        "is_ca": c.is_ca,
-        "self_signed": c.self_signed,
-    });
-    if let Some(days) = c.days_remaining {
-        obj["days_remaining"] = serde_json::json!(days);
-    }
-    if let Some(bits) = c.key_size_bits {
-        obj["key_size_bits"] = serde_json::json!(bits);
-    }
-    if !c.san_dns.is_empty() {
-        obj["san_dns"] = serde_json::json!(c.san_dns);
-    }
-    if !c.san_ip.is_empty() {
-        obj["san_ip"] = serde_json::json!(c.san_ip);
-    }
-    if !c.san_email.is_empty() {
-        obj["san_email"] = serde_json::json!(c.san_email);
-    }
-    if !c.san_uri.is_empty() {
-        obj["san_uri"] = serde_json::json!(c.san_uri);
-    }
-    if !c.key_usages.is_empty() {
-        obj["key_usages"] = serde_json::json!(c.key_usages);
-    }
-    if !c.extended_key_usages.is_empty() {
-        obj["extended_key_usages"] = serde_json::json!(c.extended_key_usages);
-    }
-    obj
+#[derive(serde::Serialize)]
+struct CertJson {
+    label: String,
+    version: u32,
+    subject: String,
+    issuer: String,
+    serial_hex: String,
+    not_before: String,
+    not_after: String,
+    key_algorithm: String,
+    signature_algorithm: String,
+    fingerprint_sha1: String,
+    fingerprint_sha256: String,
+    is_ca: bool,
+    self_signed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    days_remaining: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_size_bits: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_dns: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_ip: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_email: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_uri: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    key_usages: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    extended_key_usages: Vec<String>,
 }
 
-fn csr_json(c: &CsrEntry) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": "csr",
-        "label": c.label,
-        "subject": c.subject,
-        "key_algorithm": c.key_algorithm,
-        "signature_algorithm": c.signature_algorithm,
-    });
-    if let Some(bits) = c.key_size_bits {
-        obj["key_size_bits"] = serde_json::json!(bits);
+impl From<&CertificateEntry> for CertJson {
+    fn from(c: &CertificateEntry) -> Self {
+        CertJson {
+            label: c.label.clone(),
+            version: c.version,
+            subject: c.subject.clone(),
+            issuer: c.issuer.clone(),
+            serial_hex: c.serial_hex.clone(),
+            not_before: c.not_before.clone(),
+            not_after: c.not_after.clone(),
+            key_algorithm: c.key_algorithm.clone(),
+            signature_algorithm: c.signature_algorithm.clone(),
+            fingerprint_sha1: c.fingerprint_sha1.clone(),
+            fingerprint_sha256: c.fingerprint_sha256.clone(),
+            is_ca: c.is_ca,
+            self_signed: c.self_signed,
+            days_remaining: c.days_remaining,
+            key_size_bits: c.key_size_bits,
+            san_dns: c.san_dns.clone(),
+            san_ip: c.san_ip.clone(),
+            san_email: c.san_email.clone(),
+            san_uri: c.san_uri.clone(),
+            key_usages: c.key_usages.clone(),
+            extended_key_usages: c.extended_key_usages.clone(),
+        }
     }
-    if !c.san_dns.is_empty() {
-        obj["san_dns"] = serde_json::json!(c.san_dns);
-    }
-    if !c.san_ip.is_empty() {
-        obj["san_ip"] = serde_json::json!(c.san_ip);
-    }
-    if !c.san_email.is_empty() {
-        obj["san_email"] = serde_json::json!(c.san_email);
-    }
-    if !c.san_uri.is_empty() {
-        obj["san_uri"] = serde_json::json!(c.san_uri);
-    }
-    obj
 }
 
-fn crl_json(c: &CrlEntry) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": "crl",
-        "label": c.label,
-        "issuer": c.issuer,
-        "this_update": c.this_update,
-        "revoked_count": c.revoked_count,
-        "signature_algorithm": c.signature_algorithm,
-    });
-    if let Some(ref next) = c.next_update {
-        obj["next_update"] = serde_json::json!(next);
-    }
-    obj
+#[derive(serde::Serialize)]
+struct CsrJson {
+    label: String,
+    subject: String,
+    key_algorithm: String,
+    signature_algorithm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_size_bits: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_dns: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_ip: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_email: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    san_uri: Vec<String>,
 }
 
-fn key_json(k: &KeyEntry, kind: &str) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": kind,
-        "label": k.label,
-        "key_type": key_type_token(&k.key_type),
-    });
-    if let KeyType::Ec(curve) = &k.key_type
-        && !curve.is_empty()
-    {
-        obj["curve"] = serde_json::json!(curve);
+impl From<&CsrEntry> for CsrJson {
+    fn from(c: &CsrEntry) -> Self {
+        CsrJson {
+            label: c.label.clone(),
+            subject: c.subject.clone(),
+            key_algorithm: c.key_algorithm.clone(),
+            signature_algorithm: c.signature_algorithm.clone(),
+            key_size_bits: c.key_size_bits,
+            san_dns: c.san_dns.clone(),
+            san_ip: c.san_ip.clone(),
+            san_email: c.san_email.clone(),
+            san_uri: c.san_uri.clone(),
+        }
     }
-    if let Some(bits) = k.key_size_bits {
-        obj["key_size_bits"] = serde_json::json!(bits);
-    }
-    obj
 }
 
-fn ssh_pubkey_json(k: &SshPubKeyEntry) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": "ssh_public_key",
-        "algorithm": k.algorithm,
-        "fingerprint_sha256": k.fingerprint_sha256,
-    });
-    if let Some(bits) = k.bits {
-        obj["bits"] = serde_json::json!(bits);
-    }
-    if !k.comment.is_empty() {
-        obj["comment"] = serde_json::json!(k.comment);
-    }
-    obj
+#[derive(serde::Serialize)]
+struct CrlJson {
+    label: String,
+    issuer: String,
+    this_update: String,
+    revoked_count: usize,
+    signature_algorithm: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    next_update: Option<String>,
 }
 
-fn jwk_json(k: &JwkEntry) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "kind": "json_web_key",
-        "kty": k.kty,
-    });
-    if let Some(ref crv) = k.crv {
-        obj["crv"] = serde_json::json!(crv);
+impl From<&CrlEntry> for CrlJson {
+    fn from(c: &CrlEntry) -> Self {
+        CrlJson {
+            label: c.label.clone(),
+            issuer: c.issuer.clone(),
+            this_update: c.this_update.clone(),
+            revoked_count: c.revoked_count,
+            signature_algorithm: c.signature_algorithm.clone(),
+            next_update: c.next_update.clone(),
+        }
     }
-    if let Some(ref alg) = k.alg {
-        obj["alg"] = serde_json::json!(alg);
+}
+
+#[derive(serde::Serialize)]
+struct KeyJson {
+    label: String,
+    key_type: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    curve: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_size_bits: Option<usize>,
+}
+
+impl From<&KeyEntry> for KeyJson {
+    fn from(k: &KeyEntry) -> Self {
+        let curve = match &k.key_type {
+            KeyType::Ec(c) if !c.is_empty() => Some(c.clone()),
+            _ => None,
+        };
+        KeyJson {
+            label: k.label.clone(),
+            key_type: key_type_token(&k.key_type),
+            curve,
+            key_size_bits: k.key_size_bits,
+        }
     }
-    if let Some(ref use_) = k.use_ {
-        obj["use"] = serde_json::json!(use_);
+}
+
+#[derive(serde::Serialize)]
+struct SshJson {
+    algorithm: String,
+    fingerprint_sha256: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bits: Option<usize>,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    comment: String,
+}
+
+impl From<&SshPubKeyEntry> for SshJson {
+    fn from(k: &SshPubKeyEntry) -> Self {
+        SshJson {
+            algorithm: k.algorithm.clone(),
+            fingerprint_sha256: k.fingerprint_sha256.clone(),
+            bits: k.bits,
+            comment: k.comment.clone(),
+        }
     }
-    if let Some(ref kid) = k.kid {
-        obj["kid"] = serde_json::json!(kid);
+}
+
+#[derive(serde::Serialize)]
+struct JwkJson {
+    kty: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    crv: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    alg: Option<String>,
+    #[serde(rename = "use", skip_serializing_if = "Option::is_none")]
+    use_: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kid: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    key_ops: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    key_size_bits: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    thumbprint: Option<String>,
+}
+
+impl From<&JwkEntry> for JwkJson {
+    fn from(k: &JwkEntry) -> Self {
+        JwkJson {
+            kty: k.kty.clone(),
+            crv: k.crv.clone(),
+            alg: k.alg.clone(),
+            use_: k.use_.clone(),
+            kid: k.kid.clone(),
+            key_ops: k.key_ops.clone(),
+            key_size_bits: k.key_size_bits,
+            thumbprint: k.thumbprint.clone(),
+        }
     }
-    if !k.key_ops.is_empty() {
-        obj["key_ops"] = serde_json::json!(k.key_ops);
-    }
-    if let Some(bits) = k.key_size_bits {
-        obj["key_size_bits"] = serde_json::json!(bits);
-    }
-    if let Some(ref tp) = k.thumbprint {
-        obj["thumbprint"] = serde_json::json!(tp);
-    }
-    obj
+}
+
+#[derive(serde::Serialize)]
+struct UnknownJson {
+    label: String,
+    der_bytes: usize,
 }
 
 fn key_type_token(kt: &KeyType) -> &'static str {

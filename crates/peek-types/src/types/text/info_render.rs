@@ -1,4 +1,4 @@
-use crate::info::{paint_count, push_field, push_section_header};
+use crate::info::{Value, paint_count, push_field, push_section_header};
 use crate::theme::PeekTheme;
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 
@@ -86,25 +86,64 @@ fn encoding_label(enc: Encoding) -> &'static str {
     }
 }
 
-/// Typed `--info --json` encoding of the Content section. Enum fields use
-/// stable lowercase machine tokens rather than the display labels.
+/// Typed `--info --json` view of the Content section. Field values carry
+/// their semantic kind via [`Value`] so a print renderer can be wired in
+/// later; serialization emits the machine form (numbers, lowercase tokens).
+#[derive(serde::Serialize)]
+struct TextJson {
+    line_count: Value,
+    word_count: Value,
+    char_count: Value,
+    blank_lines: Value,
+    longest_line_chars: Value,
+    line_endings: Value,
+    encoding: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    indent: Option<IndentJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    shebang: Option<Value>,
+}
+
+#[derive(serde::Serialize)]
+struct IndentJson {
+    style: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    width: Option<Value>,
+}
+
 pub fn json_section(stats: &TextStats) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "line_count": stats.line_count,
-        "word_count": stats.word_count,
-        "char_count": stats.char_count,
-        "blank_lines": stats.blank_lines,
-        "longest_line_chars": stats.longest_line_chars,
-        "line_endings": line_endings_token(stats.line_endings),
-        "encoding": encoding_token(stats.encoding),
-    });
-    if let Some(indent) = stats.indent_style {
-        obj["indent"] = indent_json(indent);
+    let view = TextJson {
+        line_count: Value::count(stats.line_count as u64),
+        word_count: Value::count(stats.word_count as u64),
+        char_count: Value::count(stats.char_count as u64),
+        blank_lines: Value::count(stats.blank_lines as u64),
+        longest_line_chars: Value::count(stats.longest_line_chars as u64),
+        line_endings: Value::token(line_endings_token(stats.line_endings)),
+        encoding: Value::token(encoding_token(stats.encoding)),
+        indent: stats.indent_style.map(indent_json),
+        shebang: stats.shebang.as_deref().map(Value::text),
+    };
+    (
+        "text",
+        serde_json::to_value(view).expect("text info view serializes"),
+    )
+}
+
+fn indent_json(style: IndentStyle) -> IndentJson {
+    match style {
+        IndentStyle::Tabs => IndentJson {
+            style: Value::token("tabs"),
+            width: None,
+        },
+        IndentStyle::Spaces(n) => IndentJson {
+            style: Value::token("spaces"),
+            width: Some(Value::count(n as u64)),
+        },
+        IndentStyle::Mixed => IndentJson {
+            style: Value::token("mixed"),
+            width: None,
+        },
     }
-    if let Some(ref shebang) = stats.shebang {
-        obj["shebang"] = serde_json::json!(shebang);
-    }
-    ("text", obj)
 }
 
 fn line_endings_token(le: LineEndings) -> &'static str {
@@ -123,14 +162,6 @@ fn encoding_token(enc: Encoding) -> &'static str {
         Encoding::Utf8Bom => "utf-8-bom",
         Encoding::Utf16Le => "utf-16-le",
         Encoding::Utf16Be => "utf-16-be",
-    }
-}
-
-fn indent_json(style: IndentStyle) -> serde_json::Value {
-    match style {
-        IndentStyle::Tabs => serde_json::json!({ "style": "tabs" }),
-        IndentStyle::Spaces(n) => serde_json::json!({ "style": "spaces", "width": n }),
-        IndentStyle::Mixed => serde_json::json!({ "style": "mixed" }),
     }
 }
 
