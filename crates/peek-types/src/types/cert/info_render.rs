@@ -1,55 +1,70 @@
-use crate::info::{paint_count, push_field, push_section_header};
+use crate::info::{InfoNode, paint_count, push_field, render_info};
 use crate::theme::PeekTheme;
 use crate::types::cert::info::{
     CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, JwkEntry, KeyEntry, KeyType,
     SshPubKeyEntry, UnknownEntry,
 };
-use crate::types::text::info_render::push_text_stats;
+use crate::types::text::info_render::TextView;
 
-/// Render the cert section. Standard Content (text stats) header
-/// stays so the user gets the same line/word/encoding facts they get
-/// for any text file; the cert-specific section appears below.
+/// Render the cert section through the shared node tree. A Content block (text
+/// stats) leads when the source is text; the cert-specific block follows. Per-
+/// entry bodies are produced by the existing (byte-tested) `render_entry`
+/// helpers and carried verbatim as `Line` nodes — the entry headers aren't
+/// standard section rules.
 pub fn render_section(lines: &mut Vec<String>, info: &CertInfo, theme: &PeekTheme) {
-    // Text stats only apply to a text (PEM) source; a raw DER file is
-    // binary, so its `text` is `None` and the Content section is skipped.
-    if let Some(text) = &info.text {
-        lines.push(String::new());
-        push_section_header(lines, "Content", theme);
-        push_text_stats(lines, text, theme);
-    }
+    render_info(lines, &CertView(info), theme);
+}
 
-    if info.entries.is_empty() && info.parse_errors.is_empty() {
-        return;
-    }
+/// View wrapper so the cert section flows through [`render_info`] like every
+/// other type. `info_nodes` builds the tree; JSON stays in `json_section`.
+struct CertView<'a>(&'a CertInfo);
 
-    lines.push(String::new());
-    push_section_header(lines, info.source_label, theme);
-    push_field(
-        lines,
-        "Entries",
-        &paint_count(info.entries.len(), theme),
-        theme,
-    );
+impl crate::info::InfoView for CertView<'_> {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let info = self.0;
+        let mut nodes = Vec::new();
 
-    for (i, entry) in info.entries.iter().enumerate() {
-        lines.push(String::new());
-        let title = entry_title(entry, i + 1);
-        lines.push(format!(
-            "{} {}",
-            theme.paint_muted("\u{2500}\u{2500}"),
-            theme.paint_heading(&title),
-        ));
-        render_entry(lines, entry, theme);
-    }
+        // Text stats only apply to a text (PEM) source; a raw DER file's
+        // `text` is `None` and the Content block is skipped. The TextView
+        // yields the same Content block the standalone text section does.
+        if let Some(text) = &info.text {
+            nodes.extend(TextView::from(text).info_nodes(theme));
+        }
 
-    for err in &info.parse_errors {
-        lines.push(String::new());
-        push_field(
-            lines,
-            "Parse error",
-            &theme.paint(err, theme.warning),
-            theme,
-        );
+        if info.entries.is_empty() && info.parse_errors.is_empty() {
+            return nodes;
+        }
+
+        nodes.push(InfoNode::Block {
+            title: info.source_label.to_string(),
+            body: vec![InfoNode::Row {
+                label: "Entries".into(),
+                value: paint_count(info.entries.len(), theme),
+            }],
+        });
+
+        for (i, entry) in info.entries.iter().enumerate() {
+            nodes.push(InfoNode::Line(String::new()));
+            let title = entry_title(entry, i + 1);
+            nodes.push(InfoNode::Line(format!(
+                "{} {}",
+                theme.paint_muted("\u{2500}\u{2500}"),
+                theme.paint_heading(&title),
+            )));
+            // Reuse the existing field renderers, capturing their output lines.
+            let mut body = Vec::new();
+            render_entry(&mut body, entry, theme);
+            nodes.extend(body.into_iter().map(InfoNode::Line));
+        }
+
+        for err in &info.parse_errors {
+            nodes.push(InfoNode::Line(String::new()));
+            nodes.push(InfoNode::Row {
+                label: "Parse error".into(),
+                value: theme.paint(err, theme.warning),
+            });
+        }
+        nodes
     }
 }
 
