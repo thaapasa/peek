@@ -1,174 +1,289 @@
-use crate::info::{push_field, push_section_header};
+//! The image info sections — Image (dimensions, colour, animation), plus EXIF
+//! and XMP key/value blocks — driven by one [`ImageView`] that derives both
+//! `serde::Serialize` (JSON) and [`InfoView`](crate::info::InfoView) (themed
+//! print). [`ImageStats`] stays the gather struct; the view projects it.
+//!
+//! The Image stats flatten into the top-level object; EXIF / XMP nest under
+//! their own keys. `Dimensions` prints one row but serializes as `width` +
+//! `height`; `Megapixels` is print-only; animation prints inline rows but
+//! serializes as a nested `animation` object.
+
+use serde::ser::{SerializeMap, SerializeStruct};
+use serde::{Serialize, Serializer};
+
+use crate::info::{Accent, InfoNode, InfoValue, render_info};
 use crate::theme::{PeekTheme, lerp_color};
 use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
 
+/// Themed terminal image sections.
 pub fn render_section(lines: &mut Vec<String>, stats: &ImageStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Image", theme);
-    push_field(
-        lines,
-        "Dimensions",
-        &paint_dimensions(stats.width, stats.height, theme),
-        theme,
-    );
-    push_field(
-        lines,
-        "Megapixels",
-        &paint_megapixels(stats.width, stats.height, theme),
-        theme,
-    );
-    push_field(lines, "Color", &theme.paint_value(&stats.color_type), theme);
-    if stats.bit_depth > 0 {
-        push_field(
-            lines,
-            "Bit Depth",
-            &theme.paint_value(&format!("{} bits/channel", stats.bit_depth)),
-            theme,
-        );
-    }
-    if let Some(icc) = &stats.icc_profile {
-        push_field(lines, "ICC Profile", &theme.paint_value(icc), theme);
-    }
-    if let Some(hdr) = &stats.hdr_format {
-        push_field(lines, "HDR", &theme.paint_accent(hdr), theme);
-    }
-    if let Some(anim) = &stats.animation {
-        push_animation(lines, anim, theme);
-    }
-
-    if !stats.exif.is_empty() {
-        lines.push(String::new());
-        push_section_header(lines, "EXIF", theme);
-        for (label, value) in &stats.exif {
-            push_field(lines, label, &theme.paint_value(value), theme);
-        }
-    }
-
-    if !stats.xmp.is_empty() {
-        lines.push(String::new());
-        push_section_header(lines, "XMP", theme);
-        for (label, value) in &stats.xmp {
-            push_field(lines, label, &theme.paint_value(value), theme);
-        }
-    }
+    render_info(lines, &ImageView::from(stats), theme);
 }
 
-/// Paint image dimensions with resolution-based coloring.
-fn paint_dimensions(width: u32, height: u32, theme: &PeekTheme) -> String {
-    let megapixels = (width as f64 * height as f64) / 1_000_000.0;
-    let color = if megapixels < 0.5 {
-        lerp_color(theme.muted, theme.value, (megapixels * 2.0) as f32)
-    } else if megapixels < 8.0 {
-        theme.value
-    } else {
-        let t = ((megapixels / 8.0).clamp(1.0, 10.0).ln() / 10_f64.ln()) as f32;
-        lerp_color(theme.value, theme.accent, t)
-    };
-    theme.paint(&format!("{width} \u{00d7} {height}"), color)
-}
-
-fn paint_megapixels(width: u32, height: u32, theme: &PeekTheme) -> String {
-    let mp = (width as f64 * height as f64) / 1_000_000.0;
-    let text = if mp < 1.0 {
-        format!("{mp:.2} MP")
-    } else {
-        format!("{mp:.1} MP")
-    };
-    theme.paint(&text, theme.value)
-}
-
-fn push_animation(lines: &mut Vec<String>, anim: &AnimationStats, theme: &PeekTheme) {
-    if let Some(count) = anim.frame_count {
-        push_field(
-            lines,
-            "Frames",
-            &theme.paint_value(&format!("{count} (animated)")),
-            theme,
-        );
-    }
-    if let Some(ms) = anim.total_duration_ms {
-        let secs = ms as f64 / 1000.0;
-        let label = if secs < 60.0 {
-            format!("{secs:.2} s")
-        } else {
-            let mins = (secs / 60.0).floor();
-            let rem = secs - mins * 60.0;
-            format!("{mins:.0}m {rem:.2}s")
-        };
-        push_field(lines, "Duration", &theme.paint_value(&label), theme);
-        if let Some(count) = anim.frame_count
-            && ms > 0
-        {
-            let fps = count as f64 / (ms as f64 / 1000.0);
-            push_field(
-                lines,
-                "Avg FPS",
-                &theme.paint_muted(&format!("{fps:.1}")),
-                theme,
-            );
-        }
-    }
-    if let Some(loops) = &anim.loop_count {
-        let text = match loops {
-            LoopCount::Infinite => "infinite".to_string(),
-            LoopCount::Finite(0) => "infinite".to_string(),
-            LoopCount::Finite(1) => "play once".to_string(),
-            LoopCount::Finite(n) => format!("{n} times"),
-        };
-        push_field(lines, "Loop", &theme.paint_value(&text), theme);
-    }
-}
-
-/// Typed `--info --json` encoding of the Image section. EXIF / XMP key→value
-/// pairs become nested objects; absent optionals are omitted.
+/// Typed `--info --json` view of the image sections, nested under `"image"`.
 pub fn json_section(stats: &ImageStats) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "width": stats.width,
-        "height": stats.height,
-        "color_type": stats.color_type,
-        "bit_depth": stats.bit_depth,
-    });
-    if let Some(ref hdr) = stats.hdr_format {
-        obj["hdr_format"] = serde_json::json!(hdr);
-    }
-    if let Some(ref icc) = stats.icc_profile {
-        obj["icc_profile"] = serde_json::json!(icc);
-    }
-    if let Some(ref anim) = stats.animation {
-        obj["animation"] = animation_json(anim);
-    }
-    if !stats.exif.is_empty() {
-        obj["exif"] = pairs_json(&stats.exif);
-    }
-    if !stats.xmp.is_empty() {
-        obj["xmp"] = pairs_json(&stats.xmp);
-    }
-    ("image", obj)
+    (
+        "image",
+        serde_json::to_value(ImageView::from(stats)).expect("image info view serializes"),
+    )
 }
 
-fn animation_json(anim: &AnimationStats) -> serde_json::Value {
-    let mut obj = serde_json::Map::new();
-    if let Some(fc) = anim.frame_count {
-        obj.insert("frame_count".into(), serde_json::json!(fc));
+#[derive(Serialize, crate::info::InfoView)]
+struct ImageView {
+    #[info(nest)]
+    #[serde(flatten)]
+    main: ImageMain,
+    #[info(nest)]
+    #[serde(rename = "exif", skip_serializing_if = "Pairs::is_empty")]
+    exif: Pairs,
+    #[info(nest)]
+    #[serde(rename = "xmp", skip_serializing_if = "Pairs::is_empty")]
+    xmp: Pairs,
+}
+
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title = "Image")]
+struct ImageMain {
+    #[info(label = "Dimensions")]
+    #[serde(flatten)]
+    dimensions: Dims,
+    // Print-only — JSON has width/height already.
+    #[info(label = "Megapixels")]
+    #[serde(skip)]
+    megapixels: Megapixels,
+    #[info(label = "Color")]
+    color_type: String,
+    #[info(label = "Bit Depth", skip_if_zero)]
+    bit_depth: BitDepth,
+    #[info(label = "ICC Profile")]
+    #[serde(rename = "icc_profile", skip_serializing_if = "Option::is_none")]
+    icc_profile: Option<String>,
+    #[info(label = "HDR")]
+    #[serde(rename = "hdr_format", skip_serializing_if = "Option::is_none")]
+    hdr_format: Option<Accent>,
+    #[info(nest)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    animation: Option<Anim>,
+}
+
+impl From<&ImageStats> for ImageView {
+    fn from(s: &ImageStats) -> Self {
+        ImageView {
+            main: ImageMain {
+                dimensions: Dims {
+                    width: s.width,
+                    height: s.height,
+                },
+                megapixels: Megapixels {
+                    width: s.width,
+                    height: s.height,
+                },
+                color_type: s.color_type.clone(),
+                bit_depth: BitDepth(s.bit_depth),
+                icc_profile: s.icc_profile.clone(),
+                hdr_format: s.hdr_format.clone().map(Accent),
+                animation: s.animation.as_ref().map(Anim::from),
+            },
+            exif: Pairs {
+                title: "EXIF",
+                pairs: s.exif.clone(),
+            },
+            xmp: Pairs {
+                title: "XMP",
+                pairs: s.xmp.clone(),
+            },
+        }
     }
-    if let Some(ms) = anim.total_duration_ms {
-        obj.insert("total_duration_ms".into(), serde_json::json!(ms));
-    }
-    if let Some(loop_count) = anim.loop_count {
-        // Mirror the render: a finite count of 0 means an infinite loop.
-        let value = match loop_count {
-            LoopCount::Infinite | LoopCount::Finite(0) => serde_json::json!("infinite"),
-            LoopCount::Finite(n) => serde_json::json!(n),
+}
+
+/// Pixel dimensions. Print: `W × H` on a resolution gradient. JSON: `width` +
+/// `height`.
+struct Dims {
+    width: u32,
+    height: u32,
+}
+impl InfoValue for Dims {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        let mp = (self.width as f64 * self.height as f64) / 1_000_000.0;
+        let color = if mp < 0.5 {
+            lerp_color(theme.muted, theme.value, (mp * 2.0) as f32)
+        } else if mp < 8.0 {
+            theme.value
+        } else {
+            let t = ((mp / 8.0).clamp(1.0, 10.0).ln() / 10_f64.ln()) as f32;
+            lerp_color(theme.value, theme.accent, t)
         };
-        obj.insert("loop_count".into(), value);
+        theme.paint(&format!("{} \u{00d7} {}", self.width, self.height), color)
     }
-    serde_json::Value::Object(obj)
+}
+impl Serialize for Dims {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut st = ser.serialize_struct("dims", 2)?;
+        st.serialize_field("width", &self.width)?;
+        st.serialize_field("height", &self.height)?;
+        st.end()
+    }
 }
 
-fn pairs_json(pairs: &[(String, String)]) -> serde_json::Value {
-    let map: serde_json::Map<String, serde_json::Value> = pairs
-        .iter()
-        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
-        .collect();
-    serde_json::Value::Object(map)
+/// Megapixel count (print-only).
+struct Megapixels {
+    width: u32,
+    height: u32,
+}
+impl InfoValue for Megapixels {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        let mp = (self.width as f64 * self.height as f64) / 1_000_000.0;
+        let text = if mp < 1.0 {
+            format!("{mp:.2} MP")
+        } else {
+            format!("{mp:.1} MP")
+        };
+        theme.paint(&text, theme.value)
+    }
+}
+
+/// Bit depth: JSON number always, print `N bits/channel` when nonzero.
+struct BitDepth(u8);
+impl InfoValue for BitDepth {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_value(&format!("{} bits/channel", self.0))
+    }
+}
+impl crate::info::MaybeZero for BitDepth {
+    fn is_zero_value(&self) -> bool {
+        self.0 == 0
+    }
+}
+impl Serialize for BitDepth {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_u8(self.0)
+    }
+}
+
+/// Animation summary. Print: inline `Frames` / `Duration` / `Avg FPS` / `Loop`
+/// rows. JSON: a nested `{ frame_count?, total_duration_ms?, loop_count? }`.
+struct Anim {
+    frame_count: Option<usize>,
+    total_duration_ms: Option<u64>,
+    loop_count: Option<LoopCount>,
+}
+
+impl From<&AnimationStats> for Anim {
+    fn from(a: &AnimationStats) -> Self {
+        Anim {
+            frame_count: a.frame_count,
+            total_duration_ms: a.total_duration_ms,
+            loop_count: a.loop_count,
+        }
+    }
+}
+
+impl crate::info::InfoView for Anim {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let mut nodes = Vec::new();
+        if let Some(count) = self.frame_count {
+            nodes.push(InfoNode::Row {
+                label: "Frames".into(),
+                value: theme.paint_value(&format!("{count} (animated)")),
+            });
+        }
+        if let Some(ms) = self.total_duration_ms {
+            let secs = ms as f64 / 1000.0;
+            let label = if secs < 60.0 {
+                format!("{secs:.2} s")
+            } else {
+                let mins = (secs / 60.0).floor();
+                let rem = secs - mins * 60.0;
+                format!("{mins:.0}m {rem:.2}s")
+            };
+            nodes.push(InfoNode::Row {
+                label: "Duration".into(),
+                value: theme.paint_value(&label),
+            });
+            if let Some(count) = self.frame_count
+                && ms > 0
+            {
+                let fps = count as f64 / (ms as f64 / 1000.0);
+                nodes.push(InfoNode::Row {
+                    label: "Avg FPS".into(),
+                    value: theme.paint_muted(&format!("{fps:.1}")),
+                });
+            }
+        }
+        if let Some(loops) = &self.loop_count {
+            let text = match loops {
+                LoopCount::Infinite | LoopCount::Finite(0) => "infinite".to_string(),
+                LoopCount::Finite(1) => "play once".to_string(),
+                LoopCount::Finite(n) => format!("{n} times"),
+            };
+            nodes.push(InfoNode::Row {
+                label: "Loop".into(),
+                value: theme.paint_value(&text),
+            });
+        }
+        nodes
+    }
+}
+
+impl Serialize for Anim {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let len = self.frame_count.is_some() as usize
+            + self.total_duration_ms.is_some() as usize
+            + self.loop_count.is_some() as usize;
+        let mut st = ser.serialize_struct("animation", len)?;
+        if let Some(fc) = self.frame_count {
+            st.serialize_field("frame_count", &fc)?;
+        }
+        if let Some(ms) = self.total_duration_ms {
+            st.serialize_field("total_duration_ms", &ms)?;
+        }
+        match self.loop_count {
+            Some(LoopCount::Infinite) | Some(LoopCount::Finite(0)) => {
+                st.serialize_field("loop_count", "infinite")?
+            }
+            Some(LoopCount::Finite(n)) => st.serialize_field("loop_count", &n)?,
+            None => {}
+        }
+        st.end()
+    }
+}
+
+/// A key/value block (EXIF or XMP). Print: a titled section of value rows.
+/// JSON: a `{ key: value }` object.
+struct Pairs {
+    title: &'static str,
+    pairs: Vec<(String, String)>,
+}
+impl Pairs {
+    fn is_empty(&self) -> bool {
+        self.pairs.is_empty()
+    }
+}
+impl crate::info::InfoView for Pairs {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        if self.pairs.is_empty() {
+            return Vec::new();
+        }
+        let body = self
+            .pairs
+            .iter()
+            .map(|(k, v)| InfoNode::Row {
+                label: k.clone().into(),
+                value: theme.paint_value(v),
+            })
+            .collect();
+        vec![InfoNode::Block {
+            title: self.title.to_string(),
+            body,
+        }]
+    }
+}
+impl Serialize for Pairs {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut m = ser.serialize_map(Some(self.pairs.len()))?;
+        for (k, v) in &self.pairs {
+            m.serialize_entry(k, v)?;
+        }
+        m.end()
+    }
 }
