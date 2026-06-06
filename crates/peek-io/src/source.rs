@@ -179,6 +179,23 @@ impl InputSource {
         }
     }
 
+    /// Total byte length without reading the content. `File` / `TempFile`
+    /// stat the path; `Memory` / `FileRange` already know their length.
+    /// Used by size-cap gates (e.g. the rendered-view cap) that must decide
+    /// before committing to a whole-file read.
+    pub fn byte_len(&self) -> Result<u64> {
+        match self {
+            Self::File(path) => Ok(fs::metadata(path)
+                .with_context(|| format!("failed to stat {}", path.display()))?
+                .len()),
+            Self::Memory { bytes, .. } => Ok(bytes.len() as u64),
+            Self::FileRange { len, .. } => Ok(*len),
+            Self::TempFile { file, .. } => Ok(fs::metadata(file.path())
+                .with_context(|| format!("failed to stat tempfile {}", file.path().display()))?
+                .len()),
+        }
+    }
+
     /// Display name: filename for files, stored name for memory/range/temp.
     pub fn name(&self) -> &str {
         match self {

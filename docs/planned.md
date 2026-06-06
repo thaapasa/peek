@@ -198,7 +198,6 @@ file:line citations as starting points to re-find.
 
 | Priority | Site                                 | Fix                                                                                                      |
 |----------|--------------------------------------|----------------------------------------------------------------------------------------------------------|
-| High     | DOCX / ODT / HTML / RTF render cache | Cap analogous to `PRETTY_MAX_BYTES`; above cap → "too large for rendered view, raw source only".         |
 | Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                              |
 | Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                   |
 | Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                         |

@@ -24,6 +24,13 @@ use crate::viewer::ui::{Action, HelpEntry};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PREV_MATCH_HELP];
 
+/// Rendered whole-document views (HTML, DOCX/ODT, RTF) build the entire
+/// document in memory — none of the renderers stream. Above this size the
+/// rendered view is refused and the raw source / hex view takes over, so a
+/// pathological multi-hundred-MB document (or a zip-bomb `content.xml`
+/// inside a small DOCX) stays openable. Mirrors `PRETTY_MAX_BYTES`.
+pub const RENDER_MAX_BYTES: u64 = 16 * 1024 * 1024;
+
 /// Turns a parsed document into width-wrapped, ANSI-styled lines.
 ///
 /// Implementors own the parsed document (the AST, the PDF handle, the

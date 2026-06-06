@@ -26,6 +26,7 @@ use rtf_parser::{Color as RtfColor, Painter, Paragraph as RtfParagraph, RtfDocum
 use crate::input::InputSource;
 use crate::types::document::DocumentMetadata;
 use crate::viewer::listing::{Entry, EntryKind};
+use crate::viewer::modes::RENDER_MAX_BYTES;
 
 pub(crate) struct Parsed {
     pub metadata: DocumentMetadata,
@@ -178,6 +179,16 @@ fn hex_digit(c: char) -> Option<u8> {
 
 /// Parse RTF bytes from an [`InputSource`].
 pub(crate) fn open_source(source: &InputSource) -> Result<Parsed> {
+    // RTF parsing reads + holds the whole document; refuse over the cap so
+    // the rendered view is dropped and the hex view stands in.
+    let len = source.byte_len().context("failed to stat RTF source")?;
+    if len > RENDER_MAX_BYTES {
+        anyhow::bail!(
+            "RTF is {} MB (> {} MB render cap)",
+            len / (1024 * 1024),
+            RENDER_MAX_BYTES / (1024 * 1024)
+        );
+    }
     let bytes = source.read_bytes().context("failed to read RTF source")?;
     let text =
         std::str::from_utf8(&bytes).map_err(|e| anyhow!("RTF body must be ASCII / UTF-8: {e}"))?;
@@ -550,4 +561,27 @@ fn scrape_hex_blob(body: &str) -> String {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn open_source_refuses_over_cap_before_reading() {
+        // Size gate trips on the cheap `byte_len`, before the whole-file
+        // read + parse — so an over-cap blob need not even be valid RTF.
+        let big = vec![b'x'; (RENDER_MAX_BYTES + 1) as usize];
+        let err = match open_source(&InputSource::memory(big, "huge.rtf")) {
+            Err(e) => e,
+            Ok(_) => panic!("expected over-cap RTF to be refused"),
+        };
+        assert!(format!("{err:#}").contains("render cap"), "got: {err:#}");
+    }
+
+    #[test]
+    fn open_source_parses_under_cap() {
+        let src = InputSource::memory(br"{\rtf1 hello}".to_vec(), "small.rtf");
+        assert!(open_source(&src).is_ok());
+    }
 }

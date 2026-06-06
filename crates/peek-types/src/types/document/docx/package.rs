@@ -22,13 +22,14 @@ use crate::input::InputSource;
 use crate::types::archive::reader::{ReadSeek, open_seekable};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
+use crate::viewer::modes::RENDER_MAX_BYTES;
 
 pub(crate) fn open(source: &InputSource) -> Result<Doc> {
     let reader = open_seekable(source).context("failed to open DOCX container")?;
     let mut zip = ZipArchive::new(reader).context("failed to read DOCX archive")?;
 
     let document_xml =
-        read_entry(&mut zip, "word/document.xml").context("DOCX missing word/document.xml")?;
+        read_entry(&mut zip, "word/document.xml").context("couldn't read word/document.xml")?;
     let core_xml = read_entry(&mut zip, "docProps/core.xml").ok();
     let rels_xml = read_entry(&mut zip, "word/_rels/document.xml.rels").ok();
 
@@ -45,6 +46,17 @@ fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Str
     let mut file = zip
         .by_name(path)
         .with_context(|| format!("DOCX entry {path:?} not found"))?;
+    // Gate on the *uncompressed* entry size, not the container — a small
+    // DOCX can carry a multi-GB `document.xml` (zip bomb). Above the cap,
+    // refuse before the whole-entry read; the rendered view is dropped and
+    // the ZIP TOC + hex view stand in.
+    if file.size() > RENDER_MAX_BYTES {
+        anyhow::bail!(
+            "{path} is {} MB (> {} MB render cap)",
+            file.size() / (1024 * 1024),
+            RENDER_MAX_BYTES / (1024 * 1024)
+        );
+    }
     let mut buf = String::with_capacity(file.size() as usize);
     file.read_to_string(&mut buf)?;
     Ok(buf)

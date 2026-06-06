@@ -67,19 +67,29 @@ fn compose_rtf(source: &InputSource, modes: &mut Vec<Box<dyn Mode>>) -> Result<(
     // embed images as `\pict` groups inline with the prose. Read view
     // + a synthetic listing of those embeds keeps the same TAB
     // workflow as ZIP-backed DOCX.
-    if let Ok(parsed) = document::rtf::parse::open_source(source) {
-        let entries = document::rtf::parse::embeds_to_entries(&parsed.embeds);
-        let has_embeds = !entries.is_empty();
-        modes.push(Box::new(RenderedTextMode::new(RtfRenderer::new(parsed))));
-        if has_embeds {
-            modes.push(Box::new(ListingMode::new(
-                DocumentFormat::Rtf.label(),
-                "TOC",
-                entries,
-                Vec::new(),
-            )));
+    match document::rtf::parse::open_source(source) {
+        Ok(parsed) => {
+            let entries = document::rtf::parse::embeds_to_entries(&parsed.embeds);
+            let has_embeds = !entries.is_empty();
+            modes.push(Box::new(RenderedTextMode::new(RtfRenderer::new(parsed))));
+            if has_embeds {
+                modes.push(Box::new(ListingMode::new(
+                    DocumentFormat::Rtf.label(),
+                    "TOC",
+                    entries,
+                    Vec::new(),
+                )));
+            }
         }
+        // No read mode (over the render cap, or unparseable). Carry the
+        // reason on a TOC listing so it surfaces through Info; the hex
+        // view stands in for the raw bytes.
+        Err(e) => modes.push(Box::new(ListingMode::new(
+            DocumentFormat::Rtf.label(),
+            "TOC",
+            Vec::new(),
+            vec![format!("RTF unreadable: {e:#}")],
+        ))),
     }
-    // Parse error: surface through Info instead of pushing a read mode.
     Ok(())
 }
