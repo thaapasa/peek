@@ -1,100 +1,173 @@
-//! Classfile info section rendering. Maps `cafebabe`'s class version
-//! and access flags to display labels. On a parse error only the error
-//! row is shown.
+//! The Java classfile info section, driven by one [`ClassfileView`] that
+//! derives both `serde::Serialize` (JSON) and
+//! [`InfoView`](crate::info::InfoView) (themed print). [`ClassfileInfo`] stays
+//! the gather struct; the view projects it.
+//!
+//! Two fields diverge between the outputs and so carry custom impls: the class
+//! `Kind` prints as a Java-declaration phrase (`public final class`) but JSON
+//! flattens it to a `kind` token plus boolean modifier flags; `Version` prints
+//! as a JDK label but JSON flattens it to raw `major`/`minor` numbers. On a
+//! parse error only the `Status` row shows (JSON: an `error` key).
 
 use cafebabe::ClassAccessFlags;
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
 
 use super::info::ClassfileInfo;
-use crate::info::{push_field, push_section_header, thousands_sep};
+use crate::info::{InfoValue, Value, Warn, render_info};
 use crate::theme::PeekTheme;
 
+/// Themed terminal classfile section.
 pub fn render_section(lines: &mut Vec<String>, info: &ClassfileInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Class File", theme);
-
-    let Some(meta) = &info.meta else {
-        let msg = info.error.as_deref().unwrap_or("could not parse classfile");
-        push_field(lines, "Status", &theme.paint_warning(msg), theme);
-        return;
-    };
-
-    push_field(lines, "Class", &theme.paint_value(&meta.class_name), theme);
-    if let Some(super_class) = &meta.super_class {
-        push_field(lines, "Extends", &theme.paint_value(super_class), theme);
-    }
-    if !meta.interfaces.is_empty() {
-        push_field(
-            lines,
-            "Implements",
-            &theme.paint_value(&meta.interfaces.join(", ")),
-            theme,
-        );
-    }
-    push_field(
-        lines,
-        "Kind",
-        &theme.paint_value(&kind_label(meta.access_flags)),
-        theme,
-    );
-    push_field(
-        lines,
-        "Version",
-        &theme.paint_value(&version_label(meta.major_version, meta.minor_version)),
-        theme,
-    );
-    if let Some(source_file) = &meta.source_file {
-        push_field(lines, "Source", &theme.paint_value(source_file), theme);
-    }
-    push_field(
-        lines,
-        "Fields",
-        &theme.paint_value(&thousands_sep(meta.field_count as u64)),
-        theme,
-    );
-    push_field(
-        lines,
-        "Methods",
-        &theme.paint_value(&thousands_sep(meta.method_count as u64)),
-        theme,
-    );
+    render_info(lines, &ClassfileView::from(info), theme);
 }
 
-/// Typed `--info --json` encoding of the Class File section. `major_version`
-/// and `minor_version` are emitted raw (numbers); the class kind is a stable
-/// machine token plus boolean modifier flags. `error` is present only when
-/// parsing failed (then `meta` is absent).
+/// Typed `--info --json` view of the classfile section, nested under
+/// `"classfile"`.
 pub fn json_section(info: &ClassfileInfo) -> (&'static str, serde_json::Value) {
-    let Some(meta) = &info.meta else {
-        let mut obj = serde_json::json!({});
-        if let Some(ref err) = info.error {
-            obj["error"] = serde_json::json!(err);
-        }
-        return ("classfile", obj);
-    };
+    (
+        "classfile",
+        serde_json::to_value(ClassfileView::from(info)).expect("classfile info view serializes"),
+    )
+}
 
-    let f = meta.access_flags;
-    let mut obj = serde_json::json!({
-        "class_name": meta.class_name,
-        "kind": class_kind_token(f),
-        "is_public": f.contains(ClassAccessFlags::PUBLIC),
-        "is_final": f.contains(ClassAccessFlags::FINAL),
-        "is_abstract": f.contains(ClassAccessFlags::ABSTRACT),
-        "is_synthetic": f.contains(ClassAccessFlags::SYNTHETIC),
-        "major_version": meta.major_version,
-        "minor_version": meta.minor_version,
-        "field_count": meta.field_count,
-        "method_count": meta.method_count,
-    });
-    if let Some(ref super_class) = meta.super_class {
-        obj["super_class"] = serde_json::json!(super_class);
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title = "Class File")]
+struct ClassfileView {
+    // Parse failure: print shows a warning Status row; JSON an `error` key.
+    #[info(label = "Status", skip_if = "Option::is_none")]
+    #[serde(skip)]
+    status: Option<Warn>,
+    #[info(skip)]
+    #[serde(rename = "error", skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+
+    #[info(label = "Class")]
+    #[serde(rename = "class_name", skip_serializing_if = "Option::is_none")]
+    class_name: Option<String>,
+    #[info(label = "Extends")]
+    #[serde(rename = "super_class", skip_serializing_if = "Option::is_none")]
+    super_class: Option<String>,
+    #[info(label = "Implements")]
+    #[serde(rename = "interfaces", skip_serializing_if = "Option::is_none")]
+    interfaces: Option<NameList>,
+    // Print: the declaration phrase. JSON: flattened kind token + bool flags.
+    #[info(label = "Kind", skip_if = "Option::is_none")]
+    #[serde(flatten)]
+    kind: Option<ClassKind>,
+    // Print: the JDK label. JSON: flattened major/minor numbers.
+    #[info(label = "Version", skip_if = "Option::is_none")]
+    #[serde(flatten)]
+    version: Option<ClassVersion>,
+    #[info(label = "Source")]
+    #[serde(rename = "source_file", skip_serializing_if = "Option::is_none")]
+    source_file: Option<String>,
+    #[info(label = "Fields")]
+    #[serde(rename = "field_count", skip_serializing_if = "Option::is_none")]
+    field_count: Option<Value>,
+    #[info(label = "Methods")]
+    #[serde(rename = "method_count", skip_serializing_if = "Option::is_none")]
+    method_count: Option<Value>,
+}
+
+impl From<&ClassfileInfo> for ClassfileView {
+    fn from(info: &ClassfileInfo) -> Self {
+        let Some(meta) = &info.meta else {
+            return ClassfileView {
+                status: Some(Warn(
+                    info.error
+                        .clone()
+                        .unwrap_or_else(|| "could not parse classfile".to_string()),
+                )),
+                error: info.error.clone(),
+                class_name: None,
+                super_class: None,
+                interfaces: None,
+                kind: None,
+                version: None,
+                source_file: None,
+                field_count: None,
+                method_count: None,
+            };
+        };
+        ClassfileView {
+            status: None,
+            error: None,
+            class_name: Some(meta.class_name.clone()),
+            super_class: meta.super_class.clone(),
+            interfaces: (!meta.interfaces.is_empty()).then(|| NameList(meta.interfaces.clone())),
+            kind: Some(ClassKind(meta.access_flags)),
+            version: Some(ClassVersion {
+                major: meta.major_version,
+                minor: meta.minor_version,
+            }),
+            source_file: meta.source_file.clone(),
+            // Counts use plain value colour + thousands separators (Value::Int).
+            field_count: Some(Value::int(meta.field_count as i64)),
+            method_count: Some(Value::int(meta.method_count as i64)),
+        }
     }
-    if !meta.interfaces.is_empty() {
-        obj["interfaces"] = serde_json::json!(meta.interfaces);
+}
+
+/// Implemented interfaces: a JSON array, but a comma-joined value-coloured
+/// print row.
+struct NameList(Vec<String>);
+
+impl InfoValue for NameList {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_value(&self.0.join(", "))
     }
-    if let Some(ref source_file) = meta.source_file {
-        obj["source_file"] = serde_json::json!(source_file);
+}
+
+impl Serialize for NameList {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(ser)
     }
-    ("classfile", obj)
+}
+
+/// Class kind + access flags. Print: a Java-declaration phrase. JSON: a `kind`
+/// token plus `is_*` booleans (flattened into the parent object).
+struct ClassKind(ClassAccessFlags);
+
+impl InfoValue for ClassKind {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_value(&kind_label(self.0))
+    }
+}
+
+impl Serialize for ClassKind {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let f = self.0;
+        let mut st = ser.serialize_struct("kind", 5)?;
+        st.serialize_field("kind", class_kind_token(f))?;
+        st.serialize_field("is_public", &f.contains(ClassAccessFlags::PUBLIC))?;
+        st.serialize_field("is_final", &f.contains(ClassAccessFlags::FINAL))?;
+        st.serialize_field("is_abstract", &f.contains(ClassAccessFlags::ABSTRACT))?;
+        st.serialize_field("is_synthetic", &f.contains(ClassAccessFlags::SYNTHETIC))?;
+        st.end()
+    }
+}
+
+/// Classfile version. Print: a JDK label. JSON: raw major/minor numbers
+/// (flattened into the parent object).
+struct ClassVersion {
+    major: u16,
+    minor: u16,
+}
+
+impl InfoValue for ClassVersion {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_value(&version_label(self.major, self.minor))
+    }
+}
+
+impl Serialize for ClassVersion {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut st = ser.serialize_struct("version", 2)?;
+        st.serialize_field("major_version", &self.major)?;
+        st.serialize_field("minor_version", &self.minor)?;
+        st.end()
+    }
 }
 
 /// Stable lowercase machine token for the class kind, mirroring the
