@@ -2,7 +2,9 @@
 //! plug into this same section header by adding their own block here
 //! and a matching arm in `gather_extras`.
 
-use crate::info::{format_size_human, push_field, push_section_header, thousands_sep};
+use serde::{Serialize, Serializer};
+
+use crate::info::{InfoNode, format_size_human, render_info, thousands_sep};
 use crate::theme::PeekTheme;
 use crate::types::disk_image::info::{
     DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgPartition, DmgVariant, IsoDateTime,
@@ -10,49 +12,101 @@ use crate::types::disk_image::info::{
 };
 use crate::types::disk_image::mbr;
 
-pub fn render_section(lines: &mut Vec<String>, info: &DiskImageInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Disk Image", theme);
-    push_field(lines, "Format", &theme.paint_value(info.format_name), theme);
-
-    if let Some(err) = &info.error {
-        push_field(lines, "Status", &theme.paint_warning(err), theme);
-        return;
-    }
-
-    match &info.meta {
-        Some(DiskImageMeta::Iso(iso)) => render_iso(lines, iso, theme),
-        Some(DiskImageMeta::Dmg(dmg)) => render_dmg(lines, dmg, theme),
-        Some(DiskImageMeta::Raw(raw)) => render_raw(lines, raw, theme),
-        None => {}
+/// Convenience for a `label  value` row.
+fn row(label: &'static str, value: String) -> InfoNode {
+    InfoNode::Row {
+        label: label.into(),
+        value,
     }
 }
 
-fn render_raw(lines: &mut Vec<String>, raw: &RawImageMeta, theme: &PeekTheme) {
+/// Themed terminal Disk Image section.
+pub fn render_section(lines: &mut Vec<String>, info: &DiskImageInfo, theme: &PeekTheme) {
+    render_info(lines, &DiskImageView(info), theme);
+}
+
+/// Typed `--info --json` view of the Disk Image section, nested under
+/// `"disk_image"`.
+pub fn json_section(info: &DiskImageInfo) -> (&'static str, serde_json::Value) {
+    (
+        "disk_image",
+        serde_json::to_value(DiskImageView(info)).expect("disk_image info view serializes"),
+    )
+}
+
+struct DiskImageView<'a>(&'a DiskImageInfo);
+
+impl crate::info::InfoView for DiskImageView<'_> {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let info = self.0;
+        let mut main = vec![row("Format", theme.paint_value(info.format_name))];
+        if let Some(err) = &info.error {
+            main.push(row("Status", theme.paint_warning(err)));
+            return vec![InfoNode::Block {
+                title: "Disk Image".to_string(),
+                body: main,
+            }];
+        }
+        // Blocks beyond the main one (DMG partition / scheme detail).
+        let mut extra = Vec::new();
+        match &info.meta {
+            Some(DiskImageMeta::Iso(iso)) => iso_rows(&mut main, iso, theme),
+            Some(DiskImageMeta::Dmg(dmg)) => {
+                dmg_main_rows(&mut main, dmg, theme);
+                dmg_partition_nodes(&mut main, &mut extra, &dmg.partitions, theme);
+            }
+            Some(DiskImageMeta::Raw(raw)) => raw_rows(&mut main, raw, theme),
+            None => {}
+        }
+        let mut nodes = vec![InfoNode::Block {
+            title: "Disk Image".to_string(),
+            body: main,
+        }];
+        nodes.extend(extra);
+        nodes
+    }
+}
+
+impl Serialize for DiskImageView<'_> {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let info = self.0;
+        let mut obj = serde_json::json!({ "format": info.format_name });
+        if let Some(err) = &info.error {
+            obj["error"] = serde_json::json!(err);
+        }
+        match &info.meta {
+            Some(DiskImageMeta::Iso(iso)) => obj["iso"] = iso_json(iso),
+            Some(DiskImageMeta::Dmg(dmg)) => obj["dmg"] = dmg_json(dmg),
+            Some(DiskImageMeta::Raw(raw)) => obj["raw"] = raw_json(raw),
+            None => {}
+        }
+        obj.serialize(ser)
+    }
+}
+
+fn raw_rows(main: &mut Vec<InfoNode>, raw: &RawImageMeta, theme: &PeekTheme) {
     let Some(table) = &raw.mbr else {
-        push_field(
-            lines,
+        main.push(row(
             "Layout",
-            &theme.paint_value(
+            theme.paint_value(
                 "no recognised partition table — appears to be a flat filesystem dump",
             ),
-            theme,
-        );
+        ));
         return;
     };
-    push_field(
-        lines,
+    main.push(row(
         "Layout",
-        &theme.paint_value(&format!(
+        theme.paint_value(&format!(
             "MBR ({} partition{})",
             table.partitions.len(),
             if table.partitions.len() == 1 { "" } else { "s" }
         )),
-        theme,
-    );
+    ));
     for (i, p) in table.partitions.iter().enumerate() {
-        let label = format!("Part {}", i + 1);
-        push_field(lines, &label, &paint_partition(p, theme), theme);
+        main.push(InfoNode::Row {
+            label: format!("Part {}", i + 1).into(),
+            value: paint_partition(p, theme),
+        });
     }
 }
 
@@ -74,128 +128,109 @@ fn paint_partition(p: &MbrPartition, theme: &PeekTheme) -> String {
     )
 }
 
-fn render_iso(lines: &mut Vec<String>, iso: &IsoVolumeMeta, theme: &PeekTheme) {
+fn iso_rows(main: &mut Vec<InfoNode>, iso: &IsoVolumeMeta, theme: &PeekTheme) {
     if let Some(label) = &iso.volume_label {
-        push_field(lines, "Volume", &theme.paint_value(label), theme);
+        main.push(row("Volume", theme.paint_value(label)));
     }
     if let Some(set) = &iso.volume_set_id {
-        push_field(lines, "Volume set", &theme.paint_value(set), theme);
+        main.push(row("Volume set", theme.paint_value(set)));
     }
     if let Some(sys) = &iso.system_id {
-        push_field(lines, "System", &theme.paint_value(sys), theme);
+        main.push(row("System", theme.paint_value(sys)));
     }
     if let Some(p) = &iso.publisher {
-        push_field(lines, "Publisher", &theme.paint_value(p), theme);
+        main.push(row("Publisher", theme.paint_value(p)));
     }
     if let Some(p) = &iso.data_preparer {
-        push_field(lines, "Data preparer", &theme.paint_value(p), theme);
+        main.push(row("Data preparer", theme.paint_value(p)));
     }
     if let Some(a) = &iso.application {
-        push_field(lines, "Application", &theme.paint_value(a), theme);
+        main.push(row("Application", theme.paint_value(a)));
     }
-
     let total_bytes = iso.block_count as u64 * iso.block_size as u64;
-    push_field(
-        lines,
+    main.push(row(
         "Volume size",
-        &theme.paint_value(&format!(
+        theme.paint_value(&format!(
             "{} bytes ({} × {} blocks)",
             thousands_sep(total_bytes),
             thousands_sep(iso.block_count as u64),
             iso.block_size,
         )),
-        theme,
-    );
-
+    ));
     if let Some(dt) = &iso.creation {
-        push_field(lines, "Created", &theme.paint_value(&format_dt(dt)), theme);
+        main.push(row("Created", theme.paint_value(&format_dt(dt))));
     }
     if let Some(dt) = &iso.modification {
-        push_field(lines, "Modified", &theme.paint_value(&format_dt(dt)), theme);
+        main.push(row("Modified", theme.paint_value(&format_dt(dt))));
     }
     if let Some(dt) = &iso.expiration {
-        push_field(lines, "Expires", &theme.paint_value(&format_dt(dt)), theme);
+        main.push(row("Expires", theme.paint_value(&format_dt(dt))));
     }
     if let Some(dt) = &iso.effective {
-        push_field(
-            lines,
-            "Effective",
-            &theme.paint_value(&format_dt(dt)),
-            theme,
-        );
+        main.push(row("Effective", theme.paint_value(&format_dt(dt))));
     }
-
-    let extensions = format_extensions(iso);
-    push_field(lines, "Extensions", &theme.paint_value(&extensions), theme);
-
+    main.push(row(
+        "Extensions",
+        theme.paint_value(&format_extensions(iso)),
+    ));
     if iso.el_torito
         && let Some(id) = &iso.el_torito_id
     {
-        push_field(lines, "Boot loader", &theme.paint_value(id), theme);
+        main.push(row("Boot loader", theme.paint_value(id)));
     }
 }
 
-fn render_dmg(lines: &mut Vec<String>, dmg: &DmgMeta, theme: &PeekTheme) {
-    push_field(
-        lines,
+fn dmg_main_rows(main: &mut Vec<InfoNode>, dmg: &DmgMeta, theme: &PeekTheme) {
+    main.push(row(
         "UDIF version",
-        &theme.paint_value(&dmg.udif_version.to_string()),
-        theme,
-    );
-    push_field(
-        lines,
+        theme.paint_value(&dmg.udif_version.to_string()),
+    ));
+    main.push(row(
         "Variant",
-        &theme.paint_value(variant_label(dmg.variant)),
-        theme,
-    );
-    push_field(
-        lines,
+        theme.paint_value(variant_label(dmg.variant)),
+    ));
+    main.push(row(
         "Volume size",
-        &theme.paint_value(&format!("{} bytes", thousands_sep(dmg.total_size_bytes))),
-        theme,
-    );
-    push_field(
-        lines,
+        theme.paint_value(&format!("{} bytes", thousands_sep(dmg.total_size_bytes))),
+    ));
+    main.push(row(
         "Data fork",
-        &theme.paint_value(&format!("{} bytes", thousands_sep(dmg.data_fork_length))),
-        theme,
-    );
-    push_field(
-        lines,
+        theme.paint_value(&format!("{} bytes", thousands_sep(dmg.data_fork_length))),
+    ));
+    main.push(row(
         "Plist",
-        &theme.paint_value(&plist_label(dmg.plist_present, dmg.plist_length)),
-        theme,
-    );
+        theme.paint_value(&plist_label(dmg.plist_present, dmg.plist_length)),
+    ));
     if dmg.segment_count > 1 {
-        push_field(
-            lines,
+        main.push(row(
             "Segments",
-            &theme.paint_value(&format!("{} of {}", dmg.segment_number, dmg.segment_count)),
-            theme,
-        );
+            theme.paint_value(&format!("{} of {}", dmg.segment_number, dmg.segment_count)),
+        ));
     }
-    push_field(
-        lines,
+    main.push(row(
         "Data checksum",
-        &theme.paint_value(checksum_label(dmg.data_checksum_type)),
-        theme,
-    );
-    push_field(
-        lines,
+        theme.paint_value(checksum_label(dmg.data_checksum_type)),
+    ));
+    main.push(row(
         "Master checksum",
-        &theme.paint_value(checksum_label(dmg.master_checksum_type)),
-        theme,
-    );
-    let flags = format_dmg_flags(dmg.flags);
-    push_field(lines, "Flags", &theme.paint_value(&flags), theme);
-    render_dmg_partitions(lines, &dmg.partitions, theme);
+        theme.paint_value(checksum_label(dmg.master_checksum_type)),
+    ));
+    main.push(row(
+        "Flags",
+        theme.paint_value(&format_dmg_flags(dmg.flags)),
+    ));
 }
 
-/// Render the decoded partition map. Filesystems each get a detail block;
-/// the format scaffolding (MBR / GPT structures / free-space gaps)
-/// collapses into one "Partition scheme" block, one terse line each — no
-/// entry is ever hidden. Skipped entirely when no partitions decoded.
-fn render_dmg_partitions(lines: &mut Vec<String>, parts: &[DmgPartition], theme: &PeekTheme) {
+/// Decode the partition map. Filesystems each get a detail block; the format
+/// scaffolding (MBR / GPT structures / free-space gaps) collapses into one
+/// "Partition scheme" block. The `Partitions` summary row joins `main`; the
+/// detail blocks go to `extra`. No-op when no partitions decoded.
+fn dmg_partition_nodes(
+    main: &mut Vec<InfoNode>,
+    extra: &mut Vec<InfoNode>,
+    parts: &[DmgPartition],
+    theme: &PeekTheme,
+) {
     if parts.is_empty() {
         return;
     }
@@ -206,31 +241,26 @@ fn render_dmg_partitions(lines: &mut Vec<String>, parts: &[DmgPartition], theme:
     if !scheme.is_empty() {
         summary.push_str(&format!(", {} scheme", scheme.len()));
     }
-    push_field(
-        lines,
+    main.push(row(
         "Partitions",
-        &theme.paint_value(&format!("{} ({summary})", parts.len())),
-        theme,
-    );
+        theme.paint_value(&format!("{} ({summary})", parts.len())),
+    ));
 
     for p in &filesystems {
-        render_partition_block(lines, p, theme);
+        extra.push(partition_block(p, theme));
     }
     if !scheme.is_empty() {
-        render_scheme_block(lines, &scheme, theme);
+        extra.push(scheme_block(&scheme, theme));
     }
 }
 
 /// Full detail block for one filesystem partition.
-fn render_partition_block(lines: &mut Vec<String>, p: &DmgPartition, theme: &PeekTheme) {
-    lines.push(String::new());
+fn partition_block(p: &DmgPartition, theme: &PeekTheme) -> InfoNode {
     let title = match &p.fs_type {
         Some(t) => format!("Partition \u{b7} {}", friendly_type(t)),
         None => "Partition".to_string(),
     };
-    push_section_header(lines, &title, theme);
-
-    push_field(lines, "Name", &theme.paint_value(&p.name), theme);
+    let mut body = vec![row("Name", theme.paint_value(&p.name))];
     if let Some(t) = &p.fs_type {
         let friendly = friendly_type(t);
         let val = if friendly == *t {
@@ -238,54 +268,50 @@ fn render_partition_block(lines: &mut Vec<String>, p: &DmgPartition, theme: &Pee
         } else {
             format!("{friendly} ({t})")
         };
-        push_field(lines, "Type", &theme.paint_value(&val), theme);
+        body.push(row("Type", theme.paint_value(&val)));
     }
-    push_field(
-        lines,
+    body.push(row(
         "Logical size",
-        &theme.paint_value(&format_size_human(p.size_bytes)),
-        theme,
-    );
-    push_field(lines, "Stored", &theme.paint_value(&stored_desc(p)), theme);
-    push_field(
-        lines,
-        "Compression",
-        &theme.paint_value(&compression_desc(p)),
-        theme,
-    );
-    push_field(lines, "Chunks", &theme.paint_value(&chunks_desc(p)), theme);
-    push_field(
-        lines,
-        "Image offset",
-        &theme.paint_value(&offset_desc(p)),
-        theme,
-    );
+        theme.paint_value(&format_size_human(p.size_bytes)),
+    ));
+    body.push(row("Stored", theme.paint_value(&stored_desc(p))));
+    body.push(row("Compression", theme.paint_value(&compression_desc(p))));
+    body.push(row("Chunks", theme.paint_value(&chunks_desc(p))));
+    body.push(row("Image offset", theme.paint_value(&offset_desc(p))));
+    InfoNode::Block { title, body }
 }
 
-/// Compact block for the format scaffolding — one line per entry, each
-/// still carrying its size, codec, and image offset.
-fn render_scheme_block(lines: &mut Vec<String>, scheme: &[&DmgPartition], theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Partition scheme", theme);
-    for p in scheme {
-        let label = p
-            .fs_type
-            .as_deref()
-            .map(friendly_type)
-            .unwrap_or_else(|| p.name.clone());
-        let codec = if !p.compression.is_empty() {
-            p.compression.join("+")
-        } else if p.stored_bytes == 0 {
-            "sparse".to_string()
-        } else {
-            "raw".to_string()
-        };
-        let offset = thousands_sep(p.start_sector.saturating_mul(512));
-        let value = format!(
-            "{} \u{b7} {codec} \u{b7} @ {offset} B",
-            format_size_human(p.size_bytes)
-        );
-        push_field(lines, &label, &theme.paint_value(&value), theme);
+/// Compact block for the format scaffolding — one row per entry.
+fn scheme_block(scheme: &[&DmgPartition], theme: &PeekTheme) -> InfoNode {
+    let body = scheme
+        .iter()
+        .map(|p| {
+            let label = p
+                .fs_type
+                .as_deref()
+                .map(friendly_type)
+                .unwrap_or_else(|| p.name.clone());
+            let codec = if !p.compression.is_empty() {
+                p.compression.join("+")
+            } else if p.stored_bytes == 0 {
+                "sparse".to_string()
+            } else {
+                "raw".to_string()
+            };
+            let offset = thousands_sep(p.start_sector.saturating_mul(512));
+            let value = format!(
+                "{} \u{b7} {codec} \u{b7} @ {offset} B",
+                format_size_human(p.size_bytes)
+            );
+            InfoNode::Row {
+                label: label.into(),
+                value: theme.paint_value(&value),
+            }
+        })
+        .collect();
+    InfoNode::Block {
+        title: "Partition scheme".to_string(),
+        body,
     }
 }
 
@@ -446,26 +472,6 @@ fn format_offset(quarters: i8) -> String {
     let h = abs / 60;
     let m = abs % 60;
     format!("{sign}{h:02}:{m:02}")
-}
-
-/// Typed `--info --json` encoding of the Disk Image section. `error` is
-/// present only when descriptor parsing failed; `meta` then absent. Enum
-/// fields use stable lowercase machine tokens; timestamps are ISO-8601
-/// strings (via `format_dt`); sizes / counts are raw JSON numbers.
-pub fn json_section(info: &DiskImageInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "format": info.format_name,
-    });
-    if let Some(err) = &info.error {
-        obj["error"] = serde_json::json!(err);
-    }
-    match &info.meta {
-        Some(DiskImageMeta::Iso(iso)) => obj["iso"] = iso_json(iso),
-        Some(DiskImageMeta::Dmg(dmg)) => obj["dmg"] = dmg_json(dmg),
-        Some(DiskImageMeta::Raw(raw)) => obj["raw"] = raw_json(raw),
-        None => {}
-    }
-    ("disk_image", obj)
 }
 
 fn iso_json(iso: &IsoVolumeMeta) -> serde_json::Value {
@@ -782,8 +788,21 @@ mod tests {
         };
 
         let theme = test_theme();
+        let mut main = Vec::new();
+        let mut extra = Vec::new();
+        dmg_partition_nodes(&mut main, &mut extra, &[mbr, fs], &theme);
+        // Render the produced nodes (summary row + detail blocks) to lines.
+        struct Nodes(Vec<InfoNode>);
+        impl crate::info::InfoView for Nodes {
+            fn info_nodes(&self, _t: &PeekTheme) -> Vec<InfoNode> {
+                self.0.clone()
+            }
+        }
+        let mut all = main;
+        all.extend(extra);
         let mut lines = Vec::new();
-        render_dmg_partitions(&mut lines, &[mbr, fs], &theme);
+        let nodes = Nodes(all);
+        crate::info::render_info(&mut lines, &nodes, &theme);
         let blob = lines.join("\n");
 
         assert!(

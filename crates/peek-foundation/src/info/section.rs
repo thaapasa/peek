@@ -42,6 +42,7 @@ pub trait InfoValue {
 ///
 /// [`Block`]: InfoNode::Block
 /// [`Row`]: InfoNode::Row
+#[derive(Clone)]
 pub enum InfoNode {
     /// A `Label  value` line. The label is usually a `&'static str` literal
     /// (`"Lines"`), but `Cow` lets a hand-built view supply an owned, dynamic
