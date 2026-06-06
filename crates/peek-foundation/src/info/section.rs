@@ -52,6 +52,10 @@ pub enum InfoNode {
     },
     /// A `── Title ──` section header followed by its body nodes.
     Block { title: String, body: Vec<InfoNode> },
+    /// A pre-rendered line, emitted verbatim — for content that doesn't fit
+    /// the `label  value` grid (e.g. a CSS colour-swatch row). Hand-built
+    /// views only; the derive never produces one.
+    Line(String),
 }
 
 impl InfoNode {
@@ -60,7 +64,7 @@ impl InfoNode {
     /// included) — the all-optional-absent section vanishes.
     fn renders(&self) -> bool {
         match self {
-            InfoNode::Row { .. } => true,
+            InfoNode::Row { .. } | InfoNode::Line(_) => true,
             InfoNode::Block { body, .. } => body.iter().any(InfoNode::renders),
         }
     }
@@ -97,6 +101,7 @@ pub fn render_info(lines: &mut Vec<String>, view: &impl InfoView, theme: &PeekTh
 fn render_node(lines: &mut Vec<String>, node: &InfoNode, theme: &PeekTheme) {
     match node {
         InfoNode::Row { label, value } => push_field(lines, label, value, theme),
+        InfoNode::Line(line) => lines.push(line.clone()),
         InfoNode::Block { title, body } => {
             if !body.iter().any(InfoNode::renders) {
                 return;
