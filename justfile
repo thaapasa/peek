@@ -10,12 +10,12 @@ format:
 # Check formatting, cargo check + clippy
 lint:
     cargo +nightly fmt -- --check
-    cargo check --all-targets
-    cargo clippy --all-targets -- -D warnings
+    cargo check --workspace --all-targets
+    cargo clippy --workspace --all-targets -- -D warnings
 
 # Run all tests
 test:
-    cargo test
+    cargo test --workspace
 
 # Install peek locally (binary + Pdfium dylib if .pdfium/lib/ has one)
 install:
@@ -97,6 +97,6 @@ bump kind="patch":
     new="$maj.$min.$pat"
     awk -v v="$new" 'BEGIN{done=0} /^version *=/ && !done {sub(/"[^"]+"/, "\"" v "\""); done=1} {print}' Cargo.toml > Cargo.toml.tmp
     mv Cargo.toml.tmp Cargo.toml
-    cargo check
+    cargo check --workspace
     git add Cargo.toml Cargo.lock
     git commit -m "Bump version to $new"

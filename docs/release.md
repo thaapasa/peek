@@ -27,7 +27,7 @@ bumped or committed locally. Three jobs:
    builds are stripped via the release profile. Each archive also bundles the matching Pdfium
    dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
 
-   `cargo test --release --locked --target <target>` runs on every *native* matrix entry before
+   `cargo test --workspace --release --locked --target <target>` runs on every *native* matrix entry before
    bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
    targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from
    the arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure

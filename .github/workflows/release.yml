@@ -177,7 +177,7 @@ jobs:
       # skipped via `matrix.test`.
       - name: Test
         if: matrix.test
-        run: cargo test --release --locked --target ${{ matrix.target }}
+        run: cargo test --workspace --release --locked --target ${{ matrix.target }}
 
       - name: Bundle Pdfium
         shell: bash
