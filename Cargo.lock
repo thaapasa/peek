@@ -1904,6 +1904,7 @@ dependencies = [
  "peek-io",
  "peek-theme",
  "quick-xml",
+ "serde_json",
  "syntect",
  "unicode-width",
 ]

@@ -4,9 +4,11 @@ use std::time::SystemTime;
 use crate::input::mime::MimeInfo;
 use crate::theme::PeekTheme;
 
+mod json;
 mod render;
 mod time;
 
+pub use json::to_json;
 pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use time::format_archive_mtime_zoned;

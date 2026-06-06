@@ -27,6 +27,7 @@ crossterm = { workspace = true }
 syntect = { workspace = true }
 unicode-width = { workspace = true }
 quick-xml = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

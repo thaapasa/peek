@@ -37,3 +37,18 @@ Every file type has an Info view, reachable via:
 | Binary           | Detected format from magic (Mach-O, ELF, PE, SQLite, …)                                             |
 
 Use `--utc` to show timestamps in UTC instead of local + offset.
+
+## JSON output
+
+`peek <file> --info --json` prints the info screen as a single JSON object instead of the themed
+view — designed for shell pipelines:
+
+```sh
+peek report.pdf --info --json | jq .size_bytes
+```
+
+Core metadata is fully typed: `size_bytes` is a number, timestamps are ISO-8601 UTC strings
+(independent of `--utc`), and each MIME entry carries a machine `category`. Absent fields (created
+time, compression, warnings) are omitted rather than emitted as null. The format-specific section is
+currently surfaced as a `details` array of text lines; a future release will replace it with typed
+per-type fields. `--json` requires `--info`.

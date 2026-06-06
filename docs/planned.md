@@ -170,6 +170,21 @@ Crates: `pkcs12` (encrypted bags).
 - **Mach-O fat slices** — switch the viewed slice interactively. Today the host-arch slice is
   auto-picked and the rest only listed in the Info view.
 
+## Info JSON — structured extras ◐
+
+`--info --json` ships (see features.md): core file metadata is fully typed. The remaining work is
+the per-type extras section. Today each type's `InfoExtras::render_section` paints directly into a
+`Vec<String>`, so the JSON path can only surface those lines verbatim as a `details` string array —
+not real structured data (`jq .pdf.pages` is impossible).
+
+- **Phase 2** — teach each per-type stats struct to expose its fields as data, emitted under a
+  type-named key (`"pdf": { "pages": 12, … }`). Incremental: convert one type at a time, dropping it
+  from the `details` fallback as it graduates.
+- **Phase 3** — collapse the two output paths: have `render_section` return a structured field model
+  (`Section { title, fields: [{ json_key, label, value, kind }] }`) and drive *both* the themed
+  terminal render and the JSON encoder from it, so the ~30 hand-painted section renderers become
+  data + one shared renderer. JSON then falls out for free and the `details` fallback is deleted.
+
 ## Viewer Features
 
 ### Text Search ◐

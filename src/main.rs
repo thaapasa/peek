@@ -36,6 +36,9 @@ fn main() -> Result<()> {
     if args.update {
         return update::run();
     }
+    if args.json && !args.info {
+        anyhow::bail!("--json is only valid together with --info");
+    }
     // No args + interactive stdin → show short help instead of erroring.
     let no_input = args.file.is_none() && std::io::stdin().is_terminal();
     if args.short_help || args.help || no_input {
@@ -129,9 +132,14 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
         let mut output = PrintOutput::stdout();
         let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
-        let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
-        for line in &lines {
-            output.write_line(line)?;
+        if args.json {
+            let value = info::to_json(&file_info, viewers.peek_theme());
+            output.write_line(&serde_json::to_string_pretty(&value)?)?;
+        } else {
+            let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
+            for line in &lines {
+                output.write_line(line)?;
+            }
         }
         output.finish()?;
         return Ok(());
