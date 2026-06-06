@@ -3,7 +3,9 @@
 //! Surfaces the at-a-glance metadata the plan calls for: event / contact
 //! counts, the calendar's date range, and the format version.
 
-use crate::info::{Extras, paint_count, push_field, push_section_header};
+use serde::{Serialize, Serializer};
+
+use crate::info::{Extras, InfoNode, paint_count, render_info};
 use crate::input::InputSource;
 use crate::theme::PeekTheme;
 
@@ -49,64 +51,81 @@ pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<Extras>
     }))
 }
 
-/// Render the vObject Info section.
+/// Themed terminal vObject section.
 pub fn render_section(lines: &mut Vec<String>, info: &VObjectInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, info.format.label(), theme);
-
-    match &info.detail {
-        Detail::Calendar(cal) => render_calendar(lines, cal, theme),
-        Detail::Contact(c) => render_contact(lines, c, theme),
-    }
+    render_info(lines, &VObjectView(info), theme);
 }
 
-fn render_calendar(lines: &mut Vec<String>, cal: &CalendarSummary, theme: &PeekTheme) {
-    if let Some(name) = &cal.name {
-        push_field(lines, "Name", &theme.paint_value(name), theme);
-    }
-    push_field(lines, "Events", &paint_count(cal.event_count, theme), theme);
-    if cal.todo_count > 0 {
-        push_field(lines, "Todos", &paint_count(cal.todo_count, theme), theme);
-    }
-    if let Some((from, to)) = &cal.date_range {
-        let range = if from == to {
-            from.clone()
-        } else {
-            format!("{from} \u{2013} {to}")
-        };
-        push_field(lines, "Date range", &theme.paint_value(&range), theme);
-    }
-    if let Some(version) = &cal.version {
-        push_field(lines, "Version", &theme.paint_value(version), theme);
-    }
-    if let Some(product) = &cal.product {
-        push_field(lines, "Product", &theme.paint_muted(product), theme);
-    }
-}
-
-fn render_contact(lines: &mut Vec<String>, c: &ContactSummary, theme: &PeekTheme) {
-    push_field(
-        lines,
-        "Contacts",
-        &paint_count(c.contact_count, theme),
-        theme,
-    );
-    if let Some(version) = &c.version {
-        push_field(lines, "Version", &theme.paint_value(version), theme);
-    }
-}
-
-/// Typed `--info --json` encoding of the vObject section. The `format` field
-/// is a stable machine token; the per-format detail is a nested object.
+/// Typed `--info --json` view of the vObject section, nested under
+/// `"vobject"`. The `format` field is a stable token; the per-format detail
+/// is a nested object.
 pub fn json_section(info: &VObjectInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "format": format_token(info.format),
-    });
-    match &info.detail {
-        Detail::Calendar(cal) => obj["calendar"] = calendar_json(cal),
-        Detail::Contact(c) => obj["contact"] = contact_json(c),
+    (
+        "vobject",
+        serde_json::to_value(VObjectView(info)).expect("vobject info view serializes"),
+    )
+}
+
+/// One-of view: the format-labelled block inlines the calendar / contact
+/// rows for print, while JSON nests the detail under `calendar` / `contact`.
+struct VObjectView<'a>(&'a VObjectInfo);
+
+impl crate::info::InfoView for VObjectView<'_> {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let info = self.0;
+        let mut body = Vec::new();
+        let row = |label: &'static str, value: String| InfoNode::Row {
+            label: label.into(),
+            value,
+        };
+        match &info.detail {
+            Detail::Calendar(cal) => {
+                if let Some(name) = &cal.name {
+                    body.push(row("Name", theme.paint_value(name)));
+                }
+                body.push(row("Events", paint_count(cal.event_count, theme)));
+                if cal.todo_count > 0 {
+                    body.push(row("Todos", paint_count(cal.todo_count, theme)));
+                }
+                if let Some((from, to)) = &cal.date_range {
+                    let range = if from == to {
+                        from.clone()
+                    } else {
+                        format!("{from} \u{2013} {to}")
+                    };
+                    body.push(row("Date range", theme.paint_value(&range)));
+                }
+                if let Some(version) = &cal.version {
+                    body.push(row("Version", theme.paint_value(version)));
+                }
+                if let Some(product) = &cal.product {
+                    body.push(row("Product", theme.paint_muted(product)));
+                }
+            }
+            Detail::Contact(c) => {
+                body.push(row("Contacts", paint_count(c.contact_count, theme)));
+                if let Some(version) = &c.version {
+                    body.push(row("Version", theme.paint_value(version)));
+                }
+            }
+        }
+        vec![InfoNode::Block {
+            title: info.format.label().to_string(),
+            body,
+        }]
     }
-    ("vobject", obj)
+}
+
+impl Serialize for VObjectView<'_> {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let info = self.0;
+        let mut obj = serde_json::json!({ "format": format_token(info.format) });
+        match &info.detail {
+            Detail::Calendar(cal) => obj["calendar"] = calendar_json(cal),
+            Detail::Contact(c) => obj["contact"] = contact_json(c),
+        }
+        obj.serialize(ser)
+    }
 }
 
 fn format_token(fmt: VObjectFormat) -> &'static str {
