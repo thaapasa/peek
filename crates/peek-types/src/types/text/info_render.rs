@@ -45,9 +45,12 @@ pub fn json_section(stats: &TextStats) -> (&'static str, serde_json::Value) {
 
 /// One struct, two outputs. Field order is the print order; JSON key order is
 /// serde_json's (alphabetical), so the two never need to agree on order.
+///
+/// Public so the text-reusing types (`sql`, `markdown`) can nest it as a
+/// Content block via `#[info(nest)]`; build one with [`TextView::from`].
 #[derive(Serialize, InfoView)]
 #[info(title = "Content")]
-struct TextView {
+pub struct TextView {
     #[info(label = "Lines")]
     line_count: Value,
     // JSON keeps `0`; print hides a zero blank-line count.
