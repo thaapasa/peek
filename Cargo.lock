@@ -1901,6 +1901,7 @@ dependencies = [
  "crossterm",
  "libc",
  "peek-detect",
+ "peek-foundation-derive",
  "peek-io",
  "peek-theme",
  "quick-xml",
@@ -1908,6 +1909,15 @@ dependencies = [
  "serde_json",
  "syntect",
  "unicode-width",
+]
+
+[[package]]
+name = "peek-foundation-derive"
+version = "0.2.12"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

@@ -20,6 +20,7 @@ testing = []
 peek-io = { workspace = true }
 peek-detect = { workspace = true }
 peek-theme = { workspace = true }
+peek-foundation-derive = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }

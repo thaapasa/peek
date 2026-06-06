@@ -63,12 +63,22 @@ crates/
                          ViewerState / the event loop are NOT here — they're the bin's session layer.
     info/              — FileInfo + InfoExtras trait (render_section + json_section) + Extras
                          (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +
-                         json (typed --info --json encoder) + time fmt. (gather hub → bin.)
+                         json (typed --info --json encoder) + time fmt; section (InfoValue +
+                         InfoSection traits + render_info_section + MaybeZero — the print half a
+                         view struct drives via #[derive(InfoSection)], paired with serde for
+                         JSON). (gather hub → bin.)
     output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
                          theme-gradient logo painter (shared with the bin's help screen).
     extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path
                          sanitiser / forward-slash-key helpers. (The dispatch hub → bin.)
     base64, xml        — shared standard-alphabet base64 + XML attribute-unescape helpers.
+    derive/            — `peek-foundation-derive`: proc-macro sub-crate (own Cargo manifest,
+                         workspace member) for `#[derive(InfoSection)]`. Walks a serde view
+                         struct's fields — label from `#[info(label = …)]`, value from the
+                         field's `InfoValue`; mirrors serde's `skip_serializing_if` (+ print-only
+                         `#[info(skip_if_zero)]`/`skip_if`). Generated paths resolve only through
+                         `::peek_foundation` (re-exporter, guaranteed in scope). syn/quote,
+                         build-time only — no runtime dep. Re-exported as `info::InfoSection`.
   peek-types/          — per-file-type readers, one module per type (reader + info + view-mode;
                          the format enum + sniff helpers live in peek-detect, re-exported at each
                          module root). Depends on foundation/detect/io/theme — Cargo bars it from

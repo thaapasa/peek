@@ -18,6 +18,22 @@ deleted. The `Value` enum (already shipped) is where per-field formatting +
 theming lives, so JSON gets the machine form and print gets the human form
 from the same field.
 
+## Progress
+
+- ✅ **Steps 1–3 landed.** `peek-foundation-derive` crate (`#[derive(InfoSection)]`),
+  the `InfoValue` / `InfoSection` / `MaybeZero` traits + `render_info_section`
+  in `peek-foundation/src/info/section.rs`, `impl InfoValue for Value` (the
+  size/count/timestamp colouring moved into `render/`), and `text` fully
+  collapsed onto a `TextView` view struct that derives **both**
+  `Serialize` + `InfoSection`. Verified byte-identical print + JSON (text and
+  the SVG reuse path) against the prior commit. `TextStats` stays the
+  streaming-gather accumulator (and the struct `svg` embeds); `TextView` is its
+  presentation projection — for this type stats and view stay two structs
+  because the accumulator is shared, but the label/skip/format logic is now
+  declared once.
+- ☐ **Step 4** — migrate the other flat sections (see Sequencing).
+- ☐ **Step 5** — leave the bespoke sections documented as not-derived.
+
 ## Current state (already shipped on branch `info-json`)
 
 - `peek x --info --json` ships: core `FileInfo` typed + every one of the 27

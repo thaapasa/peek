@@ -6,12 +6,17 @@ use crate::theme::PeekTheme;
 
 mod json;
 mod render;
+mod section;
 mod time;
 mod value;
 
 pub use json::to_json;
+/// `#[derive(InfoSection)]` — the print-section generator. Shares the trait's
+/// name (macro vs. type namespace) the way serde's `Serialize` does.
+pub use peek_foundation_derive::InfoSection;
 pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
+pub use section::{InfoSection, InfoValue, MaybeZero, render_info_section};
 pub use time::format_archive_mtime_zoned;
 pub use value::Value;
 
