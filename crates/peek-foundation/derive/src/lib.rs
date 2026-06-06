@@ -52,12 +52,16 @@ enum Skip {
     None,
 }
 
-/// Whether a field is a scalar row or a nested sub-view.
+/// Whether a field is a scalar row, a nested sub-view, or print-skipped.
 enum Role {
     /// `#[info(label = "…")]` — a single value row.
     Scalar(String),
     /// `#[info(nest)]` — splice the field's own `info_nodes()`.
     Nest,
+    /// `#[info(skip)]` — contributes to JSON (serde) only, no print node.
+    /// For a field carried for its serde value or `title_from` (e.g. a
+    /// `format` token that *is* the section title, never a row).
+    Skip,
 }
 
 #[proc_macro_derive(InfoView, attributes(info))]
@@ -95,6 +99,9 @@ fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     for field in fields {
         let ident = field.ident.as_ref().expect("named field");
         let role = field_role(field)?;
+        if matches!(role, Role::Skip) {
+            continue;
+        }
         let skip = field_skip(field)?;
 
         // The node-producing expression for this field, pushed/extended onto
@@ -109,6 +116,7 @@ fn expand(input: &DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             Role::Nest => quote! {
                 body.extend(::peek_foundation::info::InfoView::info_nodes(&self.#ident, theme));
             },
+            Role::Skip => unreachable!("skipped above"),
         };
 
         let stmt = match skip {
@@ -188,6 +196,7 @@ fn struct_title(input: &DeriveInput) -> syn::Result<Title> {
 fn field_role(field: &syn::Field) -> syn::Result<Role> {
     let mut label = None;
     let mut nest = false;
+    let mut skip = false;
     for attr in &field.attrs {
         if !attr.path().is_ident("info") {
             continue;
@@ -198,6 +207,8 @@ fn field_role(field: &syn::Field) -> syn::Result<Role> {
                 label = Some(s.value());
             } else if meta.path.is_ident("nest") {
                 nest = true;
+            } else if meta.path.is_ident("skip") {
+                skip = true;
             } else if meta.input.peek(syn::Token![=]) {
                 // skip_if = "…" (read elsewhere) or any other valued key.
                 let _: syn::Expr = meta.value()?.parse()?;
@@ -206,16 +217,17 @@ fn field_role(field: &syn::Field) -> syn::Result<Role> {
             Ok(())
         })?;
     }
-    match (label, nest) {
-        (Some(_), true) => Err(syn::Error::new_spanned(
+    match (label, nest, skip) {
+        (None, false, true) => Ok(Role::Skip),
+        (Some(l), false, false) => Ok(Role::Scalar(l)),
+        (None, true, false) => Ok(Role::Nest),
+        (None, false, false) => Err(syn::Error::new_spanned(
             field,
-            "field cannot be both `#[info(label)]` and `#[info(nest)]`",
+            "field needs `#[info(label = \"…\")]`, `#[info(nest)]`, or `#[info(skip)]`",
         )),
-        (Some(l), false) => Ok(Role::Scalar(l)),
-        (None, true) => Ok(Role::Nest),
-        (None, false) => Err(syn::Error::new_spanned(
+        _ => Err(syn::Error::new_spanned(
             field,
-            "field needs `#[info(label = \"…\")]` or `#[info(nest)]`",
+            "field has conflicting `#[info(...)]` roles (pick one of label / nest / skip)",
         )),
     }
 }

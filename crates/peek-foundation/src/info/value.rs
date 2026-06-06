@@ -19,7 +19,9 @@ use std::time::SystemTime;
 
 use serde::{Serialize, Serializer};
 
+use super::InfoValue;
 use super::time::format_time;
+use crate::theme::PeekTheme;
 
 /// One info-field value tagged with its semantic kind. See the module docs.
 #[derive(Debug, Clone)]
@@ -87,6 +89,53 @@ impl Serialize for Value {
         }
     }
 }
+
+/// A string field rendered in a *non-default* colour. Each newtype carries
+/// the same machine value (serializes as the bare string) but paints
+/// differently — secondary metadata muted, identifiers in accent, problems in
+/// warning. Use these for fields whose print colour differs from the plain
+/// value colour the blanket `String` impl gives.
+macro_rules! painted_string {
+    ($(#[$m:meta])* $name:ident => $paint:ident) => {
+        $(#[$m])*
+        #[derive(Debug, Clone)]
+        pub struct $name(pub String);
+
+        impl From<String> for $name {
+            fn from(s: String) -> Self {
+                $name(s)
+            }
+        }
+        impl From<&str> for $name {
+            fn from(s: &str) -> Self {
+                $name(s.to_string())
+            }
+        }
+        impl InfoValue for $name {
+            fn render_value(&self, theme: &PeekTheme) -> String {
+                theme.$paint(&self.0)
+            }
+        }
+        impl Serialize for $name {
+            fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+                ser.serialize_str(&self.0)
+            }
+        }
+    };
+}
+
+painted_string!(
+    /// Secondary text in the muted colour (dates, descriptions, fallbacks).
+    Muted => paint_muted
+);
+painted_string!(
+    /// Identifier-ish text in the accent colour (format names, delimiters).
+    Accent => paint_accent
+);
+painted_string!(
+    /// Problem text in the warning colour (parse errors, risky flags).
+    Warn => paint_warning
+);
 
 #[cfg(test)]
 mod tests {
