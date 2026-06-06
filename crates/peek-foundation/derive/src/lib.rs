@@ -236,6 +236,7 @@ fn field_role(field: &syn::Field) -> syn::Result<Role> {
 /// `info(skip_if = "path")` > `serde(skip_serializing_if = "path")` > none.
 fn field_skip(field: &syn::Field) -> syn::Result<Skip> {
     let mut zero = false;
+    let mut no_skip = false;
     let mut info_pred: Option<syn::Path> = None;
 
     for attr in &field.attrs {
@@ -245,6 +246,8 @@ fn field_skip(field: &syn::Field) -> syn::Result<Skip> {
         attr.parse_nested_meta(|meta| {
             if meta.path.is_ident("skip_if_zero") {
                 zero = true;
+            } else if meta.path.is_ident("no_skip") {
+                no_skip = true;
             } else if meta.path.is_ident("skip_if") {
                 let s: LitStr = meta.value()?.parse()?;
                 info_pred = Some(s.parse()?);
@@ -256,6 +259,12 @@ fn field_skip(field: &syn::Field) -> syn::Result<Skip> {
         })?;
     }
 
+    // `no_skip` forces the print row to always render, even when serde skips
+    // the JSON field (a row whose value falls back to a placeholder while the
+    // JSON key is genuinely absent — e.g. eps `Preview` → muted `none`).
+    if no_skip {
+        return Ok(Skip::None);
+    }
     if zero {
         return Ok(Skip::Zero);
     }
