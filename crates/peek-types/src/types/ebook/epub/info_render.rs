@@ -1,74 +1,66 @@
-//! Render the EPUB info section.
+//! The EPUB info section, driven by one [`EbookView`] that derives both
+//! `serde::Serialize` (JSON) and [`InfoView`](crate::info::InfoView) (themed
+//! print). [`EbookStats`] stays the gather struct; the view projects it.
+//! Metadata members render inline (and so flatten into the JSON object).
 
-use crate::info::{paint_count, push_field, push_section_header};
+use crate::info::{Muted, Value, render_info};
 use crate::theme::PeekTheme;
 use crate::types::ebook::EbookStats;
 
+/// Themed terminal EPUB section.
 pub fn render_section(lines: &mut Vec<String>, stats: &EbookStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "EPUB", theme);
-
-    let m = &stats.metadata;
-    if let Some(v) = &m.title {
-        push_field(lines, "Title", &theme.paint_value(v), theme);
-    }
-    if let Some(v) = &m.creator {
-        push_field(lines, "Author", &theme.paint_value(v), theme);
-    }
-    if let Some(v) = &m.language {
-        push_field(lines, "Language", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.publisher {
-        push_field(lines, "Publisher", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.date {
-        push_field(lines, "Date", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.identifier {
-        push_field(lines, "Identifier", &theme.paint_muted(v), theme);
-    }
-    if stats.chapter_count > 0 {
-        push_field(
-            lines,
-            "Chapters",
-            &paint_count(stats.chapter_count, theme),
-            theme,
-        );
-    }
-    if let Some(v) = &m.description {
-        push_field(lines, "Description", &theme.paint_muted(v), theme);
-    }
+    render_info(lines, &EbookView::from(stats), theme);
 }
 
-/// Typed `--info --json` encoding of the EPUB section. Metadata members
-/// are nested under `metadata`, each omitted when absent.
+/// Typed `--info --json` view of the EPUB section, nested under `"ebook"`.
 pub fn json_section(stats: &EbookStats) -> (&'static str, serde_json::Value) {
-    let m = &stats.metadata;
-    let mut meta = serde_json::Map::new();
-    if let Some(ref v) = m.title {
-        meta.insert("title".to_string(), serde_json::json!(v));
+    (
+        "ebook",
+        serde_json::to_value(EbookView::from(stats)).expect("ebook info view serializes"),
+    )
+}
+
+#[derive(serde::Serialize, crate::info::InfoView)]
+#[info(title = "EPUB")]
+struct EbookView {
+    #[info(label = "Title")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[info(label = "Author")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    creator: Option<String>,
+    #[info(label = "Language")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    language: Option<Muted>,
+    #[info(label = "Publisher")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    publisher: Option<Muted>,
+    #[info(label = "Date")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date: Option<Muted>,
+    #[info(label = "Identifier")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    identifier: Option<Muted>,
+    // JSON keeps the count; print hides a zero.
+    #[info(label = "Chapters", skip_if_zero)]
+    chapter_count: Value,
+    #[info(label = "Description")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<Muted>,
+}
+
+impl From<&EbookStats> for EbookView {
+    fn from(s: &EbookStats) -> Self {
+        let m = &s.metadata;
+        EbookView {
+            title: m.title.clone(),
+            creator: m.creator.clone(),
+            language: m.language.clone().map(Muted),
+            publisher: m.publisher.clone().map(Muted),
+            date: m.date.clone().map(Muted),
+            identifier: m.identifier.clone().map(Muted),
+            chapter_count: Value::count(s.chapter_count as u64),
+            description: m.description.clone().map(Muted),
+        }
     }
-    if let Some(ref v) = m.creator {
-        meta.insert("creator".to_string(), serde_json::json!(v));
-    }
-    if let Some(ref v) = m.language {
-        meta.insert("language".to_string(), serde_json::json!(v));
-    }
-    if let Some(ref v) = m.publisher {
-        meta.insert("publisher".to_string(), serde_json::json!(v));
-    }
-    if let Some(ref v) = m.date {
-        meta.insert("date".to_string(), serde_json::json!(v));
-    }
-    if let Some(ref v) = m.identifier {
-        meta.insert("identifier".to_string(), serde_json::json!(v));
-    }
-    if let Some(ref v) = m.description {
-        meta.insert("description".to_string(), serde_json::json!(v));
-    }
-    let obj = serde_json::json!({
-        "metadata": serde_json::Value::Object(meta),
-        "chapter_count": stats.chapter_count,
-    });
-    ("ebook", obj)
 }
