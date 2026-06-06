@@ -15,11 +15,13 @@ use crate::impl_info_extras;
 
 impl_info_extras!(
     crate::types::image::info::ImageStats,
-    crate::types::image::info_render::render_section
+    crate::types::image::info_render::render_section,
+    crate::types::image::info_render::json_section
 );
 impl_info_extras!(
     crate::types::text::info::TextStats,
-    crate::types::text::info_render::render_section
+    crate::types::text::info_render::render_section,
+    crate::types::text::info_render::json_section
 );
 impl_info_extras!(
     crate::types::svg::info::SvgStats,
@@ -27,7 +29,8 @@ impl_info_extras!(
 );
 impl_info_extras!(
     crate::types::structured::info::StructuredInfo,
-    crate::types::structured::info::render_section
+    crate::types::structured::info::render_section,
+    crate::types::structured::info::json_section
 );
 impl_info_extras!(
     crate::types::markdown::info::MarkdownInfo,
@@ -63,7 +66,8 @@ impl_info_extras!(
 );
 impl_info_extras!(
     crate::types::archive::info::ArchiveStats,
-    crate::types::archive::info::render_section
+    crate::types::archive::info::render_section,
+    crate::types::archive::info::json_section
 );
 impl_info_extras!(
     crate::types::disk_image::info::DiskImageInfo,

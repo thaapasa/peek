@@ -53,9 +53,18 @@ pub fn to_json(info: &FileInfo, theme: &PeekTheme) -> Value {
         obj.insert("warnings".into(), json!(info.warnings));
     }
 
-    let details = extras_details(info, theme);
-    if !details.is_empty() {
-        obj.insert("details".into(), Value::Array(details));
+    // Converted types provide a typed object nested under their own key;
+    // the rest fall back to the rendered section as a `details` text array.
+    match info.extras.json_section() {
+        Some((key, value)) => {
+            obj.insert(key.into(), value);
+        }
+        None => {
+            let details = extras_details(info, theme);
+            if !details.is_empty() {
+                obj.insert("details".into(), Value::Array(details));
+            }
+        }
     }
 
     Value::Object(obj)

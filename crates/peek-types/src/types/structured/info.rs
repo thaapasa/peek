@@ -118,6 +118,39 @@ fn push_structured_stats(lines: &mut Vec<String>, stats: &StructuredStats, theme
     }
 }
 
+/// Typed `--info --json` encoding of the Format section. Stats are present
+/// only when the document parsed; an unparseable file yields just `format`.
+pub fn json_section(info: &StructuredInfo) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({ "format": info.format_name });
+    if let Some(ref s) = info.stats {
+        obj["top_level_kind"] = serde_json::json!(top_level_token(&s.top_level_kind));
+        if let TopLevelKind::MultiDoc(n) = &s.top_level_kind {
+            obj["document_count"] = serde_json::json!(n);
+        }
+        obj["top_level_count"] = serde_json::json!(s.top_level_count);
+        obj["max_depth"] = serde_json::json!(s.max_depth);
+        obj["total_nodes"] = serde_json::json!(s.total_nodes);
+        if let Some(ref root) = s.xml_root {
+            obj["xml_root"] = serde_json::json!(root);
+        }
+        if !s.xml_namespaces.is_empty() {
+            obj["xml_namespaces"] = serde_json::json!(s.xml_namespaces);
+        }
+    }
+    ("structured", obj)
+}
+
+fn top_level_token(kind: &TopLevelKind) -> &'static str {
+    match kind {
+        TopLevelKind::Object => "object",
+        TopLevelKind::Array => "array",
+        TopLevelKind::Scalar => "scalar",
+        TopLevelKind::Table => "table",
+        TopLevelKind::MultiDoc(_) => "multi-doc",
+        TopLevelKind::Document => "document",
+    }
+}
+
 // ---------------------------------------------------------------------------
 // JSON
 // ---------------------------------------------------------------------------

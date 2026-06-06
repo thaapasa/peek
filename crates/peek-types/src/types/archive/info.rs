@@ -173,6 +173,29 @@ pub fn render_section(lines: &mut Vec<String>, stats: &ArchiveStats, theme: &Pee
     }
 }
 
+/// Typed `--info --json` encoding of the Archive section. `error` is present
+/// only when listing failed; the count fields are then zero.
+pub fn json_section(stats: &ArchiveStats) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "format": stats.format_name,
+        "entry_count": stats.entry_count,
+        "file_count": stats.file_count,
+        "dir_count": stats.dir_count,
+        "total_uncompressed_size": stats.total_uncompressed_size,
+    });
+    if let Some(ref err) = stats.error {
+        obj["error"] = serde_json::json!(err);
+    }
+    if let Some(ref lib) = stats.static_lib {
+        let mut l = serde_json::json!({ "object_members": lib.object_members });
+        if let Some(ref arch) = lib.architecture {
+            l["architecture"] = serde_json::json!(arch);
+        }
+        obj["static_lib"] = l;
+    }
+    ("archive", obj)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

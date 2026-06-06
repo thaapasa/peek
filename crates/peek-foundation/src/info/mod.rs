@@ -68,6 +68,18 @@ pub struct CompressionInfo {
 pub trait InfoExtras: std::any::Any {
     /// Append this type's Info-view section to `lines`.
     fn render_section(&self, lines: &mut Vec<String>, theme: &PeekTheme);
+
+    /// Structured form of this type's section for `--info --json`, as
+    /// `(type_key, value)` — the JSON object nested under `type_key`
+    /// (e.g. `("archive", { "entry_count": 12, … })`).
+    ///
+    /// Default `None`: the type hasn't been given a typed encoder yet, so
+    /// the JSON path falls back to surfacing the rendered section as a
+    /// `details` text array. Implemented for converted types via the
+    /// three-argument form of [`impl_info_extras!`]. See `info/json.rs`.
+    fn json_section(&self) -> Option<(&'static str, serde_json::Value)> {
+        None
+    }
 }
 
 /// Boxed per-type info payload carried by [`FileInfo::extras`].
@@ -109,6 +121,23 @@ macro_rules! impl_info_extras {
                 theme: &$crate::theme::PeekTheme,
             ) {
                 $render(lines, self, theme);
+            }
+        }
+    };
+    // Three-argument form: additionally wire a typed `--info --json`
+    // encoder, a free function `(&Self) -> (&'static str, serde_json::Value)`.
+    ($ty:ty, $render:path, $json:path) => {
+        impl $crate::info::InfoExtras for $ty {
+            fn render_section(
+                &self,
+                lines: &mut ::std::vec::Vec<::std::string::String>,
+                theme: &$crate::theme::PeekTheme,
+            ) {
+                $render(lines, self, theme);
+            }
+
+            fn json_section(&self) -> ::std::option::Option<(&'static str, ::serde_json::Value)> {
+                ::std::option::Option::Some($json(self))
             }
         }
     };

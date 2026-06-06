@@ -118,3 +118,57 @@ fn push_animation(lines: &mut Vec<String>, anim: &AnimationStats, theme: &PeekTh
         push_field(lines, "Loop", &theme.paint_value(&text), theme);
     }
 }
+
+/// Typed `--info --json` encoding of the Image section. EXIF / XMP key→value
+/// pairs become nested objects; absent optionals are omitted.
+pub fn json_section(stats: &ImageStats) -> (&'static str, serde_json::Value) {
+    let mut obj = serde_json::json!({
+        "width": stats.width,
+        "height": stats.height,
+        "color_type": stats.color_type,
+        "bit_depth": stats.bit_depth,
+    });
+    if let Some(ref hdr) = stats.hdr_format {
+        obj["hdr_format"] = serde_json::json!(hdr);
+    }
+    if let Some(ref icc) = stats.icc_profile {
+        obj["icc_profile"] = serde_json::json!(icc);
+    }
+    if let Some(ref anim) = stats.animation {
+        obj["animation"] = animation_json(anim);
+    }
+    if !stats.exif.is_empty() {
+        obj["exif"] = pairs_json(&stats.exif);
+    }
+    if !stats.xmp.is_empty() {
+        obj["xmp"] = pairs_json(&stats.xmp);
+    }
+    ("image", obj)
+}
+
+fn animation_json(anim: &AnimationStats) -> serde_json::Value {
+    let mut obj = serde_json::Map::new();
+    if let Some(fc) = anim.frame_count {
+        obj.insert("frame_count".into(), serde_json::json!(fc));
+    }
+    if let Some(ms) = anim.total_duration_ms {
+        obj.insert("total_duration_ms".into(), serde_json::json!(ms));
+    }
+    if let Some(loop_count) = anim.loop_count {
+        // Mirror the render: a finite count of 0 means an infinite loop.
+        let value = match loop_count {
+            LoopCount::Infinite | LoopCount::Finite(0) => serde_json::json!("infinite"),
+            LoopCount::Finite(n) => serde_json::json!(n),
+        };
+        obj.insert("loop_count".into(), value);
+    }
+    serde_json::Value::Object(obj)
+}
+
+fn pairs_json(pairs: &[(String, String)]) -> serde_json::Value {
+    let map: serde_json::Map<String, serde_json::Value> = pairs
+        .iter()
+        .map(|(k, v)| (k.clone(), serde_json::json!(v)))
+        .collect();
+    serde_json::Value::Object(map)
+}
