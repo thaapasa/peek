@@ -21,7 +21,7 @@ pub fn compose(
     // `--plain` drops the rasterized preview — SVG falls back to raw
     // XML source, consistent with `--plain` meaning "no transformation"
     // for every other text type.
-    if !ctx.plain_mode {
+    if !args.plain {
         let cfg = image_config(args);
         let anim = if args.no_svg_anim {
             None
@@ -43,10 +43,7 @@ pub fn compose(
         source,
         &crate::input::detect::FileType::Svg,
         args,
-        crate::types::structured::pretty_view_for(
-            &crate::input::detect::FileType::Svg,
-            ctx.plain_mode,
-        ),
+        crate::types::structured::pretty_view_for(&crate::input::detect::FileType::Svg, args.plain),
     )?);
     Ok(())
 }

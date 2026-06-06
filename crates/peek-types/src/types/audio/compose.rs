@@ -44,7 +44,7 @@ pub fn compose(
                     lyrics_source,
                     line_source,
                     Rc::clone(&ctx.theme_manager),
-                    ctx.theme_name,
+                    ctx.theme_manager.theme_name,
                     ContentModeConfig {
                         label: "Lyrics",
                         line_numbers: args.line_numbers,

@@ -6,27 +6,6 @@ so commit / PR references stay valid. Add new IDs at the end of each section
 
 ## Medium
 
-### M3. `ComposeCtx` carries two fields derivable from what callers already hold
-
-`crates/peek-foundation/src/viewer/mod.rs:33-37`. `ComposeCtx` is now a
-genuinely shared bundle — its `text_content_mode` method is called from ~10
-per-type composes (svg, markdown, html, cert, eps, notebook, vobject, email,
-plus `src/compose.rs`) — so the bundle pays for itself. But two of its three
-fields are redundant:
-
-1. **`theme_name` duplicates `theme_manager.theme_name`.** That's a public
-   field on `ThemeManager` (`crates/peek-theme/src/manager.rs:12`), and
-   `ComposeCtx` already holds `Rc<ThemeManager>`.
-2. **`plain_mode` duplicates `ComposeOpts.plain`.** Every per-type compose
-   already receives `args: &ComposeOpts` alongside `&ctx`; the four sites that
-   read `ctx.plain_mode` (svg, markdown, html, cert composes + `compose.rs:91`)
-   have `args.plain` in scope and identical.
-
-Drop both and `ComposeCtx` collapses to a thin wrapper over
-`Rc<ThemeManager>`. `text_content_mode` would read `args.plain` and
-`self.theme_manager.theme_name` instead of the mirrored fields. Net: one less
-thing to keep in sync between `Registry`, `ComposeCtx`, and `ComposeOpts`.
-
 ### M6. The per-type dispatch hubs are a `match file_type` family — wontfix, kept as analysis record
 
 Original finding: adding a file type touches ≥5 dispatch tables (detect,

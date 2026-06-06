@@ -24,7 +24,7 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: VObjectFormat,
 ) -> Result<()> {
-    if !ctx.plain_mode {
+    if !args.plain {
         modes.push(match fmt {
             VObjectFormat::ICal => {
                 Box::new(RenderedTextMode::new(CalendarRenderer::new(source.clone())))

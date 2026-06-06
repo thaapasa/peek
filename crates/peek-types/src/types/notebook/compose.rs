@@ -26,7 +26,7 @@ pub fn compose(
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let rendered = (!ctx.plain_mode).then(|| -> Box<dyn Mode> {
+    let rendered = (!args.plain).then(|| -> Box<dyn Mode> {
         Box::new(RenderedTextMode::new(NotebookRenderer::new(
             source.clone(),
             Rc::clone(&ctx.theme_manager),
@@ -38,7 +38,7 @@ pub fn compose(
         args,
         crate::types::structured::pretty_view_for(
             &FileType::Structured(StructuredFormat::Json),
-            ctx.plain_mode,
+            args.plain,
         ),
     )?;
 

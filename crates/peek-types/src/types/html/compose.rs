@@ -19,7 +19,7 @@ pub fn compose(
     // `--plain` drops the html2text render — HTML falls back to raw
     // source, consistent with `--plain` meaning "no transformation"
     // for every other text type.
-    if !ctx.plain_mode {
+    if !args.plain {
         modes.push(Box::new(RenderedTextMode::new(HtmlRenderer::new(
             source.clone(),
         ))));

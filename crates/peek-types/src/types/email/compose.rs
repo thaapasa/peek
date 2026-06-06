@@ -34,7 +34,7 @@ pub fn compose(
             // attachments listing. Source precedes the listing so the
             // print/pipe "first data mode" pick is the message itself —
             // the rendered body normally, the raw RFC822 under --plain.
-            if !ctx.plain_mode {
+            if !args.plain {
                 modes.push(rendered_mode(source));
             }
             modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Eml), args, None)?);
@@ -43,7 +43,7 @@ pub fn compose(
             }
         }
         Fmt::Mbox => {
-            compose_mbox(source, detected, ctx.plain_mode, modes);
+            compose_mbox(source, detected, args.plain, modes);
             modes.push(ctx.text_content_mode(source, &FileType::Email(Fmt::Mbox), args, None)?);
         }
     }

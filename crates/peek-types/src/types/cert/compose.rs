@@ -30,7 +30,7 @@ pub fn compose(
         // pretty-prints + highlights exactly like a standalone `.json`.
         CertFormat::Jwk => {
             let ft = FileType::Structured(StructuredFormat::Json);
-            let pretty = crate::types::structured::pretty_view_for(&ft, ctx.plain_mode);
+            let pretty = crate::types::structured::pretty_view_for(&ft, args.plain);
             modes.push(ctx.text_content_mode(source, &ft, args, pretty)?);
         }
         CertFormat::Pem => {
@@ -39,7 +39,7 @@ pub fn compose(
                 source.clone(),
                 line_source,
                 Rc::clone(&ctx.theme_manager),
-                ctx.theme_name,
+                ctx.theme_manager.theme_name,
                 ContentModeConfig {
                     label: "Source",
                     line_numbers: args.line_numbers,

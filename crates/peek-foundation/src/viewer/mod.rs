@@ -27,13 +27,13 @@ pub use highlight::highlight_lines;
 pub use highlight::{LineStreamHighlighter, syntax_token_for};
 
 /// Shared services threaded through each `types::<x>::compose::compose`
-/// call. Holds the theme/style state plus the two helpers (image config,
+/// call. Holds the `ThemeManager` plus the two helpers (image config,
 /// generic text content mode) that per-type compose bodies need to build
-/// their mode stacks.
+/// their mode stacks. The active theme name is `theme_manager.theme_name`;
+/// plain mode is `ComposeOpts::plain` (every compose receives `args`) —
+/// neither is mirrored here.
 pub struct ComposeCtx {
     pub theme_manager: Rc<ThemeManager>,
-    pub theme_name: PeekThemeName,
-    pub plain_mode: bool,
 }
 
 /// CLI-derived configuration the compose path reads — the subset of
@@ -81,7 +81,7 @@ impl ComposeCtx {
     ) -> Result<Box<dyn Mode>> {
         let line_source = source.open_line_source()?;
 
-        let syntax_token = if self.plain_mode {
+        let syntax_token = if args.plain {
             None
         } else {
             syntax_token_for(args.language.as_deref(), source, file_type)
@@ -103,7 +103,7 @@ impl ComposeCtx {
             source.clone(),
             line_source,
             Rc::clone(&self.theme_manager),
-            self.theme_name,
+            self.theme_manager.theme_name,
             ContentModeConfig {
                 label,
                 syntax_token,

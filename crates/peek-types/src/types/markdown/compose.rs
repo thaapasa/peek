@@ -25,7 +25,7 @@ pub fn compose(
     ctx: &ComposeCtx,
     modes: &mut Vec<Box<dyn Mode>>,
 ) -> Result<()> {
-    let rendered = (!ctx.plain_mode).then(|| -> Box<dyn Mode> {
+    let rendered = (!args.plain).then(|| -> Box<dyn Mode> {
         Box::new(RenderedTextMode::new(MarkdownRenderer::new(
             source.clone(),
             Rc::clone(&ctx.theme_manager),

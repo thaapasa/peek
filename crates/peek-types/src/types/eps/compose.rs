@@ -41,7 +41,7 @@ pub fn compose(
     let bytes = source.read_bytes()?;
     let header = dos_eps::parse(&bytes);
 
-    if !ctx.plain_mode {
+    if !args.plain {
         // 1. Embedded preview. Decode it here rather than lazily so a
         // preview the image crate can't handle (WMF, or an exotic TIFF
         // sub-format like RGBPalette) never becomes a dead

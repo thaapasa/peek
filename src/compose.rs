@@ -26,7 +26,6 @@ use peek_types::types;
 /// `compose_modes` is the single dispatcher across both.
 pub struct Registry {
     theme_manager: Rc<ThemeManager>,
-    plain_mode: bool,
     theme_name: PeekThemeName,
     peek_theme: PeekTheme,
     /// CLI-derived compose options, read by `compose_modes` and the
@@ -41,7 +40,6 @@ impl Registry {
         let peek_theme = theme.peek_theme().clone();
         Ok(Self {
             theme_manager: theme,
-            plain_mode: opts.plain,
             theme_name: opts.theme,
             peek_theme,
             opts: opts.clone(),
@@ -88,7 +86,7 @@ impl Registry {
                     source,
                     file_type,
                     args,
-                    types::structured::pretty_view_for(file_type, ctx.plain_mode),
+                    types::structured::pretty_view_for(file_type, args.plain),
                 )?);
             }
             FileType::Html => {
@@ -190,8 +188,6 @@ impl Registry {
     fn compose_ctx(&self) -> ComposeCtx {
         ComposeCtx {
             theme_manager: Rc::clone(&self.theme_manager),
-            theme_name: self.theme_name,
-            plain_mode: self.plain_mode,
         }
     }
 }
