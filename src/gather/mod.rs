@@ -17,17 +17,18 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use crate::info::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
-use crate::input::InputSource;
-use crate::input::detect::{
+use peek_detect::mime;
+use peek_detect::{
     ComicFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,
 };
-use crate::input::mime;
+use peek_foundation::info::{CompressionInfo, Extras, FileInfo, format_permissions_from_meta};
+use peek_io::InputSource;
+use peek_types::types;
 
 #[cfg(test)]
 mod tests;
 
-use crate::types::text::info_gather::gather_text_stats;
+use peek_types::types::text::info_gather::gather_text_stats;
 
 /// Generic per-source fallback: the streaming text stats when the bytes
 /// are valid text, else the binary label. This is the bin's dispatch
@@ -36,7 +37,7 @@ use crate::types::text::info_gather::gather_text_stats;
 fn text_or_binary(source: &InputSource, magic_mime: Option<&str>) -> Extras {
     match gather_text_stats(source) {
         Some(stats) => Box::new(stats),
-        None => crate::types::binary::info::gather_extras(magic_mime),
+        None => types::binary::info::gather_extras(magic_mime),
     }
 }
 
@@ -56,11 +57,11 @@ fn source_code_extras(
 ) -> Extras {
     let sidecar = match syntax {
         Some("sql" | "ddl" | "dml" | "psql" | "pgsql") => {
-            crate::types::sql::info_gather::gather_extras(source)
+            types::sql::info_gather::gather_extras(source)
         }
         // Plain CSS only — `.scss` / `.less` are different grammars and
         // keep the generic text-stats fallback.
-        Some("css") => crate::types::css::info_gather::gather_extras(source),
+        Some("css") => types::css::info_gather::gather_extras(source),
         _ => None,
     };
     or_text(sidecar, source, magic_mime)
@@ -193,91 +194,80 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
             source_code_extras(source, syntax.as_deref(), magic_mime)
         }
         FileType::Markdown => or_text(
-            crate::types::markdown::info_gather::gather_extras(source),
+            types::markdown::info_gather::gather_extras(source),
             source,
             magic_mime,
         ),
         FileType::Notebook => or_text(
-            crate::types::notebook::info_gather::gather_extras(source),
+            types::notebook::info_gather::gather_extras(source),
             source,
             magic_mime,
         ),
         FileType::Email(fmt) => or_text(
-            crate::types::email::info::gather_extras(source, *fmt),
+            types::email::info::gather_extras(source, *fmt),
             source,
             magic_mime,
         ),
         FileType::VObject(fmt) => or_text(
-            crate::types::vobject::info::gather_extras(source, *fmt),
+            types::vobject::info::gather_extras(source, *fmt),
             source,
             magic_mime,
         ),
         FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
-            (Some(stats), Ok(bytes)) => {
-                crate::types::svg::info_gather::gather_extras(stats, &bytes)
-            }
-            _ => crate::types::binary::info::gather_extras(magic_mime),
+            (Some(stats), Ok(bytes)) => types::svg::info_gather::gather_extras(stats, &bytes),
+            _ => types::binary::info::gather_extras(magic_mime),
         },
         FileType::Structured(fmt) => match source.read_bytes() {
-            Ok(bytes) => crate::types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => Box::new(crate::types::structured::info::StructuredInfo {
-                format_name: crate::types::structured::info::format_name(*fmt),
+            Ok(bytes) => types::structured::info::gather_extras(*fmt, &bytes),
+            Err(_) => Box::new(types::structured::info::StructuredInfo {
+                format_name: types::structured::info::format_name(*fmt),
                 stats: None,
             }),
         },
         FileType::Html => match source.read_bytes() {
-            Ok(bytes) => crate::types::structured::info::gather_extras(
-                crate::input::detect::StructuredFormat::Xml,
-                &bytes,
-            ),
-            Err(_) => Box::new(crate::types::structured::info::StructuredInfo {
+            Ok(bytes) => {
+                types::structured::info::gather_extras(peek_detect::StructuredFormat::Xml, &bytes)
+            }
+            Err(_) => Box::new(types::structured::info::StructuredInfo {
                 format_name: "HTML",
                 stats: None,
             }),
         },
         FileType::Ebook(EbookFormat::Epub) => {
-            crate::types::ebook::epub::info_gather::gather_extras(source)
+            types::ebook::epub::info_gather::gather_extras(source)
         }
         FileType::Comic(fmt @ ComicFormat::Cbz) => {
-            crate::types::comic::cbz::info_gather::gather_extras(source, *fmt)
+            types::comic::cbz::info_gather::gather_extras(source, *fmt)
         }
         FileType::Document(DocumentFormat::Docx) => {
-            crate::types::document::docx::info_gather::gather_extras(source)
+            types::document::docx::info_gather::gather_extras(source)
         }
         FileType::Document(DocumentFormat::Odt) => {
-            crate::types::document::odt::info_gather::gather_extras(source)
+            types::document::odt::info_gather::gather_extras(source)
         }
         FileType::Document(DocumentFormat::Rtf) => {
-            crate::types::document::rtf::info_gather::gather_extras(source)
+            types::document::rtf::info_gather::gather_extras(source)
         }
-        FileType::Pdf(flavor) => crate::types::pdf::info_gather::gather_extras(source, *flavor),
-        FileType::PostScript(fmt) => crate::types::eps::info_gather::gather_extras(source, *fmt),
-        FileType::Spreadsheet(fmt) => {
-            crate::types::spreadsheet::info_gather::gather_extras(source, *fmt)
-        }
-        FileType::Image => crate::types::image::info_gather::gather_extras(source, magic_mime),
-        FileType::Archive(fmt) => crate::types::archive::info::gather_extras(source, *fmt),
-        FileType::Compressed(_) => crate::types::binary::info::gather_extras(magic_mime),
-        FileType::DiskImage(fmt) => {
-            crate::types::disk_image::info_gather::gather_extras(source, *fmt)
-        }
-        FileType::Audio(fmt) => crate::types::audio::info_gather::gather_extras(source, *fmt),
-        FileType::Csv(fmt) => crate::types::csv::info_gather::gather_extras(source, *fmt),
-        FileType::Sqlite(_) => crate::types::sqlite::info_gather::gather_extras(source),
-        FileType::Cert(fmt) => {
-            crate::types::cert::info_gather::gather_extras(source, *fmt, magic_mime)
-        }
-        FileType::Font(fmt) => {
-            crate::types::font::info_gather::gather_extras(source, *fmt, magic_mime)
-        }
-        FileType::ObjectFile => crate::types::objfile::info_gather::gather_extras(source),
-        FileType::Classfile => crate::types::classfile::info_gather::gather_extras(source),
+        FileType::Pdf(flavor) => types::pdf::info_gather::gather_extras(source, *flavor),
+        FileType::PostScript(fmt) => types::eps::info_gather::gather_extras(source, *fmt),
+        FileType::Spreadsheet(fmt) => types::spreadsheet::info_gather::gather_extras(source, *fmt),
+        FileType::Image => types::image::info_gather::gather_extras(source, magic_mime),
+        FileType::Archive(fmt) => types::archive::info::gather_extras(source, *fmt),
+        FileType::Compressed(_) => types::binary::info::gather_extras(magic_mime),
+        FileType::DiskImage(fmt) => types::disk_image::info_gather::gather_extras(source, *fmt),
+        FileType::Audio(fmt) => types::audio::info_gather::gather_extras(source, *fmt),
+        FileType::Csv(fmt) => types::csv::info_gather::gather_extras(source, *fmt),
+        FileType::Sqlite(_) => types::sqlite::info_gather::gather_extras(source),
+        FileType::Cert(fmt) => types::cert::info_gather::gather_extras(source, *fmt, magic_mime),
+        FileType::Font(fmt) => types::font::info_gather::gather_extras(source, *fmt, magic_mime),
+        FileType::ObjectFile => types::objfile::info_gather::gather_extras(source),
+        FileType::Classfile => types::classfile::info_gather::gather_extras(source),
         FileType::Directory => match source {
-            InputSource::File(path) => crate::types::directory::info::gather_extras(path),
+            InputSource::File(path) => types::directory::info::gather_extras(path),
             // A directory only ever reaches here via a real `File` source;
             // a virtual source can't name one.
-            _ => crate::types::binary::info::gather_extras(magic_mime),
+            _ => types::binary::info::gather_extras(magic_mime),
         },
-        FileType::Binary => crate::types::binary::info::gather_extras(magic_mime),
+        FileType::Binary => types::binary::info::gather_extras(magic_mime),
     }
 }

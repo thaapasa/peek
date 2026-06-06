@@ -1,6 +1,5 @@
-pub mod help;
+//! CLI help / version screens. The pipe writer (`PrintOutput`) and the
+//! logo painter live in `peek-foundation` (`peek_foundation::output`);
+//! reference those directly.
 
-// `PrintOutput` moved to the `peek-foundation` crate (the foundation's
-// pipe writer). Re-exported so the bin's `crate::output::PrintOutput`
-// paths (main, extract) stay unchanged.
-pub use peek_foundation::output::PrintOutput;
+pub mod help;

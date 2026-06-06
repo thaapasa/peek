@@ -1,7 +1,14 @@
-use std::io::IsTerminal;
-
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::io::IsTerminal;
+
+use peek_foundation::extract::ExtractOptions;
+use peek_foundation::output::PrintOutput;
+use peek_foundation::{info, viewer};
+use peek_io::InputSource;
+use peek_theme as theme;
+
+pub use cli::Args;
 
 mod cli;
 mod compose;
@@ -11,27 +18,6 @@ mod input;
 mod output;
 mod update;
 mod viewer_session;
-
-// Per-file-type readers live in the `peek-types` crate. Re-exported so the
-// bin's dispatch hubs (compose / gather / extract) keep using
-// `crate::types::*` unchanged.
-pub use peek_types::types;
-
-// The reader/viewer foundation lives in the `peek-foundation` crate. Re-
-// exported here so the historical `crate::viewer` / `crate::info` /
-// `crate::base64` / `crate::xml` paths across the bin (compose / gather /
-// viewer_session / extract / types) stay unchanged — mirrors the `input`
-// façade and the `theme` alias below.
-pub use peek_foundation::{base64, info, viewer, xml};
-// `#[macro_export]` puts the macro at the foundation crate root; re-export
-// it so the per-type modules' `crate::impl_info_extras!` invocations resolve.
-pub use peek_foundation::impl_info_extras;
-// Theming lives in the `peek-theme` crate (a leaf, like peek-io). Aliased
-// here so the historical `crate::theme::*` paths across the tree are
-// unchanged — mirrors the `input` façade over peek-io / peek-detect.
-use peek_theme as theme;
-
-pub use cli::Args;
 
 fn main() -> Result<()> {
     let mut args = Args::parse();
@@ -63,7 +49,7 @@ fn main() -> Result<()> {
     }
 
     let mut source = input::stdin::build_source(&args)?;
-    let mut detected = input::detect::detect(&source)?;
+    let mut detected = peek_detect::detect(&source)?;
 
     // --extract: pull an inner item out of a container. With `--print`
     // or `--info`, swap source for the extracted one and fall through
@@ -78,7 +64,7 @@ fn main() -> Result<()> {
             (None, w) if w > 0 => Some(w),
             _ => None,
         };
-        let opts = extract::ExtractOptions {
+        let opts = ExtractOptions {
             svg_size: args.extract_size,
             view_cols,
             no_tempfile: args.no_tempfile,
@@ -98,7 +84,7 @@ fn main() -> Result<()> {
         }
 
         source = extracted.source;
-        detected = input::detect::detect(&source)?;
+        detected = peek_detect::detect(&source)?;
     }
 
     // First attempt with name-biased detection. If rendering fails (e.g.
@@ -107,7 +93,7 @@ fn main() -> Result<()> {
     // the file differently, so we don't repeat a guaranteed failure.
     match run_view(&source, &detected, &args) {
         Ok(()) => Ok(()),
-        Err(e) => match input::detect::detect_ignore_name(&source) {
+        Err(e) => match peek_detect::detect_ignore_name(&source) {
             Ok(retried) if retried.file_type != detected.file_type => {
                 run_view(&source, &retried, &args).map_err(|_| e)
             }
@@ -120,11 +106,7 @@ fn main() -> Result<()> {
 /// pipe). Separated from `main` so the caller can retry it with a
 /// re-detected `Detected` when the first attempt fails on a misnamed
 /// file.
-fn run_view(
-    source: &input::InputSource,
-    detected: &input::detect::Detected,
-    args: &Args,
-) -> Result<()> {
+fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args) -> Result<()> {
     // Transparent single-stream decompression: bare `.gz` / `.bz2` /
     // `.xz` / `.zst` / `.lz4` resolve to their inner content at this
     // boundary so every downstream path (info, list, interactive,
@@ -132,7 +114,7 @@ fn run_view(
     // decompression failure the original compressed source survives
     // and downstream falls back to Hex + Info plus a warning row.
     let (source_owned, detected_owned) =
-        input::compression::resolve_transparent(source.clone(), detected.clone());
+        peek_detect::resolve_transparent(source.clone(), detected.clone());
     let source = &source_owned;
     let detected = &detected_owned;
 
@@ -144,7 +126,7 @@ fn run_view(
     // --info mode: a fixed-size summary, written straight to stdout. For
     // a scrollable view, use the interactive viewer's Info mode (key `i`).
     if args.info {
-        let mut output = output::PrintOutput::stdout();
+        let mut output = PrintOutput::stdout();
         let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let lines = info::render(&file_info, viewers.peek_theme(), render_opts);
@@ -174,7 +156,7 @@ fn run_view(
                     source.name()
                 )
             })?;
-        let mut output = output::PrintOutput::stdout();
+        let mut output = PrintOutput::stdout();
         let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);
@@ -210,7 +192,7 @@ fn run_view(
         // Print mode: stdout once, no event loop. Render the primary
         // (first non-aux) mode straight to stdout — for binary files,
         // where every mode is aux, fall back to the first mode (Hex).
-        let mut output = output::PrintOutput::stdout();
+        let mut output = PrintOutput::stdout();
         let file_info = crate::gather::gather(source, detected)
             .with_context(|| format!("failed to read info for {}", source.name()))?;
         let ctx = pipe_render_ctx(&file_info, &viewers, render_opts, args);

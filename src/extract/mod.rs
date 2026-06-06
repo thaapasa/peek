@@ -1,5 +1,5 @@
 //! Extracting an inner item from a container source (animation frame,
-//! archive entry, ISO entry) as a standalone [`crate::input::InputSource`].
+//! archive entry, ISO entry) as a standalone [`peek_io::InputSource`].
 //!
 //! See [`extract`] for the top-level dispatch and [`write`] for how an
 //! [`Extracted`] result lands on disk or stdout. Per-type extractors
@@ -14,7 +14,3 @@ mod extract;
 pub mod write;
 
 pub use extract::extract;
-// The extract vocabulary moved to `peek-foundation` (so `peek-types` can
-// build extract results). Re-exported so the bin's `crate::extract::*`
-// paths (main, viewer_session, write) stay unchanged.
-pub use peek_foundation::extract::{ExtractOptions, Extracted};

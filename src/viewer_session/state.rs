@@ -4,17 +4,17 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::KeyEvent;
 
-use crate::info::{FileInfo, RenderOptions};
-use crate::input::InputSource;
-use crate::input::detect::Detected;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
-use crate::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
+use peek_detect::Detected;
+use peek_foundation::info::{FileInfo, RenderOptions};
+use peek_foundation::viewer::modes::{Handled, Mode, ModeId, Position, RenderCtx};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
-use crate::extract::Extracted;
-use crate::viewer::ui::keys::{self, Action, Outcome};
-use crate::viewer::ui::prompt::{Prompt, PromptOutcome};
-use crate::viewer::ui::screen::ScreenBuffer;
-use crate::viewer::ui::{content_rows, make_peek_theme, terminal_cols};
+use peek_foundation::extract::Extracted;
+use peek_foundation::viewer::ui::keys::{self, Action, Outcome};
+use peek_foundation::viewer::ui::prompt::{Prompt, PromptOutcome};
+use peek_foundation::viewer::ui::screen::ScreenBuffer;
+use peek_foundation::viewer::ui::{content_rows, make_peek_theme, terminal_cols};
 
 /// One mode's most recent windowed render. The `lines` field is the
 /// exact slice that should be drawn at the top of the viewport; the
@@ -329,7 +329,9 @@ impl ViewerState {
                             // owns-scroll modes return `Owned` and
                             // position themselves; flat modes return
                             // `ScrollTo(line)` for the caller.
-                            if let crate::viewer::search::SearchTarget::ScrollTo(line) = target {
+                            if let peek_foundation::viewer::search::SearchTarget::ScrollTo(line) =
+                                target
+                            {
                                 f.scroll[active] = line;
                             }
                         }
@@ -508,8 +510,8 @@ impl ViewerState {
         let f = self.frame();
         let target = f.modes[f.active].extract_target()?;
         Some(match target {
-            crate::viewer::modes::ExtractTarget::EntryPath(p) => p,
-            crate::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
+            peek_foundation::viewer::modes::ExtractTarget::EntryPath(p) => p,
+            peek_foundation::viewer::modes::ExtractTarget::FrameIndex(n) => n.to_string(),
         })
     }
 
@@ -520,7 +522,7 @@ impl ViewerState {
             self.flash = Some("nothing selected to extract".to_string());
             return;
         };
-        let opts = crate::extract::ExtractOptions {
+        let opts = peek_foundation::extract::ExtractOptions {
             no_tempfile: self.no_tempfile,
             ..Default::default()
         };
@@ -557,7 +559,7 @@ impl ViewerState {
             self.flash = Some("nothing to descend into".to_string());
             return Ok(());
         };
-        let opts = crate::extract::ExtractOptions {
+        let opts = peek_foundation::extract::ExtractOptions {
             no_tempfile: self.no_tempfile,
             ..Default::default()
         };
@@ -580,8 +582,11 @@ impl ViewerState {
     /// frame (SQLite contents → row viewer). Gathers `FileInfo` from
     /// the supplied source + detected so the new frame's InfoMode has
     /// a populated panel.
-    fn push_direct_frame(&mut self, frame: crate::viewer::modes::DescendFrame) -> Result<()> {
-        let crate::viewer::modes::DescendFrame {
+    fn push_direct_frame(
+        &mut self,
+        frame: peek_foundation::viewer::modes::DescendFrame,
+    ) -> Result<()> {
+        let peek_foundation::viewer::modes::DescendFrame {
             source,
             detected,
             modes,
@@ -607,7 +612,7 @@ impl ViewerState {
 
     fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {
         let source = extracted.source;
-        let detected = match crate::input::detect::detect(&source) {
+        let detected = match peek_detect::detect(&source) {
             Ok(d) => d,
             Err(e) => {
                 self.flash = Some(format!("descend failed: {e}"));
@@ -617,7 +622,7 @@ impl ViewerState {
         // Apply transparent decompression so descending into an
         // extracted `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` lands
         // straight on the inner content.
-        let (source, detected) = crate::input::compression::resolve_transparent(source, detected);
+        let (source, detected) = peek_detect::resolve_transparent(source, detected);
         let modes = match (self.mode_builder)(&source, &detected) {
             Ok(m) => m,
             Err(e) => {
@@ -631,13 +636,11 @@ impl ViewerState {
         // pushing, so navigating between sibling subdirectories doesn't
         // accumulate a stack the user has to back out of. Esc on the
         // resulting frame still exits peek (depth-1 Back semantics).
-        let collapse = matches!(
-            frame.detected.file_type,
-            crate::input::detect::FileType::Directory
-        ) && matches!(
-            self.frame().detected.file_type,
-            crate::input::detect::FileType::Directory
-        );
+        let collapse = matches!(frame.detected.file_type, peek_detect::FileType::Directory)
+            && matches!(
+                self.frame().detected.file_type,
+                peek_detect::FileType::Directory
+            );
         if collapse {
             *self.frames.last_mut().expect("non-empty stack") = frame;
         } else {
@@ -849,7 +852,7 @@ impl ViewerState {
     fn retry_frame_detection(&mut self) -> Result<bool> {
         let retried = {
             let frame = self.frame();
-            match crate::input::detect::detect_ignore_name(&frame.source) {
+            match peek_detect::detect_ignore_name(&frame.source) {
                 Ok(d) if d.file_type != frame.detected.file_type => d,
                 _ => {
                     self.frame_mut().retry_attempted = true;
@@ -861,7 +864,7 @@ impl ViewerState {
         // resolve transparently so the rebuilt frame renders the
         // decompressed inner content.
         let (source_clone, retried) =
-            crate::input::compression::resolve_transparent(self.frame().source.clone(), retried);
+            peek_detect::resolve_transparent(self.frame().source.clone(), retried);
         let modes = (self.mode_builder)(&source_clone, &retried)?;
         let file_info = crate::gather::gather(&source_clone, &retried)?;
         let frame = self.frame_mut();
@@ -1153,7 +1156,7 @@ mod tests {
     #[test]
     fn tab_cycles_svg_view_modes() {
         let source = fixture_source("test-images/calendar.svg");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
 
         assert_eq!(active_id(&state), ModeId::ImageRender);
@@ -1181,10 +1184,10 @@ mod tests {
         // Pin a narrow viewport so the verbose decode warning is wider
         // than the content area — the Info view must wrap it rather than
         // let the terminal soft-wrap a row the ScreenBuffer miscounts.
-        let _term = crate::viewer::ui::test_term_override::pin(40, 24);
+        let _term = peek_foundation::viewer::ui::test_term_override::pin(40, 24);
 
         let source = fixture_source("test-images/corrupt.png");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-images/corrupt.png"], source, detected);
 
         // Composes as an image — ImageRender is the home view.
@@ -1217,7 +1220,7 @@ mod tests {
         let cols = terminal_cols();
         for line in &view.lines {
             assert!(
-                crate::viewer::ui::strip_ansi_width(line) <= cols,
+                peek_foundation::viewer::ui::strip_ansi_width(line) <= cols,
                 "Info line exceeds content width {cols}: {line:?}"
             );
         }
@@ -1226,7 +1229,7 @@ mod tests {
     #[test]
     fn scrolldown_on_info_after_tab_advances_scroll() {
         let source = fixture_source("test-images/calendar.svg");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-images/calendar.svg"], source, detected);
 
         state.apply(Action::CycleView).unwrap(); // Content
@@ -1248,7 +1251,7 @@ mod tests {
     #[test]
     fn static_and_animated_svg_share_source_mode() {
         let static_src = fixture_source("test-images/calendar.svg");
-        let static_det = crate::input::detect::detect(&static_src).unwrap();
+        let static_det = peek_detect::detect(&static_src).unwrap();
         let mut static_state = build_state(
             &["peek", "test-images/calendar.svg"],
             static_src,
@@ -1256,7 +1259,7 @@ mod tests {
         );
 
         let anim_src = fixture_source("test-images/loader-dots.svg");
-        let anim_det = crate::input::detect::detect(&anim_src).unwrap();
+        let anim_det = peek_detect::detect(&anim_src).unwrap();
         let mut anim_state =
             build_state(&["peek", "test-images/loader-dots.svg"], anim_src, anim_det);
 
@@ -1287,10 +1290,10 @@ mod tests {
         // Pin viewport so the assertion below isn't a function of the
         // terminal the test happens to run in (the pretty SVG is ~52
         // lines — a tall console makes `total > rows + 5` flaky).
-        let _term = crate::viewer::ui::test_term_override::pin(80, 21);
+        let _term = peek_foundation::viewer::ui::test_term_override::pin(80, 21);
 
         let source = fixture_source("test-images/walking-outside.svg");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(
             &["peek", "test-images/walking-outside.svg"],
             source,
@@ -1327,7 +1330,7 @@ mod tests {
     #[test]
     fn descend_then_back_round_trips_stack() {
         let source = fixture_source("test-data/archive.zip");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-data/archive.zip"], source, detected);
         assert_eq!(state.stack_depth(), 1);
 
@@ -1356,7 +1359,7 @@ mod tests {
     #[test]
     fn sqlite_table_frame_breadcrumb_shows_table_name() {
         let source = fixture_source("test-data/library.sqlite");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(
             &["peek", "test-data/library.sqlite"],
             source.clone(),
@@ -1366,9 +1369,9 @@ mod tests {
 
         // Build the contents descend frame the way the listing does:
         // a row viewer over the parent source, labelled with the table.
-        let table = crate::types::sqlite::table_mode::build(&source, "books").unwrap();
+        let table = peek_types::types::sqlite::table_mode::build(&source, "books").unwrap();
         let modes: Vec<Box<dyn Mode>> = vec![Box::new(table)];
-        let frame = crate::viewer::modes::DescendFrame {
+        let frame = peek_foundation::viewer::modes::DescendFrame {
             source: source.clone(),
             detected,
             modes,
@@ -1390,10 +1393,10 @@ mod tests {
         // src/ has subdirectories. Row 0 is the synthetic `..`; skip
         // past it so we exercise descent into a real child dir.
         let source = fixture_source("src");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         assert!(matches!(
             detected.file_type,
-            crate::input::detect::FileType::Directory
+            peek_detect::FileType::Directory
         ));
         let mut state = build_state(&["peek", "src"], source, detected);
         assert_eq!(state.stack_depth(), 1);
@@ -1402,7 +1405,7 @@ mod tests {
         assert_eq!(state.stack_depth(), 1, "dir → dir descent collapses stack");
         assert!(matches!(
             state.frame().detected.file_type,
-            crate::input::detect::FileType::Directory
+            peek_detect::FileType::Directory
         ));
     }
 
@@ -1414,7 +1417,7 @@ mod tests {
         // always lands on a file row regardless of how many
         // subdirectories test-data picks up.
         let source = fixture_source("test-data");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-data"], source, detected);
         assert_eq!(state.stack_depth(), 1);
         state.try_active_scroll(Action::Bottom);
@@ -1430,7 +1433,7 @@ mod tests {
     #[test]
     fn directory_parent_link_walks_up() {
         let source = fixture_source("src");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "src"], source, detected);
         // `..` is row 0 by construction.
         state.apply(Action::Descend).unwrap();
@@ -1451,7 +1454,7 @@ mod tests {
     #[test]
     fn search_prompt_confirm_runs_search_without_quitting() {
         let source = fixture_source("test-data/theme.rs");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
         assert_eq!(active_id(&state), ModeId::Content);
 
@@ -1482,7 +1485,7 @@ mod tests {
         // recognised extension) — classified as Binary, so only
         // Hex + Info compose into the mode stack.
         let source = InputSource::memory(bytes::Bytes::from(vec![0xFFu8; 1024]), "blob");
-        let detected = crate::input::detect::detect(&source).unwrap();
+        let detected = peek_detect::detect(&source).unwrap();
         let mut state = build_state(&["peek", "blob"], source, detected);
         assert_eq!(active_id(&state), ModeId::Hex, "binary opens on Hex");
 

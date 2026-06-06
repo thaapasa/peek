@@ -1,14 +1,14 @@
 //! Top-level extract dispatch — the `FileType → types::<x>::extract` hub.
 //! Session glue, so it lives in the binary; the value types it returns
 //! ([`Extracted`] / [`ExtractError`] / [`ExtractOptions`]) and the
-//! path-safety helpers come from `peek-foundation` (re-exported via the
-//! bin's `crate::extract` module). The extracted source feeds straight
-//! back into the rest of the peek pipeline (write to disk, stream to
-//! stdout, recursive peek).
+//! path-safety helpers come from `peek-foundation`. The extracted source
+//! feeds straight back into the rest of the peek pipeline (write to disk,
+//! stream to stdout, recursive peek).
 
-use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
+use peek_detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
 use peek_foundation::extract::{ExtractError, ExtractOptions, Extracted};
+use peek_io::InputSource;
+use peek_types::types;
 
 /// Dispatch to the per-type extractor. Containers without an
 /// extractor return `Unsupported`.
@@ -20,35 +20,26 @@ pub fn extract(
 ) -> Result<Extracted, ExtractError> {
     match &detected.file_type {
         FileType::Image => {
-            crate::types::image::extract::extract(source, key, detected.magic_mime.as_deref())
+            types::image::extract::extract(source, key, detected.magic_mime.as_deref())
         }
-        FileType::Svg => {
-            crate::types::svg::extract::extract(source, key, opts.svg_size, opts.view_cols)
-        }
-        FileType::Archive(fmt) => crate::types::archive::extract::extract(source, *fmt, key, opts),
-        FileType::DiskImage(fmt) => crate::types::disk_image::extract::extract(source, *fmt, key),
+        FileType::Svg => types::svg::extract::extract(source, key, opts.svg_size, opts.view_cols),
+        FileType::Archive(fmt) => types::archive::extract::extract(source, *fmt, key, opts),
+        FileType::DiskImage(fmt) => types::disk_image::extract::extract(source, *fmt, key),
         FileType::Ebook(EbookFormat::Epub)
         | FileType::Comic(ComicFormat::Cbz)
         | FileType::Document(DocumentFormat::Docx | DocumentFormat::Odt) => {
-            crate::types::archive::extract::extract(
-                source,
-                crate::input::detect::ArchiveFormat::Zip,
-                key,
-                opts,
-            )
+            types::archive::extract::extract(source, peek_detect::ArchiveFormat::Zip, key, opts)
         }
         FileType::Document(DocumentFormat::Rtf) => {
-            crate::types::document::rtf::extract::extract(source, key)
+            types::document::rtf::extract::extract(source, key)
         }
-        FileType::Pdf(_) => crate::types::pdf::extract::extract(source, key),
-        FileType::Spreadsheet(fmt) => {
-            crate::types::spreadsheet::extract::extract(source, key, *fmt, opts)
-        }
-        FileType::Directory => crate::types::directory::extract::extract(source, key),
-        FileType::Audio(fmt) => crate::types::audio::extract::extract(source, *fmt, key),
-        FileType::Sqlite(_) => crate::types::sqlite::extract::extract(source, key),
-        FileType::Notebook => crate::types::notebook::extract::extract(source, key),
-        FileType::Email(_) => crate::types::email::extract::extract(source, key),
+        FileType::Pdf(_) => types::pdf::extract::extract(source, key),
+        FileType::Spreadsheet(fmt) => types::spreadsheet::extract::extract(source, key, *fmt, opts),
+        FileType::Directory => types::directory::extract::extract(source, key),
+        FileType::Audio(fmt) => types::audio::extract::extract(source, *fmt, key),
+        FileType::Sqlite(_) => types::sqlite::extract::extract(source, key),
+        FileType::Notebook => types::notebook::extract::extract(source, key),
+        FileType::Email(_) => types::email::extract::extract(source, key),
         FileType::SourceCode { .. }
         | FileType::Structured(_)
         | FileType::Html
@@ -70,7 +61,7 @@ pub fn extract(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::detect;
+    use peek_detect as detect;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {

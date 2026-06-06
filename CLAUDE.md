@@ -84,14 +84,15 @@ crates/
                          keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen)
   peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + vscode variants)
 src/                   — the bin: the thin session layer (CLI + the three dispatch hubs + the
-                         interactive event loop). Re-exports peek-foundation/peek-types modules so
-                         the hubs keep `crate::{viewer,info,types,extract,base64,xml}` paths.
+                         interactive event loop). Names member crates directly — `peek_io`,
+                         `peek_detect`, `peek_theme`, `peek_foundation::{viewer,info,extract,…}`,
+                         `peek_types::types`; no re-export shims.
   main.rs              — CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe)
   cli.rs               — Args (clap derive) + `compose_opts()` projection (keeps clap out of the readers)
   update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
-  input/               — façade re-exporting peek-io + peek-detect under `crate::input::*`, plus
-                         the CLI-level stdin/source dispatch (build_source, needs Args)
-  output/              — CLI help + version screens; re-exports foundation's PrintOutput
+  input/               — CLI-level stdin/source dispatch (build_source, needs Args). The input
+                         foundation itself is peek-io / peek-detect, named directly.
+  output/              — CLI help + version screens (PrintOutput / logo come from peek-foundation)
   compose.rs           — Registry + the FileType→types::<x>::compose dispatch hub (holds ComposeOpts)
   gather/              — the FileType→types::<x> info-gather dispatch hub
   extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)

@@ -1,8 +1,8 @@
+use clap::Parser;
 use std::path::PathBuf;
 
-use clap::Parser;
-
-use crate::theme;
+use peek_foundation::viewer::ComposeOpts;
+use peek_theme as theme;
 
 /// peek — a modern file viewer for the terminal.
 ///
@@ -159,8 +159,8 @@ impl Args {
     /// compose path consumes — the seam that keeps clap out of the
     /// reader/compose layer (and, after the crate split, out of
     /// `peek-types`).
-    pub fn compose_opts(&self) -> crate::viewer::ComposeOpts {
-        crate::viewer::ComposeOpts {
+    pub fn compose_opts(&self) -> ComposeOpts {
+        ComposeOpts {
             theme: self.theme,
             color: self.color,
             plain: self.plain,

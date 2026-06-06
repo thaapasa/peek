@@ -4,12 +4,15 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyEventKind};
 
-use crate::info::RenderOptions;
-use crate::input::InputSource;
-use crate::input::detect::Detected;
-use crate::theme::{PeekThemeName, StyleMode};
-use crate::viewer::modes::Mode;
-use crate::viewer::ui::{Action, Outcome, render_themed_status_line, with_alternate_screen};
+use peek_detect::Detected;
+use peek_foundation::info::RenderOptions;
+use peek_foundation::viewer::modes::Mode;
+use peek_foundation::viewer::ui::{
+    Action, Outcome, render_themed_status_line, with_alternate_screen,
+};
+use peek_io::InputSource;
+use peek_theme::{PeekThemeName, StyleMode};
+
 use crate::viewer_session::{ModeBuilder, ViewerState};
 
 /// Run the interactive viewer for a given list of view modes.

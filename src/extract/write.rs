@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
-use super::Extracted;
+use peek_foundation::extract::Extracted;
 
 /// Where extracted bytes land. `Stdout` writes raw bytes (no
 /// rendering — that's the print path). `Path` creates parent dirs as
@@ -63,9 +63,9 @@ pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extract::Extracted;
-    use crate::input::InputSource;
     use bytes::Bytes;
+    use peek_foundation::extract::Extracted;
+    use peek_io::InputSource;
 
     #[test]
     fn resolve_dash_means_stdout() {

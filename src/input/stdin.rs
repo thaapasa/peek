@@ -1,7 +1,8 @@
 use anyhow::Result;
 
+use peek_io::InputSource;
+
 use crate::Args;
-use crate::input::InputSource;
 
 /// Decide the input source based on args and stdin state.
 ///

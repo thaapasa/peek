@@ -3,8 +3,8 @@ use std::io::{self, Write};
 use anyhow::Result;
 use clap::CommandFactory;
 
-use crate::theme::{PeekThemeName, ThemeManager};
 use peek_foundation::output::paint_logo;
+use peek_theme::{PeekThemeName, ThemeManager};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");

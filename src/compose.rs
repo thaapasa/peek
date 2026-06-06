@@ -12,11 +12,12 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{ComicFormat, Detected, EbookFormat, FileType};
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
-use crate::viewer::modes::Mode;
-use crate::viewer::{ComposeCtx, ComposeOpts, append_universal_modes};
+use peek_detect::{ComicFormat, Detected, EbookFormat, FileType};
+use peek_foundation::viewer::modes::Mode;
+use peek_foundation::viewer::{ComposeCtx, ComposeOpts, append_universal_modes};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, ThemeManager};
+use peek_types::types;
 
 /// File-type-aware mode-stack builder. Holds the shared `ThemeManager`
 /// plus the CLI-driven options every mode in the stack needs to consume
@@ -87,101 +88,81 @@ impl Registry {
                     source,
                     file_type,
                     args,
-                    crate::types::structured::pretty_view_for(file_type, ctx.plain_mode),
+                    types::structured::pretty_view_for(file_type, ctx.plain_mode),
                 )?);
             }
             FileType::Html => {
-                crate::types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::html::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Markdown => {
-                crate::types::markdown::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::markdown::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Notebook => {
-                crate::types::notebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::notebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Image => {
-                crate::types::image::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::image::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Svg => {
-                crate::types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::svg::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Email(fmt) => {
-                crate::types::email::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::email::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Ebook(EbookFormat::Epub) => {
-                crate::types::ebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::ebook::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Document(fmt) => {
-                crate::types::document::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::document::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Pdf(_) => {
-                crate::types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::pdf::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::PostScript(_) => {
-                crate::types::eps::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::eps::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Spreadsheet(fmt) => {
-                crate::types::spreadsheet::compose::compose(
+                types::spreadsheet::compose::compose(
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
             FileType::Comic(ComicFormat::Cbz) => {
-                crate::types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Archive(fmt) => {
-                crate::types::archive::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::archive::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::DiskImage(fmt) => {
-                crate::types::disk_image::compose::compose(
+                types::disk_image::compose::compose(
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
             FileType::ObjectFile => {
-                crate::types::objfile::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::objfile::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Classfile => {
-                crate::types::classfile::compose::compose(
-                    source, detected, args, &ctx, &mut modes,
-                )?;
+                types::classfile::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Audio(fmt) => {
-                crate::types::audio::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::audio::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Csv(fmt) => {
-                crate::types::csv::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::csv::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Sqlite(fmt) => {
-                crate::types::sqlite::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::sqlite::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Cert(fmt) => {
-                crate::types::cert::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::cert::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Font(_) => {
-                crate::types::font::compose::compose(source, detected, args, &ctx, &mut modes)?;
+                types::font::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::VObject(fmt) => {
-                crate::types::vobject::compose::compose(
-                    source, detected, args, &ctx, &mut modes, *fmt,
-                )?;
+                types::vobject::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }
             FileType::Directory => {
-                crate::types::directory::compose::compose(
-                    source, detected, args, &ctx, &mut modes,
-                )?;
+                types::directory::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Compressed(_) => {
                 // Bare-codec streams resolve to their inner content
