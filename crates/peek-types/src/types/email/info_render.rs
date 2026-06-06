@@ -1,53 +1,107 @@
-//! Render the email Info section.
+//! The email info section, driven by one [`EmailView`] that derives both
+//! `serde::Serialize` (JSON) and [`InfoView`](crate::info::InfoView) (themed
+//! print). [`EmailInfo`] stays the gather struct; the view projects it.
+//!
+//! An `.mbox` populates only `message_count` (the gather blanks the per-message
+//! fields), so the natural skips give just a `Messages` row. Header values are
+//! truncated for the print row but serialized in full. Attachments print as a
+//! count + size composite, serializing to `attachment_count` +
+//! `attachment_bytes`.
 
-use crate::info::{format_size_human, paint_count, push_field, push_section_header};
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
+
+use crate::info::{InfoNode, InfoValue, Value, format_size_human, paint_count, render_info};
 use crate::theme::PeekTheme;
 
 use super::EmailFormat;
 use super::info::EmailInfo;
 
+/// Themed terminal email section.
 pub fn render_section(lines: &mut Vec<String>, info: &EmailInfo, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, info.format.label(), theme);
+    render_info(lines, &EmailView::from(info), theme);
+}
 
-    if let Some(count) = info.message_count {
-        push_field(lines, "Messages", &paint_count(count, theme), theme);
-        return;
-    }
+/// Typed `--info --json` view of the email section, nested under `"email"`.
+pub fn json_section(info: &EmailInfo) -> (&'static str, serde_json::Value) {
+    (
+        "email",
+        serde_json::to_value(EmailView::from(info)).expect("email info view serializes"),
+    )
+}
 
-    field(lines, "From", info.from.as_deref(), theme);
-    field(lines, "To", info.to.as_deref(), theme);
-    field(lines, "Cc", info.cc.as_deref(), theme);
-    field(lines, "Subject", info.subject.as_deref(), theme);
-    field(lines, "Date", info.date.as_deref(), theme);
-    field(lines, "Message-ID", info.message_id.as_deref(), theme);
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title_from = "section_title")]
+struct EmailView {
+    #[info(skip)]
+    #[serde(rename = "format", serialize_with = "ser_format")]
+    format: EmailFormat,
+    #[info(label = "Messages")]
+    #[serde(rename = "message_count", skip_serializing_if = "Option::is_none")]
+    message_count: Option<Value>,
+    #[info(label = "From")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from: Option<HeaderField>,
+    #[info(label = "To")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    to: Option<HeaderField>,
+    #[info(label = "Cc")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cc: Option<HeaderField>,
+    #[info(label = "Subject")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subject: Option<HeaderField>,
+    #[info(label = "Date")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date: Option<HeaderField>,
+    #[info(label = "Message-ID")]
+    #[serde(rename = "message_id", skip_serializing_if = "Option::is_none")]
+    message_id: Option<HeaderField>,
+    #[info(nest)]
+    #[serde(flatten)]
+    attachments: Attachments,
+}
 
-    if info.attachment_count > 0 {
-        push_field(
-            lines,
-            "Attachments",
-            &format!(
-                "{} {}",
-                paint_count(info.attachment_count, theme),
-                theme.paint_muted(&format!("({})", format_size_human(info.attachment_bytes)))
-            ),
-            theme,
-        );
+impl EmailView {
+    fn section_title(&self) -> &'static str {
+        self.format.label()
     }
 }
 
-/// Emit a single header row, truncating long values so the Info screen
-/// stays a scannable summary (the rendered view shows the full headers).
-fn field(lines: &mut Vec<String>, label: &str, value: Option<&str>, theme: &PeekTheme) {
-    let Some(value) = value.filter(|v| !v.is_empty()) else {
-        return;
-    };
-    push_field(
-        lines,
-        label,
-        &theme.paint_value(&truncate(value, 100)),
-        theme,
-    );
+impl From<&EmailInfo> for EmailView {
+    fn from(e: &EmailInfo) -> Self {
+        let header = |v: &Option<String>| v.clone().filter(|s| !s.is_empty()).map(HeaderField);
+        EmailView {
+            format: e.format,
+            message_count: e.message_count.map(|n| Value::count(n as u64)),
+            from: header(&e.from),
+            to: header(&e.to),
+            cc: header(&e.cc),
+            subject: header(&e.subject),
+            date: header(&e.date),
+            message_id: header(&e.message_id),
+            attachments: Attachments {
+                count: e.attachment_count,
+                bytes: e.attachment_bytes,
+            },
+        }
+    }
+}
+
+/// A header value: truncated for the print row (the Info screen stays a
+/// scannable summary), full in JSON.
+struct HeaderField(String);
+
+impl InfoValue for HeaderField {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_value(&truncate(&self.0, 100))
+    }
+}
+
+impl Serialize for HeaderField {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_str(&self.0)
+    }
 }
 
 fn truncate(s: &str, max: usize) -> String {
@@ -58,42 +112,41 @@ fn truncate(s: &str, max: usize) -> String {
     format!("{head}…")
 }
 
-/// Typed `--info --json` encoding of the Email section. Header fields are
-/// emitted in full (the truncation is a display concern only) and omitted when
-/// absent; the format uses a stable lowercase token.
-pub fn json_section(info: &EmailInfo) -> (&'static str, serde_json::Value) {
-    let mut obj = serde_json::json!({
-        "format": format_token(info.format),
-        "attachment_count": info.attachment_count,
-        "attachment_bytes": info.attachment_bytes,
-    });
-    if let Some(count) = info.message_count {
-        obj["message_count"] = serde_json::json!(count);
-    }
-    if let Some(ref from) = info.from {
-        obj["from"] = serde_json::json!(from);
-    }
-    if let Some(ref to) = info.to {
-        obj["to"] = serde_json::json!(to);
-    }
-    if let Some(ref cc) = info.cc {
-        obj["cc"] = serde_json::json!(cc);
-    }
-    if let Some(ref subject) = info.subject {
-        obj["subject"] = serde_json::json!(subject);
-    }
-    if let Some(ref date) = info.date {
-        obj["date"] = serde_json::json!(date);
-    }
-    if let Some(ref message_id) = info.message_id {
-        obj["message_id"] = serde_json::json!(message_id);
-    }
-    ("email", obj)
+/// Attachment tally. Print: a `count (size)` row when any. JSON:
+/// `attachment_count` + `attachment_bytes` (always).
+struct Attachments {
+    count: usize,
+    bytes: u64,
 }
 
-fn format_token(fmt: EmailFormat) -> &'static str {
-    match fmt {
+impl crate::info::InfoView for Attachments {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        if self.count == 0 {
+            return Vec::new();
+        }
+        vec![InfoNode::Row {
+            label: "Attachments".into(),
+            value: format!(
+                "{} {}",
+                paint_count(self.count, theme),
+                theme.paint_muted(&format!("({})", format_size_human(self.bytes)))
+            ),
+        }]
+    }
+}
+
+impl Serialize for Attachments {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let mut st = ser.serialize_struct("attachments", 2)?;
+        st.serialize_field("attachment_count", &self.count)?;
+        st.serialize_field("attachment_bytes", &self.bytes)?;
+        st.end()
+    }
+}
+
+fn ser_format<S: Serializer>(fmt: &EmailFormat, ser: S) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(match fmt {
         EmailFormat::Eml => "eml",
         EmailFormat::Mbox => "mbox",
-    }
+    })
 }
