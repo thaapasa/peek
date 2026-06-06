@@ -31,8 +31,40 @@ from the same field.
   presentation projection — for this type stats and view stay two structs
   because the accumulator is shared, but the label/skip/format logic is now
   declared once.
-- ☐ **Step 4** — migrate the other flat sections (see Sequencing).
-- ☐ **Step 5** — leave the bespoke sections documented as not-derived.
+- ✅ **Step 4 (flat set) landed.** Added the derived `impl_info_extras!($ty, json = "key")`
+  arm (one view struct → both outputs) and made `render_info_section` skip a
+  section with no visible rows (all-optional-absent sections vanish, matching
+  the old `if let Some` guard). Migrated the genuinely-flat types: `binary`
+  (vanishing single-field Format section) and `directory` (`Value::Int` counts —
+  flat value colour, not the gradient). Verified byte-identical.
+- ✅ **Step 5 — triage done; the flat set is small.** Of the 27 sections, only
+  `text` / `binary` / `directory` are cleanly flat-derivable. Every other type
+  is **intentionally bespoke** — deriving it would need macro escape hatches
+  (dynamic title, print-flatten-of-JSON-nested metadata, one-of/error
+  short-circuits, composite indented sub-rows, warning-vs-bool divergence) that
+  outweigh the payoff. Concrete reasons:
+  - **Dynamic section title** from `format.label()`: `comic`, `spreadsheet`,
+    `eps`, `pdf`, `csv`, `document`, `email`.
+  - **JSON nests `metadata{}`, print flattens it** (+ interleaved trailing
+    field): `pdf`, `spreadsheet`, `document`, `ebook`.
+  - **One-of / error short-circuit** (whole different shape): `classfile`,
+    `pdf`, `spreadsheet`, `email` (mbox message-count), `csv` (partial records).
+  - **Composite / indented sub-rows** (`  Code/Markdown`, `  DDL`, `H1/H2/H3`):
+    `notebook`, `sql`, `markdown`.
+  - **Multi-section or per-entry**: `image` (EXIF/XMP), `sql`+`markdown`
+    (Content + own section), `csv` (per-column).
+  - **Custom value rendering** (muted "N bytes", warning text, accent token):
+    `comic`, `csv`, `structured`, `email`.
+  - Plus the originally-listed bespoke set: `cert`, `disk_image`, `sqlite`,
+    `font`, `css`, `vobject`.
+
+  These keep their hand `render_section` for print + serde/`json!` for JSON.
+  Extending the derive to chase them was judged not worth the macro complexity
+  (see north star: abstractions earn their place; no hypothetical-future
+  machinery). If a future need arises, the cheapest lever is a
+  `#[info(title_from = "method")]` for dynamic titles + `#[info(flatten)]` for
+  metadata — but each candidate type has *additional* divergences beyond those,
+  so neither alone unlocks a clean migration.
 
 ## Current state (already shipped on branch `info-json`)
 

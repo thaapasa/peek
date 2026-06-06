@@ -2,15 +2,22 @@
 
 use std::path::Path;
 
-use crate::info::{Extras, push_field, push_section_header, thousands_sep};
-use crate::theme::PeekTheme;
+use crate::info::{Extras, Value};
 
 use super::read::{DirEntryKind, read_dir_entries};
 
+/// Directory section view — drives both `--info` print and `--info --json`.
+/// Counts use [`Value::Int`] (flat value colour + thousands separators), not
+/// the count gradient.
+#[derive(serde::Serialize, crate::info::InfoSection)]
+#[info(title = "Directory")]
 pub struct DirectoryStats {
-    pub entry_count: usize,
-    pub file_count: usize,
-    pub dir_count: usize,
+    #[info(label = "Entries")]
+    pub entry_count: Value,
+    #[info(label = "Files")]
+    pub file_count: Value,
+    #[info(label = "Subdirs")]
+    pub dir_count: Value,
 }
 
 pub fn gather_extras(path: &Path) -> Extras {
@@ -24,42 +31,8 @@ pub fn gather_extras(path: &Path) -> Extras {
         .filter(|e| e.kind == DirEntryKind::File)
         .count();
     Box::new(DirectoryStats {
-        entry_count: entries.len(),
-        file_count,
-        dir_count,
+        entry_count: Value::int(entries.len() as i64),
+        file_count: Value::int(file_count as i64),
+        dir_count: Value::int(dir_count as i64),
     })
-}
-
-pub fn render_section(lines: &mut Vec<String>, stats: &DirectoryStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Directory", theme);
-    push_field(
-        lines,
-        "Entries",
-        &theme.paint_value(&thousands_sep(stats.entry_count as u64)),
-        theme,
-    );
-    push_field(
-        lines,
-        "Files",
-        &theme.paint_value(&thousands_sep(stats.file_count as u64)),
-        theme,
-    );
-    push_field(
-        lines,
-        "Subdirs",
-        &theme.paint_value(&thousands_sep(stats.dir_count as u64)),
-        theme,
-    );
-}
-
-/// Typed `--info --json` encoding of the Directory section. Counts are raw
-/// JSON numbers.
-pub fn json_section(stats: &DirectoryStats) -> (&'static str, serde_json::Value) {
-    let obj = serde_json::json!({
-        "entry_count": stats.entry_count,
-        "file_count": stats.file_count,
-        "dir_count": stats.dir_count,
-    });
-    ("directory", obj)
 }

@@ -42,14 +42,22 @@ pub trait InfoSection {
 /// Shared driver: blank spacer, section header, then each row via
 /// [`push_field`]. Replaces the hand-written `render_section` for every flat
 /// section that derives [`InfoSection`].
+///
+/// Emits nothing when the section has no visible rows — an all-optional
+/// section whose fields are all absent vanishes entirely (header included),
+/// matching the hand-written `if let Some(_) { push header … }` idiom.
 pub fn render_info_section<S: InfoSection>(
     lines: &mut Vec<String>,
     section: &S,
     theme: &PeekTheme,
 ) {
+    let rows = section.rows(theme);
+    if rows.is_empty() {
+        return;
+    }
     lines.push(String::new());
     push_section_header(lines, section.title(), theme);
-    for (label, value) in section.rows(theme) {
+    for (label, value) in rows {
         push_field(lines, label, &value, theme);
     }
 }

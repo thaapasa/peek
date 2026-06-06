@@ -120,6 +120,29 @@ pub fn downcast_extras<T: 'static>(extras: &Extras) -> &T {
 /// path. The struct and the function need not share a module.
 #[macro_export]
 macro_rules! impl_info_extras {
+    // Derived form: the type derives both `serde::Serialize` and
+    // `#[derive(InfoSection)]`, so one view struct drives both outputs —
+    // print via [`render_info_section`], JSON via `serde_json::to_value`
+    // nested under `$key`. The preferred wiring for migrated flat sections.
+    ($ty:ty, json = $key:literal) => {
+        impl $crate::info::InfoExtras for $ty {
+            fn render_section(
+                &self,
+                lines: &mut ::std::vec::Vec<::std::string::String>,
+                theme: &$crate::theme::PeekTheme,
+            ) {
+                $crate::info::render_info_section(lines, self, theme);
+            }
+
+            fn json_section(&self) -> ::std::option::Option<(&'static str, ::serde_json::Value)> {
+                ::std::option::Option::Some((
+                    $key,
+                    ::serde_json::to_value(self)
+                        .expect(::std::concat!($key, " info view serializes")),
+                ))
+            }
+        }
+    };
     ($ty:ty, $render:path) => {
         impl $crate::info::InfoExtras for $ty {
             fn render_section(

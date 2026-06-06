@@ -60,11 +60,7 @@ impl_info_extras!(
     crate::types::css::info_render::render_section,
     crate::types::css::info_render::json_section
 );
-impl_info_extras!(
-    crate::types::binary::info::BinaryInfo,
-    crate::types::binary::info::render_section,
-    crate::types::binary::info::json_section
-);
+impl_info_extras!(crate::types::binary::info::BinaryInfo, json = "binary");
 impl_info_extras!(
     crate::types::objfile::info::ObjectInfo,
     crate::types::objfile::info_render::render_section,
@@ -87,8 +83,7 @@ impl_info_extras!(
 );
 impl_info_extras!(
     crate::types::directory::info::DirectoryStats,
-    crate::types::directory::info::render_section,
-    crate::types::directory::info::json_section
+    json = "directory"
 );
 impl_info_extras!(
     crate::types::ebook::EbookStats,
