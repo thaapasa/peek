@@ -130,7 +130,8 @@ pub fn push_rows(lines: &mut Vec<String>, rows: &[InfoRow], theme: &PeekTheme) {
 }
 
 /// Collect a row list's keyed cells into a JSON object. Insertion order is
-/// irrelevant — `serde_json` sorts object keys.
+/// preserved — `serde_json` is built with `preserve_order`, so object keys
+/// follow definition order rather than being alphabetized.
 pub fn rows_to_json(rows: &[InfoRow]) -> serde_json::Map<String, serde_json::Value> {
     let mut map = serde_json::Map::new();
     for row in rows {
