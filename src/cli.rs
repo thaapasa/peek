@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches, Parser};
 use std::path::PathBuf;
 
 use peek_foundation::viewer::ComposeOpts;
@@ -157,6 +157,18 @@ pub struct Args {
     /// detection is wrong.
     #[arg(long = "cell-aspect", value_name = "RATIO", hide_short_help = true)]
     pub cell_aspect: Option<f64>,
+}
+
+/// Parse CLI args, reporting whether the theme was set explicitly (via
+/// `--theme` or `PEEK_THEME`) rather than left at clap's default. The
+/// caller uses that to auto-pick a light/dark default theme from the
+/// detected terminal background only when the user hasn't chosen one.
+pub fn parse() -> (Args, bool) {
+    let matches = Args::command().get_matches();
+    let theme_explicit =
+        matches.value_source("theme") != Some(clap::parser::ValueSource::DefaultValue);
+    let args = Args::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    (args, theme_explicit)
 }
 
 impl Args {

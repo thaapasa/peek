@@ -8,6 +8,7 @@ use syntect::highlighting::{Theme, ThemeSet};
 // ---------------------------------------------------------------------------
 
 const THEME_IDEA_DARK: &str = include_str!("../themes/idea-dark.tmTheme");
+const THEME_IDEA_LIGHT: &str = include_str!("../themes/idea-light.tmTheme");
 const THEME_VSCODE_DARK_MODERN: &str = include_str!("../themes/vscode-dark-modern.tmTheme");
 const THEME_VSCODE_DARK_2026: &str = include_str!("../themes/vscode-dark-2026.tmTheme");
 const THEME_VSCODE_MONOKAI: &str = include_str!("../themes/vscode-monokai.tmTheme");
@@ -17,6 +18,7 @@ const THEME_VSCODE_MONOKAI: &str = include_str!("../themes/vscode-monokai.tmThem
 pub enum PeekThemeName {
     #[default]
     IdeaDark,
+    IdeaLight,
     VscodeDarkModern,
     VscodeDark2026,
     VscodeMonokai,
@@ -27,6 +29,7 @@ impl PeekThemeName {
     pub fn cli_name(self) -> &'static str {
         match self {
             Self::IdeaDark => "idea-dark",
+            Self::IdeaLight => "idea-light",
             Self::VscodeDarkModern => "vscode-dark-modern",
             Self::VscodeDark2026 => "vscode-dark-2026",
             Self::VscodeMonokai => "vscode-monokai",
@@ -37,16 +40,34 @@ impl PeekThemeName {
     pub fn tmtheme_source(self) -> &'static str {
         match self {
             Self::IdeaDark => THEME_IDEA_DARK,
+            Self::IdeaLight => THEME_IDEA_LIGHT,
             Self::VscodeDarkModern => THEME_VSCODE_DARK_MODERN,
             Self::VscodeDark2026 => THEME_VSCODE_DARK_2026,
             Self::VscodeMonokai => THEME_VSCODE_MONOKAI,
         }
     }
 
+    /// Whether this is a light-background theme. Drives default-theme
+    /// selection against the detected terminal background.
+    pub fn is_light(self) -> bool {
+        matches!(self, Self::IdeaLight)
+    }
+
+    /// The built-in default for a given terminal background — the favored
+    /// dark theme on a dark terminal, the light counterpart on a light one.
+    pub fn default_for_light_background(is_light: bool) -> Self {
+        if is_light {
+            Self::IdeaLight
+        } else {
+            Self::IdeaDark
+        }
+    }
+
     /// Cycle to the next theme.
     pub fn next(self) -> Self {
         match self {
-            Self::IdeaDark => Self::VscodeDarkModern,
+            Self::IdeaDark => Self::IdeaLight,
+            Self::IdeaLight => Self::VscodeDarkModern,
             Self::VscodeDarkModern => Self::VscodeDark2026,
             Self::VscodeDark2026 => Self::VscodeMonokai,
             Self::VscodeMonokai => Self::IdeaDark,
@@ -57,7 +78,8 @@ impl PeekThemeName {
     pub fn prev(self) -> Self {
         match self {
             Self::IdeaDark => Self::VscodeMonokai,
-            Self::VscodeDarkModern => Self::IdeaDark,
+            Self::IdeaLight => Self::IdeaDark,
+            Self::VscodeDarkModern => Self::IdeaLight,
             Self::VscodeDark2026 => Self::VscodeDarkModern,
             Self::VscodeMonokai => Self::VscodeDark2026,
         }
@@ -66,6 +88,7 @@ impl PeekThemeName {
     pub fn help_text(self) -> &'static str {
         match self {
             Self::IdeaDark => "JetBrains IDEA default Dark theme",
+            Self::IdeaLight => "JetBrains IntelliJ Light theme",
             Self::VscodeDarkModern => "VS Code Dark Modern theme",
             Self::VscodeDark2026 => "VS Code Dark 2026 theme",
             Self::VscodeMonokai => "VS Code Monokai theme",
@@ -83,6 +106,7 @@ impl clap::ValueEnum for PeekThemeName {
     fn value_variants<'a>() -> &'a [Self] {
         &[
             Self::IdeaDark,
+            Self::IdeaLight,
             Self::VscodeDarkModern,
             Self::VscodeDark2026,
             Self::VscodeMonokai,

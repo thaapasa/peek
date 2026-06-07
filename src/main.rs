@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use clap::Parser;
 use std::io::IsTerminal;
 
 use peek_foundation::extract::ExtractOptions;
@@ -20,7 +19,7 @@ mod update;
 mod viewer_session;
 
 fn main() -> Result<()> {
-    let mut args = Args::parse();
+    let (mut args, theme_explicit) = cli::parse();
 
     // `--plain` implies `--color plain`: a single "sterile output" knob.
     // Otherwise the status bar and UI chrome stay themed while content is
@@ -39,6 +38,17 @@ fn main() -> Result<()> {
     if args.json && !args.info {
         anyhow::bail!("--json is only valid together with --info");
     }
+
+    // No explicit theme → pick the light or dark default from the
+    // terminal's background. Only when output is a terminal: piped output
+    // has no queryable background, so it keeps the built-in dark default.
+    // Priming the cache here also means later readers (the About screen)
+    // hit the cache instead of a live round-trip mid event loop.
+    if !theme_explicit && std::io::stdout().is_terminal() {
+        let light = peek_io::term_query::background_color_cached().is_some_and(|bg| bg.is_light());
+        args.theme = theme::PeekThemeName::default_for_light_background(light);
+    }
+
     // No args + interactive stdin → show short help instead of erroring.
     let no_input = args.file.is_none() && std::io::stdin().is_terminal();
     if args.short_help || args.help || no_input {

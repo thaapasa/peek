@@ -5,6 +5,7 @@ Selectable via `--theme <name>` or `PEEK_THEME`. Default `idea-dark`.
 | Theme                | Description                           |
 |----------------------|---------------------------------------|
 | `idea-dark`          | JetBrains IDEA default Dark (default) |
+| `idea-light`         | JetBrains IntelliJ Light              |
 | `vscode-dark-modern` | VS Code Dark Modern                   |
 | `vscode-dark-2026`   | VS Code Dark 2026                     |
 | `vscode-monokai`     | VS Code Monokai                       |

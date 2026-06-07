@@ -1390,9 +1390,10 @@ source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 
 ### Theme Selection ✅
 
-`--theme` / `PEEK_THEME`. Default `idea-dark`. Four custom embedded `.tmTheme` themes:
+`--theme` / `PEEK_THEME`. Default `idea-dark`. Five custom embedded `.tmTheme` themes:
 
 - **idea-dark** — JetBrains IDEA default Dark (default)
+- **idea-light** — JetBrains IntelliJ Light
 - **vscode-dark-modern** — VS Code Dark Modern
 - **vscode-dark-2026** — VS Code Dark 2026
 - **vscode-monokai** — VS Code Monokai
