@@ -65,10 +65,15 @@ crates/
                          (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +
                          json (typed --info --json encoder) + time fmt; section (the info model:
                          InfoNode tree [Row | Line | Block] + InfoView trait + render_info walker +
-                         InfoValue per-field paint + Value/Muted/Accent/Warn value types +
-                         MaybeZero). Every per-type view derives `serde::Serialize` (JSON) +
-                         `#[derive(InfoView)]` (print) from one struct; a display Block ≡ a JSON
-                         sub-object. (gather hub → bin.)
+                         InfoValue per-field paint + Value [Size/Count/Timestamp/Text/Split/…] +
+                         Role + Muted/Accent/Warn value types + MaybeZero); rows (InfoRow runtime
+                         model — optional print-label + optional json-key + Value cell; push_rows /
+                         rows_to_json). Three section-build modes: **derive** (regular —
+                         `#[derive(Serialize, InfoView)]`, one struct → both outputs; `Value::split`
+                         for a print≠json leaf), **InfoRow** (irregular row-shaped — enum-variant
+                         dispatch / one print row → several json keys; cert, font), **bespoke**
+                         (hand InfoView + Serialize). A display Block ≡ a JSON sub-object.
+                         (gather hub → bin.)
     output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
                          theme-gradient logo painter (shared with the bin's help screen).
     extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path

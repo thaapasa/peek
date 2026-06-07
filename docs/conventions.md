@@ -65,9 +65,12 @@ Owned by the type module:
   `Extras` (`Box<dyn InfoExtras>`), built with `Box::new(<Stats>)`. Single entry
   point called from `info::gather` dispatch. (Tiny types may combine gather +
   render into one `info.rs`.)
-- `info_render.rs` — `render_section(lines, &<Stats>, theme)` appends themed
-  lines for the type's own stats struct. Bound to the `InfoExtras` trait by a
-  single `impl_info_extras!` row in `crates/peek-types/src/types/info_impls.rs`;
+- `info_render.rs` — the type's info section, both outputs: themed terminal
+  (`render_section`) and `--info --json` (`json_section`). Normally a single
+  `#[derive(serde::Serialize, InfoView)]` view struct drives both; irregular
+  sections use the `InfoRow` runtime model or hand-impl the traits (see
+  architecture.md → "Adding a new file type" for the three modes). Bound to the
+  `InfoExtras` trait by one `impl_info_extras!` row in `info_impls.rs`;
   `info::render` invokes it dynamically — there is no per-type render match.
 - `reader.rs` / `backends/` (optional) — format-specific parsing, streaming where
   possible (see CLAUDE.md "Stream, don't load").
