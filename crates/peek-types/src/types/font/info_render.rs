@@ -89,7 +89,7 @@ impl crate::info::InfoView for FontView<'_> {
 fn face_rows(face: &FaceInfo) -> Vec<InfoRow> {
     let mut r = Vec::new();
     // `index` and `full_name` appear in the title / JSON only, not as print rows.
-    r.push(InfoRow::json_only("index", Value::int(face.index as i64)));
+    r.push(InfoRow::json_int("index", face.index as i64));
     named(&mut r, "Family", "family", &face.family);
     json_text(&mut r, "full_name", &face.full_name);
     named(&mut r, "Subfamily", "subfamily", &face.subfamily);
@@ -112,34 +112,31 @@ fn face_rows(face: &FaceInfo) -> Vec<InfoRow> {
         Value::split(width_label(face.width), Role::Value, json!(face.width)),
     ));
     // JSON keeps the bool always; print shows the row only when set.
-    r.push(InfoRow::json_only("italic", Value::bool(face.italic)));
+    r.push(InfoRow::json_bool("italic", face.italic));
     if face.italic {
         r.push(InfoRow::print_only("Style", Value::text("Italic")));
     }
-    r.push(InfoRow::json_only(
-        "monospaced",
-        Value::bool(face.monospaced),
-    ));
+    r.push(InfoRow::json_bool("monospaced", face.monospaced));
     if face.monospaced {
         r.push(InfoRow::print_only("Pitch", Value::text("Monospaced")));
     }
-    r.push(InfoRow::new(
+    r.push(InfoRow::count(
         "Glyphs",
         "glyph_count",
-        Value::count(face.glyph_count as u64),
+        face.glyph_count as u64,
     ));
     if face.units_per_em > 0 {
-        r.push(InfoRow::new(
+        r.push(InfoRow::count(
             "Units / em",
             "units_per_em",
-            Value::count(face.units_per_em as u64),
+            face.units_per_em as u64,
         ));
     }
     if face.codepoint_count > 0 {
-        r.push(InfoRow::new(
+        r.push(InfoRow::count(
             "Codepoints",
             "codepoint_count",
-            Value::count(face.codepoint_count as u64),
+            face.codepoint_count as u64,
         ));
     }
     if !face.scripts.is_empty() {
@@ -149,10 +146,7 @@ fn face_rows(face: &FaceInfo) -> Vec<InfoRow> {
             Value::split(face.scripts.join(", "), Role::Value, json!(face.scripts)),
         ));
     }
-    r.push(InfoRow::json_only(
-        "hinting_present",
-        Value::bool(face.hinting_present),
-    ));
+    r.push(InfoRow::json_bool("hinting_present", face.hinting_present));
     if face.hinting_present {
         r.push(InfoRow::print_only("Hinting", Value::text("present")));
     }

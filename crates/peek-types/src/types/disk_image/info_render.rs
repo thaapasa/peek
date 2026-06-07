@@ -23,8 +23,6 @@
 //! fits the row model, so `raw_rows` (print) and `raw_json` (JSON) remain
 //! separate.
 
-use serde_json::json;
-
 use crate::info::{
     InfoNode, InfoRow, Role, Value, format_size_human, push_rows, render_info, rows_to_json,
     thousands_sep,
@@ -35,6 +33,7 @@ use crate::types::disk_image::info::{
     IsoVolumeMeta, MbrPartition, RawImageMeta,
 };
 use crate::types::disk_image::mbr;
+use serde_json::json;
 
 /// Convenience for a `label  value` row.
 fn row(label: &'static str, value: String) -> InfoNode {
@@ -161,42 +160,22 @@ fn paint_partition(p: &MbrPartition, theme: &PeekTheme) -> String {
 fn iso_rows(iso: &IsoVolumeMeta) -> Vec<InfoRow> {
     let mut r = Vec::new();
     if let Some(v) = &iso.volume_label {
-        r.push(InfoRow::new(
-            "Volume",
-            "volume_label",
-            Value::text(v.clone()),
-        ));
+        r.push(InfoRow::text("Volume", "volume_label", v));
     }
     if let Some(v) = &iso.volume_set_id {
-        r.push(InfoRow::new(
-            "Volume set",
-            "volume_set_id",
-            Value::text(v.clone()),
-        ));
+        r.push(InfoRow::text("Volume set", "volume_set_id", v));
     }
     if let Some(v) = &iso.system_id {
-        r.push(InfoRow::new("System", "system_id", Value::text(v.clone())));
+        r.push(InfoRow::text("System", "system_id", v));
     }
     if let Some(v) = &iso.publisher {
-        r.push(InfoRow::new(
-            "Publisher",
-            "publisher",
-            Value::text(v.clone()),
-        ));
+        r.push(InfoRow::text("Publisher", "publisher", v));
     }
     if let Some(v) = &iso.data_preparer {
-        r.push(InfoRow::new(
-            "Data preparer",
-            "data_preparer",
-            Value::text(v.clone()),
-        ));
+        r.push(InfoRow::text("Data preparer", "data_preparer", v.clone()));
     }
     if let Some(v) = &iso.application {
-        r.push(InfoRow::new(
-            "Application",
-            "application",
-            Value::text(v.clone()),
-        ));
+        r.push(InfoRow::text("Application", "application", v.clone()));
     }
     let total_bytes = iso.block_count as u64 * iso.block_size as u64;
     r.push(InfoRow::print_only(
@@ -208,55 +187,33 @@ fn iso_rows(iso: &IsoVolumeMeta) -> Vec<InfoRow> {
             iso.block_size,
         )),
     ));
-    r.push(InfoRow::json_only(
-        "block_size",
-        Value::int(iso.block_size as i64),
-    ));
-    r.push(InfoRow::json_only(
-        "block_count",
-        Value::int(iso.block_count as i64),
-    ));
+    r.push(InfoRow::json_int("block_size", iso.block_size as i64));
+    r.push(InfoRow::json_int("block_count", iso.block_count as i64));
     if let Some(dt) = &iso.creation {
-        r.push(InfoRow::new(
-            "Created",
-            "creation",
-            Value::text(format_dt(dt)),
-        ));
+        r.push(InfoRow::text("Created", "creation", format_dt(dt)));
     }
     if let Some(dt) = &iso.modification {
-        r.push(InfoRow::new(
-            "Modified",
-            "modification",
-            Value::text(format_dt(dt)),
-        ));
+        r.push(InfoRow::text("Modified", "modification", format_dt(dt)));
     }
     if let Some(dt) = &iso.expiration {
-        r.push(InfoRow::new(
-            "Expires",
-            "expiration",
-            Value::text(format_dt(dt)),
-        ));
+        r.push(InfoRow::text("Expires", "expiration", format_dt(dt)));
     }
     if let Some(dt) = &iso.effective {
-        r.push(InfoRow::new(
-            "Effective",
-            "effective",
-            Value::text(format_dt(dt)),
-        ));
+        r.push(InfoRow::text("Effective", "effective", format_dt(dt)));
     }
     r.push(InfoRow::print_only(
         "Extensions",
         Value::text(format_extensions(iso)),
     ));
-    r.push(InfoRow::json_only("joliet", Value::bool(iso.joliet)));
-    r.push(InfoRow::json_only("el_torito", Value::bool(iso.el_torito)));
+    r.push(InfoRow::json_bool("joliet", iso.joliet));
+    r.push(InfoRow::json_bool("el_torito", iso.el_torito));
     if iso.el_torito
         && let Some(id) = &iso.el_torito_id
     {
         r.push(InfoRow::print_only("Boot loader", Value::text(id.clone())));
     }
     if let Some(id) = &iso.el_torito_id {
-        r.push(InfoRow::json_only("el_torito_id", Value::text(id.clone())));
+        r.push(InfoRow::json_text("el_torito_id", id.clone()));
     }
     r
 }
@@ -291,7 +248,7 @@ fn dmg_main_rows(dmg: &DmgMeta) -> Vec<InfoRow> {
             "Plist",
             Value::text(plist_label(dmg.plist_present, dmg.plist_length)),
         ),
-        InfoRow::json_only("plist_present", Value::bool(dmg.plist_present)),
+        InfoRow::json_bool("plist_present", dmg.plist_present),
         InfoRow::json_only("plist_length", Value::size(dmg.plist_length)),
         InfoRow::json_only("plist_offset", Value::size(dmg.plist_offset)),
     ];
@@ -301,14 +258,11 @@ fn dmg_main_rows(dmg: &DmgMeta) -> Vec<InfoRow> {
             Value::text(format!("{} of {}", dmg.segment_number, dmg.segment_count)),
         ));
     }
-    r.push(InfoRow::json_only(
+    r.push(InfoRow::json_int(
         "segment_number",
-        Value::int(dmg.segment_number as i64),
+        dmg.segment_number as i64,
     ));
-    r.push(InfoRow::json_only(
-        "segment_count",
-        Value::int(dmg.segment_count as i64),
-    ));
+    r.push(InfoRow::json_int("segment_count", dmg.segment_count as i64));
     r.push(InfoRow::new(
         "Data checksum",
         "data_checksum_type",
@@ -329,7 +283,7 @@ fn dmg_main_rows(dmg: &DmgMeta) -> Vec<InfoRow> {
         "Flags",
         Value::text(format_dmg_flags(dmg.flags)),
     ));
-    r.push(InfoRow::json_only("flags", Value::int(dmg.flags as i64)));
+    r.push(InfoRow::json_int("flags", dmg.flags as i64));
     r
 }
 
@@ -354,7 +308,7 @@ fn dmg_json(dmg: &DmgMeta) -> serde_json::Value {
 /// arrays those strings are computed from. Drives the print filesystem block
 /// (via `partition_block`) and every element of the JSON `partitions` array.
 fn partition_rows(p: &DmgPartition) -> Vec<InfoRow> {
-    let mut r = vec![InfoRow::new("Name", "name", Value::text(p.name.clone()))];
+    let mut r = vec![InfoRow::text("Name", "name", p.name.clone())];
     if let Some(t) = &p.fs_type {
         let friendly = friendly_type(t);
         let val = if friendly == *t {
@@ -402,7 +356,7 @@ fn partition_rows(p: &DmgPartition) -> Vec<InfoRow> {
         json_blob(run_histogram_json(p)),
     ));
     if let Some(t) = &p.fs_type {
-        r.push(InfoRow::json_only("fs_type", Value::text(t.clone())));
+        r.push(InfoRow::json_text("fs_type", t.clone()));
     }
     r
 }

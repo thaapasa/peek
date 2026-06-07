@@ -39,6 +39,54 @@ impl InfoRow {
         }
     }
 
+    pub fn text(
+        label: impl Into<Cow<'static, str>>,
+        key: &'static str,
+        value: impl Into<String>,
+    ) -> Self {
+        InfoRow {
+            print_label: Some(label.into()),
+            json_key: Some(key),
+            value: Value::text(value.into()),
+        }
+    }
+
+    // Both-output convenience constructors, one per `Value` kind — they keep
+    // call sites to one line instead of `new(.., .., Value::kind(..))`.
+
+    /// A both-output row whose cell is a grouped, colour-graded count.
+    pub fn count(label: impl Into<Cow<'static, str>>, key: &'static str, n: u64) -> Self {
+        Self::new(label, key, Value::count(n))
+    }
+    /// A both-output row whose cell is a plain signed integer.
+    pub fn int(label: impl Into<Cow<'static, str>>, key: &'static str, n: i64) -> Self {
+        Self::new(label, key, Value::int(n))
+    }
+    /// A both-output row printed in the muted colour, serialized as the string.
+    pub fn muted(
+        label: impl Into<Cow<'static, str>>,
+        key: &'static str,
+        s: impl Into<String>,
+    ) -> Self {
+        Self::new(label, key, Value::muted(s))
+    }
+    /// A both-output row printed in the accent colour, serialized as the string.
+    pub fn accent(
+        label: impl Into<Cow<'static, str>>,
+        key: &'static str,
+        s: impl Into<String>,
+    ) -> Self {
+        Self::new(label, key, Value::accent(s))
+    }
+    /// A both-output row printed in the warning colour, serialized as the string.
+    pub fn warn(
+        label: impl Into<Cow<'static, str>>,
+        key: &'static str,
+        s: impl Into<String>,
+    ) -> Self {
+        Self::new(label, key, Value::warn(s))
+    }
+
     /// A print-only row (no JSON key).
     pub fn print_only(label: impl Into<Cow<'static, str>>, value: Value) -> Self {
         InfoRow {
@@ -55,6 +103,19 @@ impl InfoRow {
             json_key: Some(key),
             value,
         }
+    }
+
+    /// A JSON-only bool — e.g. a flag whose print row only shows when set.
+    pub fn json_bool(key: &'static str, b: bool) -> Self {
+        Self::json_only(key, Value::bool(b))
+    }
+    /// A JSON-only integer.
+    pub fn json_int(key: &'static str, n: i64) -> Self {
+        Self::json_only(key, Value::int(n))
+    }
+    /// A JSON-only string.
+    pub fn json_text(key: &'static str, s: impl Into<String>) -> Self {
+        Self::json_only(key, Value::text(s))
     }
 }
 

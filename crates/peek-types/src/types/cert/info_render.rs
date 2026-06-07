@@ -130,17 +130,13 @@ fn entry_rows(entry: &CertEntry) -> Vec<InfoRow> {
 fn cert_rows(c: &CertificateEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("certificate")),
-        InfoRow::new("Label", "label", Value::muted(c.label.clone())),
+        InfoRow::muted("Label", "label", c.label.clone()),
         InfoRow::new("Version", "version", int_row(c.version as i64)),
-        InfoRow::new("Subject", "subject", Value::text(c.subject.clone())),
-        InfoRow::new("Issuer", "issuer", Value::text(c.issuer.clone())),
-        InfoRow::new("Serial", "serial_hex", Value::muted(c.serial_hex.clone())),
-        InfoRow::new(
-            "Not Before",
-            "not_before",
-            Value::text(c.not_before.clone()),
-        ),
-        InfoRow::new("Not After", "not_after", Value::text(c.not_after.clone())),
+        InfoRow::text("Subject", "subject", c.subject.clone()),
+        InfoRow::text("Issuer", "issuer", c.issuer.clone()),
+        InfoRow::muted("Serial", "serial_hex", c.serial_hex.clone()),
+        InfoRow::text("Not Before", "not_before", c.not_before.clone()),
+        InfoRow::text("Not After", "not_after", c.not_after.clone()),
     ];
     if let Some(days) = c.days_remaining {
         let (label, warn) = if days < 0 {
@@ -159,38 +155,32 @@ fn cert_rows(c: &CertificateEntry) -> Vec<InfoRow> {
                 Value::text(label)
             },
         ));
-        r.push(InfoRow::json_only("days_remaining", Value::int(days)));
+        r.push(InfoRow::json_int("days_remaining", days));
     }
     // One print row "alg (bits bit)"; JSON splits into two flat keys.
     r.push(InfoRow::print_only(
         "Public Key",
         Value::text(key_algo_label(&c.key_algorithm, c.key_size_bits)),
     ));
-    r.push(InfoRow::json_only(
-        "key_algorithm",
-        Value::text(c.key_algorithm.clone()),
-    ));
+    r.push(InfoRow::json_text("key_algorithm", c.key_algorithm.clone()));
     if let Some(b) = c.key_size_bits {
-        r.push(InfoRow::json_only("key_size_bits", Value::int(b as i64)));
+        r.push(InfoRow::json_int("key_size_bits", b as i64));
     }
-    r.push(InfoRow::new(
+    r.push(InfoRow::text(
         "Signature",
         "signature_algorithm",
-        Value::text(c.signature_algorithm.clone()),
+        c.signature_algorithm.clone(),
     ));
     push_list_row(&mut r, "SAN DNS", "san_dns", &c.san_dns);
     push_list_row(&mut r, "SAN IP", "san_ip", &c.san_ip);
     push_list_row(&mut r, "SAN Email", "san_email", &c.san_email);
     push_list_row(&mut r, "SAN URI", "san_uri", &c.san_uri);
     // JSON keeps the bool always; print shows the row only when true.
-    r.push(InfoRow::json_only("is_ca", Value::bool(c.is_ca)));
+    r.push(InfoRow::json_bool("is_ca", c.is_ca));
     if c.is_ca {
         r.push(InfoRow::print_only("CA", Value::text("yes")));
     }
-    r.push(InfoRow::json_only(
-        "self_signed",
-        Value::bool(c.self_signed),
-    ));
+    r.push(InfoRow::json_bool("self_signed", c.self_signed));
     if c.self_signed {
         r.push(InfoRow::print_only("Self-Signed", Value::text("yes")));
     }
@@ -201,15 +191,15 @@ fn cert_rows(c: &CertificateEntry) -> Vec<InfoRow> {
         "extended_key_usages",
         &c.extended_key_usages,
     );
-    r.push(InfoRow::new(
+    r.push(InfoRow::muted(
         "SHA-1",
         "fingerprint_sha1",
-        Value::muted(c.fingerprint_sha1.clone()),
+        c.fingerprint_sha1.clone(),
     ));
-    r.push(InfoRow::new(
+    r.push(InfoRow::muted(
         "SHA-256",
         "fingerprint_sha256",
-        Value::muted(c.fingerprint_sha256.clone()),
+        c.fingerprint_sha256.clone(),
     ));
     r
 }
@@ -217,21 +207,21 @@ fn cert_rows(c: &CertificateEntry) -> Vec<InfoRow> {
 fn csr_rows(c: &CsrEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("csr")),
-        InfoRow::new("Label", "label", Value::muted(c.label.clone())),
-        InfoRow::new("Subject", "subject", Value::text(c.subject.clone())),
+        InfoRow::muted("Label", "label", c.label.clone()),
+        InfoRow::text("Subject", "subject", c.subject.clone()),
         InfoRow::print_only(
             "Public Key",
             Value::text(key_algo_label(&c.key_algorithm, c.key_size_bits)),
         ),
-        InfoRow::json_only("key_algorithm", Value::text(c.key_algorithm.clone())),
+        InfoRow::json_text("key_algorithm", c.key_algorithm.clone()),
     ];
     if let Some(b) = c.key_size_bits {
-        r.push(InfoRow::json_only("key_size_bits", Value::int(b as i64)));
+        r.push(InfoRow::json_int("key_size_bits", b as i64));
     }
-    r.push(InfoRow::new(
+    r.push(InfoRow::text(
         "Signature",
         "signature_algorithm",
-        Value::text(c.signature_algorithm.clone()),
+        c.signature_algorithm.clone(),
     ));
     push_list_row(&mut r, "SAN DNS", "san_dns", &c.san_dns);
     push_list_row(&mut r, "SAN IP", "san_ip", &c.san_ip);
@@ -243,30 +233,22 @@ fn csr_rows(c: &CsrEntry) -> Vec<InfoRow> {
 fn crl_rows(c: &CrlEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("crl")),
-        InfoRow::new("Label", "label", Value::muted(c.label.clone())),
-        InfoRow::new("Issuer", "issuer", Value::text(c.issuer.clone())),
-        InfoRow::new(
-            "This Update",
-            "this_update",
-            Value::text(c.this_update.clone()),
-        ),
+        InfoRow::muted("Label", "label", c.label.clone()),
+        InfoRow::text("Issuer", "issuer", c.issuer.clone()),
+        InfoRow::text("This Update", "this_update", c.this_update.clone()),
     ];
     if let Some(next) = &c.next_update {
-        r.push(InfoRow::new(
-            "Next Update",
-            "next_update",
-            Value::text(next.clone()),
-        ));
+        r.push(InfoRow::text("Next Update", "next_update", next.clone()));
     }
-    r.push(InfoRow::new(
+    r.push(InfoRow::count(
         "Revoked",
         "revoked_count",
-        Value::count(c.revoked_count as u64),
+        c.revoked_count as u64,
     ));
-    r.push(InfoRow::new(
+    r.push(InfoRow::text(
         "Signature",
         "signature_algorithm",
-        Value::text(c.signature_algorithm.clone()),
+        c.signature_algorithm.clone(),
     ));
     r
 }
@@ -274,14 +256,14 @@ fn crl_rows(c: &CrlEntry) -> Vec<InfoRow> {
 fn key_rows(k: &KeyEntry, kind: &'static str) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token(kind)),
-        InfoRow::new("Label", "label", Value::muted(k.label.clone())),
+        InfoRow::muted("Label", "label", k.label.clone()),
         InfoRow::print_only("Type", Value::text(key_type_label(&k.key_type))),
         InfoRow::json_only("key_type", Value::token(key_type_token(&k.key_type))),
     ];
     if let KeyType::Ec(curve) = &k.key_type
         && !curve.is_empty()
     {
-        r.push(InfoRow::json_only("curve", Value::text(curve.clone())));
+        r.push(InfoRow::json_text("curve", curve.clone()));
     }
     if let Some(bits) = k.key_size_bits {
         r.push(InfoRow::new("Bits", "key_size_bits", int_row(bits as i64)));
@@ -292,22 +274,18 @@ fn key_rows(k: &KeyEntry, kind: &'static str) -> Vec<InfoRow> {
 fn ssh_rows(k: &SshPubKeyEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("ssh_public_key")),
-        InfoRow::new("Algorithm", "algorithm", Value::text(k.algorithm.clone())),
+        InfoRow::text("Algorithm", "algorithm", k.algorithm.clone()),
     ];
     if let Some(bits) = k.bits {
         r.push(InfoRow::new("Bits", "bits", int_row(bits as i64)));
     }
     if !k.comment.is_empty() {
-        r.push(InfoRow::new(
-            "Comment",
-            "comment",
-            Value::muted(k.comment.clone()),
-        ));
+        r.push(InfoRow::muted("Comment", "comment", k.comment.clone()));
     }
-    r.push(InfoRow::new(
+    r.push(InfoRow::muted(
         "SHA-256",
         "fingerprint_sha256",
-        Value::muted(k.fingerprint_sha256.clone()),
+        k.fingerprint_sha256.clone(),
     ));
     r
 }
@@ -320,19 +298,19 @@ fn jwk_rows(k: &JwkEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("json_web_key")),
         InfoRow::print_only("Type", Value::text(type_label)),
-        InfoRow::json_only("kty", Value::text(k.kty.clone())),
+        InfoRow::json_text("kty", k.kty.clone()),
     ];
     if let Some(crv) = &k.crv {
-        r.push(InfoRow::json_only("crv", Value::text(crv.clone())));
+        r.push(InfoRow::json_text("crv", crv.clone()));
     }
     if let Some(bits) = k.key_size_bits {
         r.push(InfoRow::new("Bits", "key_size_bits", int_row(bits as i64)));
     }
     if let Some(alg) = &k.alg {
-        r.push(InfoRow::new("Algorithm", "alg", Value::text(alg.clone())));
+        r.push(InfoRow::text("Algorithm", "alg", alg.clone()));
     }
     if let Some(use_) = &k.use_ {
-        r.push(InfoRow::new("Use", "use", Value::text(use_.clone())));
+        r.push(InfoRow::text("Use", "use", use_.clone()));
     }
     if !k.key_ops.is_empty() {
         r.push(InfoRow::new(
@@ -342,14 +320,10 @@ fn jwk_rows(k: &JwkEntry) -> Vec<InfoRow> {
         ));
     }
     if let Some(kid) = &k.kid {
-        r.push(InfoRow::new("Key ID", "kid", Value::muted(kid.clone())));
+        r.push(InfoRow::muted("Key ID", "kid", kid.clone()));
     }
     if let Some(tp) = &k.thumbprint {
-        r.push(InfoRow::new(
-            "Thumbprint",
-            "thumbprint",
-            Value::muted(tp.clone()),
-        ));
+        r.push(InfoRow::muted("Thumbprint", "thumbprint", tp.clone()));
     }
     r
 }
@@ -357,8 +331,8 @@ fn jwk_rows(k: &JwkEntry) -> Vec<InfoRow> {
 fn unknown_rows(u: &UnknownEntry) -> Vec<InfoRow> {
     vec![
         InfoRow::json_only("kind", Value::token("unknown")),
-        InfoRow::new("Label", "label", Value::muted(u.label.clone())),
-        InfoRow::new("DER Bytes", "der_bytes", Value::count(u.der_bytes as u64)),
+        InfoRow::muted("Label", "label", u.label.clone()),
+        InfoRow::count("DER Bytes", "der_bytes", u.der_bytes as u64),
     ]
 }
 
