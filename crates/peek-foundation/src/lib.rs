@@ -36,6 +36,9 @@ pub mod input {
     pub use peek_io::{ByteSource, InputSource, LineSource};
     pub use peek_io::{source, stream};
 
+    /// `crate::input::term_query` — OSC 11 terminal background probe.
+    pub use peek_io::term_query;
+
     /// `crate::input::detect::*` — the detection surface.
     pub mod detect {
         pub use peek_detect::*;

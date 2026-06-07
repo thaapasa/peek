@@ -81,6 +81,7 @@ impl Mode for AboutMode {
         if let Some(rss) = peak_rss_bytes() {
             lines.push(kv_line(pt, "Peak memory", &format_bytes(rss)));
         }
+        lines.push(kv_line(pt, "Term bg", &terminal_bg_desc()));
         lines.push(String::new());
 
         // Palette swatches: the colors the active theme actually paints.
@@ -130,6 +131,18 @@ fn tip_line(pt: &PeekTheme, key: &str, desc: &str) -> String {
 
 fn terminal_dimensions() -> (u16, u16) {
     terminal::size().unwrap_or((80, 24))
+}
+
+/// Detected terminal background (OSC 11), read from the startup cache.
+/// `#rrggbb · light/dark` when the terminal answered, else "not detected".
+fn terminal_bg_desc() -> String {
+    match crate::input::term_query::background_color_cached() {
+        Some(bg) => {
+            let kind = if bg.is_light() { "light" } else { "dark" };
+            format!("#{:02x}{:02x}{:02x} · {kind}", bg.r, bg.g, bg.b)
+        }
+        None => "not detected".to_string(),
+    }
 }
 
 /// Peak resident set size for the current process, in bytes.

@@ -55,7 +55,7 @@ pub fn reopen_stdin_from_tty() {
 /// Resolve the controlling terminal's device path by calling `ttyname()` on
 /// stderr, then stdout. Returns `None` if neither is a TTY.
 #[cfg(unix)]
-fn resolve_tty_path() -> Option<String> {
+pub(crate) fn resolve_tty_path() -> Option<String> {
     for fd in [2, 1] {
         unsafe {
             let p = libc::ttyname(fd);

@@ -179,6 +179,13 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
         // Interactive TTY: compose mode list per file type; one event loop.
         // compose_modes handles animation detection internally, so this
         // path is uniform across file types.
+
+        // Probe the terminal background now, before the event loop puts the
+        // tty into raw mode — an OSC 11 round-trip mid-loop would race
+        // keystroke input. Result is cached for the About screen (and,
+        // later, default-theme selection).
+        let _ = peek_io::term_query::background_color_cached();
+
         let viewers = std::rc::Rc::new(viewers);
         let viewers_for_builder = viewers.clone();
         let mode_builder: viewer_session::ModeBuilder =

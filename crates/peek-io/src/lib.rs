@@ -11,7 +11,9 @@ pub mod lines;
 pub mod source;
 pub mod stdin;
 pub mod stream;
+pub mod term_query;
 
 pub use lines::LineSource;
 pub use source::{ByteSource, InputSource};
 pub use stream::ByteStream;
+pub use term_query::{Rgb, query_background_color};
