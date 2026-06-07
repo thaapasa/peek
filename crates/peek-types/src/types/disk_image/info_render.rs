@@ -1,10 +1,34 @@
-//! Disk-image info section rendering. ISO 9660 today; future formats
-//! plug into this same section header by adding their own block here
-//! and a matching arm in `gather_extras`.
+//! Disk-image info section rendering. ISO 9660 / DMG / raw images plug into
+//! one section header (`Disk Image`), variant-dispatched on [`DiskImageMeta`].
+//!
+//! The ISO and DMG variants drive *both* outputs — themed print and `--info
+//! --json` — from one [`InfoRow`] list per variant (`iso_rows`,
+//! `dmg_main_rows`, `partition_rows`), the way `cert` / `font` do.
+//! [`push_rows`] emits the print lines; [`rows_to_json`] the JSON object. That
+//! kills the former parallel `*_json` listers. A `Value::split` covers each
+//! leaf whose print form diverges from its JSON value: a `159.64 MiB` size vs
+//! a raw byte count, a `device image` label vs a `device` token, a composite
+//! `Volume size` line whose `block_size` / `block_count` are separate JSON
+//! keys.
+//!
+//! The block *framing* is still built by hand per output, because print and
+//! JSON genuinely nest differently: print appends one `InfoNode::Block` per
+//! DMG filesystem partition plus a collapsed scheme block, while JSON nests
+//! the variant under an `iso` / `dmg` / `raw` key with a flat `partitions`
+//! array. `info_nodes` and `json_section` are those framers.
+//!
+//! The raw (MBR) variant stays hand-built: its print rows mix a themed type
+//! label with plain numbers in one cell (partial painting no `Value` can
+//! express), and one print line maps to a four-field JSON object — neither
+//! fits the row model, so `raw_rows` (print) and `raw_json` (JSON) remain
+//! separate.
 
-use serde::{Serialize, Serializer};
+use serde_json::json;
 
-use crate::info::{InfoNode, format_size_human, render_info, thousands_sep};
+use crate::info::{
+    InfoNode, InfoRow, Role, Value, format_size_human, push_rows, render_info, rows_to_json,
+    thousands_sep,
+};
 use crate::theme::PeekTheme;
 use crate::types::disk_image::info::{
     DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgPartition, DmgVariant, IsoDateTime,
@@ -26,12 +50,22 @@ pub fn render_section(lines: &mut Vec<String>, info: &DiskImageInfo, theme: &Pee
 }
 
 /// Typed `--info --json` view of the Disk Image section, nested under
-/// `"disk_image"`.
+/// `"disk_image"`. The variant payload nests under `iso` / `dmg` / `raw`,
+/// built from the same row lists the print framer uses.
 pub fn json_section(info: &DiskImageInfo) -> (&'static str, serde_json::Value) {
-    (
-        "disk_image",
-        serde_json::to_value(DiskImageView(info)).expect("disk_image info view serializes"),
-    )
+    let mut obj = json!({ "format": info.format_name });
+    if let Some(err) = &info.error {
+        obj["error"] = json!(err);
+    }
+    match &info.meta {
+        Some(DiskImageMeta::Iso(iso)) => {
+            obj["iso"] = serde_json::Value::Object(rows_to_json(&iso_rows(iso)))
+        }
+        Some(DiskImageMeta::Dmg(dmg)) => obj["dmg"] = dmg_json(dmg),
+        Some(DiskImageMeta::Raw(raw)) => obj["raw"] = raw_json(raw),
+        None => {}
+    }
+    ("disk_image", obj)
 }
 
 struct DiskImageView<'a>(&'a DiskImageInfo);
@@ -39,49 +73,41 @@ struct DiskImageView<'a>(&'a DiskImageInfo);
 impl crate::info::InfoView for DiskImageView<'_> {
     fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
         let info = self.0;
-        let mut main = vec![row("Format", theme.paint_value(info.format_name))];
+        let mut body = vec![row("Format", theme.paint_value(info.format_name))];
         if let Some(err) = &info.error {
-            main.push(row("Status", theme.paint_warning(err)));
+            body.push(row("Status", theme.paint_warning(err)));
             return vec![InfoNode::Block {
                 title: "Disk Image".to_string(),
-                body: main,
+                body,
             }];
         }
         // Blocks beyond the main one (DMG partition / scheme detail).
         let mut extra = Vec::new();
         match &info.meta {
-            Some(DiskImageMeta::Iso(iso)) => iso_rows(&mut main, iso, theme),
+            Some(DiskImageMeta::Iso(iso)) => push_row_lines(&mut body, &iso_rows(iso), theme),
             Some(DiskImageMeta::Dmg(dmg)) => {
-                dmg_main_rows(&mut main, dmg, theme);
-                dmg_partition_nodes(&mut main, &mut extra, &dmg.partitions, theme);
+                push_row_lines(&mut body, &dmg_main_rows(dmg), theme);
+                dmg_partition_nodes(&mut body, &mut extra, &dmg.partitions, theme);
             }
-            Some(DiskImageMeta::Raw(raw)) => raw_rows(&mut main, raw, theme),
+            Some(DiskImageMeta::Raw(raw)) => raw_rows(&mut body, raw, theme),
             None => {}
         }
         let mut nodes = vec![InfoNode::Block {
             title: "Disk Image".to_string(),
-            body: main,
+            body,
         }];
         nodes.extend(extra);
         nodes
     }
 }
 
-impl Serialize for DiskImageView<'_> {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let info = self.0;
-        let mut obj = serde_json::json!({ "format": info.format_name });
-        if let Some(err) = &info.error {
-            obj["error"] = serde_json::json!(err);
-        }
-        match &info.meta {
-            Some(DiskImageMeta::Iso(iso)) => obj["iso"] = iso_json(iso),
-            Some(DiskImageMeta::Dmg(dmg)) => obj["dmg"] = dmg_json(dmg),
-            Some(DiskImageMeta::Raw(raw)) => obj["raw"] = raw_json(raw),
-            None => {}
-        }
-        obj.serialize(ser)
-    }
+/// Render a row list's print rows into `body` as verbatim `Line` nodes; the
+/// enclosing block is framed by the caller. `push_rows` emits the same
+/// `push_field` lines an `InfoNode::Row` would, so the output is unchanged.
+fn push_row_lines(body: &mut Vec<InfoNode>, rows: &[InfoRow], theme: &PeekTheme) {
+    let mut lines = Vec::new();
+    push_rows(&mut lines, rows, theme);
+    body.extend(lines.into_iter().map(InfoNode::Line));
 }
 
 fn raw_rows(main: &mut Vec<InfoNode>, raw: &RawImageMeta, theme: &PeekTheme) {
@@ -128,97 +154,257 @@ fn paint_partition(p: &MbrPartition, theme: &PeekTheme) -> String {
     )
 }
 
-fn iso_rows(main: &mut Vec<InfoNode>, iso: &IsoVolumeMeta, theme: &PeekTheme) {
-    if let Some(label) = &iso.volume_label {
-        main.push(row("Volume", theme.paint_value(label)));
+/// One ISO 9660 volume's rows, driving both print and JSON. The composite
+/// `Volume size` / `Extensions` print lines map to flat JSON keys
+/// (`block_size`+`block_count`, `joliet`+`el_torito`), so those are split into
+/// a print-only row plus the JSON-only keys.
+fn iso_rows(iso: &IsoVolumeMeta) -> Vec<InfoRow> {
+    let mut r = Vec::new();
+    if let Some(v) = &iso.volume_label {
+        r.push(InfoRow::new(
+            "Volume",
+            "volume_label",
+            Value::text(v.clone()),
+        ));
     }
-    if let Some(set) = &iso.volume_set_id {
-        main.push(row("Volume set", theme.paint_value(set)));
+    if let Some(v) = &iso.volume_set_id {
+        r.push(InfoRow::new(
+            "Volume set",
+            "volume_set_id",
+            Value::text(v.clone()),
+        ));
     }
-    if let Some(sys) = &iso.system_id {
-        main.push(row("System", theme.paint_value(sys)));
+    if let Some(v) = &iso.system_id {
+        r.push(InfoRow::new("System", "system_id", Value::text(v.clone())));
     }
-    if let Some(p) = &iso.publisher {
-        main.push(row("Publisher", theme.paint_value(p)));
+    if let Some(v) = &iso.publisher {
+        r.push(InfoRow::new(
+            "Publisher",
+            "publisher",
+            Value::text(v.clone()),
+        ));
     }
-    if let Some(p) = &iso.data_preparer {
-        main.push(row("Data preparer", theme.paint_value(p)));
+    if let Some(v) = &iso.data_preparer {
+        r.push(InfoRow::new(
+            "Data preparer",
+            "data_preparer",
+            Value::text(v.clone()),
+        ));
     }
-    if let Some(a) = &iso.application {
-        main.push(row("Application", theme.paint_value(a)));
+    if let Some(v) = &iso.application {
+        r.push(InfoRow::new(
+            "Application",
+            "application",
+            Value::text(v.clone()),
+        ));
     }
     let total_bytes = iso.block_count as u64 * iso.block_size as u64;
-    main.push(row(
+    r.push(InfoRow::print_only(
         "Volume size",
-        theme.paint_value(&format!(
+        Value::text(format!(
             "{} bytes ({} × {} blocks)",
             thousands_sep(total_bytes),
             thousands_sep(iso.block_count as u64),
             iso.block_size,
         )),
     ));
+    r.push(InfoRow::json_only(
+        "block_size",
+        Value::int(iso.block_size as i64),
+    ));
+    r.push(InfoRow::json_only(
+        "block_count",
+        Value::int(iso.block_count as i64),
+    ));
     if let Some(dt) = &iso.creation {
-        main.push(row("Created", theme.paint_value(&format_dt(dt))));
+        r.push(InfoRow::new(
+            "Created",
+            "creation",
+            Value::text(format_dt(dt)),
+        ));
     }
     if let Some(dt) = &iso.modification {
-        main.push(row("Modified", theme.paint_value(&format_dt(dt))));
+        r.push(InfoRow::new(
+            "Modified",
+            "modification",
+            Value::text(format_dt(dt)),
+        ));
     }
     if let Some(dt) = &iso.expiration {
-        main.push(row("Expires", theme.paint_value(&format_dt(dt))));
+        r.push(InfoRow::new(
+            "Expires",
+            "expiration",
+            Value::text(format_dt(dt)),
+        ));
     }
     if let Some(dt) = &iso.effective {
-        main.push(row("Effective", theme.paint_value(&format_dt(dt))));
+        r.push(InfoRow::new(
+            "Effective",
+            "effective",
+            Value::text(format_dt(dt)),
+        ));
     }
-    main.push(row(
+    r.push(InfoRow::print_only(
         "Extensions",
-        theme.paint_value(&format_extensions(iso)),
+        Value::text(format_extensions(iso)),
     ));
+    r.push(InfoRow::json_only("joliet", Value::bool(iso.joliet)));
+    r.push(InfoRow::json_only("el_torito", Value::bool(iso.el_torito)));
     if iso.el_torito
         && let Some(id) = &iso.el_torito_id
     {
-        main.push(row("Boot loader", theme.paint_value(id)));
+        r.push(InfoRow::print_only("Boot loader", Value::text(id.clone())));
     }
+    if let Some(id) = &iso.el_torito_id {
+        r.push(InfoRow::json_only("el_torito_id", Value::text(id.clone())));
+    }
+    r
 }
 
-fn dmg_main_rows(main: &mut Vec<InfoNode>, dmg: &DmgMeta, theme: &PeekTheme) {
-    main.push(row(
-        "UDIF version",
-        theme.paint_value(&dmg.udif_version.to_string()),
-    ));
-    main.push(row(
-        "Variant",
-        theme.paint_value(variant_label(dmg.variant)),
-    ));
-    main.push(row(
-        "Volume size",
-        theme.paint_value(&format!("{} bytes", thousands_sep(dmg.total_size_bytes))),
-    ));
-    main.push(row(
-        "Data fork",
-        theme.paint_value(&format!("{} bytes", thousands_sep(dmg.data_fork_length))),
-    ));
-    main.push(row(
-        "Plist",
-        theme.paint_value(&plist_label(dmg.plist_present, dmg.plist_length)),
-    ));
+/// The DMG trailer rows (everything but the partition map), driving both
+/// outputs. Labelled enums (`Variant`, the checksums) print a human label and
+/// serialize a token; the byte-count lines print `N bytes` and serialize raw
+/// numbers; `Flags` prints the decoded list and serializes the raw bitfield.
+fn dmg_main_rows(dmg: &DmgMeta) -> Vec<InfoRow> {
+    let mut r = vec![
+        InfoRow::new(
+            "UDIF version",
+            "udif_version",
+            int_row(dmg.udif_version as i64),
+        ),
+        InfoRow::new(
+            "Variant",
+            "variant",
+            Value::labelled(variant_label(dmg.variant), variant_token(dmg.variant)),
+        ),
+        InfoRow::print_only(
+            "Volume size",
+            Value::text(format!("{} bytes", thousands_sep(dmg.total_size_bytes))),
+        ),
+        InfoRow::json_only("total_size_bytes", Value::size(dmg.total_size_bytes)),
+        InfoRow::print_only(
+            "Data fork",
+            Value::text(format!("{} bytes", thousands_sep(dmg.data_fork_length))),
+        ),
+        InfoRow::json_only("data_fork_length", Value::size(dmg.data_fork_length)),
+        InfoRow::print_only(
+            "Plist",
+            Value::text(plist_label(dmg.plist_present, dmg.plist_length)),
+        ),
+        InfoRow::json_only("plist_present", Value::bool(dmg.plist_present)),
+        InfoRow::json_only("plist_length", Value::size(dmg.plist_length)),
+        InfoRow::json_only("plist_offset", Value::size(dmg.plist_offset)),
+    ];
     if dmg.segment_count > 1 {
-        main.push(row(
+        r.push(InfoRow::print_only(
             "Segments",
-            theme.paint_value(&format!("{} of {}", dmg.segment_number, dmg.segment_count)),
+            Value::text(format!("{} of {}", dmg.segment_number, dmg.segment_count)),
         ));
     }
-    main.push(row(
+    r.push(InfoRow::json_only(
+        "segment_number",
+        Value::int(dmg.segment_number as i64),
+    ));
+    r.push(InfoRow::json_only(
+        "segment_count",
+        Value::int(dmg.segment_count as i64),
+    ));
+    r.push(InfoRow::new(
         "Data checksum",
-        theme.paint_value(checksum_label(dmg.data_checksum_type)),
+        "data_checksum_type",
+        Value::labelled(
+            checksum_label(dmg.data_checksum_type),
+            checksum_token(dmg.data_checksum_type),
+        ),
     ));
-    main.push(row(
+    r.push(InfoRow::new(
         "Master checksum",
-        theme.paint_value(checksum_label(dmg.master_checksum_type)),
+        "master_checksum_type",
+        Value::labelled(
+            checksum_label(dmg.master_checksum_type),
+            checksum_token(dmg.master_checksum_type),
+        ),
     ));
-    main.push(row(
+    r.push(InfoRow::print_only(
         "Flags",
-        theme.paint_value(&format_dmg_flags(dmg.flags)),
+        Value::text(format_dmg_flags(dmg.flags)),
     ));
+    r.push(InfoRow::json_only("flags", Value::int(dmg.flags as i64)));
+    r
+}
+
+/// The DMG JSON object: trailer rows plus the flat `partitions` array (every
+/// partition, filesystem and scheme alike, from the same `partition_rows`).
+fn dmg_json(dmg: &DmgMeta) -> serde_json::Value {
+    let partitions: Vec<serde_json::Value> = dmg
+        .partitions
+        .iter()
+        .map(|p| serde_json::Value::Object(rows_to_json(&partition_rows(p))))
+        .collect();
+    let mut obj = rows_to_json(&dmg_main_rows(dmg));
+    obj.insert(
+        "partitions".to_string(),
+        serde_json::Value::Array(partitions),
+    );
+    serde_json::Value::Object(obj)
+}
+
+/// One DMG partition's rows. The print rows (the filesystem detail block body)
+/// carry derived human strings; the JSON-only rows carry the raw numbers and
+/// arrays those strings are computed from. Drives the print filesystem block
+/// (via `partition_block`) and every element of the JSON `partitions` array.
+fn partition_rows(p: &DmgPartition) -> Vec<InfoRow> {
+    let mut r = vec![InfoRow::new("Name", "name", Value::text(p.name.clone()))];
+    if let Some(t) = &p.fs_type {
+        let friendly = friendly_type(t);
+        let val = if friendly == *t {
+            t.clone()
+        } else {
+            format!("{friendly} ({t})")
+        };
+        r.push(InfoRow::print_only("Type", Value::text(val)));
+    }
+    r.push(InfoRow::print_only(
+        "Logical size",
+        Value::text(format_size_human(p.size_bytes)),
+    ));
+    r.push(InfoRow::print_only("Stored", Value::text(stored_desc(p))));
+    r.push(InfoRow::print_only(
+        "Compression",
+        Value::text(compression_desc(p)),
+    ));
+    r.push(InfoRow::print_only("Chunks", Value::text(chunks_desc(p))));
+    r.push(InfoRow::print_only(
+        "Image offset",
+        Value::text(offset_desc(p)),
+    ));
+    // The machine view carries the unformatted fields the print rows above
+    // derive their human strings from.
+    r.push(InfoRow::json_only(
+        "start_sector",
+        Value::size(p.start_sector),
+    ));
+    r.push(InfoRow::json_only("size_bytes", Value::size(p.size_bytes)));
+    r.push(InfoRow::json_only(
+        "stored_bytes",
+        Value::size(p.stored_bytes),
+    ));
+    r.push(InfoRow::json_only(
+        "compression",
+        json_blob(json!(p.compression)),
+    ));
+    r.push(InfoRow::json_only(
+        "chunk_count",
+        Value::size(p.chunk_count as u64),
+    ));
+    r.push(InfoRow::json_only(
+        "run_histogram",
+        json_blob(run_histogram_json(p)),
+    ));
+    if let Some(t) = &p.fs_type {
+        r.push(InfoRow::json_only("fs_type", Value::text(t.clone())));
+    }
+    r
 }
 
 /// Decode the partition map. Filesystems each get a detail block; the format
@@ -254,31 +440,19 @@ fn dmg_partition_nodes(
     }
 }
 
-/// Full detail block for one filesystem partition.
+/// Full detail block for one filesystem partition — the print rows of
+/// [`partition_rows`] under a friendly-typed header.
 fn partition_block(p: &DmgPartition, theme: &PeekTheme) -> InfoNode {
     let title = match &p.fs_type {
         Some(t) => format!("Partition \u{b7} {}", friendly_type(t)),
         None => "Partition".to_string(),
     };
-    let mut body = vec![row("Name", theme.paint_value(&p.name))];
-    if let Some(t) = &p.fs_type {
-        let friendly = friendly_type(t);
-        let val = if friendly == *t {
-            t.clone()
-        } else {
-            format!("{friendly} ({t})")
-        };
-        body.push(row("Type", theme.paint_value(&val)));
+    let mut lines = Vec::new();
+    push_rows(&mut lines, &partition_rows(p), theme);
+    InfoNode::Block {
+        title,
+        body: lines.into_iter().map(InfoNode::Line).collect(),
     }
-    body.push(row(
-        "Logical size",
-        theme.paint_value(&format_size_human(p.size_bytes)),
-    ));
-    body.push(row("Stored", theme.paint_value(&stored_desc(p))));
-    body.push(row("Compression", theme.paint_value(&compression_desc(p))));
-    body.push(row("Chunks", theme.paint_value(&chunks_desc(p))));
-    body.push(row("Image offset", theme.paint_value(&offset_desc(p))));
-    InfoNode::Block { title, body }
 }
 
 /// Compact block for the format scaffolding — one row per entry.
@@ -362,6 +536,15 @@ fn offset_desc(p: &DmgPartition) -> String {
         thousands_sep(p.start_sector.saturating_mul(512)),
         thousands_sep(p.start_sector)
     )
+}
+
+/// The partition's run-type histogram as a JSON object `{label: count}`.
+fn run_histogram_json(p: &DmgPartition) -> serde_json::Value {
+    let mut hist = serde_json::Map::new();
+    for (label, n) in &p.run_histogram {
+        hist.insert((*label).to_string(), json!(n));
+    }
+    serde_json::Value::Object(hist)
 }
 
 /// Format scaffolding vs a real filesystem. Classifies by the Apple type
@@ -474,89 +657,6 @@ fn format_offset(quarters: i8) -> String {
     format!("{sign}{h:02}:{m:02}")
 }
 
-fn iso_json(iso: &IsoVolumeMeta) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "block_size": iso.block_size,
-        "block_count": iso.block_count,
-        "joliet": iso.joliet,
-        "el_torito": iso.el_torito,
-    });
-    if let Some(v) = &iso.system_id {
-        obj["system_id"] = serde_json::json!(v);
-    }
-    if let Some(v) = &iso.volume_label {
-        obj["volume_label"] = serde_json::json!(v);
-    }
-    if let Some(v) = &iso.volume_set_id {
-        obj["volume_set_id"] = serde_json::json!(v);
-    }
-    if let Some(v) = &iso.publisher {
-        obj["publisher"] = serde_json::json!(v);
-    }
-    if let Some(v) = &iso.data_preparer {
-        obj["data_preparer"] = serde_json::json!(v);
-    }
-    if let Some(v) = &iso.application {
-        obj["application"] = serde_json::json!(v);
-    }
-    if let Some(dt) = &iso.creation {
-        obj["creation"] = serde_json::json!(format_dt(dt));
-    }
-    if let Some(dt) = &iso.modification {
-        obj["modification"] = serde_json::json!(format_dt(dt));
-    }
-    if let Some(dt) = &iso.expiration {
-        obj["expiration"] = serde_json::json!(format_dt(dt));
-    }
-    if let Some(dt) = &iso.effective {
-        obj["effective"] = serde_json::json!(format_dt(dt));
-    }
-    if let Some(v) = &iso.el_torito_id {
-        obj["el_torito_id"] = serde_json::json!(v);
-    }
-    obj
-}
-
-fn dmg_json(dmg: &DmgMeta) -> serde_json::Value {
-    let partitions: Vec<serde_json::Value> =
-        dmg.partitions.iter().map(dmg_partition_json).collect();
-    serde_json::json!({
-        "udif_version": dmg.udif_version,
-        "flags": dmg.flags,
-        "variant": variant_token(dmg.variant),
-        "total_size_bytes": dmg.total_size_bytes,
-        "data_fork_length": dmg.data_fork_length,
-        "plist_present": dmg.plist_present,
-        "plist_length": dmg.plist_length,
-        "plist_offset": dmg.plist_offset,
-        "segment_number": dmg.segment_number,
-        "segment_count": dmg.segment_count,
-        "data_checksum_type": checksum_token(dmg.data_checksum_type),
-        "master_checksum_type": checksum_token(dmg.master_checksum_type),
-        "partitions": partitions,
-    })
-}
-
-fn dmg_partition_json(p: &DmgPartition) -> serde_json::Value {
-    let mut run_histogram = serde_json::Map::new();
-    for (label, n) in &p.run_histogram {
-        run_histogram.insert((*label).to_string(), serde_json::json!(n));
-    }
-    let mut obj = serde_json::json!({
-        "name": p.name,
-        "start_sector": p.start_sector,
-        "size_bytes": p.size_bytes,
-        "stored_bytes": p.stored_bytes,
-        "compression": p.compression,
-        "chunk_count": p.chunk_count,
-        "run_histogram": serde_json::Value::Object(run_histogram),
-    });
-    if let Some(t) = &p.fs_type {
-        obj["fs_type"] = serde_json::json!(t);
-    }
-    obj
-}
-
 fn raw_json(raw: &RawImageMeta) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     if let Some(table) = &raw.mbr {
@@ -564,7 +664,7 @@ fn raw_json(raw: &RawImageMeta) -> serde_json::Value {
             .partitions
             .iter()
             .map(|p| {
-                serde_json::json!({
+                json!({
                     "bootable": p.bootable,
                     "type_code": p.type_code,
                     "start_lba": p.start_lba,
@@ -572,10 +672,7 @@ fn raw_json(raw: &RawImageMeta) -> serde_json::Value {
                 })
             })
             .collect();
-        obj.insert(
-            "mbr".to_string(),
-            serde_json::json!({ "partitions": partitions }),
-        );
+        obj.insert("mbr".to_string(), json!({ "partitions": partitions }));
     }
     serde_json::Value::Object(obj)
 }
@@ -599,6 +696,19 @@ fn checksum_token(kind: DmgChecksumKind) -> &'static str {
         DmgChecksumKind::Sha512 => "sha512",
         DmgChecksumKind::Other(_) => "other",
     }
+}
+
+/// A raw-printed integer (no thousands separator) that serializes as a
+/// number — e.g. the UDIF version. Distinct from [`Value::count`], whose
+/// print form is grouped and colour-graded.
+fn int_row(n: i64) -> Value {
+    Value::split(n.to_string(), Role::Value, json!(n))
+}
+
+/// A JSON-only cell carrying a composite (array/object) value verbatim. The
+/// row has no print label, so the placeholder text is never rendered.
+fn json_blob(json: serde_json::Value) -> Value {
+    Value::split(String::new(), Role::Value, json)
 }
 
 fn format_extensions(iso: &IsoVolumeMeta) -> String {
