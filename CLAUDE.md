@@ -103,7 +103,8 @@ crates/
                          disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /
                          keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen),
                          vobject (vcf/ics — vCard / iCalendar)
-  peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + idea-light + vscode variants)
+  peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + idea-light / solarized-light
+                         / github-light + vscode variants)
 src/                   — the bin: the thin session layer (CLI + the three dispatch hubs + the
                          interactive event loop). Names member crates directly — `peek_io`,
                          `peek_detect`, `peek_theme`, `peek_foundation::{viewer,info,extract,…}`,
