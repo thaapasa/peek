@@ -11,6 +11,9 @@ Selectable via `--theme <name>` or `PEEK_THEME`. Default `idea-dark`.
 | `vscode-dark-modern` | VS Code Dark Modern                   |
 | `vscode-dark-2026`   | VS Code Dark 2026                     |
 | `vscode-monokai`     | VS Code Monokai                       |
+| `graveyard`          | Gothic moonlit night                  |
+| `candy-floss`        | Pastel candy on dark plum             |
+| `victorian`          | Parlour parchment with oxblood        |
 
 With no `--theme` / `PEEK_THEME` set, the default adapts to your terminal: peek probes the
 terminal background (OSC 11) and picks `idea-light` on a light background, `idea-dark` on a dark

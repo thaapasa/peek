@@ -1390,7 +1390,7 @@ source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 
 ### Theme Selection ✅
 
-`--theme` / `PEEK_THEME`. Seven custom embedded `.tmTheme` themes:
+`--theme` / `PEEK_THEME`. Ten custom embedded `.tmTheme` themes:
 
 - **idea-dark** — JetBrains IDEA default Dark
 - **idea-light** — JetBrains IntelliJ Light
@@ -1399,6 +1399,9 @@ source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 - **vscode-dark-modern** — VS Code Dark Modern
 - **vscode-dark-2026** — VS Code Dark 2026
 - **vscode-monokai** — VS Code Monokai
+- **graveyard** — gothic moonlit night
+- **candy-floss** — pastel candy on dark plum
+- **victorian** — parlour parchment with oxblood
 
 Default adapts to the terminal background (OSC 11 probe): `idea-light` on a light terminal,
 `idea-dark` on a dark one (or when output is piped). Explicit `--theme` / `PEEK_THEME` wins.
