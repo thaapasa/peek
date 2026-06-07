@@ -299,6 +299,23 @@ mod tests {
         assert_eq!(config_name_syntax("main.rs"), None);
     }
 
+    /// Every syntax token `peek-detect`'s shebang sniffer can emit must
+    /// resolve to a real grammar here — otherwise an extensionless script
+    /// (postinst, configure, a git hook) silently renders as plain text.
+    /// The list mirrors `detect::shebang_syntax`; keep them in sync.
+    #[test]
+    fn shebang_syntax_tokens_resolve() {
+        let tm = tm();
+        let plain = tm.syntax_set.find_syntax_plain_text().name.clone();
+        for token in ["sh", "py", "pl", "rb", "js", "php", "lua", "tcl", "awk"] {
+            let name = &resolve_syntax(&tm, token).name;
+            assert_ne!(
+                name, &plain,
+                "shebang token {token:?} fell back to plain text"
+            );
+        }
+    }
+
     /// Feeding `LineStreamHighlighter` line-by-line must produce the same
     /// escaped output as `highlight_lines` over the whole content. Covers
     /// JSON (simple) and Rust (multi-line block comment exercises

@@ -1,0 +1,41 @@
+#!/bin/sh
+# postinst — Debian maintainer script, run after package unpack.
+# No file extension: type must come from the shebang, not the name.
+set -e
+
+PACKAGE="peek"
+BIN_DIR="/usr/bin"
+DATA_DIR="/usr/share/$PACKAGE"
+
+case "$1" in
+    configure)
+        # Create the runtime data directory if missing.
+        if [ ! -d "$DATA_DIR" ]; then
+            mkdir -p "$DATA_DIR"
+            chmod 0755 "$DATA_DIR"
+        fi
+
+        # Refresh the shared-library cache and the man-page index.
+        if command -v ldconfig >/dev/null 2>&1; then
+            ldconfig
+        fi
+        if command -v mandb >/dev/null 2>&1; then
+            mandb --quiet || true
+        fi
+
+        # Register the binary as an alternative for `view`.
+        update-alternatives \
+            --install "$BIN_DIR/view" view "$BIN_DIR/$PACKAGE" 50
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        echo "postinst called with unexpected stage '$1', skipping." >&2
+        ;;
+
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

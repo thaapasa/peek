@@ -691,7 +691,53 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
         };
         return Some((FileType::Email(fmt), mime));
     }
+    // Last: an extensionless script with a `#!` line (postinst, configure,
+    // git hooks). The interpreter names the syntax; report the generic
+    // shell-script MIME (only used when magic-byte sniffing found none).
+    if let Some(syntax) = shebang_syntax(text) {
+        return Some((
+            FileType::SourceCode {
+                syntax: Some(syntax.to_string()),
+            },
+            "text/x-shellscript",
+        ));
+    }
     None
+}
+
+/// Map a leading shebang to a syntect syntax token so extensionless scripts
+/// still highlight. Reads the interpreter basename from `#!/path/to/foo` (or
+/// `#!/usr/bin/env foo`), strips a trailing version (`python3` → `python`),
+/// and returns an extension-style token syntect resolves. `None` when there
+/// is no shebang or the interpreter has no known grammar.
+fn shebang_syntax(text: &str) -> Option<&'static str> {
+    let first = text.lines().next()?;
+    let rest = first.strip_prefix("#!")?.trim_start();
+    // First whitespace token is the interpreter path; for `env NAME` the
+    // real interpreter is the following argument.
+    let mut words = rest.split_whitespace();
+    let mut interp = words.next()?;
+    let base = interp.rsplit(['/', '\\']).next().unwrap_or(interp);
+    if base == "env" {
+        interp = words.next()?;
+    } else {
+        interp = base;
+    }
+    // Strip a trailing version suffix: `python3`, `python3.11`, `ruby2.7`.
+    let name = interp.trim_end_matches(|c: char| c.is_ascii_digit() || c == '.');
+    Some(match name {
+        "sh" | "bash" | "dash" | "ksh" | "zsh" | "ash" => "sh",
+        "python" => "py",
+        "perl" => "pl",
+        "ruby" => "rb",
+        "node" | "nodejs" => "js",
+        "php" => "php",
+        "lua" => "lua",
+        "tcl" | "wish" => "tcl",
+        "awk" | "gawk" => "awk",
+        "fish" => "sh",
+        _ => return None,
+    })
 }
 
 /// Detect the file type from an in-memory byte buffer (for stdin).
@@ -817,4 +863,33 @@ fn classify_by_name(name: &str) -> Option<FileType> {
         "ipynb" => FileType::Notebook,
         _ => return None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shebang_maps_interpreter_to_syntax() {
+        assert_eq!(shebang_syntax("#!/bin/sh\n"), Some("sh"));
+        assert_eq!(shebang_syntax("#!/usr/bin/bash"), Some("sh"));
+        assert_eq!(shebang_syntax("#!/usr/bin/env python3\n..."), Some("py"));
+        assert_eq!(shebang_syntax("#!/usr/bin/perl -w"), Some("pl"));
+        assert_eq!(shebang_syntax("#!/usr/bin/env node"), Some("js"));
+        // No shebang / unknown interpreter → no hint.
+        assert_eq!(shebang_syntax("echo hi\n"), None);
+        assert_eq!(shebang_syntax("#!/usr/bin/env brainfuck"), None);
+    }
+
+    #[test]
+    fn extensionless_shell_script_sniffs_with_syntax() {
+        let (file_type, mime) = sniff_text_content("#!/bin/sh\nset -e\n").unwrap();
+        assert_eq!(
+            file_type,
+            FileType::SourceCode {
+                syntax: Some("sh".to_string())
+            }
+        );
+        assert_eq!(mime, "text/x-shellscript");
+    }
 }
