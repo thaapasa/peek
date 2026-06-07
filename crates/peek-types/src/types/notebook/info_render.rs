@@ -9,8 +9,9 @@
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
+use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, paint_count, render_info};
+use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
 use crate::theme::PeekTheme;
 
 use super::info::NotebookInfo;
@@ -49,7 +50,7 @@ struct NotebookView {
     outputs: Outputs,
     #[info(label = "Max Execution")]
     #[serde(rename = "max_exec_count", skip_serializing_if = "Option::is_none")]
-    max_exec: Option<MaxExec>,
+    max_exec: Option<Value>,
 }
 
 impl From<&NotebookInfo> for NotebookView {
@@ -72,7 +73,9 @@ impl From<&NotebookInfo> for NotebookView {
                 images: info.image_outputs,
                 errors: info.error_outputs,
             },
-            max_exec: info.max_exec_count.map(MaxExec),
+            max_exec: info
+                .max_exec_count
+                .map(|n| Value::split(format!("[{n}]"), Role::Value, json!(n))),
         }
     }
 }
@@ -218,20 +221,5 @@ impl Serialize for Outputs {
         st.serialize_field("image_outputs", &self.images)?;
         st.serialize_field("error_outputs", &self.errors)?;
         st.end()
-    }
-}
-
-/// Highest execution count. Print: `[n]`. JSON: the raw number.
-struct MaxExec(i64);
-
-impl InfoValue for MaxExec {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("[{}]", self.0))
-    }
-}
-
-impl Serialize for MaxExec {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_i64(self.0)
     }
 }

@@ -10,7 +10,9 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoValue, Muted, format_size_human, render_info};
+use serde_json::json;
+
+use crate::info::{InfoValue, Muted, Role, Value, format_size_human, render_info};
 use crate::theme::PeekTheme;
 
 use super::PostScriptFormat;
@@ -64,7 +66,7 @@ struct EpsView {
     // Always a row; JSON bool.
     #[info(label = "Render")]
     #[serde(rename = "gs_available")]
-    render: RenderAvail,
+    render: Value,
 }
 
 impl EpsView {
@@ -86,7 +88,15 @@ impl From<&EpsInfo> for EpsView {
             language_level: d.language_level.clone().map(Muted),
             pages: d.pages.clone().map(Muted),
             preview: Preview(s.preview.clone()),
-            render: RenderAvail(s.gs_available),
+            render: if s.gs_available {
+                Value::split("Ghostscript", Role::Value, json!(true))
+            } else {
+                Value::split(
+                    "unavailable (install Ghostscript)",
+                    Role::Muted,
+                    json!(false),
+                )
+            },
         }
     }
 }
@@ -139,24 +149,6 @@ impl Serialize for Preview {
 
 /// Ghostscript availability. Print: `Ghostscript` or a muted install hint.
 /// JSON: a bool.
-struct RenderAvail(bool);
-
-impl InfoValue for RenderAvail {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        if self.0 {
-            theme.paint_value("Ghostscript")
-        } else {
-            theme.paint_muted("unavailable (install Ghostscript)")
-        }
-    }
-}
-
-impl Serialize for RenderAvail {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_bool(self.0)
-    }
-}
-
 fn ser_format<S: Serializer>(format: &PostScriptFormat, ser: S) -> Result<S::Ok, S::Error> {
     ser.serialize_str(match format {
         PostScriptFormat::Eps => "eps",

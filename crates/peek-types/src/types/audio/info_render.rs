@@ -10,8 +10,9 @@
 
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
+use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Warn, render_info, thousands_sep};
+use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
 use crate::theme::PeekTheme;
 
 use super::info::{AudioMetadata, AudioStats};
@@ -54,7 +55,7 @@ struct AudioBlock {
     // Print row only when the probe succeeded…
     #[info(label = "Format")]
     #[serde(skip)]
-    format_print: Option<Fmt>,
+    format_print: Option<String>,
     // …JSON token always.
     #[info(skip)]
     #[serde(rename = "format")]
@@ -64,19 +65,19 @@ struct AudioBlock {
     codec: Option<String>,
     #[info(label = "Duration")]
     #[serde(rename = "duration_secs", skip_serializing_if = "Option::is_none")]
-    duration: Option<Duration>,
+    duration: Option<Value>,
     #[info(label = "Channels")]
     #[serde(flatten)]
     channels: Option<Channels>,
     #[info(label = "Sample rate")]
     #[serde(rename = "sample_rate", skip_serializing_if = "Option::is_none")]
-    sample_rate: Option<SampleRate>,
+    sample_rate: Option<Value>,
     #[info(label = "Bit depth")]
     #[serde(rename = "bits_per_sample", skip_serializing_if = "Option::is_none")]
-    bits_per_sample: Option<BitDepth>,
+    bits_per_sample: Option<Value>,
     #[info(label = "Bitrate")]
     #[serde(rename = "bitrate", skip_serializing_if = "Option::is_none")]
-    bitrate: Option<Bitrate>,
+    bitrate: Option<Value>,
 }
 
 impl From<&AudioStats> for AudioView {
@@ -85,17 +86,29 @@ impl From<&AudioStats> for AudioView {
         AudioView {
             audio: AudioBlock {
                 error: s.error.clone().map(Warn),
-                format_print: ok.then_some(Fmt(s.format)),
+                format_print: ok.then(|| s.format.label().to_string()),
                 format: audio_format_token(s.format),
                 codec: if ok { s.codec.clone() } else { None },
-                duration: s.duration_secs.map(Duration),
+                duration: s
+                    .duration_secs
+                    .map(|d| Value::split(format_duration(d), Role::Value, json!(d))),
                 channels: s.channels.map(|ch| Channels {
                     channels: ch,
                     layout: s.channel_layout.clone(),
                 }),
-                sample_rate: s.sample_rate.map(SampleRate),
-                bits_per_sample: s.bits_per_sample.map(BitDepth),
-                bitrate: s.bitrate.map(Bitrate),
+                sample_rate: s.sample_rate.map(|r| {
+                    Value::split(
+                        format!("{} Hz", thousands_sep(r as u64)),
+                        Role::Value,
+                        json!(r),
+                    )
+                }),
+                bits_per_sample: s
+                    .bits_per_sample
+                    .map(|b| Value::split(format!("{b}-bit"), Role::Value, json!(b))),
+                bitrate: s
+                    .bitrate
+                    .map(|b| Value::split(format_bitrate(b), Role::Value, json!(b))),
             },
             tags: Tags {
                 meta: s.metadata.clone(),
@@ -105,27 +118,6 @@ impl From<&AudioStats> for AudioView {
             has_lyrics: s.has_lyrics,
             has_album_art: s.has_album_art,
         }
-    }
-}
-
-/// Audio format: print the human label, serialize the lowercase token.
-struct Fmt(AudioFormat);
-impl InfoValue for Fmt {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(self.0.label())
-    }
-}
-
-/// Track duration: print `H:MM:SS` / `M:SS`, serialize raw seconds.
-struct Duration(f64);
-impl InfoValue for Duration {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format_duration(self.0))
-    }
-}
-impl Serialize for Duration {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_f64(self.0)
     }
 }
 
@@ -153,45 +145,6 @@ impl Serialize for Channels {
             st.serialize_field("channel_layout", layout)?;
         }
         st.end()
-    }
-}
-
-/// Sample rate: print `N Hz`, serialize raw Hz.
-struct SampleRate(u32);
-impl InfoValue for SampleRate {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("{} Hz", thousands_sep(self.0 as u64)))
-    }
-}
-impl Serialize for SampleRate {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u32(self.0)
-    }
-}
-
-/// Bit depth: print `N-bit`, serialize raw bits.
-struct BitDepth(u32);
-impl InfoValue for BitDepth {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("{}-bit", self.0))
-    }
-}
-impl Serialize for BitDepth {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u32(self.0)
-    }
-}
-
-/// Bitrate: print `N kbps` / `N Mbps`, serialize raw bits-per-second.
-struct Bitrate(u64);
-impl InfoValue for Bitrate {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format_bitrate(self.0))
-    }
-}
-impl Serialize for Bitrate {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(self.0)
     }
 }
 

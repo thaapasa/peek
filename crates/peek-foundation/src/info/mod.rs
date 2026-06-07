@@ -18,7 +18,7 @@ pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
 pub use time::format_archive_mtime_zoned;
-pub use value::{Accent, Muted, Value, Warn};
+pub use value::{Accent, Muted, Role, Value, Warn};
 
 /// Collected file metadata.
 pub struct FileInfo {

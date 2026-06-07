@@ -11,7 +11,9 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoNode, InfoValue, Value, format_size_human, paint_count, render_info};
+use serde_json::json;
+
+use crate::info::{InfoNode, Role, Value, format_size_human, paint_count, render_info};
 use crate::theme::PeekTheme;
 
 use super::EmailFormat;
@@ -41,22 +43,22 @@ struct EmailView {
     message_count: Option<Value>,
     #[info(label = "From")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    from: Option<HeaderField>,
+    from: Option<Value>,
     #[info(label = "To")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    to: Option<HeaderField>,
+    to: Option<Value>,
     #[info(label = "Cc")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    cc: Option<HeaderField>,
+    cc: Option<Value>,
     #[info(label = "Subject")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    subject: Option<HeaderField>,
+    subject: Option<Value>,
     #[info(label = "Date")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    date: Option<HeaderField>,
+    date: Option<Value>,
     #[info(label = "Message-ID")]
     #[serde(rename = "message_id", skip_serializing_if = "Option::is_none")]
-    message_id: Option<HeaderField>,
+    message_id: Option<Value>,
     #[info(nest)]
     #[serde(flatten)]
     attachments: Attachments,
@@ -70,7 +72,12 @@ impl EmailView {
 
 impl From<&EmailInfo> for EmailView {
     fn from(e: &EmailInfo) -> Self {
-        let header = |v: &Option<String>| v.clone().filter(|s| !s.is_empty()).map(HeaderField);
+        // Truncated for the scannable print row, full in JSON.
+        let header = |v: &Option<String>| {
+            v.clone()
+                .filter(|s| !s.is_empty())
+                .map(|s| Value::split(truncate(&s, 100), Role::Value, json!(s)))
+        };
         EmailView {
             format: e.format,
             message_count: e.message_count.map(|n| Value::count(n as u64)),
@@ -85,22 +92,6 @@ impl From<&EmailInfo> for EmailView {
                 bytes: e.attachment_bytes,
             },
         }
-    }
-}
-
-/// A header value: truncated for the print row (the Info screen stays a
-/// scannable summary), full in JSON.
-struct HeaderField(String);
-
-impl InfoValue for HeaderField {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&truncate(&self.0, 100))
-    }
-}
-
-impl Serialize for HeaderField {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&self.0)
     }
 }
 

@@ -11,7 +11,9 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoNode, InfoValue, Value, paint_count, render_info};
+use serde_json::json;
+
+use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
 use crate::theme::PeekTheme;
 use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
 use crate::types::text::info_render::TextView;
@@ -72,7 +74,7 @@ struct MarkdownSection {
     #[info(label = "Prose Words")]
     prose_words: Value,
     #[info(label = "Reading Time", skip_if_zero)]
-    reading_minutes: ReadingTime,
+    reading_minutes: Value,
 }
 
 impl From<&MarkdownInfo> for MarkdownView {
@@ -99,7 +101,15 @@ impl From<&MarkdownInfo> for MarkdownView {
                 blockquote_lines: Value::count(s.blockquote_lines as u64),
                 footnote_def_count: Value::count(s.footnote_def_count as u64),
                 prose_words: Value::count(s.prose_words as u64),
-                reading_minutes: ReadingTime(s.reading_minutes),
+                reading_minutes: Value::split(
+                    if s.reading_minutes == 1 {
+                        "1 min".to_string()
+                    } else {
+                        format!("{} min", s.reading_minutes)
+                    },
+                    Role::Value,
+                    json!(s.reading_minutes),
+                ),
             },
         }
     }
@@ -212,33 +222,6 @@ impl Serialize for Tasks {
         st.serialize_field("task_done", &self.done)?;
         st.serialize_field("task_total", &self.total)?;
         st.end()
-    }
-}
-
-/// Reading-time estimate. Print: `N min` (omitted under a minute). JSON: the
-/// raw minute count.
-struct ReadingTime(u32);
-
-impl InfoValue for ReadingTime {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        let label = if self.0 == 1 {
-            "1 min".to_string()
-        } else {
-            format!("{} min", self.0)
-        };
-        theme.paint_value(&label)
-    }
-}
-
-impl crate::info::MaybeZero for ReadingTime {
-    fn is_zero_value(&self) -> bool {
-        self.0 == 0
-    }
-}
-
-impl Serialize for ReadingTime {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u32(self.0)
     }
 }
 

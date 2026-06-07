@@ -11,7 +11,9 @@
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Serialize, Serializer};
 
-use crate::info::{Accent, InfoNode, InfoValue, render_info};
+use serde_json::json;
+
+use crate::info::{Accent, InfoNode, InfoValue, Role, Value, render_info};
 use crate::theme::{PeekTheme, lerp_color};
 use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
 
@@ -54,7 +56,7 @@ struct ImageMain {
     #[info(label = "Color")]
     color_type: String,
     #[info(label = "Bit Depth", skip_if_zero)]
-    bit_depth: BitDepth,
+    bit_depth: Value,
     #[info(label = "ICC Profile")]
     #[serde(rename = "icc_profile", skip_serializing_if = "Option::is_none")]
     icc_profile: Option<String>,
@@ -79,7 +81,11 @@ impl From<&ImageStats> for ImageView {
                     height: s.height,
                 },
                 color_type: s.color_type.clone(),
-                bit_depth: BitDepth(s.bit_depth),
+                bit_depth: Value::split(
+                    format!("{} bits/channel", s.bit_depth),
+                    Role::Value,
+                    json!(s.bit_depth),
+                ),
                 icc_profile: s.icc_profile.clone(),
                 hdr_format: s.hdr_format.clone().map(Accent),
                 animation: s.animation.as_ref().map(Anim::from),
@@ -143,23 +149,6 @@ impl InfoValue for Megapixels {
 }
 
 /// Bit depth: JSON number always, print `N bits/channel` when nonzero.
-struct BitDepth(u8);
-impl InfoValue for BitDepth {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("{} bits/channel", self.0))
-    }
-}
-impl crate::info::MaybeZero for BitDepth {
-    fn is_zero_value(&self) -> bool {
-        self.0 == 0
-    }
-}
-impl Serialize for BitDepth {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u8(self.0)
-    }
-}
-
 /// Animation summary. Print: inline `Frames` / `Duration` / `Avg FPS` / `Loop`
 /// rows. JSON: a nested `{ frame_count?, total_duration_ms?, loop_count? }`.
 struct Anim {

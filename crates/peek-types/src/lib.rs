@@ -47,3 +47,6 @@ pub mod input {
 }
 
 pub mod types;
+
+#[cfg(test)]
+mod derive_view_tests;

@@ -99,11 +99,22 @@ impl InfoValue for Value {
             Value::Int(n) => theme.paint_value(&thousands_sep_signed(*n)),
             Value::Ratio(r) => theme.paint_value(&format!("{r:.2}")),
             Value::Timestamp(t) => {
+                // NB: always local time. `InfoValue::render_value` has no
+                // `RenderOptions`, so a derived-section timestamp can't honour
+                // `--utc` the way the File section's own `paint_timestamp`
+                // does. No shipping section constructs a `Value::Timestamp`
+                // yet (timestamps arrive pre-formatted from gather), so this is
+                // latent — but a future one would silently disagree with the
+                // File section under `--utc`. Threading `utc` here needs a
+                // `render_value` signature change.
                 theme.paint(&format_time(*t, false), file::timestamp_color(*t, theme))
             }
             Value::DurationMs(ms) => theme.paint_value(&format!("{} ms", thousands_sep(*ms))),
             Value::Text(s) | Value::Token(s) => theme.paint_value(s),
             Value::Bool(b) => theme.paint_value(if *b { "yes" } else { "no" }),
+            // Pre-formatted: just paint the text in its role; JSON came from the
+            // stored `json` (see `Value::Split`).
+            Value::Split { text, role, .. } => role.paint(theme, text),
         }
     }
 }
@@ -132,6 +143,20 @@ pub fn thousands_sep(n: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::thousands_sep;
+    use crate::info::{InfoValue, Role, Value};
+    use crate::theme::{PeekThemeName, StyleMode, load_embedded_theme};
+
+    #[test]
+    fn split_paints_text_not_json() {
+        let mut theme = crate::theme::PeekTheme::from_syntect(&load_embedded_theme(
+            PeekThemeName::default().tmtheme_source(),
+        ));
+        theme.style_mode = StyleMode::Plain;
+        // Print shows `text`; the `json` payload (16) never appears in print.
+        let v = Value::split("0x10", Role::Value, serde_json::json!(16));
+        assert_eq!(v.render_value(&theme), "0x10");
+        assert_eq!(Value::labelled("ELF", "elf").render_value(&theme), "ELF");
+    }
 
     #[test]
     fn thousands_sep_inserts_commas_every_three_digits() {

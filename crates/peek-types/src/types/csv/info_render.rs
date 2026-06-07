@@ -10,7 +10,11 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
-use crate::info::{Accent, InfoNode, InfoValue, Value, paint_count, render_info, thousands_sep};
+use serde_json::json;
+
+use crate::info::{
+    Accent, InfoNode, InfoValue, Role, Value, paint_count, render_info, thousands_sep,
+};
 use crate::theme::PeekTheme;
 
 use super::info::{ColumnStats, ColumnType, CsvStats, delimiter_label};
@@ -52,14 +56,14 @@ struct CsvMain {
     #[info(label = "BOM", skip_if = "Bom::clear")]
     has_bom: Bom,
     #[info(label = "Header")]
-    header_detected: Header,
+    header_detected: Value,
     #[info(label = "Records")]
     #[serde(flatten)]
     records: Records,
     #[info(label = "Columns")]
     column_count: Value,
     #[info(label = "Malformed", skip_if_zero)]
-    malformed_count: Malformed,
+    malformed_count: Value,
     #[info(skip)]
     sampled: bool,
 }
@@ -78,13 +82,25 @@ impl From<&CsvStats> for CsvView {
                 delimiter: Accent(delimiter_label(s.delimiter).to_string()),
                 encoding: s.encoding,
                 has_bom: Bom(s.has_bom),
-                header_detected: Header(s.header_detected),
+                header_detected: Value::split(
+                    if s.header_detected {
+                        "detected"
+                    } else {
+                        "none"
+                    },
+                    Role::Value,
+                    json!(s.header_detected),
+                ),
                 records: Records {
                     loaded: s.loaded_records,
                     total: s.total_records,
                 },
                 column_count: Value::count(s.columns.len() as u64),
-                malformed_count: Malformed(s.malformed_count),
+                malformed_count: Value::split(
+                    thousands_sep(s.malformed_count as u64),
+                    Role::Warn,
+                    json!(s.malformed_count),
+                ),
                 sampled: s.sampled,
             },
             columns: Columns {
@@ -109,19 +125,6 @@ impl InfoValue for Bom {
     }
 }
 impl Serialize for Bom {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_bool(self.0)
-    }
-}
-
-/// Header-detected flag: JSON bool; print the value-coloured `detected`/`none`.
-struct Header(bool);
-impl InfoValue for Header {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(if self.0 { "detected" } else { "none" })
-    }
-}
-impl Serialize for Header {
     fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
         ser.serialize_bool(self.0)
     }
@@ -154,25 +157,6 @@ impl Serialize for Records {
             st.serialize_field("total_records", &n)?;
         }
         st.end()
-    }
-}
-
-/// Malformed-record count: JSON number always, print a warning row only when
-/// nonzero.
-struct Malformed(usize);
-impl InfoValue for Malformed {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint(&thousands_sep(self.0 as u64), theme.warning)
-    }
-}
-impl crate::info::MaybeZero for Malformed {
-    fn is_zero_value(&self) -> bool {
-        self.0 == 0
-    }
-}
-impl Serialize for Malformed {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(self.0 as u64)
     }
 }
 

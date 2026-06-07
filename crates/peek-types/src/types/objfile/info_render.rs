@@ -3,15 +3,18 @@
 //! (themed print). [`ObjectInfo`] stays the gather struct; the view projects
 //! it. On a parse error only the `Status` row shows (JSON: an `error` key).
 //!
-//! The `object`-crate enums are foreign, so each is wrapped in a local newtype
-//! that prints its display label and serializes its lowercase token.
+//! The `object`-crate enums are foreign; the scalar fields project each to a
+//! [`Value::split`] (print label + JSON token). Only the composite fields
+//! (`Symbols`, `Universal`, `BuildId`) — whose JSON is an object — keep a
+//! typed `Serialize` struct, so editing print can't desync their shape.
 
 use object::{Architecture, BinaryFormat, Endianness, ObjectKind};
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
+use serde_json::json;
 
 use super::info::{BuildIdKind, ObjectInfo};
-use crate::info::{InfoNode, InfoValue, Value, Warn, render_info, thousands_sep};
+use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
 use crate::theme::PeekTheme;
 
 /// Themed terminal object-file section.
@@ -40,25 +43,25 @@ struct ObjectView {
 
     #[info(label = "Format")]
     #[serde(rename = "format", skip_serializing_if = "Option::is_none")]
-    format: Option<Fmt>,
+    format: Option<Value>,
     #[info(label = "Architecture")]
     #[serde(rename = "architecture", skip_serializing_if = "Option::is_none")]
-    architecture: Option<Arch>,
+    architecture: Option<Value>,
     #[info(label = "Universal", skip_if = "Option::is_none")]
     #[serde(flatten)]
     universal: Option<Universal>,
     #[info(label = "Type")]
     #[serde(rename = "kind", skip_serializing_if = "Option::is_none")]
-    kind: Option<Kind>,
+    kind: Option<Value>,
     #[info(label = "Class")]
     #[serde(rename = "is_64", skip_serializing_if = "Option::is_none")]
-    class: Option<Class>,
+    class: Option<Value>,
     #[info(label = "Endianness")]
     #[serde(rename = "endianness", skip_serializing_if = "Option::is_none")]
-    endianness: Option<Endian>,
+    endianness: Option<Value>,
     #[info(label = "Entry point")]
     #[serde(rename = "entry", skip_serializing_if = "Option::is_none")]
-    entry: Option<Entry>,
+    entry: Option<Value>,
     #[info(label = "Sections")]
     #[serde(rename = "section_count", skip_serializing_if = "Option::is_none")]
     sections: Option<Value>,
@@ -67,13 +70,13 @@ struct ObjectView {
     symbols: Option<Symbols>,
     #[info(label = "Debug info")]
     #[serde(rename = "has_debug_info", skip_serializing_if = "Option::is_none")]
-    debug: Option<DebugInfo>,
+    debug: Option<Value>,
     #[info(nest)]
     #[serde(rename = "build_id", skip_serializing_if = "Option::is_none")]
     build_id: Option<BuildId>,
     #[info(label = "Linked libs", skip_if = "Option::is_none")]
     #[serde(rename = "linked_libraries", skip_serializing_if = "Option::is_none")]
-    linked: Option<LinkedLibs>,
+    linked: Option<Value>,
 }
 
 impl From<&ObjectInfo> for ObjectView {
@@ -103,22 +106,48 @@ impl From<&ObjectInfo> for ObjectView {
         ObjectView {
             status: None,
             error: None,
-            format: Some(Fmt(meta.format)),
-            architecture: Some(Arch(meta.architecture)),
+            format: Some(Value::labelled(
+                format_label(meta.format),
+                format_token(meta.format),
+            )),
+            architecture: Some(Value::labelled(
+                arch_label(meta.architecture),
+                arch_token(meta.architecture),
+            )),
             universal: (!meta.universal.is_empty()).then(|| Universal {
                 archs: meta.universal.clone(),
                 selected: meta.universal_selected,
             }),
-            kind: Some(Kind(meta.kind)),
-            class: Some(Class(meta.is_64)),
-            endianness: Some(Endian(meta.endianness)),
-            entry: meta.entry.map(Entry),
+            kind: Some(Value::labelled(
+                kind_label(meta.kind),
+                kind_token(meta.kind),
+            )),
+            class: Some(Value::split(
+                if meta.is_64 { "64-bit" } else { "32-bit" },
+                Role::Value,
+                json!(meta.is_64),
+            )),
+            endianness: Some(Value::labelled(
+                endianness_label(meta.endianness),
+                endianness_token(meta.endianness),
+            )),
+            entry: meta
+                .entry
+                .map(|e| Value::split(format!("0x{e:x}"), Role::Value, json!(e))),
             sections: Some(Value::int(meta.section_count as i64)),
             symbols: Some(Symbols {
                 symbols: meta.symbol_count,
                 dynamic: meta.dynamic_symbol_count,
             }),
-            debug: Some(DebugInfo(meta.has_debug_info)),
+            debug: Some(Value::split(
+                if meta.has_debug_info {
+                    "present"
+                } else {
+                    "none"
+                },
+                Role::Value,
+                json!(meta.has_debug_info),
+            )),
             build_id: meta.build_id.as_ref().map(|(kind, bytes)| BuildId {
                 kind: build_id_token(kind),
                 label: build_id_label(kind),
@@ -129,87 +158,18 @@ impl From<&ObjectInfo> for ObjectView {
                 },
                 json_value: hex(bytes),
             }),
-            linked: (!meta.linked_libraries.is_empty())
-                .then(|| LinkedLibs(meta.linked_libraries.clone())),
+            linked: (!meta.linked_libraries.is_empty()).then(|| {
+                Value::split(
+                    meta.linked_libraries.join(", "),
+                    Role::Value,
+                    json!(meta.linked_libraries),
+                )
+            }),
         }
     }
 }
 
-// --- field newtypes over the foreign `object` enums -----------------------
-
-struct Fmt(BinaryFormat);
-impl InfoValue for Fmt {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(format_label(self.0))
-    }
-}
-impl Serialize for Fmt {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(format_token(self.0))
-    }
-}
-
-struct Arch(Architecture);
-impl InfoValue for Arch {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&arch_label(self.0))
-    }
-}
-impl Serialize for Arch {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(&arch_token(self.0))
-    }
-}
-
-struct Kind(ObjectKind);
-impl InfoValue for Kind {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(kind_label(self.0))
-    }
-}
-impl Serialize for Kind {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(kind_token(self.0))
-    }
-}
-
-struct Endian(Endianness);
-impl InfoValue for Endian {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(endianness_label(self.0))
-    }
-}
-impl Serialize for Endian {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_str(endianness_token(self.0))
-    }
-}
-
-/// Container class: print `64-bit` / `32-bit`, serialize the `is_64` bool.
-struct Class(bool);
-impl InfoValue for Class {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(if self.0 { "64-bit" } else { "32-bit" })
-    }
-}
-impl Serialize for Class {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_bool(self.0)
-    }
-}
-
-/// Entry point: print `0x…`, serialize the raw address.
-struct Entry(u64);
-impl InfoValue for Entry {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("0x{:x}", self.0))
-    }
-}
-impl Serialize for Entry {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(self.0)
-    }
-}
+// --- composite fields: typed `Serialize` structs (JSON is an object) -------
 
 /// Symbol tally. Print: `N (+M dynamic)` / `none (stripped)`. JSON:
 /// `symbol_count` + `dynamic_symbol_count`.
@@ -240,19 +200,6 @@ impl Serialize for Symbols {
         st.serialize_field("symbol_count", &self.symbols)?;
         st.serialize_field("dynamic_symbol_count", &self.dynamic)?;
         st.end()
-    }
-}
-
-/// Debug info: print `present` / `none`, serialize the `has_debug_info` bool.
-struct DebugInfo(bool);
-impl InfoValue for DebugInfo {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(if self.0 { "present" } else { "none" })
-    }
-}
-impl Serialize for DebugInfo {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_bool(self.0)
     }
 }
 
@@ -310,19 +257,6 @@ impl Serialize for BuildId {
         st.serialize_field("kind", self.kind)?;
         st.serialize_field("value", &self.json_value)?;
         st.end()
-    }
-}
-
-/// Linked libraries. Print: comma-joined value. JSON: a string array.
-struct LinkedLibs(Vec<String>);
-impl InfoValue for LinkedLibs {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&self.0.join(", "))
-    }
-}
-impl Serialize for LinkedLibs {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        self.0.serialize(ser)
     }
 }
 

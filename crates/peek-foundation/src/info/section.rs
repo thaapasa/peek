@@ -195,7 +195,158 @@ impl MaybeZero for super::Value {
             Value::Size(n) | Value::Count(n) | Value::DurationMs(n) => *n == 0,
             Value::Int(n) => *n == 0,
             Value::Ratio(r) => *r == 0.0,
+            // A Split's value *is* its JSON payload, so `skip_if_zero` reads it
+            // directly: a numeric-zero payload hides the print row while JSON
+            // still carries the 0. Non-numeric payloads are never "zero".
+            Value::Split { json, .. } => json.as_f64() == Some(0.0),
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::info::{Role, Value};
+    use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+
+    fn plain_theme() -> PeekTheme {
+        let mut t = PeekTheme::from_syntect(&load_embedded_theme(
+            PeekThemeName::default().tmtheme_source(),
+        ));
+        // Plain so asserts can match raw substrings without SGR escapes.
+        t.style_mode = StyleMode::Plain;
+        t
+    }
+
+    /// A throwaway [`InfoView`] wrapping a fixed node list, so the walker can
+    /// be driven through its real public entry point.
+    struct Nodes(Vec<InfoNode>);
+    impl InfoView for Nodes {
+        fn info_nodes(&self, _theme: &PeekTheme) -> Vec<InfoNode> {
+            self.0.clone()
+        }
+    }
+
+    fn render(nodes: Vec<InfoNode>) -> Vec<String> {
+        let mut lines = Vec::new();
+        render_info(&mut lines, &Nodes(nodes), &plain_theme());
+        lines
+    }
+
+    fn row(label: &str, value: &str) -> InfoNode {
+        InfoNode::Row {
+            label: label.to_string().into(),
+            value: value.to_string(),
+        }
+    }
+    fn block(title: &str, body: Vec<InfoNode>) -> InfoNode {
+        InfoNode::Block {
+            title: title.to_string(),
+            body,
+        }
+    }
+
+    #[test]
+    fn renders_predicate() {
+        assert!(row("a", "b").renders());
+        assert!(InfoNode::Line("x".into()).renders());
+        // An empty block, and a block whose only child is an empty block, are
+        // both invisible — the all-optional-absent section vanishes.
+        assert!(!block("T", vec![]).renders());
+        assert!(!block("Outer", vec![block("Inner", vec![])]).renders());
+        // A single rendering descendant at any depth keeps the block alive.
+        assert!(block("T", vec![row("a", "b")]).renders());
+        assert!(
+            block(
+                "Outer",
+                vec![block("Inner", vec![InfoNode::Line("x".into())])]
+            )
+            .renders()
+        );
+    }
+
+    #[test]
+    fn empty_block_emits_nothing() {
+        // No header, no leading blank line — the block disappears entirely.
+        assert!(
+            render(vec![block("Stats", vec![])]).is_empty(),
+            "all-skipped block must vanish"
+        );
+    }
+
+    #[test]
+    fn nested_all_empty_block_vanishes() {
+        let out = render(vec![block("Outer", vec![block("Inner", vec![])])]);
+        assert!(
+            out.is_empty(),
+            "block of only-empty blocks must vanish: {out:?}"
+        );
+    }
+
+    #[test]
+    fn a_lone_line_keeps_its_block_alive() {
+        let out = render(vec![block("Outer", vec![InfoNode::Line("hello".into())])]);
+        assert!(
+            out.iter().any(|l| l.contains("Outer")),
+            "header present: {out:?}"
+        );
+        assert!(out.iter().any(|l| l.contains("hello")));
+    }
+
+    #[test]
+    fn block_with_row_renders_header_blank_and_row() {
+        let out = render(vec![block("Stats", vec![row("Lines", "10")])]);
+        // A rendered block is preceded by a blank separator line.
+        assert_eq!(out.first().map(String::as_str), Some(""));
+        assert!(out.iter().any(|l| l.contains("Stats")));
+        assert!(out.iter().any(|l| l.contains("Lines") && l.contains("10")));
+    }
+
+    #[test]
+    fn empty_subblock_pruned_while_parent_row_stays() {
+        let out = render(vec![block(
+            "Outer",
+            vec![block("EmptyInner", vec![]), row("Key", "val")],
+        )]);
+        assert!(out.iter().any(|l| l.contains("Outer")));
+        assert!(
+            out.iter().all(|l| !l.contains("EmptyInner")),
+            "pruned subblock header leaked: {out:?}"
+        );
+        assert!(out.iter().any(|l| l.contains("Key") && l.contains("val")));
+    }
+
+    #[test]
+    fn blanket_value_impls() {
+        let t = plain_theme();
+        assert_eq!(true.render_value(&t), "yes");
+        assert_eq!(false.render_value(&t), "no");
+        assert_eq!("x".render_value(&t), "x");
+        assert_eq!(
+            vec!["a".to_string(), "b".to_string()].render_value(&t),
+            "a, b"
+        );
+        assert_eq!(Some("z".to_string()).render_value(&t), "z");
+        // None renders empty — its row is meant to be skipped, not shown blank.
+        assert_eq!(None::<String>.render_value(&t), "");
+    }
+
+    #[test]
+    fn maybe_zero_covers_numeric_values_only() {
+        assert!(0u32.is_zero_value());
+        assert!(!3u32.is_zero_value());
+        assert!(Value::Count(0).is_zero_value());
+        assert!(!Value::Count(5).is_zero_value());
+        assert!(Value::Ratio(0.0).is_zero_value());
+        // A non-numeric value is never "zero", even if it stringifies to "0".
+        assert!(!Value::Text("0".into()).is_zero_value());
+        assert!(!Value::Bool(false).is_zero_value());
+        // A Split reads its JSON payload: numeric zero is zero, anything else
+        // (non-zero number, string, bool) is not.
+        assert!(Value::split("0 min", Role::Value, serde_json::json!(0)).is_zero_value());
+        assert!(!Value::split("5 min", Role::Value, serde_json::json!(5)).is_zero_value());
+        assert!(!Value::split("x", Role::Value, serde_json::json!("x")).is_zero_value());
+        assert!(!Value::split("no", Role::Value, serde_json::json!(false)).is_zero_value());
     }
 }

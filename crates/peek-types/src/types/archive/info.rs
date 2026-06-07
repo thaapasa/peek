@@ -5,8 +5,10 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
+use serde_json::json;
+
 use super::reader::list_entries;
-use crate::info::{Extras, InfoNode, InfoValue, Value, Warn, render_info, thousands_sep};
+use crate::info::{Extras, InfoNode, Role, Value, Warn, render_info, thousands_sep};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::theme::PeekTheme;
@@ -171,7 +173,7 @@ struct ArchiveMain {
         rename = "total_uncompressed_size",
         skip_serializing_if = "Option::is_none"
     )]
-    total_size: Option<TotalSize>,
+    total_size: Option<Value>,
 }
 
 impl From<&ArchiveStats> for ArchiveView {
@@ -184,26 +186,19 @@ impl From<&ArchiveStats> for ArchiveView {
                 entry_count: ok.then(|| Value::count(s.entry_count as u64)),
                 file_count: ok.then(|| Value::count(s.file_count as u64)),
                 dir_count: ok.then(|| Value::count(s.dir_count as u64)),
-                total_size: ok.then_some(TotalSize(s.total_uncompressed_size)),
+                total_size: ok.then(|| {
+                    Value::split(
+                        format!("{} bytes", thousands_sep(s.total_uncompressed_size)),
+                        Role::Value,
+                        json!(s.total_uncompressed_size),
+                    )
+                }),
             },
             static_lib: s.static_lib.as_ref().map(|lib| StaticLib {
                 object_members: lib.object_members,
                 architecture: lib.architecture.clone(),
             }),
         }
-    }
-}
-
-/// Total uncompressed size: print `N bytes`, serialize the raw byte count.
-struct TotalSize(u64);
-impl InfoValue for TotalSize {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(&format!("{} bytes", thousands_sep(self.0)))
-    }
-}
-impl Serialize for TotalSize {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(self.0)
     }
 }
 

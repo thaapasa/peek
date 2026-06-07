@@ -4,8 +4,9 @@
 //! it.
 
 use serde::{Serialize, Serializer};
+use serde_json::json;
 
-use crate::info::{InfoValue, Value, render_info, thousands_sep};
+use crate::info::{Role, Value, render_info, thousands_sep};
 use crate::input::detect::ComicFormat;
 use crate::theme::PeekTheme;
 use crate::types::comic::ComicStats;
@@ -32,7 +33,7 @@ struct ComicView {
     #[info(label = "Pages", skip_if_zero)]
     page_count: Value,
     #[info(label = "Image bytes", skip_if_zero)]
-    total_image_bytes: ImageBytes,
+    total_image_bytes: Value,
 }
 
 impl ComicView {
@@ -46,30 +47,12 @@ impl From<&ComicStats> for ComicView {
         ComicView {
             format: s.format,
             page_count: Value::count(s.page_count as u64),
-            total_image_bytes: ImageBytes(s.total_image_bytes),
+            total_image_bytes: Value::split(
+                format!("{} bytes", thousands_sep(s.total_image_bytes)),
+                Role::Muted,
+                json!(s.total_image_bytes),
+            ),
         }
-    }
-}
-
-/// Total image-bytes field: a raw JSON number, but a muted `N bytes` print
-/// row.
-struct ImageBytes(u64);
-
-impl InfoValue for ImageBytes {
-    fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_muted(&format!("{} bytes", thousands_sep(self.0)))
-    }
-}
-
-impl crate::info::MaybeZero for ImageBytes {
-    fn is_zero_value(&self) -> bool {
-        self.0 == 0
-    }
-}
-
-impl Serialize for ImageBytes {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        ser.serialize_u64(self.0)
     }
 }
 
