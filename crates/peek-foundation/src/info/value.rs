@@ -139,6 +139,28 @@ impl Value {
             json: serde_json::Value::String(token.into()),
         }
     }
+
+    /// A string printed in the muted colour, serialized as the bare string —
+    /// the cell form of the [`Muted`] newtype, for [`InfoRow`](super::InfoRow).
+    pub fn muted(s: impl Into<String>) -> Self {
+        Self::roled(s, Role::Muted)
+    }
+    /// A string printed in the accent colour, serialized as the bare string.
+    pub fn accent(s: impl Into<String>) -> Self {
+        Self::roled(s, Role::Accent)
+    }
+    /// A string printed in the warning colour, serialized as the bare string.
+    pub fn warn(s: impl Into<String>) -> Self {
+        Self::roled(s, Role::Warn)
+    }
+    fn roled(s: impl Into<String>, role: Role) -> Self {
+        let s = s.into();
+        Value::Split {
+            json: serde_json::Value::String(s.clone()),
+            text: s,
+            role,
+        }
+    }
 }
 
 impl Serialize for Value {
