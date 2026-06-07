@@ -1,14 +1,16 @@
-//! Renders a [`FontInfo`] via a single [`FontView`] driving both the themed
-//! terminal output ([`InfoView`](crate::info::InfoView)) and the
-//! `--info --json` form (`serde::Serialize`).
-//!
-//! The per-face headers aren't standard section rules (`── Title` with no
-//! trailing dashes), so faces emit as a blank `Line` + a custom header `Line`
-//! followed by top-level field rows rather than `Block`s.
+//! The Font section. Each face is an irregular block — `── Title` headers with
+//! no trailing dashes, and rows whose print and JSON forms diverge (a
+//! `Weight` label vs the raw OS/2 number, a `Style`/`Pitch`/`Hinting` row shown
+//! only when set vs an always-present bool). The `#[derive(InfoView)]` can't
+//! express that, so each face builds one [`InfoRow`] list that drives *both*
+//! outputs — [`push_rows`] for the themed lines, [`rows_to_json`] for the
+//! object. The section frame (format / face_count / faces array) stays manual.
 
-use serde::{Serialize, Serializer};
+use serde_json::json;
 
-use crate::info::{InfoNode, paint_count, render_info};
+use crate::info::{
+    InfoNode, InfoRow, Role, Value, paint_count, push_rows, render_info, rows_to_json,
+};
 use crate::theme::PeekTheme;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
@@ -20,10 +22,19 @@ pub fn render_section(lines: &mut Vec<String>, info: &FontInfo, theme: &PeekThem
 
 /// Typed `--info --json` view of the Font section, nested under `"font"`.
 pub fn json_section(info: &FontInfo) -> (&'static str, serde_json::Value) {
-    (
-        "font",
-        serde_json::to_value(FontView(info)).expect("font info view serializes"),
-    )
+    let faces: Vec<serde_json::Value> = info
+        .faces
+        .iter()
+        .map(|f| serde_json::Value::Object(rows_to_json(&face_rows(f))))
+        .collect();
+    let mut obj = serde_json::Map::new();
+    obj.insert("format".into(), json!(format_token(info.format)));
+    obj.insert("face_count".into(), json!(info.face_count));
+    obj.insert("faces".into(), serde_json::Value::Array(faces));
+    if !info.parse_errors.is_empty() {
+        obj.insert("parse_errors".into(), json!(info.parse_errors));
+    }
+    ("font", serde_json::Value::Object(obj))
 }
 
 struct FontView<'a>(&'a FontInfo);
@@ -56,7 +67,11 @@ impl crate::info::InfoView for FontView<'_> {
                 theme.paint_muted("\u{2500}\u{2500}"),
                 theme.paint_heading(&title),
             )));
-            nodes.extend(face_rows(face, theme));
+            // One row list drives the print body here and the JSON in
+            // `json_section`; `push_rows` emits the print rows as `Line`s.
+            let mut body = Vec::new();
+            push_rows(&mut body, &face_rows(face), theme);
+            nodes.extend(body.into_iter().map(InfoNode::Line));
         }
 
         for err in &info.parse_errors {
@@ -70,91 +85,96 @@ impl crate::info::InfoView for FontView<'_> {
     }
 }
 
-impl Serialize for FontView<'_> {
-    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
-        let info = self.0;
-        let mut obj = serde_json::json!({
-            "format": format_token(info.format),
-            "face_count": info.face_count,
-        });
-        let faces: Vec<serde_json::Value> = info.faces.iter().map(face_json).collect();
-        obj["faces"] = serde_json::json!(faces);
-        if !info.parse_errors.is_empty() {
-            obj["parse_errors"] = serde_json::json!(info.parse_errors);
-        }
-        obj.serialize(ser)
-    }
-}
-
-/// Push a `label  value` row, skipping empty values.
-fn named(rows: &mut Vec<InfoNode>, label: &'static str, value: &str, theme: &PeekTheme) {
-    if !value.is_empty() {
-        rows.push(InfoNode::Row {
-            label: label.into(),
-            value: theme.paint_value(value),
-        });
-    }
-}
-
-fn face_rows(face: &FaceInfo, theme: &PeekTheme) -> Vec<InfoNode> {
-    let mut rows = Vec::new();
-    named(&mut rows, "Family", &face.family, theme);
-    named(&mut rows, "Subfamily", &face.subfamily, theme);
-    named(&mut rows, "Postscript", &face.postscript_name, theme);
-    named(&mut rows, "Version", &face.version, theme);
-    rows.push(InfoNode::Row {
-        label: "Weight".into(),
-        value: paint_weight(face.weight, theme),
-    });
-    rows.push(InfoNode::Row {
-        label: "Width".into(),
-        value: theme.paint_value(width_label(face.width)),
-    });
+/// The one row list per face — feeding both outputs.
+fn face_rows(face: &FaceInfo) -> Vec<InfoRow> {
+    let mut r = Vec::new();
+    // `index` and `full_name` appear in the title / JSON only, not as print rows.
+    r.push(InfoRow::json_only("index", Value::int(face.index as i64)));
+    named(&mut r, "Family", "family", &face.family);
+    json_text(&mut r, "full_name", &face.full_name);
+    named(&mut r, "Subfamily", "subfamily", &face.subfamily);
+    named(
+        &mut r,
+        "Postscript",
+        "postscript_name",
+        &face.postscript_name,
+    );
+    named(&mut r, "Version", "version", &face.version);
+    // Print the labelled weight/width; JSON keeps the raw OS/2 numbers.
+    r.push(InfoRow::new(
+        "Weight",
+        "weight",
+        Value::split(weight_text(face.weight), Role::Value, json!(face.weight)),
+    ));
+    r.push(InfoRow::new(
+        "Width",
+        "width",
+        Value::split(width_label(face.width), Role::Value, json!(face.width)),
+    ));
+    // JSON keeps the bool always; print shows the row only when set.
+    r.push(InfoRow::json_only("italic", Value::bool(face.italic)));
     if face.italic {
-        rows.push(InfoNode::Row {
-            label: "Style".into(),
-            value: theme.paint_value("Italic"),
-        });
+        r.push(InfoRow::print_only("Style", Value::text("Italic")));
     }
+    r.push(InfoRow::json_only(
+        "monospaced",
+        Value::bool(face.monospaced),
+    ));
     if face.monospaced {
-        rows.push(InfoNode::Row {
-            label: "Pitch".into(),
-            value: theme.paint_value("Monospaced"),
-        });
+        r.push(InfoRow::print_only("Pitch", Value::text("Monospaced")));
     }
-    rows.push(InfoNode::Row {
-        label: "Glyphs".into(),
-        value: paint_count(face.glyph_count as usize, theme),
-    });
+    r.push(InfoRow::new(
+        "Glyphs",
+        "glyph_count",
+        Value::count(face.glyph_count as u64),
+    ));
     if face.units_per_em > 0 {
-        rows.push(InfoNode::Row {
-            label: "Units / em".into(),
-            value: paint_count(face.units_per_em as usize, theme),
-        });
+        r.push(InfoRow::new(
+            "Units / em",
+            "units_per_em",
+            Value::count(face.units_per_em as u64),
+        ));
     }
     if face.codepoint_count > 0 {
-        rows.push(InfoNode::Row {
-            label: "Codepoints".into(),
-            value: paint_count(face.codepoint_count as usize, theme),
-        });
+        r.push(InfoRow::new(
+            "Codepoints",
+            "codepoint_count",
+            Value::count(face.codepoint_count as u64),
+        ));
     }
     if !face.scripts.is_empty() {
-        rows.push(InfoNode::Row {
-            label: "Scripts".into(),
-            value: theme.paint_value(&face.scripts.join(", ")),
-        });
+        r.push(InfoRow::new(
+            "Scripts",
+            "scripts",
+            Value::split(face.scripts.join(", "), Role::Value, json!(face.scripts)),
+        ));
     }
+    r.push(InfoRow::json_only(
+        "hinting_present",
+        Value::bool(face.hinting_present),
+    ));
     if face.hinting_present {
-        rows.push(InfoNode::Row {
-            label: "Hinting".into(),
-            value: theme.paint_value("present"),
-        });
+        r.push(InfoRow::print_only("Hinting", Value::text("present")));
     }
-    named(&mut rows, "Designer", &face.designer, theme);
-    named(&mut rows, "Vendor", &face.vendor, theme);
-    named(&mut rows, "Copyright", &face.copyright, theme);
-    named(&mut rows, "License", &face.license_url, theme);
-    rows
+    named(&mut r, "Designer", "designer", &face.designer);
+    named(&mut r, "Vendor", "vendor", &face.vendor);
+    named(&mut r, "Copyright", "copyright", &face.copyright);
+    named(&mut r, "License", "license_url", &face.license_url);
+    r
+}
+
+/// A text field present in both outputs, skipped from both when empty.
+fn named(rows: &mut Vec<InfoRow>, label: &'static str, key: &'static str, value: &str) {
+    if !value.is_empty() {
+        rows.push(InfoRow::new(label, key, Value::text(value)));
+    }
+}
+
+/// A JSON-only text field, omitted when empty.
+fn json_text(rows: &mut Vec<InfoRow>, key: &'static str, value: &str) {
+    if !value.is_empty() {
+        rows.push(InfoRow::json_only(key, Value::text(value)));
+    }
 }
 
 fn face_title(face: &FaceInfo, face_count: u32) -> String {
@@ -179,9 +199,9 @@ fn face_title(face: &FaceInfo, face_count: u32) -> String {
     format!("{base}{suffix}")
 }
 
-/// Format a numeric weight as `<class> (<name>)` when it matches a canonical
-/// OS/2 class, or bare number otherwise.
-fn paint_weight(weight: u16, theme: &PeekTheme) -> String {
+/// A numeric weight as `<class> (<name>)` when it matches a canonical OS/2
+/// class, or the bare number otherwise.
+fn weight_text(weight: u16) -> String {
     let name = match weight {
         100 => Some("Thin"),
         200 => Some("ExtraLight"),
@@ -194,11 +214,10 @@ fn paint_weight(weight: u16, theme: &PeekTheme) -> String {
         900 => Some("Black"),
         _ => None,
     };
-    let text = match name {
+    match name {
         Some(label) => format!("{weight} ({label})"),
         None => weight.to_string(),
-    };
-    theme.paint_value(&text)
+    }
 }
 
 fn width_label(width: u16) -> &'static str {
@@ -224,40 +243,4 @@ fn format_token(format: FontFormat) -> &'static str {
         FontFormat::Woff => "woff",
         FontFormat::Woff2 => "woff2",
     }
-}
-
-fn face_json(face: &FaceInfo) -> serde_json::Value {
-    let mut obj = serde_json::json!({
-        "index": face.index,
-        "weight": face.weight,
-        "width": face.width,
-        "italic": face.italic,
-        "monospaced": face.monospaced,
-        "hinting_present": face.hinting_present,
-        "glyph_count": face.glyph_count,
-    });
-    let mut put = |key: &str, value: &str| {
-        if !value.is_empty() {
-            obj[key] = serde_json::json!(value);
-        }
-    };
-    put("family", &face.family);
-    put("subfamily", &face.subfamily);
-    put("full_name", &face.full_name);
-    put("postscript_name", &face.postscript_name);
-    put("version", &face.version);
-    put("copyright", &face.copyright);
-    put("designer", &face.designer);
-    put("vendor", &face.vendor);
-    put("license_url", &face.license_url);
-    if face.units_per_em > 0 {
-        obj["units_per_em"] = serde_json::json!(face.units_per_em);
-    }
-    if face.codepoint_count > 0 {
-        obj["codepoint_count"] = serde_json::json!(face.codepoint_count);
-    }
-    if !face.scripts.is_empty() {
-        obj["scripts"] = serde_json::json!(face.scripts);
-    }
-    obj
 }
