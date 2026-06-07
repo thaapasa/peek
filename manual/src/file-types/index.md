@@ -26,10 +26,10 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Comic archives    | CBZ                                                         |
 | Disk images       | ISO 9660, DMG (UDIF trailer)                                |
 | Filesystem        | Directories (one-level listing)                             |
-| Executables       | ELF, Mach-O, PE / COFF object files                         |
+| Executables       | ELF, Mach-O, PE / COFF, WebAssembly (`.wasm`) object files  |
 | Java classfiles   | .class files — header, fields, methods                      |
 | Certificates      | PEM X.509 / CSR / CRL / keys / OpenSSH public keys          |
-| Fonts             | TrueType, OpenType, TTC / OTC collections (metadata + specimen render) |
+| Fonts             | TrueType, OpenType, TTC / OTC collections, WOFF / WOFF2 (metadata + specimen render) |
 | Binary / unknown  | Hex dump (`hexdump -C` style)                               |
 
 Detection logic: [`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).

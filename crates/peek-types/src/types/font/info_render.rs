@@ -238,3 +238,74 @@ fn format_token(format: FontFormat) -> &'static str {
         FontFormat::Woff2 => "woff2",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_face() -> FaceInfo {
+        FaceInfo {
+            index: 0,
+            family: "Inter".to_string(),
+            subfamily: "Regular".to_string(),
+            full_name: "Inter Regular".to_string(),
+            postscript_name: "Inter-Regular".to_string(),
+            version: "1.0".to_string(),
+            copyright: String::new(),
+            designer: String::new(),
+            vendor: String::new(),
+            license_url: String::new(),
+            units_per_em: 2048,
+            glyph_count: 1234,
+            monospaced: false,
+            weight: 400,
+            width: 5,
+            italic: true,
+            hinting_present: true,
+            codepoint_count: 2500,
+            scripts: vec!["Latin".to_string(), "Greek".to_string()],
+        }
+    }
+
+    /// One face's JSON object: the labelled weight/width serialize as the raw
+    /// OS/2 numbers, the always-present bools carry their JSON keys, and the
+    /// human-only print rows (`Style`, `Pitch`, `Hinting`) stay out of JSON.
+    #[test]
+    fn face_json_shape() {
+        let obj = serde_json::Value::Object(rows_to_json(&face_rows(&sample_face())));
+
+        assert_eq!(obj["index"], json!(0));
+        assert_eq!(obj["family"], json!("Inter"));
+        assert_eq!(obj["full_name"], json!("Inter Regular"));
+        // Weight/width serialize as the raw numbers, not `400 (Regular)`.
+        assert_eq!(obj["weight"], json!(400));
+        assert_eq!(obj["width"], json!(5));
+        // Bools always keyed; their print rows are JSON-keyless.
+        assert_eq!(obj["italic"], json!(true));
+        assert_eq!(obj["monospaced"], json!(false));
+        assert_eq!(obj["hinting_present"], json!(true));
+        assert!(obj.get("Style").is_none(), "print label leaked: {obj}");
+        assert!(obj.get("Pitch").is_none(), "print label leaked: {obj}");
+        assert!(obj.get("Hinting").is_none(), "print label leaked: {obj}");
+        assert_eq!(obj["glyph_count"], json!(1234));
+        assert_eq!(obj["scripts"], json!(["Latin", "Greek"]));
+    }
+
+    /// The section frame: `font` key, `format` token, `face_count`, the faces
+    /// array, and `parse_errors` only when non-empty.
+    #[test]
+    fn section_frame() {
+        let info = FontInfo {
+            format: FontFormat::OpenType,
+            face_count: 1,
+            faces: vec![sample_face()],
+            parse_errors: Vec::new(),
+        };
+        let (key, value) = json_section(&info);
+        assert_eq!(key, "font");
+        assert_eq!(value["format"], json!("opentype"));
+        assert_eq!(value["face_count"], json!(1));
+        assert_eq!(value["faces"].as_array().unwrap().len(), 1);
+        assert!(value.get("parse_errors").is_none());
+    }
+}

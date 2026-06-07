@@ -21,7 +21,7 @@ Modern terminal file viewer — preview any file, any format.
 - **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards with human date-times, grouped fields, recurrence
 - **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
 - **Containers** — ZIP / tar / 7z / cpio / ar archives, ISO disk images, audio metadata
-- **Executables** — ELF / Mach-O / PE object files: header, sections, symbols
+- **Executables** — ELF / Mach-O / PE / WebAssembly (`.wasm`) object files: header, sections, symbols
 - **Java classfiles** — `.class` header, fields, methods with decoded signatures
 - **Certificates and keys** — PEM / DER X.509 / CSR / CRL / keys / OpenSSH pubkeys / JWK: subject, validity, SANs, fingerprints, thumbprints
 - **Fonts** — TrueType / OpenType / TTC collections / WOFF / WOFF2: rasterised specimen render + family / weight / glyphs / script coverage

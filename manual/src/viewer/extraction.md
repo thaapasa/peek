@@ -10,6 +10,8 @@ Pull an inner item out of a container as a standalone file.
   temp file is unlinked automatically when the extracted view is closed.
 - **ISO entries** (`.iso`) — zero-copy via a `FileRange` view over the backing image. No
   decompression, no buffering, multi-GB ISOs unaffected.
+- **Email attachments** (`.eml`) — extract a single MIME attachment by its inner path as a memory
+  source that re-detects through the recursive-peek pipeline.
 - **PDF embedded files** (`/EmbeddedFiles` attachments) — extracted as a memory source.
 - **PDF inline images** — `pages/page{N}/image{M}.{ext}` pseudo-paths for image XObjects.
 - **Audio embeds** — `pictures/<usage>.<ext>` per visual, plus `lyrics/lyrics.txt`.

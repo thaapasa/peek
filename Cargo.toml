@@ -42,7 +42,7 @@ peek-foundation-derive = { path = "crates/peek-foundation/derive" }
 peek-foundation = { path = "crates/peek-foundation" }
 peek-types = { path = "crates/peek-types" }
 
-# Proc-macro toolkit for the `#[derive(InfoSection)]` macro (build-time only;
+# Proc-macro toolkit for the `#[derive(InfoView)]` macro (build-time only;
 # no runtime dependency added).
 syn = { version = "2", features = ["full"] }
 quote = "1"

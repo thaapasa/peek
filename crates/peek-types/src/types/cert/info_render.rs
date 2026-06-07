@@ -389,3 +389,100 @@ fn key_type_token(kt: &KeyType) -> &'static str {
         KeyType::Other => "other",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_cert() -> CertificateEntry {
+        CertificateEntry {
+            label: "CERTIFICATE".to_string(),
+            subject: "CN=example.com".to_string(),
+            issuer: "CN=Test CA".to_string(),
+            serial_hex: "01:23:AB".to_string(),
+            not_before: "2026-01-15T00:00:00Z".to_string(),
+            not_after: "2027-01-15T00:00:00Z".to_string(),
+            days_remaining: Some(222),
+            san_dns: vec!["example.com".to_string(), "www.example.com".to_string()],
+            san_ip: Vec::new(),
+            san_email: Vec::new(),
+            san_uri: Vec::new(),
+            key_algorithm: "RSA".to_string(),
+            key_size_bits: Some(2048),
+            signature_algorithm: "SHA256-RSA".to_string(),
+            fingerprint_sha1: "AB:CD".to_string(),
+            fingerprint_sha256: "EF:01".to_string(),
+            is_ca: true,
+            self_signed: false,
+            version: 3,
+            key_usages: vec!["digitalSignature".to_string()],
+            extended_key_usages: Vec::new(),
+        }
+    }
+
+    /// The JSON object for a certificate entry: keys present, the print≠json
+    /// divergences resolved to the machine form, print-only rows absent.
+    #[test]
+    fn certificate_json_shape() {
+        let c = sample_cert();
+        let obj = serde_json::Value::Object(rows_to_json(&entry_rows(&CertEntry::Certificate(
+            Box::new(c),
+        ))));
+
+        assert_eq!(obj["kind"], json!("certificate"));
+        assert_eq!(obj["subject"], json!("CN=example.com"));
+        assert_eq!(obj["version"], json!(3));
+        // Validity split: the print `Days Left` line has no key; the raw count does.
+        assert_eq!(obj["days_remaining"], json!(222));
+        assert!(obj.get("Days Left").is_none(), "print label leaked: {obj}");
+        // Public Key split: one print row, two flat JSON keys.
+        assert_eq!(obj["key_algorithm"], json!("RSA"));
+        assert_eq!(obj["key_size_bits"], json!(2048));
+        assert!(obj.get("Public Key").is_none(), "print label leaked: {obj}");
+        // SAN serializes as an array, not the comma-joined print string.
+        assert_eq!(
+            obj["san_dns"],
+            json!(["example.com", "www.example.com"]),
+            "SAN must be an array: {obj}"
+        );
+        assert_eq!(obj["key_usages"], json!(["digitalSignature"]));
+        // Bools are always present; their print rows (`CA`) are JSON-keyless.
+        assert_eq!(obj["is_ca"], json!(true));
+        assert_eq!(obj["self_signed"], json!(false));
+        assert!(obj.get("CA").is_none(), "print label leaked: {obj}");
+        assert_eq!(obj["fingerprint_sha256"], json!("EF:01"));
+    }
+
+    /// The section frame: `cert` key, `source_label`, the entries array, and
+    /// `parse_errors` only when non-empty.
+    #[test]
+    fn section_frame() {
+        let info = CertInfo {
+            text: None,
+            source_label: "PEM",
+            entries: vec![CertEntry::Certificate(Box::new(sample_cert()))],
+            parse_errors: Vec::new(),
+        };
+        let (key, value) = json_section(&info);
+        assert_eq!(key, "cert");
+        assert_eq!(value["source_label"], json!("PEM"));
+        assert_eq!(value["entries"].as_array().unwrap().len(), 1);
+        assert!(value.get("parse_errors").is_none());
+    }
+
+    /// A private-key entry: `kind`/`key_type` tokens, the human `Type` print
+    /// row stays out of JSON, bits surface as a number.
+    #[test]
+    fn private_key_json_shape() {
+        let k = KeyEntry {
+            label: "PRIVATE KEY".to_string(),
+            key_type: KeyType::Rsa,
+            key_size_bits: Some(4096),
+        };
+        let obj = serde_json::Value::Object(rows_to_json(&entry_rows(&CertEntry::PrivateKey(k))));
+        assert_eq!(obj["kind"], json!("private_key"));
+        assert_eq!(obj["key_type"], json!("rsa"));
+        assert_eq!(obj["key_size_bits"], json!(4096));
+        assert!(obj.get("Type").is_none(), "print label leaked: {obj}");
+    }
+}

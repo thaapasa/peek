@@ -1,6 +1,6 @@
 [package]
 name = "peek-foundation-derive"
-description = "peek-foundation proc-macros — #[derive(InfoSection)] for the info view model"
+description = "peek-foundation proc-macros — #[derive(InfoView)] for the info view model"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

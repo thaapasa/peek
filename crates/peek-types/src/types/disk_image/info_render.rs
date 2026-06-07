@@ -884,4 +884,133 @@ mod tests {
             "MBR must not get a full block: {blob}"
         );
     }
+
+    fn sample_dmg() -> DmgMeta {
+        DmgMeta {
+            udif_version: 4,
+            flags: 0x1,
+            variant: DmgVariant::Device,
+            total_size_bytes: 200 * 1024 * 1024,
+            data_fork_length: 60 * 1024 * 1024,
+            plist_present: true,
+            plist_length: 4096,
+            plist_offset: 1000,
+            partitions: vec![DmgPartition {
+                name: "disk image (Apple_HFS : 4)".to_string(),
+                fs_type: Some("Apple_HFS".to_string()),
+                start_sector: 40,
+                size_bytes: 2048 * 512,
+                stored_bytes: 270,
+                compression: vec!["zlib"],
+                chunk_count: 408,
+                run_histogram: vec![("raw", 1), ("zlib", 407)],
+            }],
+            segment_number: 1,
+            segment_count: 1,
+            data_checksum_type: DmgChecksumKind::Crc32,
+            master_checksum_type: DmgChecksumKind::Sha256,
+        }
+    }
+
+    /// The DMG JSON object: labelled enums serialize as tokens, the byte-count
+    /// print lines serialize as raw numbers, `flags` is the raw bitfield, and
+    /// the human print rows (`Volume size`, `Flags`) carry no JSON key.
+    #[test]
+    fn dmg_json_shape() {
+        let (key, value) = json_section(&DiskImageInfo {
+            format_name: "DMG",
+            meta: Some(DiskImageMeta::Dmg(sample_dmg())),
+            error: None,
+        });
+        assert_eq!(key, "disk_image");
+        assert_eq!(value["format"], json!("DMG"));
+        let dmg = &value["dmg"];
+        assert_eq!(dmg["udif_version"], json!(4));
+        // Labelled enums → tokens, not the `device image` / `CRC-32` print labels.
+        assert_eq!(dmg["variant"], json!("device"));
+        assert_eq!(dmg["data_checksum_type"], json!("crc32"));
+        assert_eq!(dmg["master_checksum_type"], json!("sha256"));
+        // Byte counts as raw numbers; the `Volume size` print row is keyless.
+        assert_eq!(dmg["total_size_bytes"], json!(200 * 1024 * 1024));
+        assert_eq!(dmg["data_fork_length"], json!(60 * 1024 * 1024));
+        assert!(
+            dmg.get("Volume size").is_none(),
+            "print label leaked: {dmg}"
+        );
+        // Flags as the raw bitfield, not the decoded `flattened` string.
+        assert_eq!(dmg["flags"], json!(1));
+        assert!(dmg.get("Flags").is_none(), "print label leaked: {dmg}");
+        // Partition JSON-only raw fields and the run_histogram object.
+        let part = &dmg["partitions"][0];
+        assert_eq!(part["name"], json!("disk image (Apple_HFS : 4)"));
+        assert_eq!(part["fs_type"], json!("Apple_HFS"));
+        assert_eq!(part["start_sector"], json!(40));
+        assert_eq!(part["size_bytes"], json!(2048 * 512));
+        assert_eq!(part["stored_bytes"], json!(270));
+        assert_eq!(part["chunk_count"], json!(408));
+        assert_eq!(part["compression"], json!(["zlib"]));
+        assert_eq!(part["run_histogram"], json!({ "raw": 1, "zlib": 407 }));
+        // The derived human print rows have no JSON keys.
+        assert!(part.get("Logical size").is_none(), "leak: {part}");
+        assert!(part.get("Stored").is_none(), "leak: {part}");
+        assert!(part.get("Chunks").is_none(), "leak: {part}");
+    }
+
+    fn sample_iso() -> IsoVolumeMeta {
+        IsoVolumeMeta {
+            system_id: Some("LINUX".to_string()),
+            volume_label: Some("MY_DISC".to_string()),
+            volume_set_id: None,
+            publisher: None,
+            data_preparer: None,
+            application: None,
+            block_size: 2048,
+            block_count: 81720,
+            creation: None,
+            modification: None,
+            expiration: None,
+            effective: None,
+            joliet: true,
+            el_torito: false,
+            el_torito_id: None,
+        }
+    }
+
+    /// The ISO JSON object: the composite `Volume size` / `Extensions` print
+    /// rows resolve to flat numeric / bool keys, and the print labels are absent.
+    #[test]
+    fn iso_json_shape() {
+        let (_, value) = json_section(&DiskImageInfo {
+            format_name: "ISO 9660",
+            meta: Some(DiskImageMeta::Iso(sample_iso())),
+            error: None,
+        });
+        let iso = &value["iso"];
+        assert_eq!(iso["volume_label"], json!("MY_DISC"));
+        assert_eq!(iso["system_id"], json!("LINUX"));
+        // `Volume size` print line splits into flat block_size / block_count.
+        assert_eq!(iso["block_size"], json!(2048));
+        assert_eq!(iso["block_count"], json!(81720));
+        assert!(
+            iso.get("Volume size").is_none(),
+            "print label leaked: {iso}"
+        );
+        // `Extensions` print line splits into the joliet / el_torito bools.
+        assert_eq!(iso["joliet"], json!(true));
+        assert_eq!(iso["el_torito"], json!(false));
+        assert!(iso.get("Extensions").is_none(), "print label leaked: {iso}");
+    }
+
+    /// An errored image: the `error` surfaces, no variant payload is built.
+    #[test]
+    fn error_json_shape() {
+        let (_, value) = json_section(&DiskImageInfo {
+            format_name: "DMG",
+            meta: None,
+            error: Some("truncated trailer".to_string()),
+        });
+        assert_eq!(value["format"], json!("DMG"));
+        assert_eq!(value["error"], json!("truncated trailer"));
+        assert!(value.get("dmg").is_none());
+    }
 }

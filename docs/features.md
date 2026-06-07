@@ -363,7 +363,7 @@ yet supported — see [planned.md](planned.md).)
   attached image opens in the image viewer, and so on). Hidden when no attachments are present.
 - **Info** — PDF version (`1.4`, `1.7`, …), title, author, subject, keywords, creation /
   modification dates (PDF `D:YYYYMMDDHHMMSSO…` strings reformatted to `YYYY-MM-DD HH:MM:SS UTC`
-  / `±HH:MM`), page count, attachment count.
+  / `±HH:MM`), page count, attachment count, inline-image count.
 
 Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
 detects the `%PDF-` magic and routes to the PDF mode stack (a piped `.ai` lands here too,

@@ -21,7 +21,7 @@
 //! - `crate::input::*` → the `peek-io` + `peek-detect` re-export façade,
 //!   mirroring the binary's own `src/input` façade.
 
-// So the `#[derive(InfoSection)]` macro's fully-qualified `::peek_foundation::…`
+// So the `#[derive(InfoView)]` macro's fully-qualified `::peek_foundation::…`
 // paths resolve when the derive is used inside this crate too (it generates
 // the same absolute paths regardless of call site).
 extern crate self as peek_foundation;
