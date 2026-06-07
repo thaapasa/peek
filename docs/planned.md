@@ -7,20 +7,20 @@ For implemented (✅) and partial (◐) features, see [features.md](features.md)
 ## Detection hardening ☐
 
 The `peek-detect` crate split (see the archived
-[crate-split plan](archived/crate-split-plan.md)) was built to make these tractable: detection is now
-a small, reader-free, fuzzable surface. Full rationale + file/line references live in that plan's
-"Follow-up backlog" section; summary, ordered by value:
+[crate-split plan](archived/crate-split-plan.md)) was built to make these tractable: detection is
+now a small, reader-free, fuzzable surface. Full rationale + file/line references live in that
+plan's "Follow-up backlog" section; summary, ordered by value:
 
-- ☐ **Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG, `.csv` holding a zip)
-  routes by name; the only correction (`detect_ignore_name`) fires reactively on render failure, so
-  silent mis-routes never self-correct. Prefer magic when it strongly disagrees — minding the
-  deliberate `.ai`/`.pdf` ambiguity.
-- ☐ **Unify the two detection paths.** File path and in-memory path differ in order *and* UTF-8 rigor;
-  collapse to one core over a `Read`, parity-test both entry points.
+- ☐ **Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG, `.csv` holding a
+  zip) routes by name; the only correction (`detect_ignore_name`) fires reactively on render
+  failure, so silent mis-routes never self-correct. Prefer magic when it strongly disagrees —
+  minding the deliberate `.ai`/`.pdf` ambiguity.
+- ☐ **Unify the two detection paths.** File path and in-memory path differ in order *and* UTF-8
+  rigor; collapse to one core over a `Read`, parity-test both entry points.
 - ☐ **Bound the UTF-8 text/binary scan.** `is_utf8_streaming` reads the whole file to decide
   text-vs-binary; cap at the first N MB.
-- ☐ **Truncated-head JSON sniff.** Large extensionless/stdin JSON fails to parse on the head and falls
-  through to plain text; use a structural brace-sniff / valid-prefix instead of a full parse.
+- ☐ **Truncated-head JSON sniff.** Large extensionless/stdin JSON fails to parse on the head and
+  falls through to plain text; use a structural brace-sniff / valid-prefix instead of a full parse.
 - ☐ **Tighten loose heuristics.** YAML `---` prefix over-matches; extension-routed binary types and
   `.br` aren't magic-verified.
 - ☐ **Fuzz / property-test the pure surface** now that no reader crates are in the way (never-panic,
@@ -157,9 +157,9 @@ Stretch:
 X.509 DER (`.der`, and DER-encoded `.crt` / `.cer`) and JWK / JWKS (`.jwk` / `.jwks`) ship — see
 [features.md → Certificates and Keys](features.md#certificates-and-keys-).
 
-| Format        | Extensions      | Notes                                                                                                                                                                                                 |
-|---------------|-----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| PKCS#12 / PFX | `.p12`, `.pfx`  | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
+| Format        | Extensions     | Notes                                                                                                                                                                                                 |
+|---------------|----------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| PKCS#12 / PFX | `.p12`, `.pfx` | Encrypted bag. First cut: show bag types + embedded cert/key labels without prompting for the password. A password prompt is a separate UX surface (interactive only; pipe mode would skip the parse) |
 
 Crates: `pkcs12` (encrypted bags).
 
@@ -196,12 +196,12 @@ unboundedly with scroll, or whole-file slurps lack a cap. Audit snapshot (2026-0
 snapshot have drifted; treat its categorization as the source-of-truth shape, the specific
 file:line citations as starting points to re-find.
 
-| Priority | Site                                 | Fix                                                                                                      |
-|----------|--------------------------------------|----------------------------------------------------------------------------------------------------------|
-| Medium   | EPUB + PDF + CBZ paged cache         | LRU cap (last N renders) keyed by viewport.                                                              |
-| Medium   | Audio visuals                        | Per-visual byte cap; reject oversized cover art early.                                                   |
-| Low      | Pretty-print double-buffer           | Share raw vec between pretty and highlighter to halve footprint.                                         |
-| Low      | Stdin slurp                          | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path). |
+| Priority | Site                         | Fix                                                                                                      |
+|----------|------------------------------|----------------------------------------------------------------------------------------------------------|
+| Medium   | EPUB + PDF + CBZ paged cache | LRU cap (last N renders) keyed by viewport.                                                              |
+| Medium   | Audio visuals                | Per-visual byte cap; reject oversized cover art early.                                                   |
+| Low      | Pretty-print double-buffer   | Share raw vec between pretty and highlighter to halve footprint.                                         |
+| Low      | Stdin slurp                  | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path). |
 
 ## Future / Optional Features
 

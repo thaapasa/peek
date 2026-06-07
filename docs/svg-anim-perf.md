@@ -8,13 +8,13 @@ terminal. Release build.
 
 ## Memory profile
 
-| State                                | RSS    | Notes                                                    |
-|--------------------------------------|--------|----------------------------------------------------------|
-| `peek <bitmap.png>` (baseline)       | ~27 MB | Glyph atlas + syntect + theme + image decode             |
-| `peek <demo.svg>` cold start         | ~40 MB | + `fontdb::load_system_fonts()` (font metadata index)    |
-| Demo, after ~2 frames rendered       | ~100 MB| LRU partially populated                                  |
-| Demo, after 1 full loop              | ~200 MB| LRU full: 55 frames × ~3 MB                              |
-| Demo, replay (steady state)          | ~200 MB| All hits, no allocations                                 |
+| State                          | RSS     | Notes                                                 |
+|--------------------------------|---------|-------------------------------------------------------|
+| `peek <bitmap.png>` (baseline) | ~27 MB  | Glyph atlas + syntect + theme + image decode          |
+| `peek <demo.svg>` cold start   | ~40 MB  | + `fontdb::load_system_fonts()` (font metadata index) |
+| Demo, after ~2 frames rendered | ~100 MB | LRU partially populated                               |
+| Demo, after 1 full loop        | ~200 MB | LRU full: 55 frames × ~3 MB                           |
+| Demo, replay (steady state)    | ~200 MB | All hits, no allocations                              |
 
 `fontdb::load_system_fonts()` is unavoidable — without it `<text>`
 glyphs drop to nothing. Cost is one-time at first SVG parse and shared
@@ -122,12 +122,12 @@ transform without reparse.
   — text shaping is amortized across all frames. Estimate 5-20× speedup
   per frame for text-heavy anims.
 - **Effort**: largest. Need to:
-  - Convert byte-marker injection to `usvg::Tree` post-parse mutation
-    (or hand-craft a minimal SVG mutation by inserting the wrap pre-parse,
-    since usvg's tree mutation surface is small).
-  - Handle multi-target anims (multiple wrap nodes, multiple handles).
-  - Reconcile with the prepare_svg pipeline (which currently takes
-    bytes; would need a `prepare_svg_tree(&Tree, ...)` variant).
+    - Convert byte-marker injection to `usvg::Tree` post-parse mutation
+      (or hand-craft a minimal SVG mutation by inserting the wrap pre-parse,
+      since usvg's tree mutation surface is small).
+    - Handle multi-target anims (multiple wrap nodes, multiple handles).
+    - Reconcile with the prepare_svg pipeline (which currently takes
+      bytes; would need a `prepare_svg_tree(&Tree, ...)` variant).
 
 ### D. Half-resolution rasterize, upscale to grid
 

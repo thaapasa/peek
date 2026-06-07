@@ -23,10 +23,10 @@ rules: [conventions.md](conventions.md).
 
 ## Crate structure
 
-peek is a Cargo workspace: the `peek` **binary** at the repo root, plus leaf **library crates** under
-`crates/`. The crates are layers — each depends only on the ones below it, and Cargo enforces that no
-edge points back up. This turns architectural rules ("detection must not depend on the readers") from
-convention into compile errors.
+peek is a Cargo workspace: the `peek` **binary** at the repo root, plus leaf **library crates**
+under `crates/`. The crates are layers — each depends only on the ones below it, and Cargo enforces
+that no edge points back up. This turns architectural rules ("detection must not depend on the
+readers") from convention into compile errors.
 
 ```
 peek (bin)        session layer: CLI + the compose / gather / extract dispatch hubs + the
@@ -45,8 +45,8 @@ peek-io  ◀─────┘  input foundation: InputSource + streaming byte/l
 Why these cuts:
 
 - **`peek-io`** is the "stream, don't load" foundation (principle in CLAUDE.md). Everything reads
-  through `InputSource`; isolating it keeps the IO primitives reviewable and reusable, and guarantees
-  they carry no knowledge of file types or rendering.
+  through `InputSource`; isolating it keeps the IO primitives reviewable and reusable, and
+  guarantees they carry no knowledge of file types or rendering.
 - **`peek-detect`** is the layer we most want to review and harden in isolation: a small, mostly
   dependency-light surface that maps bytes/names to a `FileType`. Because it can't reach the reader
   crates, `cargo tree -p peek-detect` is the litmus — it must stay free of the heavy reader deps
@@ -59,9 +59,9 @@ Why these cuts:
   reach theme/io/detect but **not** the bin — so the toolkit can't reach the event loop or process
   control.
 - **`peek-types`** is the layer that parses untrusted file bytes (fonts, PDFs, archives, disk
-  images). Cargo bars it from naming the bin's session layer, so a parser bug is contained to a crate
-  with no I/O-control surface. `cargo tree -p peek-types` must not show the `peek` bin. It owns the
-  heavy parser dependency set.
+  images). Cargo bars it from naming the bin's session layer, so a parser bug is contained to a
+  crate with no I/O-control surface. `cargo tree -p peek-types` must not show the `peek` bin. It
+  owns the heavy parser dependency set.
 - The **binary** is the thin session layer: the CLI plus the three `FileType → types::<x>` dispatch
   hubs (`compose.rs`, `gather/`, `extract/`) and the interactive event loop (`viewer_session/`). It
   reaches the lower crates through thin façades (`crate::input` over peek-io/peek-detect; re-exports
@@ -116,17 +116,17 @@ seeking handle. `HexMode` uses this to read just the visible window per scroll. 
 reader with offset translation. The `TempFile` byte source carries its own `Arc<NamedTempFile>`
 clone so reads outlive any drop of the source.
 
-For line-oriented streaming, `open_line_source() -> LineSource` (in `crates/peek-io/src/lines.rs`) does one pass
-of the source to count newlines and capture sparse byte-offset anchors (every 1024 lines), then
-serves windowed line lookups in O(stride) — `ContentMode` uses this so multi-GB text files never
-materialize. Stdin and file go through the same path: stdin's `Arc<[u8]>` backing makes "streaming"
-a zero-cost slice; file seeks per chunk via `FileByteSource`.
+For line-oriented streaming, `open_line_source() -> LineSource` (in `crates/peek-io/src/lines.rs`)
+does one pass of the source to count newlines and capture sparse byte-offset anchors (every 1024
+lines), then serves windowed line lookups in O(stride) — `ContentMode` uses this so multi-GB text
+files never materialize. Stdin and file go through the same path: stdin's `Arc<[u8]>` backing
+makes "streaming"a zero-cost slice; file seeks per chunk via `FileByteSource`.
 
-When stdin is consumed (`-` argument or no args + piped stdin), `peek_io::stdin::read_stdin` reads it
-into a `Memory` source and reopens fd 0 from the controlling terminal so the event loop can still
+When stdin is consumed (`-` argument or no args + piped stdin), `peek_io::stdin::read_stdin` reads
+it into a `Memory` source and reopens fd 0 from the controlling terminal so the event loop can still
 read keystrokes (resolved via `ttyname()` on stderr/stdout, not `/dev/tty` directly — macOS kqueue
-rejects the latter with EINVAL). The CLI-level "file vs stdin" decision (`build_source`, needs `Args`)
-stays in the binary at `src/input.rs`.
+rejects the latter with EINVAL). The CLI-level "file vs stdin" decision (`build_source`, needs
+`Args`) stays in the binary at `src/input.rs`.
 
 Stdin detection: magic bytes (images, binary) → content sniffing (leading `{`/`[` → JSON, `<` →
 XML/SVG, `---` → YAML), in `peek-detect`'s `detect_bytes()` (`crates/peek-detect/src/detect.rs`).
@@ -189,24 +189,24 @@ raw).
 A `Mode` is one renderable + interactive view of a file. The interactive viewer drives a
 `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x` shortcuts to Info/Help/Hex). Today's modes:
 
-| Mode                  | Used by                                                     | Owns scroll?           | Reacts to resize? |
-|-----------------------|-------------------------------------------------------------|------------------------|-------------------|
-| `ContentMode`         | text, source, structured, SVG XML                           | **yes**                | **yes**           |
-| `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text / vCard / iCalendar) | no                     | **yes**           |
-| `EpubReadMode`        | EPUB chapter-by-chapter read (cover render + chapter search) | no                     | **yes**           |
-| `ListingMode`         | archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic TOC | **yes**                | **yes**           |
-| `DirectoryMode`       | filesystem directory listings                               | **yes**                | **yes**           |
-| `HexMode`             | binary; reachable from any view via `x`                     | **yes** (byte-aligned) | **yes**           |
-| `ImageRenderMode`     | raster + rasterized SVG                                     | **yes** (FitWidth/Height pan) | **yes**    |
-| `AnimationMode`       | GIF / WebP (drives `next_tick`/`tick`)                      | **yes**                | **yes**           |
-| `SvgAnimationMode`    | CSS-`@keyframes` SVG (lazy per-frame raster)                | **yes**                | **yes**           |
-| `PagedImageMode<R>`   | PDF / CBZ paged image render                                | **yes**                | **yes**           |
-| `SpecimenMode`        | font specimen rasterisation (`.ttf` / `.otf` / `.ttc`)      | **yes**                | **yes**           |
-| `TableMode`           | objfile / classfile aligned tables                          | **yes**                | **yes**           |
-| `RowsTableMode`       | streaming CSV / TSV + SQLite contents                       | **yes**                | **yes**           |
-| `InfoMode`            | every file (file metadata)                                  | no                     | no                |
-| `HelpMode`            | every file (keyboard-shortcut listing)                      | no                     | no                |
-| `AboutMode`           | every file (logo, version, palette swatches)                | no                     | no                |
+| Mode                  | Used by                                                                            | Owns scroll?                  | Reacts to resize? |
+|-----------------------|------------------------------------------------------------------------------------|-------------------------------|-------------------|
+| `ContentMode`         | text, source, structured, SVG XML                                                  | **yes**                       | **yes**           |
+| `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text / vCard / iCalendar) | no                            | **yes**           |
+| `EpubReadMode`        | EPUB chapter-by-chapter read (cover render + chapter search)                       | no                            | **yes**           |
+| `ListingMode`         | archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic TOC                        | **yes**                       | **yes**           |
+| `DirectoryMode`       | filesystem directory listings                                                      | **yes**                       | **yes**           |
+| `HexMode`             | binary; reachable from any view via `x`                                            | **yes** (byte-aligned)        | **yes**           |
+| `ImageRenderMode`     | raster + rasterized SVG                                                            | **yes** (FitWidth/Height pan) | **yes**           |
+| `AnimationMode`       | GIF / WebP (drives `next_tick`/`tick`)                                             | **yes**                       | **yes**           |
+| `SvgAnimationMode`    | CSS-`@keyframes` SVG (lazy per-frame raster)                                       | **yes**                       | **yes**           |
+| `PagedImageMode<R>`   | PDF / CBZ paged image render                                                       | **yes**                       | **yes**           |
+| `SpecimenMode`        | font specimen rasterisation (`.ttf` / `.otf` / `.ttc`)                             | **yes**                       | **yes**           |
+| `TableMode`           | objfile / classfile aligned tables                                                 | **yes**                       | **yes**           |
+| `RowsTableMode`       | streaming CSV / TSV + SQLite contents                                              | **yes**                       | **yes**           |
+| `InfoMode`            | every file (file metadata)                                                         | no                            | no                |
+| `HelpMode`            | every file (keyboard-shortcut listing)                                             | no                            | no                |
+| `AboutMode`           | every file (logo, version, palette swatches)                                       | no                            | no                |
 
 ### Pipe-mode rendering (`Mode::render_to_pipe`)
 
@@ -268,12 +268,12 @@ dumps are first-class.
 
 Streams the raw view from a `LineSource` (anchor-indexed line iterator over `InputSource`); a
 window-only render fetches just the visible lines per scroll, so multi-GB text never materializes.
-With a syntax token, `LineStreamHighlighter` (in `viewer/highlight.rs`) carries syntect `ParseState` +
-`HighlightState` across `feed()` calls so multi-line constructs (block comments, here-docs)
-highlight correctly. Backward scrolls past the highlighter's cursor reset and replay forward —
-typical top-to-bottom reading is cheap; pathological backward jumps on huge files pay a one-time
-cost. Theme cycle resets state too (cached styles are theme-derived); color cycle takes effect on
-the next `feed()` without a reset.
+With a syntax token, `LineStreamHighlighter` (in `viewer/highlight.rs`) carries syntect
+`ParseState` + `HighlightState` across `feed()` calls so multi-line constructs (block comments,
+here-docs) highlight correctly. Backward scrolls past the highlighter's cursor reset and replay
+forward — typical top-to-bottom reading is cheap; pathological backward jumps on huge files pay a
+one-time cost. Theme cycle resets state too (cached styles are theme-derived); color cycle takes
+effect on the next `feed()` without a reset.
 
 Pretty-print is whole-file with a 16 MB cap (`PRETTY_MAX_BYTES` in `content.rs`). Above the cap
 ContentMode pushes a warning, clears `use_pretty`, and the streamed raw view takes over. Below the
@@ -433,15 +433,16 @@ mode label, status segments, theme), then `state.draw()`.
 the active mode's `render_window` errors, it tries two recoveries before giving up. First,
 `retry_frame_detection` re-detects the source with `detect_ignore_name` (magic bytes only, no path
 bias) — for a file whose extension lied about its content this rebuilds the frame with the correct
-type. If that doesn't apply (already ran, or re-detection agrees with the original), it falls back to
+type. If that doesn't apply (already ran, or re-detection agrees with the original), it falls back
+to
 `degrade_active_to_hex`: the active mode is repointed at the always-present Hex view, the decode
 cause (deepest error in the chain, e.g. a PNG `CRC error`) is pushed onto `FileInfo.warnings` and
 flashed on the status line, and `last_primary` is cleared if it pointed at the broken mode so aux
 toggles don't bounce back into it. Only when there is nothing safer to fall back to (the failed mode
 *is* Hex, or no Hex view exists — directories) does the error propagate. The pipe path
-(`main.rs`) mirrors this: a primary-mode `render_to_pipe` failure falls back to Hex with the cause on
-stderr. Net effect: a corrupt image, truncated archive, or malformed payload degrades to a hex dump
-plus a warning rather than crashing peek.
+(`main.rs`) mirrors this: a primary-mode `render_to_pipe` failure falls back to Hex with the cause
+on stderr. Net effect: a corrupt image, truncated archive, or malformed payload degrades to a hex
+dump plus a warning rather than crashing peek.
 
 ### Modal prompt overlay (`viewer/ui/prompt.rs`)
 
@@ -503,9 +504,9 @@ wiring-sites checklist. Quick summary:
 1. Add a `FileType` variant in `crates/peek-detect/src/detect.rs` and wire detection. The per-type
    format enum + extension/MIME/content-sniff helpers live in `crates/peek-detect/src/types/<x>.rs`
    (the `peek-detect` crate, NOT the reader). Re-export the format enum from the reader module root
-   (`crates/peek-types/src/types/<x>/mod.rs`: `pub use peek_detect::types::<x>::<X>Format;`) so reader
-   code keeps a local `crate::types::<x>::<X>Format` path. Detection must stay reader-free — that
-   boundary is Cargo-enforced.
+   (`crates/peek-types/src/types/<x>/mod.rs`: `pub use peek_detect::types::<x>::<X>Format;`) so
+   reader code keeps a local `crate::types::<x>::<X>Format` path. Detection must stay reader-free —
+   that boundary is Cargo-enforced.
 2. Create the `crates/peek-types/src/types/<x>/` module and build the type's `Mode` impls there.
    Generic, reusable modes — `ContentMode`, `RenderedTextMode`, `PagedImageMode`, `ListingMode` —
    already live in `peek-foundation` (`viewer/`); prefer wrapping one over a bespoke `Mode`. Add a
@@ -524,37 +525,38 @@ wiring-sites checklist. Quick summary:
 
    Build the section in one of **three modes**, in order of preference:
 
-   - **Derive (regular sections — default).** Define a
-     `#[derive(serde::Serialize, peek_foundation::info::InfoView)]` view struct (see
-     `info/section.rs`) so print + `--info --json` fall out of one definition:
-     `#[info(label/nest/skip/title/title_from)]` for the print tree, `serde` attrs for JSON,
-     per-field paint via `InfoValue`. Cells are the semantic `Value` (`Size` / `Count` /
-     `Timestamp` / `Text` / …, see `info/value.rs`) painted by role; `Muted` / `Accent` / `Warn`
-     are the off-colour string newtypes. When a leaf's print text and JSON value **diverge**
-     (prints `ELF`, serializes `"elf"`; or a join-string that serializes as an array), use
-     `Value::split(text, Role, json)` / `Value::labelled(label, token)` rather than a bespoke
-     newtype. Wire with `impl_info_extras!(<View>, json = "<key>")`.
+    - **Derive (regular sections — default).** Define a
+      `#[derive(serde::Serialize, peek_foundation::info::InfoView)]` view struct (see
+      `info/section.rs`) so print + `--info --json` fall out of one definition:
+      `#[info(label/nest/skip/title/title_from)]` for the print tree, `serde` attrs for JSON,
+      per-field paint via `InfoValue`. Cells are the semantic `Value` (`Size` / `Count` /
+      `Timestamp` / `Text` / …, see `info/value.rs`) painted by role; `Muted` / `Accent` / `Warn`
+      are the off-colour string newtypes. When a leaf's print text and JSON value **diverge**
+      (prints `ELF`, serializes `"elf"`; or a join-string that serializes as an array), use
+      `Value::split(text, Role, json)` / `Value::labelled(label, token)` rather than a bespoke
+      newtype. Wire with `impl_info_extras!(<View>, json = "<key>")`.
 
-   - **`InfoRow` (irregular but row-shaped — enum-variant dispatch, one print row mapping to
-     several JSON keys).** The derive walks struct *fields*, so it can't express a `Vec<enum>`
-     whose variants lay out differently. Build a `Vec<InfoRow>` per entry instead (see
-     `info/rows.rs`): each row carries an optional print label, an optional JSON key, and a `Value`
-     cell (`InfoRow::new/text/count/int/muted/…`, `print_only`, `json_only`). One list feeds both
-     outputs — `push_rows` for the themed lines, `rows_to_json` for the object — so the two can't
-     drift. `cert` and `font` are the worked examples. The section frame (which blocks exist,
-     custom headers) stays hand-built in `render_section` / `json_section`.
+    - **`InfoRow` (irregular but row-shaped — enum-variant dispatch, one print row mapping to
+      several JSON keys).** The derive walks struct *fields*, so it can't express a `Vec<enum>`
+      whose variants lay out differently. Build a `Vec<InfoRow>` per entry instead (see
+      `info/rows.rs`): each row carries an optional print label, an optional JSON key, and a `Value`
+      cell (`InfoRow::new/text/count/int/muted/…`, `print_only`, `json_only`). One list feeds both
+      outputs — `push_rows` for the themed lines, `rows_to_json` for the object — so the two can't
+      drift. `cert` and `font` are the worked examples. The section frame (which blocks exist,
+      custom headers) stays hand-built in `render_section` / `json_section`.
 
-   - **Fully bespoke (rare).** A layout neither covers (pre-painted composite cells, nested
-     partition tables) wraps its gathered struct and hand-implements `InfoView::info_nodes` (the
-     `InfoNode` tree, capturing `lines`-based renderers as `Line` nodes) plus `serde::Serialize`.
+    - **Fully bespoke (rare).** A layout neither covers (pre-painted composite cells, nested
+      partition tables) wraps its gathered struct and hand-implements `InfoView::info_nodes` (the
+      `InfoNode` tree, capturing `lines`-based renderers as `Line` nodes) plus `serde::Serialize`.
 
    The `InfoRow` and bespoke modes wire through the free `render_section` / `json_section` form of
    `impl_info_extras!`.
 5. If the type is a container, add `types/<x>/extract.rs` (returning `peek_foundation::extract`'s
    `Extracted` / `ExtractError`) and **one arm in the bin's `src/extract/extract.rs`**.
 
-So a new type is: a peek-detect entry, a peek-types module, and up to three one-line dispatch arms in
-the bin (compose / gather / extract). See [conventions.md → File types](conventions.md#file-types).
+So a new type is: a peek-detect entry, a peek-types module, and up to three one-line dispatch arms
+in the bin (compose / gather / extract).
+See [conventions.md → File types](conventions.md#file-types).
 
 Example — PDF (`crates/peek-types/src/types/pdf/compose.rs`):
 

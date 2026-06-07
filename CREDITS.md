@@ -14,22 +14,22 @@ The example images included in this repository are used under the
 
 ## Example vectors
 
-| File                                 | Source                                                                                                                       | License                                                               |
-|--------------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
-| `test-images/airlock-demo.svg`       | [airlock by Matti Lankinen](https://github.com/milankinen/airlock/blob/main/docs/manual/src/demo.svg)                        | [Apache 2.0](https://github.com/milankinen/airlock/blob/main/LICENSE) |
-| `test-images/bonfire-nature.ai`      | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Bonfire-in-the-nature/84221.html)                    | [CC0](https://publicdomainvectors.org/en/public-domain)               |
-| `test-images/calendar.svg`           | [Bootstrap Icons](https://icons.getbootstrap.com/icons/calendar2-week/)                                                      | [MIT](https://github.com/twbs/icons/blob/main/LICENSE)                |
-| `test-images/certificate.svg`        | [unDraw](https://undraw.co/search/certificate)                                                                               | [unDraw License](https://undraw.co/license)                           |
-| `test-images/feather.svg`            | [designed by OpenMoji](https://openmoji.org/library/emoji-1FAB6/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
-| `test-images/loader-dots.svg`        | [svg-spinners by Utkarsh Verma](https://github.com/n3r4zzurr0/svg-spinners/blob/main/svg-css/6-dots-scale.svg)               | [MIT](https://github.com/n3r4zzurr0/svg-spinners/blob/main/LICENSE)   |
-| `test-images/nature-kids.svg`        | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Vector-clip-art-of-kids-in-nature-poster/18798.html) | [CC0](https://publicdomainvectors.org/en/public-domain)               |
-| `test-images/pentaskelion-beads.svg` | [freesvg — Animated Polyskelion Beads (Jay Nick)](https://freesvg.org/animated-polyskelion-beads)                            | [CC0](https://freesvg.org/faq)                                        |
-| `test-images/star-struck.svg`        | [designed by OpenMoji](https://openmoji.org/library/emoji-1F929/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
-| `test-images/tropical-jungle-nopreview.eps` | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                   | [CC0](https://publicdomainvectors.org/en/public-domain)               |
-| `test-images/tropical-jungle-rgbpreview.eps` | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                  | [CC0](https://publicdomainvectors.org/en/public-domain)               |
-| `test-images/tropical-jungle.eps`    | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)               |
-| `test-images/unicorn.svg`            | [designed by OpenMoji](https://openmoji.org/library/emoji-1F984/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
-| `test-images/walking-outside.svg`    | [unDraw](https://undraw.co/search/walking-outside)                                                                           | [unDraw License](https://undraw.co/license)                           |
+| File                                         | Source                                                                                                                       | License                                                               |
+|----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| `test-images/airlock-demo.svg`               | [airlock by Matti Lankinen](https://github.com/milankinen/airlock/blob/main/docs/manual/src/demo.svg)                        | [Apache 2.0](https://github.com/milankinen/airlock/blob/main/LICENSE) |
+| `test-images/bonfire-nature.ai`              | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Bonfire-in-the-nature/84221.html)                    | [CC0](https://publicdomainvectors.org/en/public-domain)               |
+| `test-images/calendar.svg`                   | [Bootstrap Icons](https://icons.getbootstrap.com/icons/calendar2-week/)                                                      | [MIT](https://github.com/twbs/icons/blob/main/LICENSE)                |
+| `test-images/certificate.svg`                | [unDraw](https://undraw.co/search/certificate)                                                                               | [unDraw License](https://undraw.co/license)                           |
+| `test-images/feather.svg`                    | [designed by OpenMoji](https://openmoji.org/library/emoji-1FAB6/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
+| `test-images/loader-dots.svg`                | [svg-spinners by Utkarsh Verma](https://github.com/n3r4zzurr0/svg-spinners/blob/main/svg-css/6-dots-scale.svg)               | [MIT](https://github.com/n3r4zzurr0/svg-spinners/blob/main/LICENSE)   |
+| `test-images/nature-kids.svg`                | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Vector-clip-art-of-kids-in-nature-poster/18798.html) | [CC0](https://publicdomainvectors.org/en/public-domain)               |
+| `test-images/pentaskelion-beads.svg`         | [freesvg — Animated Polyskelion Beads (Jay Nick)](https://freesvg.org/animated-polyskelion-beads)                            | [CC0](https://freesvg.org/faq)                                        |
+| `test-images/star-struck.svg`                | [designed by OpenMoji](https://openmoji.org/library/emoji-1F929/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
+| `test-images/tropical-jungle-nopreview.eps`  | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)               |
+| `test-images/tropical-jungle-rgbpreview.eps` | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)               |
+| `test-images/tropical-jungle.eps`            | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Tropical-jungle/90930.html)                          | [CC0](https://publicdomainvectors.org/en/public-domain)               |
+| `test-images/unicorn.svg`                    | [designed by OpenMoji](https://openmoji.org/library/emoji-1F984/)                                                            | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)       |
+| `test-images/walking-outside.svg`            | [unDraw](https://undraw.co/search/walking-outside)                                                                           | [unDraw License](https://undraw.co/license)                           |
 
 ## Animated test images
 
@@ -85,11 +85,11 @@ Bundled verbatim from [google/fonts](https://github.com/google/fonts); each subd
 carries the upstream `OFL.txt` alongside the font binary. Used by the font-viewer tests and
 to give the specimen render output enough visual range for a useful smoke test.
 
-| File                                                | Author / Source                                                                                | License                                                                  |
-|-----------------------------------------------------|------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------|
-| `test-data/fonts/sacramento/Sacramento-Regular.ttf` | [Astigmatic — Brian J. Bonislawsky](https://github.com/google/fonts/tree/main/ofl/sacramento)  | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/sacramento/OFL.txt) |
-| `test-data/fonts/greatvibes/GreatVibes-Regular.ttf` | [TypeSETit](https://github.com/google/fonts/tree/main/ofl/greatvibes)                          | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/greatvibes/OFL.txt) |
-| `test-data/fonts/cabin/Cabin[wdth,wght].ttf`        | [Pablo Impallari](https://github.com/google/fonts/tree/main/ofl/cabin)                         | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/cabin/OFL.txt)      |
+| File                                                | Author / Source                                                                               | License                                                                         |
+|-----------------------------------------------------|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| `test-data/fonts/sacramento/Sacramento-Regular.ttf` | [Astigmatic — Brian J. Bonislawsky](https://github.com/google/fonts/tree/main/ofl/sacramento) | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/sacramento/OFL.txt) |
+| `test-data/fonts/greatvibes/GreatVibes-Regular.ttf` | [TypeSETit](https://github.com/google/fonts/tree/main/ofl/greatvibes)                         | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/greatvibes/OFL.txt) |
+| `test-data/fonts/cabin/Cabin[wdth,wght].ttf`        | [Pablo Impallari](https://github.com/google/fonts/tree/main/ofl/cabin)                        | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/cabin/OFL.txt)      |
 
 ## Example databases
 

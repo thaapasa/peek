@@ -173,6 +173,7 @@ file every search. Violates the spirit of "stream, don't load" even while
 streaming — the cost is paid per query, not per session.
 
 Two directions:
+
 - Cheap: cap by *bytes scanned* in addition to match count, so a no-match
   search on a multi-GB file degrades cleanly with a status warning.
 - Invasive: move scanning to a background thread that streams matches in.
@@ -189,6 +190,7 @@ readers must learn that `owns_scroll`-true modes silently discard it and use
 their internal scroll instead.
 
 Two reasonable directions:
+
 - Split `Mode` into `ScrolledMode` / `OwnsScrollMode`, drop the dead
   parameter, add trait-discrimination in `ViewerState`.
 - Keep as-is, document the contract more loudly on the trait.

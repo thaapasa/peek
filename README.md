@@ -14,19 +14,28 @@ Modern terminal file viewer — preview any file, any format.
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
-- **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV extract, workbook metadata
+- **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV
+  extract, workbook metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
-- **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT, RTF, EPUB, CBZ
-- **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing + extract, message-list drill-in
-- **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards with human date-times, grouped fields, recurrence
-- **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript render, DSC metadata
+- **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT,
+  RTF, EPUB, CBZ
+- **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing +
+  extract, message-list drill-in
+- **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards
+  with human date-times, grouped fields, recurrence
+- **Vector / PostScript** — EPS / PostScript (`.eps`, `.ps`): embedded preview, optional Ghostscript
+  render, DSC metadata
 - **Containers** — ZIP / tar / 7z / cpio / ar archives, ISO disk images, audio metadata
-- **Executables** — ELF / Mach-O / PE / WebAssembly (`.wasm`) object files: header, sections, symbols
+- **Executables** — ELF / Mach-O / PE / WebAssembly (`.wasm`) object files: header, sections,
+  symbols
 - **Java classfiles** — `.class` header, fields, methods with decoded signatures
-- **Certificates and keys** — PEM / DER X.509 / CSR / CRL / keys / OpenSSH pubkeys / JWK: subject, validity, SANs, fingerprints, thumbprints
-- **Fonts** — TrueType / OpenType / TTC collections / WOFF / WOFF2: rasterised specimen render + family / weight / glyphs / script coverage
+- **Certificates and keys** — PEM / DER X.509 / CSR / CRL / keys / OpenSSH pubkeys / JWK: subject,
+  validity, SANs, fingerprints, thumbprints
+- **Fonts** — TrueType / OpenType / TTC collections / WOFF / WOFF2: rasterised specimen render +
+  family / weight / glyphs / script coverage
 - **Hex dump** fallback for binary, reachable from any view with `x`
-- **Interactive viewer** with live theme cycling, info screen, extraction, text search, soft wrap, image zoom/pan
+- **Interactive viewer** with live theme cycling, info screen, extraction, text search, soft wrap,
+  image zoom/pan
 
 peek is a single-file viewer: one path (or stdin) at a time. Run peek once per file.
 

@@ -1,7 +1,7 @@
 # Converting external themes to peek `.tmTheme`
 
-peek themes are syntect `.tmTheme` (TextMate plist) files in `crates/peek-theme/themes/`. This guide covers porting
-IntelliJ `.icls` and VS Code JSON themes, plus the syntect quirks that cap fidelity.
+peek themes are syntect `.tmTheme` (TextMate plist) files in `crates/peek-theme/themes/`. This guide
+covers porting IntelliJ `.icls` and VS Code JSON themes, plus the syntect quirks that cap fidelity.
 
 ## Source themes
 

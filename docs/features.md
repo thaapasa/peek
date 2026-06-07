@@ -44,8 +44,8 @@ straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`)
 cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
-line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/`p` cycle matches) works
-in the text / source / structured views.
+line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/
+`p` cycle matches) works in the text / source / structured views.
 
 ### Print Mode ✅
 
@@ -296,8 +296,8 @@ RTF apply the same cap.
 
 `.odt` files (OpenDocument Text — a ZIP container with `content.xml` body + `meta.xml` Dublin
 Core metadata) get the same three-mode view as DOCX, backed by a shared AST + renderer in
-`crates/peek-types/src/types/document/{ast,render,renderer}` plus the generic `RenderedTextMode`. The per-format
-parser is the only piece that differs.
+`crates/peek-types/src/types/document/{ast,render,renderer}` plus the generic `RenderedTextMode`.
+The per-format parser is the only piece that differs.
 
 - **Read** (default) — styled body text. Headings (`<text:h text:outline-level="N">`) render
   bold + themed; bold / italic / underline / strikethrough / colored runs render via SGR. Span
@@ -494,10 +494,10 @@ search (substring, smart-case) that spans the whole file — it pages the window
 record rather than holding them all, so it stays exhaustive at bounded memory; `n` / `p`
 step matches, panning columns and scrolling rows to bring each match into view. The exact
 total record count (and jump-to-end) is settled by a one-time streaming count pass that
-discards cells; until then the info view shows `N (partial)`. Malformed records (over 4 MiB raw, over 10 000 physical
-lines, or rejected by the csv crate) render as a single `<error>` row in `theme.warning`
-and bump the status-bar counter. Print mode renders the seed widths only (no auto-widen)
-and allows long cells to overflow rightward for that one row — alignment resumes on the
+discards cells; until then the info view shows `N (partial)`. Malformed records (over 4 MiB raw,
+over 10 000 physical lines, or rejected by the csv crate) render as a single `<error>` row in
+`theme.warning` and bump the status-bar counter. Print mode renders the seed widths only (no
+auto-widen) and allows long cells to overflow rightward for that one row — alignment resumes on the
 next row.
 
 Two viewing sub-modes (toggle with `r`; CLI `--raw`):
@@ -719,7 +719,8 @@ Three views, Tab-cycled:
 - **Info** (landing) — format, architecture, file kind (executable / relocatable object / dynamic
   library / core dump), 32- vs 64-bit, endianness, entry point, section and symbol counts,
   debug-info presence, build identity (ELF build ID / Mach-O UUID / PE PDB GUID), and linked
-  libraries (ELF `DT_NEEDED`, Mach-O dylibs, PE imports). Mirrors `file` + `readelf -d` + `otool -L`.
+  libraries (ELF `DT_NEEDED`, Mach-O dylibs, PE imports). Mirrors `file` + `readelf -d` +
+  `otool -L`.
 - **Sections** — `readelf -S`-style table: index, name, address, size, kind.
 - **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
   falls back to the dynamic symbol table when the file is stripped.
@@ -733,12 +734,12 @@ Universal (fat) Mach-O containers are unwrapped transparently — the host archi
 parsed and the Info view lists every slice. No extract path: sections and symbols are not
 standalone files.
 
-| Format    | Coverage                                                        |
-|-----------|-----------------------------------------------------------------|
-| ELF       | executables, shared objects (`.so`), relocatable objects (`.o`) |
-| Mach-O    | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
-| PE / COFF | Windows executables and DLLs                                    |
-| WebAssembly | `.wasm` modules (functions surface as symbols)                |
+| Format      | Coverage                                                        |
+|-------------|-----------------------------------------------------------------|
+| ELF         | executables, shared objects (`.so`), relocatable objects (`.o`) |
+| Mach-O      | executables, `.dylib`, `.o`; universal (fat) binaries unwrapped |
+| PE / COFF   | Windows executables and DLLs                                    |
+| WebAssembly | `.wasm` modules (functions surface as symbols)                  |
 
 `object` enum values (`BinaryFormat` / `Architecture` / `ObjectKind` / `Endianness`) are carried
 through `ObjectMeta` and mapped to display labels only in `info_render`. Bare COFF `.obj` files have
@@ -865,7 +866,7 @@ decodes wins:
 | Private key       | label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size (best-effort from PKCS#1 / SEC1 / PKCS#8). Encrypted / opaque keys (`ENCRYPTED PRIVATE KEY`, `OPENSSH PRIVATE KEY`) show structural info only — no password prompt                                                                                                 |
 | Public key        | label, key type, bit size (parsed from SPKI envelope)                                                                                                                                                                                                                                                                                    |
 | SSH public key    | algorithm, bits, comment, SHA-256 fingerprint (matches `ssh-keygen -l -E sha256` output)                                                                                                                                                                                                                                                 |
-| JSON Web Key      | type (RSA / EC / oct / OKP) + curve, bit size (RSA modulus / curve / `oct` secret), algorithm, use, key ops, key ID, RFC 7638 thumbprint (`SHA-256:` base64url)                                                                                                                                                                           |
+| JSON Web Key      | type (RSA / EC / oct / OKP) + curve, bit size (RSA modulus / curve / `oct` secret), algorithm, use, key ops, key ID, RFC 7638 thumbprint (`SHA-256:` base64url)                                                                                                                                                                          |
 
 Decode failures don't suppress the rest of the section — a malformed block lands in a per-entry
 **Parse error** row so a single bad PEM in a chain doesn't hide the others. Unrecognised PEM
@@ -969,21 +970,21 @@ descendable entry. `n` / `p` step matches with wrap. Same `/` search is wired in
 ListingMode consumer — archives, ISO 9660, PDF `/EmbeddedFiles`, audio embed bundles,
 directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 
-| Format      | Extensions                     | Status    |
-|-------------|--------------------------------|-----------|
-| ZIP         | `.zip`, `.jar`, `.war`, `.apk` | ✅         |
-| Tar         | `.tar`                         | ✅         |
-| Tar + gzip  | `.tar.gz`, `.tgz`              | ✅         |
-| Tar + bzip2 | `.tar.bz2`, `.tbz2`            | ✅         |
-| Tar + xz    | `.tar.xz`, `.txz`              | ✅         |
-| Tar + zstd  | `.tar.zst`, `.tzst`            | ✅         |
-| Tar + lz4   | `.tar.lz4`, `.tlz4`            | ✅         |
-| Tar + brotli| `.tar.br`, `.tbr`             | ✅         |
-| 7-Zip       | `.7z`                          | ✅         |
-| cpio        | `.cpio`                        | ✅         |
-| cpio + gzip | `.cpio.gz`                     | ✅         |
-| ar / Debian | `.ar`, `.deb`, `.a`            | ✅         |
-| RAR         | `.rar`                         | ☐ planned |
+| Format       | Extensions                     | Status    |
+|--------------|--------------------------------|-----------|
+| ZIP          | `.zip`, `.jar`, `.war`, `.apk` | ✅         |
+| Tar          | `.tar`                         | ✅         |
+| Tar + gzip   | `.tar.gz`, `.tgz`              | ✅         |
+| Tar + bzip2  | `.tar.bz2`, `.tbz2`            | ✅         |
+| Tar + xz     | `.tar.xz`, `.txz`              | ✅         |
+| Tar + zstd   | `.tar.zst`, `.tzst`            | ✅         |
+| Tar + lz4    | `.tar.lz4`, `.tlz4`            | ✅         |
+| Tar + brotli | `.tar.br`, `.tbr`              | ✅         |
+| 7-Zip        | `.7z`                          | ✅         |
+| cpio         | `.cpio`                        | ✅         |
+| cpio + gzip  | `.cpio.gz`                     | ✅         |
+| ar / Debian  | `.ar`, `.deb`, `.a`            | ✅         |
+| RAR          | `.rar`                         | ☐ planned |
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
 (corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty. When an
@@ -1005,14 +1006,14 @@ adds a Compression row showing the codec and the size before / after decompressi
 detour. Decompression failures fall back to a Hex view of the raw compressed bytes plus a
 warning row in info.
 
-| Format | Extensions | Status    |
-|--------|------------|-----------|
-| gzip   | `.gz`      | ✅         |
-| bzip2  | `.bz2`     | ✅         |
-| xz     | `.xz`      | ✅         |
-| zstd   | `.zst`     | ✅         |
-| lz4    | `.lz4`     | ✅         |
-| brotli | `.br`      | ✅         |
+| Format | Extensions | Status |
+|--------|------------|--------|
+| gzip   | `.gz`      | ✅      |
+| bzip2  | `.bz2`     | ✅      |
+| xz     | `.xz`      | ✅      |
+| zstd   | `.zst`     | ✅      |
+| lz4    | `.lz4`     | ✅      |
+| brotli | `.br`      | ✅      |
 
 Decompressed output is capped at 256 MiB. Anything larger surfaces a warning and the viewer
 shows the raw compressed bytes — the same shape as a corrupt-stream fallback.
@@ -1023,11 +1024,11 @@ won't auto-classify.
 
 #### Disk Images ✅
 
-| Format | Extensions            | Status                                                |
-|--------|-----------------------|-------------------------------------------------------|
-| ISO    | `.iso`                | ✅ PVD metadata + recursive directory listing (Joliet) |
+| Format | Extensions            | Status                                                  |
+|--------|-----------------------|---------------------------------------------------------|
+| ISO    | `.iso`                | ✅ PVD metadata + recursive directory listing (Joliet)   |
 | DMG    | `.dmg`                | ✅ UDIF trailer + plist partition map (no inner-FS walk) |
-| Raw    | `.img`, `.bin`, `.dd` | ✅ MBR partition table walk in info (no listing)       |
+| Raw    | `.img`, `.bin`, `.dd` | ✅ MBR partition table walk in info (no listing)         |
 
 **ISO 9660** opens to a **TOC view** (the same tree-style listing archive containers use): one row
 per file/directory with size, mtime, and 8.3 / Joliet name; depth tracked by indented tree glyphs.
@@ -1461,33 +1462,33 @@ syntax-highlighted code is downgraded along with everything else.
 
 ## CLI Options
 
-| Option           | Short | Description                                                                                                 | Status |
-|------------------|-------|-------------------------------------------------------------------------------------------------------------|--------|
-| `--help`         | `-h`  | Show help screen and exit (short / long forms)                                                              | ✅      |
-| `--version`      | `-V`  | Show version info and exit                                                                                  | ✅      |
-| `--print`        | `-p`  | Force print mode (direct stdout)                                                                            | ✅      |
-| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                 | ✅      |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                                                                    | ✅      |
-| `--theme`        | `-t`  | Syntax highlighting theme                                                                                   | ✅      |
-| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)                                                    | ✅      |
-| `--language`     | `-L`  | Force syntax language                                                                                       | ✅      |
-| `--width`        | `-w`  | Image rendering width in characters                                                                         | ✅      |
-| `--image-mode`   | `-m`  | Image rendering mode                                                                                        | ✅      |
-| `--edge-density` |       | Edge density target for `--image-mode contour`                                                              | ✅      |
-| `--info`         | `-i`  | Show file info instead of contents                                                                          | ✅      |
-| `--json`         |       | Emit `--info` as machine-readable JSON (requires `--info`)                                                  | ✅      |
+| Option           | Short | Description                                                                                                       | Status |
+|------------------|-------|-------------------------------------------------------------------------------------------------------------------|--------|
+| `--help`         | `-h`  | Show help screen and exit (short / long forms)                                                                    | ✅      |
+| `--version`      | `-V`  | Show version info and exit                                                                                        | ✅      |
+| `--print`        | `-p`  | Force print mode (direct stdout)                                                                                  | ✅      |
+| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                       | ✅      |
+| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                                                                          | ✅      |
+| `--theme`        | `-t`  | Syntax highlighting theme                                                                                         | ✅      |
+| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)                                                          | ✅      |
+| `--language`     | `-L`  | Force syntax language                                                                                             | ✅      |
+| `--width`        | `-w`  | Image rendering width in characters                                                                               | ✅      |
+| `--image-mode`   | `-m`  | Image rendering mode                                                                                              | ✅      |
+| `--edge-density` |       | Edge density target for `--image-mode contour`                                                                    | ✅      |
+| `--info`         | `-i`  | Show file info instead of contents                                                                                | ✅      |
+| `--json`         |       | Emit `--info` as machine-readable JSON (requires `--info`)                                                        | ✅      |
 | `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) | ✅      |
-| `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                            | ✅      |
-| `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                               | ✅      |
-| `--margin`       |       | Image margin in transparent pixels                                                                          | ✅      |
-| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)                                                        | ✅      |
-| `--no-svg-anim`  |       | Force static render for animated SVG                                                                        | ✅      |
-| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)                                                         | ✅      |
-| `--extract`      | `-x`  | Extract a single inner item from a container by key                                                         | ✅      |
-| `--output`       | `-o`  | Output path for `--extract` (or `-` for stdout)                                                             | ✅      |
-| `--extract-size` |       | Output pixel size for animation / SVG frame extract                                                         | ✅      |
-| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                | ✅      |
-| `--update`       |       | Check for newer release and re-run `install.sh`                                                             | ✅      |
+| `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                                  | ✅      |
+| `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                                     | ✅      |
+| `--margin`       |       | Image margin in transparent pixels                                                                                | ✅      |
+| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)                                                              | ✅      |
+| `--no-svg-anim`  |       | Force static render for animated SVG                                                                              | ✅      |
+| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)                                                               | ✅      |
+| `--extract`      | `-x`  | Extract a single inner item from a container by key                                                               | ✅      |
+| `--output`       | `-o`  | Output path for `--extract` (or `-` for stdout)                                                                   | ✅      |
+| `--extract-size` |       | Output pixel size for animation / SVG frame extract                                                               | ✅      |
+| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                      | ✅      |
+| `--update`       |       | Check for newer release and re-run `install.sh`                                                                   | ✅      |
 
 `--plain` is the single "sterile output" knob: it implies `--color plain` and additionally
 disables syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered

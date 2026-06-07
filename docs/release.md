@@ -27,11 +27,11 @@ bumped or committed locally. Three jobs:
    builds are stripped via the release profile. Each archive also bundles the matching Pdfium
    dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
 
-   `cargo test --workspace --release --locked --target <target>` runs on every *native* matrix entry before
-   bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
-   targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from
-   the arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure
-   in any target halts the matrix (`fail-fast: true`) so no release artifacts publish.
+   `cargo test --workspace --release --locked --target <target>` runs on every *native* matrix entry
+   before bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
+   targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from the
+   arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure in any
+   target halts the matrix (`fail-fast: true`) so no release artifacts publish.
 3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`:
    `--ff-only` when `main` hasn't moved, otherwise a `--no-ff` merge commit (the log line says
    which). Pushes `main`, tags the **release-branch commit** (see below), publishes a GitHub
