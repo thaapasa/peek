@@ -307,10 +307,13 @@ mod tests {
     }
 
     #[test]
-    fn fenced_code_block_no_lang_falls_back_to_dim() {
+    fn fenced_code_block_no_lang_paints_foreground_on_surface() {
         let out = render_styled("```\nbare text\n```\n");
-        // Dim attribute opens with [2m.
-        assert!(out.contains("\x1b[2m"), "expected dim fallback in {out:?}");
+        // No syntect highlighter, so the body is painted at full
+        // foreground (38;2 truecolor) on the surface-tint fill — readable
+        // light text, not the old dim ([2m) treatment.
+        assert!(out.contains("38;2"), "expected foreground paint in {out:?}");
+        assert!(!out.contains("\x1b[2m"), "should not be dim in {out:?}");
     }
 
     #[test]

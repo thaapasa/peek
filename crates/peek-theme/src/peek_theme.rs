@@ -170,6 +170,22 @@ impl PeekTheme {
         self.paint(text, self.muted)
     }
 
+    /// Inline `code` span — full-strength foreground text on the surface
+    /// tint, so it reads as a boxed span (IDEA-style) rather than dimmed
+    /// prose. Returns the text unchanged in plain (no-style) modes.
+    pub fn paint_code_inline(&self, text: &str) -> String {
+        if !self.style_mode.styled() {
+            return text.to_string();
+        }
+        format!(
+            "{}{}{}{}",
+            self.style_mode.bg_seq(self.surface),
+            self.style_mode.fg_seq(self.foreground),
+            text,
+            self.style_mode.reset()
+        )
+    }
+
     #[allow(unused)]
     pub fn paint_warning(&self, text: &str) -> String {
         self.paint(text, self.warning)

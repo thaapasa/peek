@@ -313,9 +313,7 @@ impl<'a> Walker<'a> {
                 // events, not Code.
                 self.ensure_leaf_for_inline();
                 if self.leaf.is_some() {
-                    self.pending.push_str(self.style_mode.attr_open(Attr::Dim));
-                    self.pending.push_str(&code);
-                    self.pending.push_str(self.style_mode.attr_close(Attr::Dim));
+                    self.pending.push_str(&self.theme.paint_code_inline(&code));
                 }
             }
             Event::SoftBreak | Event::HardBreak if self.leaf.is_some() => {
@@ -584,14 +582,7 @@ impl<'a> Walker<'a> {
             Some(lines) => lines,
             None => body
                 .lines()
-                .map(|l| {
-                    format!(
-                        "{}{}{}",
-                        self.style_mode.attr_open(Attr::Dim),
-                        l,
-                        self.style_mode.attr_close(Attr::Dim)
-                    )
-                })
+                .map(|l| self.theme.paint(l, self.theme.foreground))
                 .collect(),
         };
 
