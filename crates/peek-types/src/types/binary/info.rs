@@ -1,11 +1,15 @@
 //! Binary info: friendly format label from a magic-byte MIME, or `None`
-//! if the type is genuinely unknown. Render emits a single Format
-//! section when a label is available.
+//! if the type is genuinely unknown. The Format section vanishes when no
+//! label is available (its only field is absent).
 
-use crate::info::{Extras, push_field, push_section_header};
-use crate::theme::PeekTheme;
+use crate::info::Extras;
 
+/// Format section view — drives both `--info` print and `--info --json`.
+#[derive(serde::Serialize, crate::info::InfoView)]
+#[info(title = "Format")]
 pub struct BinaryInfo {
+    #[info(label = "Type")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<String>,
 }
 
@@ -13,14 +17,6 @@ pub fn gather_extras(magic_mime: Option<&str>) -> Extras {
     Box::new(BinaryInfo {
         format: magic_mime.map(format_label_for_mime),
     })
-}
-
-pub fn render_section(lines: &mut Vec<String>, info: &BinaryInfo, theme: &PeekTheme) {
-    if let Some(fmt) = &info.format {
-        lines.push(String::new());
-        push_section_header(lines, "Format", theme);
-        push_field(lines, "Type", &theme.paint_value(fmt), theme);
-    }
 }
 
 fn format_label_for_mime(mime: &str) -> String {

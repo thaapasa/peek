@@ -102,6 +102,11 @@ pub struct Args {
     #[arg(short = 'i', long)]
     pub info: bool,
 
+    /// Emit `--info` as machine-readable JSON (for shell pipelines, e.g.
+    /// `peek x --info --json | jq .size_bytes`). Requires `--info`.
+    #[arg(long, hide_short_help = true)]
+    pub json: bool,
+
     /// List the contents of a container file
     #[arg(short = 'l', long)]
     pub list: bool,

@@ -18,6 +18,7 @@
 | `--edge-density` |       | Tune contour line count (image-mode contour)                  |
 | `--no-svg-anim` |       | Force static render for animated SVG                          |
 | `--info`         | `-i`  | Print file info and exit                                      |
+| `--json`         |       | Emit `--info` as JSON for pipelines (requires `--info`)       |
 | `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)              |
 | `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           |
@@ -38,6 +39,10 @@
   font styles, and rich renders. Pair `--raw --color plain` if you want raw structure
   without colors but still want HTML / SVG rendered.
 - `--print` / `-p` forces print mode regardless of TTY.
+- `--json` (with `--info`) prints the info screen as a single JSON object for shell pipelines —
+  `peek file.pdf --info --json | jq .size_bytes`. Core metadata is typed (numbers stay numbers,
+  timestamps are ISO-8601 UTC); per-type stats are nested under a key named for the file type
+  (`peek book.pdf --info --json | jq .pdf.page_count`).
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 
 ## Help screens

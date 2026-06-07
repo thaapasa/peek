@@ -54,5 +54,5 @@ Hex (`x`) is still available; for cert files it's rarely what you want, but it's
 
 ## Limitations
 
-DER-encoded files (`.der`, DER-form `.crt` / `.cer`), PKCS#12 / PFX containers, encrypted PKCS#8
-with a password prompt, and JWK / JWKS are not yet decoded. They're tracked as follow-up work.
+PKCS#12 / PFX containers and encrypted PKCS#8 (password prompt) are not yet decoded. They're
+tracked as follow-up work.

@@ -146,7 +146,7 @@ fn paint_size(bytes: u64, theme: &PeekTheme) -> String {
     theme.paint(&text, color)
 }
 
-fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
+pub(super) fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
     if bytes == 0 {
         return theme.muted;
     }
@@ -169,7 +169,7 @@ fn size_color(bytes: u64, theme: &PeekTheme) -> Color {
     }
 }
 
-fn format_size_display(bytes: u64) -> String {
+pub(super) fn format_size_display(bytes: u64) -> String {
     let exact = super::thousands_sep(bytes);
     let human = format_size_human(bytes);
     format!("{exact} bytes ({human})")
@@ -198,7 +198,7 @@ fn paint_timestamp(time: SystemTime, theme: &PeekTheme, utc: bool) -> String {
     theme.paint(&text, color)
 }
 
-fn timestamp_color(time: SystemTime, theme: &PeekTheme) -> Color {
+pub(super) fn timestamp_color(time: SystemTime, theme: &PeekTheme) -> Color {
     let age_secs = SystemTime::now()
         .duration_since(time)
         .map(|d| d.as_secs())

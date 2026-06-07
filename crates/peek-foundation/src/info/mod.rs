@@ -4,12 +4,23 @@ use std::time::SystemTime;
 use crate::input::mime::MimeInfo;
 use crate::theme::PeekTheme;
 
+mod json;
 mod render;
+mod rows;
+mod section;
 mod time;
+mod value;
 
+pub use json::to_json;
+/// `#[derive(InfoView)]` — the print-tree generator. Shares the trait's name
+/// (macro vs. type namespace) the way serde's `Serialize` does.
+pub use peek_foundation_derive::InfoView;
 pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
+pub use rows::{InfoRow, push_rows, rows_to_json};
+pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
 pub use time::format_archive_mtime_zoned;
+pub use value::{Accent, Muted, Role, Value, Warn};
 
 /// Collected file metadata.
 pub struct FileInfo {
@@ -66,6 +77,18 @@ pub struct CompressionInfo {
 pub trait InfoExtras: std::any::Any {
     /// Append this type's Info-view section to `lines`.
     fn render_section(&self, lines: &mut Vec<String>, theme: &PeekTheme);
+
+    /// Structured form of this type's section for `--info --json`, as
+    /// `(type_key, value)` — the JSON object nested under `type_key`
+    /// (e.g. `("archive", { "entry_count": 12, … })`).
+    ///
+    /// Default `None`: the type hasn't been given a typed encoder yet, so
+    /// the JSON path falls back to surfacing the rendered section as a
+    /// `details` text array. Implemented for converted types via the
+    /// three-argument form of [`impl_info_extras!`]. See `info/json.rs`.
+    fn json_section(&self) -> Option<(&'static str, serde_json::Value)> {
+        None
+    }
 }
 
 /// Boxed per-type info payload carried by [`FileInfo::extras`].
@@ -99,6 +122,29 @@ pub fn downcast_extras<T: 'static>(extras: &Extras) -> &T {
 /// path. The struct and the function need not share a module.
 #[macro_export]
 macro_rules! impl_info_extras {
+    // Derived form: the type derives both `serde::Serialize` and
+    // `#[derive(InfoView)]`, so one view struct drives both outputs —
+    // print via [`render_info`], JSON via `serde_json::to_value` nested under
+    // `$key`. The preferred wiring for migrated sections.
+    ($ty:ty, json = $key:literal) => {
+        impl $crate::info::InfoExtras for $ty {
+            fn render_section(
+                &self,
+                lines: &mut ::std::vec::Vec<::std::string::String>,
+                theme: &$crate::theme::PeekTheme,
+            ) {
+                $crate::info::render_info(lines, self, theme);
+            }
+
+            fn json_section(&self) -> ::std::option::Option<(&'static str, ::serde_json::Value)> {
+                ::std::option::Option::Some((
+                    $key,
+                    ::serde_json::to_value(self)
+                        .expect(::std::concat!($key, " info view serializes")),
+                ))
+            }
+        }
+    };
     ($ty:ty, $render:path) => {
         impl $crate::info::InfoExtras for $ty {
             fn render_section(
@@ -107,6 +153,23 @@ macro_rules! impl_info_extras {
                 theme: &$crate::theme::PeekTheme,
             ) {
                 $render(lines, self, theme);
+            }
+        }
+    };
+    // Three-argument form: additionally wire a typed `--info --json`
+    // encoder, a free function `(&Self) -> (&'static str, serde_json::Value)`.
+    ($ty:ty, $render:path, $json:path) => {
+        impl $crate::info::InfoExtras for $ty {
+            fn render_section(
+                &self,
+                lines: &mut ::std::vec::Vec<::std::string::String>,
+                theme: &$crate::theme::PeekTheme,
+            ) {
+                $render(lines, self, theme);
+            }
+
+            fn json_section(&self) -> ::std::option::Option<(&'static str, ::serde_json::Value)> {
+                ::std::option::Option::Some($json(self))
             }
         }
     };

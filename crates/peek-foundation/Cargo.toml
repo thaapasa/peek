@@ -20,6 +20,7 @@ testing = []
 peek-io = { workspace = true }
 peek-detect = { workspace = true }
 peek-theme = { workspace = true }
+peek-foundation-derive = { workspace = true }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
@@ -27,6 +28,8 @@ crossterm = { workspace = true }
 syntect = { workspace = true }
 unicode-width = { workspace = true }
 quick-xml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }

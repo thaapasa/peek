@@ -2,8 +2,13 @@
 //! section. On listing failure the format name is preserved and the
 //! error is surfaced as a warning row.
 
+use serde::ser::SerializeStruct;
+use serde::{Serialize, Serializer};
+
+use serde_json::json;
+
 use super::reader::list_entries;
-use crate::info::{Extras, paint_count, push_field, push_section_header, thousands_sep};
+use crate::info::{Extras, InfoNode, Role, Value, Warn, render_info, thousands_sep};
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::theme::PeekTheme;
@@ -120,56 +125,116 @@ fn is_object_member(data: &[u8]) -> bool {
     )
 }
 
+/// Themed terminal Archive section.
 pub fn render_section(lines: &mut Vec<String>, stats: &ArchiveStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, "Archive", theme);
-    push_field(
-        lines,
-        "Format",
-        &theme.paint_value(stats.format_name),
-        theme,
-    );
+    render_info(lines, &ArchiveView::from(stats), theme);
+}
 
-    if let Some(err) = &stats.error {
-        push_field(lines, "Status", &theme.paint_warning(err), theme);
-        return;
-    }
+/// Typed `--info --json` view of the Archive section, nested under
+/// `"archive"`. On a listing error the count fields drop out (only `format`
+/// and `error` remain).
+pub fn json_section(stats: &ArchiveStats) -> (&'static str, serde_json::Value) {
+    (
+        "archive",
+        serde_json::to_value(ArchiveView::from(stats)).expect("archive info view serializes"),
+    )
+}
 
-    push_field(
-        lines,
-        "Entries",
-        &paint_count(stats.entry_count, theme),
-        theme,
-    );
-    push_field(lines, "Files", &paint_count(stats.file_count, theme), theme);
-    push_field(
-        lines,
-        "Directories",
-        &paint_count(stats.dir_count, theme),
-        theme,
-    );
-    push_field(
-        lines,
-        "Total size",
-        &theme.paint_value(&format!(
-            "{} bytes",
-            thousands_sep(stats.total_uncompressed_size)
-        )),
-        theme,
-    );
+#[derive(Serialize, crate::info::InfoView)]
+struct ArchiveView {
+    #[info(nest)]
+    #[serde(flatten)]
+    main: ArchiveMain,
+    #[info(nest)]
+    #[serde(rename = "static_lib", skip_serializing_if = "Option::is_none")]
+    static_lib: Option<StaticLib>,
+}
 
-    if let Some(lib) = &stats.static_lib {
-        lines.push(String::new());
-        push_section_header(lines, "Static library", theme);
-        push_field(
-            lines,
-            "Objects",
-            &paint_count(lib.object_members, theme),
-            theme,
-        );
-        if let Some(arch) = &lib.architecture {
-            push_field(lines, "Architecture", &theme.paint_value(arch), theme);
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title = "Archive")]
+struct ArchiveMain {
+    #[info(label = "Format")]
+    format: &'static str,
+    #[info(label = "Status", skip_if = "Option::is_none")]
+    #[serde(rename = "error", skip_serializing_if = "Option::is_none")]
+    error: Option<Warn>,
+    // On a listing error these drop from both outputs.
+    #[info(label = "Entries")]
+    #[serde(rename = "entry_count", skip_serializing_if = "Option::is_none")]
+    entry_count: Option<Value>,
+    #[info(label = "Files")]
+    #[serde(rename = "file_count", skip_serializing_if = "Option::is_none")]
+    file_count: Option<Value>,
+    #[info(label = "Directories")]
+    #[serde(rename = "dir_count", skip_serializing_if = "Option::is_none")]
+    dir_count: Option<Value>,
+    #[info(label = "Total size")]
+    #[serde(
+        rename = "total_uncompressed_size",
+        skip_serializing_if = "Option::is_none"
+    )]
+    total_size: Option<Value>,
+}
+
+impl From<&ArchiveStats> for ArchiveView {
+    fn from(s: &ArchiveStats) -> Self {
+        let ok = s.error.is_none();
+        ArchiveView {
+            main: ArchiveMain {
+                format: s.format_name,
+                error: s.error.clone().map(Warn),
+                entry_count: ok.then(|| Value::count(s.entry_count as u64)),
+                file_count: ok.then(|| Value::count(s.file_count as u64)),
+                dir_count: ok.then(|| Value::count(s.dir_count as u64)),
+                total_size: ok.then(|| {
+                    Value::split(
+                        format!("{} bytes", thousands_sep(s.total_uncompressed_size)),
+                        Role::Value,
+                        json!(s.total_uncompressed_size),
+                    )
+                }),
+            },
+            static_lib: s.static_lib.as_ref().map(|lib| StaticLib {
+                object_members: lib.object_members,
+                architecture: lib.architecture.clone(),
+            }),
         }
+    }
+}
+
+/// Static-library summary. Print: a `Static library` block. JSON: a
+/// `static_lib` object.
+struct StaticLib {
+    object_members: usize,
+    architecture: Option<String>,
+}
+impl crate::info::InfoView for StaticLib {
+    fn info_nodes(&self, theme: &PeekTheme) -> Vec<InfoNode> {
+        let mut body = vec![InfoNode::Row {
+            label: "Objects".into(),
+            value: crate::info::paint_count(self.object_members, theme),
+        }];
+        if let Some(arch) = &self.architecture {
+            body.push(InfoNode::Row {
+                label: "Architecture".into(),
+                value: theme.paint_value(arch),
+            });
+        }
+        vec![InfoNode::Block {
+            title: "Static library".to_string(),
+            body,
+        }]
+    }
+}
+impl Serialize for StaticLib {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        let len = 1 + self.architecture.is_some() as usize;
+        let mut st = ser.serialize_struct("static_lib", len)?;
+        st.serialize_field("object_members", &self.object_members)?;
+        if let Some(arch) = &self.architecture {
+            st.serialize_field("architecture", arch)?;
+        }
+        st.end()
     }
 }
 

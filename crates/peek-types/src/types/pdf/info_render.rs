@@ -1,71 +1,137 @@
-//! Render the PDF info section. Mirrors the shared document
-//! info-render so the layout matches DOCX / RTF.
+//! The PDF info section, driven by one [`PdfView`] that derives both
+//! `serde::Serialize` (JSON) and [`InfoView`](crate::info::InfoView) (themed
+//! print). Mirrors the shared document layout. [`PdfStats`] stays the gather
+//! struct; the view projects it.
+//!
+//! On a load error only the `Error` row shows: the gather leaves every other
+//! field empty/zero, so they skip. Zero counts are omitted from *both* outputs
+//! (modelled as `Option<Value>`); `encrypted` is a JSON bool always but a
+//! print row only when set.
 
-use crate::info::{paint_count, push_field, push_section_header};
+use serde::{Serialize, Serializer};
+
+use crate::info::{InfoValue, Muted, Value, Warn, render_info};
 use crate::theme::PeekTheme;
+use crate::types::pdf::PdfFlavor;
 
 use super::info::PdfStats;
 
+/// Themed terminal PDF section.
 pub fn render_section(lines: &mut Vec<String>, stats: &PdfStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    push_section_header(lines, stats.flavor.label(), theme);
+    render_info(lines, &PdfView::from(stats), theme);
+}
 
-    if let Some(err) = &stats.error {
-        push_field(lines, "Error", &theme.paint_warning(err), theme);
-        return;
-    }
+/// Typed `--info --json` view of the PDF section, nested under `"pdf"`.
+pub fn json_section(stats: &PdfStats) -> (&'static str, serde_json::Value) {
+    (
+        "pdf",
+        serde_json::to_value(PdfView::from(stats)).expect("pdf info view serializes"),
+    )
+}
 
-    if !stats.pdf_version.is_empty() {
-        push_field(
-            lines,
-            "Version",
-            &theme.paint_value(&stats.pdf_version),
-            theme,
-        );
-    }
-    if stats.encrypted {
-        push_field(lines, "Encrypted", &theme.paint_warning("yes"), theme);
-    }
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title_from = "section_title")]
+struct PdfView {
+    #[info(skip)]
+    #[serde(rename = "flavor", serialize_with = "ser_flavor")]
+    flavor: PdfFlavor,
+    #[info(label = "Error")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<Warn>,
+    #[info(label = "Version")]
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pdf_version: String,
+    // JSON bool always; print row only when encrypted.
+    #[info(label = "Encrypted", skip_if = "Encrypted::clear")]
+    encrypted: Encrypted,
+    #[info(label = "Title")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[info(label = "Author")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    creator: Option<String>,
+    #[info(label = "Subject")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subject: Option<Muted>,
+    #[info(label = "Keywords")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keywords: Option<Muted>,
+    #[info(label = "Created")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created: Option<Muted>,
+    #[info(label = "Modified")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modified: Option<Muted>,
+    // Zero counts vanish from both outputs.
+    #[info(label = "Pages")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    page_count: Option<Value>,
+    #[info(label = "Attachments")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attachment_count: Option<Value>,
+    #[info(label = "Images")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image_count: Option<Value>,
+    #[info(label = "Description")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<Muted>,
+}
 
-    let m = &stats.metadata;
-    if let Some(v) = &m.title {
-        push_field(lines, "Title", &theme.paint_value(v), theme);
+impl PdfView {
+    fn section_title(&self) -> &'static str {
+        self.flavor.label()
     }
-    if let Some(v) = &m.creator {
-        push_field(lines, "Author", &theme.paint_value(v), theme);
+}
+
+impl From<&PdfStats> for PdfView {
+    fn from(s: &PdfStats) -> Self {
+        let m = &s.metadata;
+        let count = |n: usize| (n > 0).then(|| Value::count(n as u64));
+        PdfView {
+            flavor: s.flavor,
+            error: s.error.clone().map(Warn),
+            pdf_version: s.pdf_version.clone(),
+            encrypted: Encrypted(s.encrypted),
+            title: m.title.clone(),
+            creator: m.creator.clone(),
+            subject: m.subject.clone().map(Muted),
+            keywords: m.keywords.clone().map(Muted),
+            created: m.created.clone().map(Muted),
+            modified: m.modified.clone().map(Muted),
+            page_count: count(s.page_count),
+            attachment_count: count(s.attachment_count),
+            image_count: count(s.image_count),
+            description: m.description.clone().map(Muted),
+        }
     }
-    if let Some(v) = &m.subject {
-        push_field(lines, "Subject", &theme.paint_muted(v), theme);
+}
+
+/// `encrypted` flag: a JSON bool, but printed only when set — as a warning
+/// `yes` (an encrypted document is the noteworthy case).
+struct Encrypted(bool);
+
+impl Encrypted {
+    /// Skip predicate: hide the print row when not encrypted.
+    fn clear(&self) -> bool {
+        !self.0
     }
-    if let Some(v) = &m.keywords {
-        push_field(lines, "Keywords", &theme.paint_muted(v), theme);
+}
+
+impl InfoValue for Encrypted {
+    fn render_value(&self, theme: &PeekTheme) -> String {
+        theme.paint_warning("yes")
     }
-    if let Some(v) = &m.created {
-        push_field(lines, "Created", &theme.paint_muted(v), theme);
+}
+
+impl Serialize for Encrypted {
+    fn serialize<S: Serializer>(&self, ser: S) -> Result<S::Ok, S::Error> {
+        ser.serialize_bool(self.0)
     }
-    if let Some(v) = &m.modified {
-        push_field(lines, "Modified", &theme.paint_muted(v), theme);
-    }
-    if stats.page_count > 0 {
-        push_field(lines, "Pages", &paint_count(stats.page_count, theme), theme);
-    }
-    if stats.attachment_count > 0 {
-        push_field(
-            lines,
-            "Attachments",
-            &paint_count(stats.attachment_count, theme),
-            theme,
-        );
-    }
-    if stats.image_count > 0 {
-        push_field(
-            lines,
-            "Images",
-            &paint_count(stats.image_count, theme),
-            theme,
-        );
-    }
-    if let Some(v) = &m.description {
-        push_field(lines, "Description", &theme.paint_muted(v), theme);
-    }
+}
+
+fn ser_flavor<S: Serializer>(flavor: &PdfFlavor, ser: S) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(match flavor {
+        PdfFlavor::Pdf => "pdf",
+        PdfFlavor::Illustrator => "illustrator",
+    })
 }

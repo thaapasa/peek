@@ -61,13 +61,33 @@ crates/
                          ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
                          primitives; wrap_scroll; cell_size; highlight. NB: compose_modes /
                          ViewerState / the event loop are NOT here — they're the bin's session layer.
-    info/              — FileInfo + InfoExtras trait + Extras (Box<dyn InfoExtras>); render/
-                         (dynamic trait dispatch, themed sections) + time fmt. (gather hub → bin.)
+    info/              — FileInfo + InfoExtras trait (render_section + json_section) + Extras
+                         (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +
+                         json (typed --info --json encoder) + time fmt; section (the info model:
+                         InfoNode tree [Row | Line | Block] + InfoView trait + render_info walker +
+                         InfoValue per-field paint + Value [Size/Count/Timestamp/Text/Split/…] +
+                         Role + Muted/Accent/Warn value types + MaybeZero); rows (InfoRow runtime
+                         model — optional print-label + optional json-key + Value cell; push_rows /
+                         rows_to_json). Three section-build modes: **derive** (regular —
+                         `#[derive(Serialize, InfoView)]`, one struct → both outputs; `Value::split`
+                         for a print≠json leaf), **InfoRow** (irregular row-shaped — enum-variant
+                         dispatch / one print row → several json keys; cert, font), **bespoke**
+                         (hand InfoView + Serialize). A display Block ≡ a JSON sub-object.
+                         (gather hub → bin.)
     output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
                          theme-gradient logo painter (shared with the bin's help screen).
     extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path
                          sanitiser / forward-slash-key helpers. (The dispatch hub → bin.)
     base64, xml        — shared standard-alphabet base64 + XML attribute-unescape helpers.
+    derive/            — `peek-foundation-derive`: proc-macro sub-crate (own Cargo manifest,
+                         workspace member) for `#[derive(InfoView)]`. Walks a serde view struct's
+                         fields into an InfoNode tree: `#[info(label)]` → Row, `#[info(nest)]` →
+                         splice a sub-view (titled → Block, untitled → inline), `#[info(skip)]` →
+                         JSON-only. Title via `#[info(title)]` / `#[info(title_from = "method")]`
+                         / none (container). Skips mirror serde's `skip_serializing_if` (+ print-
+                         only `skip_if_zero` / `skip_if` / `no_skip`). Generated paths resolve only
+                         through `::peek_foundation`. syn/quote, build-time only. Re-exported as
+                         `info::InfoView`.
   peek-types/          — per-file-type readers, one module per type (reader + info + view-mode;
                          the format enum + sniff helpers live in peek-detect, re-exported at each
                          module root). Depends on foundation/detect/io/theme — Cargo bars it from

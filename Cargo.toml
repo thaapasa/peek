@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [workspace]
-members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation", "crates/peek-types"]
+members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation/derive", "crates/peek-foundation", "crates/peek-types"]
 
 # Shared package metadata for the bin + every member crate (`field.workspace
 # = true` to inherit). One version line for the whole workspace — the release
@@ -38,8 +38,15 @@ homepage = "https://github.com/thaapasa/peek"
 peek-io = { path = "crates/peek-io" }
 peek-detect = { path = "crates/peek-detect" }
 peek-theme = { path = "crates/peek-theme" }
+peek-foundation-derive = { path = "crates/peek-foundation/derive" }
 peek-foundation = { path = "crates/peek-foundation" }
 peek-types = { path = "crates/peek-types" }
+
+# Proc-macro toolkit for the `#[derive(InfoView)]` macro (build-time only;
+# no runtime dependency added).
+syn = { version = "2", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"
 
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }

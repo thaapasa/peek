@@ -54,8 +54,4 @@ impl NotebookInfo {
         }
         info
     }
-
-    pub(crate) fn cell_count(&self) -> usize {
-        self.markdown_cells + self.code_cells + self.raw_cells
-    }
 }

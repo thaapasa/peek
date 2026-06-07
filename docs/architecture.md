@@ -516,11 +516,40 @@ wiring-sites checklist. Quick summary:
    are appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).
    The per-type `compose()` lives in peek-types; only the dispatch arm lives in the bin.
 4. Add `types/<x>/info_gather.rs` (`gather_extras(...)` returning `Extras`, i.e.
-   `Box::new(<Stats>)`) and `types/<x>/info_render.rs` (`render_section(lines, &<Stats>,
-   theme)`) for type-specific metadata, with one `impl_info_extras!(<Stats>, ...::render_section)`
-   row binding the stats struct to the `InfoExtras` trait (`info::render` dispatches through the
-   trait — no per-type render match). Then wire **one arm in the bin's `src/gather/mod.rs`**
-   calling the type's `gather_extras`. Tiny types may combine gather + render into one `info.rs`.
+   `Box::new(<Stats>)`) and `types/<x>/info_render.rs` for type-specific metadata, with one
+   `impl_info_extras!` row binding the stats struct to the `InfoExtras` trait (`info::render`
+   dispatches through the trait — no per-type render match). Then wire **one arm in the bin's
+   `src/gather/mod.rs`** calling the type's `gather_extras`. Tiny types may combine gather + render
+   into one `info.rs`.
+
+   Build the section in one of **three modes**, in order of preference:
+
+   - **Derive (regular sections — default).** Define a
+     `#[derive(serde::Serialize, peek_foundation::info::InfoView)]` view struct (see
+     `info/section.rs`) so print + `--info --json` fall out of one definition:
+     `#[info(label/nest/skip/title/title_from)]` for the print tree, `serde` attrs for JSON,
+     per-field paint via `InfoValue`. Cells are the semantic `Value` (`Size` / `Count` /
+     `Timestamp` / `Text` / …, see `info/value.rs`) painted by role; `Muted` / `Accent` / `Warn`
+     are the off-colour string newtypes. When a leaf's print text and JSON value **diverge**
+     (prints `ELF`, serializes `"elf"`; or a join-string that serializes as an array), use
+     `Value::split(text, Role, json)` / `Value::labelled(label, token)` rather than a bespoke
+     newtype. Wire with `impl_info_extras!(<View>, json = "<key>")`.
+
+   - **`InfoRow` (irregular but row-shaped — enum-variant dispatch, one print row mapping to
+     several JSON keys).** The derive walks struct *fields*, so it can't express a `Vec<enum>`
+     whose variants lay out differently. Build a `Vec<InfoRow>` per entry instead (see
+     `info/rows.rs`): each row carries an optional print label, an optional JSON key, and a `Value`
+     cell (`InfoRow::new/text/count/int/muted/…`, `print_only`, `json_only`). One list feeds both
+     outputs — `push_rows` for the themed lines, `rows_to_json` for the object — so the two can't
+     drift. `cert` and `font` are the worked examples. The section frame (which blocks exist,
+     custom headers) stays hand-built in `render_section` / `json_section`.
+
+   - **Fully bespoke (rare).** A layout neither covers (pre-painted composite cells, nested
+     partition tables) wraps its gathered struct and hand-implements `InfoView::info_nodes` (the
+     `InfoNode` tree, capturing `lines`-based renderers as `Line` nodes) plus `serde::Serialize`.
+
+   The `InfoRow` and bespoke modes wire through the free `render_section` / `json_section` form of
+   `impl_info_extras!`.
 5. If the type is a container, add `types/<x>/extract.rs` (returning `peek_foundation::extract`'s
    `Extracted` / `ExtractError`) and **one arm in the bin's `src/extract/extract.rs`**.
 

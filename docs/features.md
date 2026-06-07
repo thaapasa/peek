@@ -363,7 +363,7 @@ yet supported — see [planned.md](planned.md).)
   attached image opens in the image viewer, and so on). Hidden when no attachments are present.
 - **Info** — PDF version (`1.4`, `1.7`, …), title, author, subject, keywords, creation /
   modification dates (PDF `D:YYYYMMDDHHMMSSO…` strings reformatted to `YYYY-MM-DD HH:MM:SS UTC`
-  / `±HH:MM`), page count, attachment count.
+  / `±HH:MM`), page count, attachment count, inline-image count.
 
 Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
 detects the `%PDF-` magic and routes to the PDF mode stack (a piped `.ai` lands here too,
@@ -1149,6 +1149,22 @@ colors, per-character permission coloring).
   script / external-href flags, plus source text stats
 - **Binary** — detected format from magic (Mach-O, ELF, PE, ZIP, SQLite, …)
 
+**JSON output (`--info --json`)** ✅ — emits the info screen as a single JSON object for shell
+pipelines (`peek x --info --json | jq .size_bytes`). Core metadata is fully typed — `size_bytes`
+stays a number, timestamps are ISO-8601 UTC strings (independent of `--utc`), MIME entries carry a
+machine `category` (`registered` / `vendor` / `convention` / …). Absent optionals (created,
+compression, warnings) are omitted rather than null. Each file type contributes a typed object
+nested under its own key (`pdf`, `archive`, `image`, `sqlite`, …) with raw typed values and
+lowercase machine tokens for enum fields (`line_endings: "crlf"`, `top_level_kind: "object"`). A
+type with no typed encoder falls back to a `details` text array, but every shipping type provides
+one. `--json` requires `--info` and is rejected otherwise.
+
+Both outputs derive from **one view model per type**: a struct that derives `serde::Serialize`
+(JSON) and `#[derive(InfoView)]` (the themed terminal render), so labels, skip rules, and
+per-field formatting are declared once and can't drift between print and JSON. A displayed section
+block corresponds to a nested JSON object; per-field human formatting (sizes, gradients, muted
+secondary text) lives in `InfoValue` impls while the same field serializes its machine value.
+
 EXIF: camera make/model, lens, orientation, resolution/DPI, exposure, aperture, ISO, focal length,
 flash, white balance, date taken, GPS, artist, copyright. ICC profile name parsed from the embedded
 profile's `desc` / `mluc` tag. Animation stats (frame count, total duration, average FPS, loop
@@ -1459,6 +1475,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--image-mode`   | `-m`  | Image rendering mode                                                                                        | ✅      |
 | `--edge-density` |       | Edge density target for `--image-mode contour`                                                              | ✅      |
 | `--info`         | `-i`  | Show file info instead of contents                                                                          | ✅      |
+| `--json`         |       | Emit `--info` as machine-readable JSON (requires `--info`)                                                  | ✅      |
 | `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) | ✅      |
 | `--utc`          |       | Show timestamps in UTC (default: local + offset)                                                            | ✅      |
 | `--background`   |       | Image transparency background (auto/black/white/checkerboard)                                               | ✅      |

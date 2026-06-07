@@ -1,60 +1,103 @@
-//! Render the shared document info section. Format label comes from
-//! the [`DocumentFormat`](crate::input::detect::DocumentFormat) on the
-//! stats so DOCX and RTF render through the same path.
+//! The shared document info section (DOCX / ODT / RTF), driven by one
+//! [`DocumentView`] that derives both `serde::Serialize` (JSON) and
+//! [`InfoView`](crate::info::InfoView) (themed print). [`DocumentStats`] stays
+//! the gather struct; the view projects it. The section title is the format
+//! name; metadata members render inline (so they flatten into the JSON object
+//! too, rather than nesting under a separate `metadata` key).
 
-use crate::info::{paint_count, push_field, push_section_header};
+use serde::{Serialize, Serializer};
+
+use crate::info::{Muted, Value, render_info};
+use crate::input::detect::DocumentFormat;
 use crate::theme::PeekTheme;
 
 use super::info::DocumentStats;
 
+/// Themed terminal document section.
 pub fn render_section(lines: &mut Vec<String>, stats: &DocumentStats, theme: &PeekTheme) {
-    lines.push(String::new());
-    let header = match stats.format {
-        crate::input::detect::DocumentFormat::Docx => "DOCX",
-        crate::input::detect::DocumentFormat::Odt => "ODT",
-        crate::input::detect::DocumentFormat::Rtf => "RTF",
-    };
-    push_section_header(lines, header, theme);
+    render_info(lines, &DocumentView::from(stats), theme);
+}
 
-    let m = &stats.metadata;
-    if let Some(v) = &m.title {
-        push_field(lines, "Title", &theme.paint_value(v), theme);
+/// Typed `--info --json` view of the document section, nested under
+/// `"document"`.
+pub fn json_section(stats: &DocumentStats) -> (&'static str, serde_json::Value) {
+    (
+        "document",
+        serde_json::to_value(DocumentView::from(stats)).expect("document info view serializes"),
+    )
+}
+
+#[derive(Serialize, crate::info::InfoView)]
+#[info(title_from = "section_title")]
+struct DocumentView {
+    // The format token drives the JSON `format` field and the section title;
+    // it is never a row of its own.
+    #[info(skip)]
+    #[serde(rename = "format", serialize_with = "ser_format")]
+    format: DocumentFormat,
+    #[info(label = "Title")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    title: Option<String>,
+    #[info(label = "Author")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    creator: Option<String>,
+    #[info(label = "Subject")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subject: Option<Muted>,
+    #[info(label = "Keywords")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    keywords: Option<Muted>,
+    #[info(label = "Created")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created: Option<Muted>,
+    #[info(label = "Modified")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modified: Option<Muted>,
+    #[info(label = "Paragraphs", skip_if_zero)]
+    paragraph_count: Value,
+    #[info(label = "Words", skip_if_zero)]
+    word_count: Value,
+    #[info(label = "Images", skip_if_zero)]
+    image_count: Value,
+    #[info(label = "Description")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<Muted>,
+}
+
+impl DocumentView {
+    /// Section title — the uppercase format name.
+    fn section_title(&self) -> &'static str {
+        match self.format {
+            DocumentFormat::Docx => "DOCX",
+            DocumentFormat::Odt => "ODT",
+            DocumentFormat::Rtf => "RTF",
+        }
     }
-    if let Some(v) = &m.creator {
-        push_field(lines, "Author", &theme.paint_value(v), theme);
+}
+
+impl From<&DocumentStats> for DocumentView {
+    fn from(s: &DocumentStats) -> Self {
+        let m = &s.metadata;
+        DocumentView {
+            format: s.format,
+            title: m.title.clone(),
+            creator: m.creator.clone(),
+            subject: m.subject.clone().map(Muted),
+            keywords: m.keywords.clone().map(Muted),
+            created: m.created.clone().map(Muted),
+            modified: m.modified.clone().map(Muted),
+            paragraph_count: Value::count(s.paragraph_count as u64),
+            word_count: Value::count(s.word_count as u64),
+            image_count: Value::count(s.image_count as u64),
+            description: m.description.clone().map(Muted),
+        }
     }
-    if let Some(v) = &m.subject {
-        push_field(lines, "Subject", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.keywords {
-        push_field(lines, "Keywords", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.created {
-        push_field(lines, "Created", &theme.paint_muted(v), theme);
-    }
-    if let Some(v) = &m.modified {
-        push_field(lines, "Modified", &theme.paint_muted(v), theme);
-    }
-    if stats.paragraph_count > 0 {
-        push_field(
-            lines,
-            "Paragraphs",
-            &paint_count(stats.paragraph_count, theme),
-            theme,
-        );
-    }
-    if stats.word_count > 0 {
-        push_field(lines, "Words", &paint_count(stats.word_count, theme), theme);
-    }
-    if stats.image_count > 0 {
-        push_field(
-            lines,
-            "Images",
-            &paint_count(stats.image_count, theme),
-            theme,
-        );
-    }
-    if let Some(v) = &m.description {
-        push_field(lines, "Description", &theme.paint_muted(v), theme);
-    }
+}
+
+fn ser_format<S: Serializer>(format: &DocumentFormat, ser: S) -> Result<S::Ok, S::Error> {
+    ser.serialize_str(match format {
+        DocumentFormat::Docx => "docx",
+        DocumentFormat::Odt => "odt",
+        DocumentFormat::Rtf => "rtf",
+    })
 }
