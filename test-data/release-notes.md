@@ -67,6 +67,10 @@ cargo install --path . --locked
 The new `acme scan` command walks a directory tree without buffering
 the full file list in memory:
 
+> **Heads up: pass `--json` for machine-readable output and the rest of this
+> sentence must stay bold to prove inline code does not reset surrounding
+> emphasis.** Plain prose resumes here.
+
 ```sh
 acme scan ./src --include '*.{rs,toml}' --exclude target --json
 ```
