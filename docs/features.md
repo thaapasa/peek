@@ -113,6 +113,10 @@ Filename-keyed special cases fill the gaps where the extension misleads or is ab
 Just definition exists), `.dockerignore` → Git Ignore. Names with no grammar (`.dhall`, `.cue`)
 fall back to plain text.
 
+Extensionless `#!` scripts (e.g. `postinst`, `configure`, git hooks) are detected by their
+shebang line and routed to the matching grammar — the interpreter name (`sh`, `bash`, `python`,
+`perl`, `ruby`, …) selects the syntax, including `env`-style shebangs (`#!/usr/bin/env python`).
+
 Features: syntax-colored source with theme support; toggleable line numbers (✅, `--line-numbers` /
 `-n` / `l`).
 
@@ -125,8 +129,9 @@ Features: syntax-colored source with theme support; toggleable line numbers (✅
   and ordered lists with hanging indent, task lists (`☐` / `✓`), blockquote rail (`▍`),
   horizontal rules, GFM tables as box-drawing (per-column alignment from the header separator
   row, proportional shrink when the row exceeds available width), fenced code blocks
-  syntect-highlighted by their declared language (falls back to dim plain when language doesn't
-  resolve), emphasis / strong / strikethrough as SGR attributes, inline code dim, links
+  syntect-highlighted by their declared language (falls back to full foreground-on-surface plain
+  when language doesn't resolve), emphasis / strong / strikethrough as SGR attributes, inline code
+  as full foreground-on-surface (boxed span), links
   (underlined + dim URL after), images (`[image: alt] (url)`), footnote references and
   definitions, and frontmatter (YAML `---` / TOML `+++`) stripped to a dim verbatim block at the
   top.

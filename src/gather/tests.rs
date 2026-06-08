@@ -345,6 +345,24 @@ fn sqlite_library_catalogue_stats() {
     assert!(stats.integrity_ok, "fixture passes integrity_check");
 }
 
+/// An extensionless `#!/bin/sh` script (Debian `postinst`) must classify
+/// as shell source from its shebang alone — the filename gives no hint.
+/// Guards the `shebang_syntax` detection path.
+#[test]
+fn extensionless_shebang_script_detects_as_shell() {
+    let path = fixture("test-data/postinst");
+    let source = InputSource::File(path);
+    let detected = detect::detect(&source).expect("detect");
+    assert!(
+        matches!(
+            &detected.file_type,
+            FileType::SourceCode { syntax } if syntax.as_deref() == Some("sh")
+        ),
+        "expected SourceCode {{ syntax: sh }}, got {:?}",
+        detected.file_type,
+    );
+}
+
 #[test]
 fn java_classfile_sample_metadata() {
     let info = gather_fixture("test-data/Sample.class");

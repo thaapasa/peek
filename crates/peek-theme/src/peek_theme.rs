@@ -131,10 +131,17 @@ impl PeekTheme {
         }
         let bg_open = self.style_mode.bg_seq(color);
         let reset = self.style_mode.reset();
+        let reset_bg = self.style_mode.reset_bg();
+        // Re-arm the surface bg after any sequence that clears it — the
+        // universal reset (`[0m`) *and* a bare bg reset (`[49m`, emitted by
+        // inline-code spans that close without touching outer attributes).
+        // Otherwise the fill would drop to the terminal default mid-line.
         let body = if reset.is_empty() {
             content.to_string()
         } else {
-            content.replace(reset, &format!("{reset}{bg_open}"))
+            content
+                .replace(reset, &format!("{reset}{bg_open}"))
+                .replace(reset_bg, &format!("{reset_bg}{bg_open}"))
         };
         let visible = super::sgr::display_width(content);
         let pad = width.saturating_sub(visible);
@@ -173,16 +180,21 @@ impl PeekTheme {
     /// Inline `code` span — full-strength foreground text on the surface
     /// tint, so it reads as a boxed span (IDEA-style) rather than dimmed
     /// prose. Returns the text unchanged in plain (no-style) modes.
+    ///
+    /// Closes with bg+fg resets (not the universal `[0m`) so a code span
+    /// nested inside emphasis doesn't blow away the surrounding Bold /
+    /// Italic / Underline state — restores only what it opened.
     pub fn paint_code_inline(&self, text: &str) -> String {
         if !self.style_mode.styled() {
             return text.to_string();
         }
         format!(
-            "{}{}{}{}",
+            "{}{}{}{}{}",
             self.style_mode.bg_seq(self.surface),
             self.style_mode.fg_seq(self.foreground),
             text,
-            self.style_mode.reset()
+            self.style_mode.reset_bg(),
+            self.style_mode.reset_fg()
         )
     }
 

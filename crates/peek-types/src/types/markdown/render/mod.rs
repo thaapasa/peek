@@ -235,6 +235,23 @@ mod tests {
     }
 
     #[test]
+    fn inline_code_in_emphasis_keeps_outer_attr() {
+        // A code span nested inside bold must not emit a universal reset
+        // (`[0m`), which would clear the surrounding Bold state and leave
+        // the trailing text unstyled.
+        let out = render_styled("**bold `code` tail**\n");
+        let bold_open = out.find("\x1b[1m").expect("expected bold open");
+        let bold_close = out.find("\x1b[22m").expect("expected bold close");
+        assert!(bold_close > bold_open, "bold close should follow open");
+        let run = &out[bold_open..bold_close];
+        assert!(
+            !run.contains("\x1b[0m"),
+            "inline code must not blow away outer bold via [0m, got {run:?}"
+        );
+        assert!(run.contains("tail"), "trailing text inside the bold run");
+    }
+
+    #[test]
     fn frontmatter_yaml_stripped_and_dimmed() {
         let out = render_styled("---\ntitle: x\n---\n# Heading\n\nbody\n");
         // YAML key should appear (dimmed) and `# Heading` should not
@@ -314,6 +331,25 @@ mod tests {
         // light text, not the old dim ([2m) treatment.
         assert!(out.contains("38;2"), "expected foreground paint in {out:?}");
         assert!(!out.contains("\x1b[2m"), "should not be dim in {out:?}");
+    }
+
+    #[test]
+    fn inline_code_in_blockquote_restores_surface_bg() {
+        // Inline code closes with a bare bg reset (`[49m`). Inside a
+        // blockquote the surface-fill post-pass must re-arm the surface bg
+        // right after it, or the card drops to the terminal default for the
+        // rest of the line. Assert every `[49m` is immediately followed by a
+        // bg-open (`[48;2;`) so the fill never goes bare mid-line.
+        let out = render_styled("> Lead `code` trail\n");
+        for (i, _) in out.match_indices("\x1b[49m") {
+            let after = &out[i + "\x1b[49m".len()..];
+            assert!(
+                after.starts_with("\x1b[48;2;"),
+                "bg reset not re-armed with surface fill in {out:?}"
+            );
+        }
+        // Sanity: the line really did contain a code span bg reset.
+        assert!(out.contains("\x1b[49m"), "expected a bg reset in {out:?}");
     }
 
     #[test]
