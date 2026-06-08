@@ -552,6 +552,13 @@ breadcrumb); the pipe path falls back to a hex dump with the cause on stderr. Th
 fallback is generic to the render loop — any view mode that fails to render an input lands on Hex
 plus a warning rather than crashing.
 
+Decode allocation is capped so a decompression bomb — a tiny header declaring a gigapixel canvas, or
+an animation declaring thousands of huge frames — errors and degrades to Hex instead of OOM-killing
+the process. Static rasters inherit the `image` crate's 512 MiB default via `ImageReader`. The
+GIF/WebP animation path (built directly, so uncapped by default) sets that per-frame limit *and*
+caps the cumulative decoded-frame total at 1 GiB — the second cap covers WebP, whose decoder ignores
+the per-frame limit, and the many-small-frames case the per-frame limit alone misses.
+
 #### SVG ✅
 
 SVG (`.svg`) is vector; the `image` crate doesn't handle it. Rasterized via `resvg`.
