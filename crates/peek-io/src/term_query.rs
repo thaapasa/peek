@@ -17,6 +17,7 @@
 //! `is_terminal()` themselves; this module performs no such check.
 
 use std::sync::OnceLock;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 
 /// A terminal background color, one byte per channel. Reports wider than
