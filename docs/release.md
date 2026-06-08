@@ -10,9 +10,11 @@ bumped or committed locally. Three jobs:
 
 1. **`prepare`** (ubuntu-24.04) — reads the current version from `Cargo.toml`, applies the `bump`
    level to compute `vX.Y.Z`, fails fast if that tag exists on `origin`. The version is the single
-   workspace version under `[workspace.package]` (the `peek` bin + `peek-io` + `peek-detect` crates
-   all inherit it via `version.workspace = true`). Bumps that one line in `Cargo.toml` + all three
-   crate entries in `Cargo.lock`, commits as `github-actions[bot]` on a fresh
+   workspace version under `[workspace.package]` (the `peek` bin + every member crate inherit it
+   via `version.workspace = true`). Bumps that one line in `Cargo.toml`, then runs
+   `cargo update --workspace --offline` so cargo rewrites every internal crate entry in
+   `Cargo.lock` (keeps `--locked` builds valid; adding a member crate never re-breaks this).
+   Commits as `github-actions[bot]` on a fresh
    `release/vX.Y.Z` branch, and force-pushes that branch. Outputs the new version, tag, previous
    tag (for release notes), branch name, and the branch commit SHA.
 2. **`build`** — 5-target matrix, all built from the release-branch SHA:

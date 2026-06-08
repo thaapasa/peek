@@ -85,11 +85,15 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           # Bump the workspace version in Cargo.toml (the single `version`
-          # line, under [workspace.package]; [package] inherits it) and the
-          # peek / peek-io / peek-detect entries in Cargo.lock so --locked
-          # builds stay valid. All three crates share the workspace version.
+          # line, under [workspace.package]; [package] + every member crate
+          # inherit it). Then let cargo rewrite the lockfile so all internal
+          # crate entries track the new version and --locked builds stay valid.
+          # --offline keeps it network-free: only local path-crate versions
+          # changed, so no registry fetch is needed. Cargo owns the lock here
+          # rather than a hand-edit, so adding a member crate never re-breaks
+          # the release.
           sed -i -E '0,/^version = "[^"]+"/s//version = "'"$VERSION"'"/' Cargo.toml
-          perl -0pi -e 's/(name = "(?:peek|peek-io|peek-detect)"\nversion = ")[^"]+/${1}'"$VERSION"'/g' Cargo.lock
+          cargo update --workspace --offline
           git checkout -B "$BRANCH"
           git add Cargo.toml Cargo.lock
           # When highlights are supplied, attach them as the commit body so
