@@ -201,6 +201,7 @@ impl Drop for RawMode {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     #[test]
     fn parses_16bit_reply() {
         let reply = b"\x1b]11;rgb:ffff/ffff/ffff\x07";
@@ -214,12 +215,14 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn parses_st_terminated_reply() {
         let reply = b"\x1b]11;rgb:0000/0000/0000\x1b\\";
         assert_eq!(parse_osc11(reply), Some(Rgb { r: 0, g: 0, b: 0 }));
     }
 
+    #[cfg(unix)]
     #[test]
     fn parses_8bit_channels() {
         let reply = b"\x1b]11;rgb:1e/1e/1e\x07";
@@ -233,6 +236,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn rejects_garbage() {
         assert_eq!(parse_osc11(b"no color here"), None);
