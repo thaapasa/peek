@@ -88,12 +88,13 @@ jobs:
           # line, under [workspace.package]; [package] + every member crate
           # inherit it). Then let cargo rewrite the lockfile so all internal
           # crate entries track the new version and --locked builds stay valid.
-          # --offline keeps it network-free: only local path-crate versions
-          # changed, so no registry fetch is needed. Cargo owns the lock here
-          # rather than a hand-edit, so adding a member crate never re-breaks
-          # the release.
+          # `--workspace` restricts the update to member crates, so registry
+          # deps stay pinned. No --offline: this job has no cargo cache, so
+          # cargo needs the index to resolve the graph. Cargo owns the lock
+          # here rather than a hand-edit, so adding a member crate never
+          # re-breaks the release.
           sed -i -E '0,/^version = "[^"]+"/s//version = "'"$VERSION"'"/' Cargo.toml
-          cargo update --workspace --offline
+          cargo update --workspace
           git checkout -B "$BRANCH"
           git add Cargo.toml Cargo.lock
           # When highlights are supplied, attach them as the commit body so
