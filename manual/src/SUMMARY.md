@@ -37,6 +37,7 @@
   - [Java classfiles](./file-types/classfiles.md)
   - [Certificates and keys](./file-types/certificates.md)
   - [Fonts](./file-types/fonts.md)
+  - [.DS_Store](./file-types/ds-store.md)
   - [Binary](./file-types/binary.md)
 
 # Viewer

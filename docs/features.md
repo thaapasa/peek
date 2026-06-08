@@ -22,6 +22,7 @@ Status legend: ✅ implemented · ◐ partial
     - [SQLite Databases](#sqlite-databases-)
     - [Certificates and Keys](#certificates-and-keys-)
     - [Fonts](#fonts-)
+    - [`.DS_Store`](#ds_store-)
     - [Binary and Archive Files](#binary-and-archive-files-)
 - [Viewer Features](#viewer-features)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
@@ -940,6 +941,31 @@ Crates: `ttf-parser` for the `name` / `head` / `maxp` / `cmap` / `OS/2` / `post`
 unwrap.
 
 Multi-script sample sentences keyed on cmap coverage are [planned](planned.md#font-files-).
+
+### `.DS_Store` ✅
+
+Apple Finder's per-folder Desktop Services Store — the "Bud1" Buddy-allocator container. peek
+parses the block store and its single `DSDB` B-tree read-only, collecting every
+`(filename, structure-id, typed value)` record.
+
+- **Records** (landing view) — a `viewer::table::TableMode` with one row per stored property:
+  `File │ Property │ Code │ Value`. Rows arrive in B-tree key order (by filename). Friendly
+  `Property` labels cover the common Finder codes; the long tail shows `—` and leaves the raw
+  `Code` to speak for itself.
+- **Info** — record count, distinct tracked filenames, and the folder's own view style /
+  background when present.
+
+Value decoding: `Iloc` / `dilc` → `(x, y)` icon coordinates (or `auto`); `fwi0` → window-frame
+bounds + view style; `vstl` → the view-style menu name; `BKGD` → `default` / `color #RRGGBB` /
+`picture`; `modD` / `moDD` → a UTC date (an 8-byte little-endian `CFAbsoluteTime` double, seconds
+since 2001, reusing the info layer's date formatter). Embedded binary property lists (`bwsp`,
+`icvp`, `lsvp`) are reported as `binary plist, N bytes` rather than expanded.
+
+Detection is by the `\0\0\0\1Bud1` magic (so renamed / stdin-piped stores route correctly) as
+well as the canonical `.DS_Store` filename. The walk is defensive: a malformed node or an unknown
+record encoding stops it and flags the Records table / Info `Note` row as truncated, keeping the
+records gathered so far. No source view (opaque binary — `x` drops to hex) and no extract path
+(records aren't files). Parser: hand-rolled, no added dependency.
 
 ### Binary and Archive Files ◐
 

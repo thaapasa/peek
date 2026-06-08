@@ -33,6 +33,8 @@ Modern terminal file viewer — preview any file, any format.
   validity, SANs, fingerprints, thumbprints
 - **Fonts** — TrueType / OpenType / TTC collections / WOFF / WOFF2: rasterised specimen render +
   family / weight / glyphs / script coverage
+- **`.DS_Store`** — Apple Finder's per-folder store decoded to a records table: icon positions,
+  window geometry, view style, background, modification dates
 - **Hex dump** fallback for binary, reachable from any view with `x`
 - **Interactive viewer** with live theme cycling, info screen, extraction, text search, soft wrap,
   image zoom/pan
@@ -67,6 +69,7 @@ peek server.pem         # certificate / key — subject, validity, SANs, fingerp
 peek Lobster.ttf        # font — rasterised specimen + family / weight / scripts
 peek invite.ics         # calendar — agenda with dates, recurrence, attendees
 peek contacts.vcf       # vCard — grouped contact cards
+peek .DS_Store          # Finder store — records table (icons, window, view style)
 peek -                  # explicit stdin
 echo '{"a":1}' | peek   # piped stdin auto-detected
 ```

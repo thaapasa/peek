@@ -50,6 +50,7 @@ pub fn extract(
         | FileType::Font(_)
         | FileType::ObjectFile
         | FileType::Classfile
+        | FileType::DsStore
         | FileType::PostScript(_)
         | FileType::VObject(_)
         | FileType::Binary => Err(ExtractError::Unsupported(

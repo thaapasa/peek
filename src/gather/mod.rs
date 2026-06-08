@@ -256,6 +256,7 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
         FileType::Font(fmt) => types::font::info_gather::gather_extras(source, *fmt, magic_mime),
         FileType::ObjectFile => types::objfile::info_gather::gather_extras(source),
         FileType::Classfile => types::classfile::info_gather::gather_extras(source),
+        FileType::DsStore => types::ds_store::info_gather::gather_extras(source),
         FileType::Directory => match source {
             InputSource::File(path) => types::directory::info::gather_extras(path),
             // A directory only ever reaches here via a real `File` source;

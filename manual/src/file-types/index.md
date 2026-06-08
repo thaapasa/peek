@@ -30,6 +30,7 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | Java classfiles   | .class files — header, fields, methods                      |
 | Certificates      | PEM X.509 / CSR / CRL / keys / OpenSSH public keys          |
 | Fonts             | TrueType, OpenType, TTC / OTC collections, WOFF / WOFF2 (metadata + specimen render) |
+| `.DS_Store`       | Apple Finder store — records table (icon / window / view settings) |
 | Binary / unknown  | Hex dump (`hexdump -C` style)                               |
 
 Detection logic: [`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).

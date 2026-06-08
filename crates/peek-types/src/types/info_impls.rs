@@ -72,6 +72,11 @@ impl_info_extras!(
     crate::types::classfile::info_render::json_section
 );
 impl_info_extras!(
+    crate::types::ds_store::info::DsStoreInfo,
+    crate::types::ds_store::info_render::render_section,
+    crate::types::ds_store::info_render::json_section
+);
+impl_info_extras!(
     crate::types::archive::info::ArchiveStats,
     crate::types::archive::info::render_section,
     crate::types::archive::info::json_section

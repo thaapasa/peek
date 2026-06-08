@@ -141,6 +141,9 @@ impl Registry {
             FileType::Classfile => {
                 types::classfile::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::DsStore => {
+                types::ds_store::compose::compose(source, detected, args, &ctx, &mut modes)?;
+            }
             FileType::Audio(fmt) => {
                 types::audio::compose::compose(source, detected, args, &ctx, &mut modes, *fmt)?;
             }

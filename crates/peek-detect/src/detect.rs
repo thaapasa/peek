@@ -34,6 +34,7 @@ use crate::types::comic as comic_detect;
 use crate::types::csv as csv_detect;
 use crate::types::disk_image as disk_image_detect;
 use crate::types::document as document_detect;
+use crate::types::ds_store as ds_store_detect;
 use crate::types::ebook as ebook_detect;
 use crate::types::email as email_detect;
 use crate::types::eps as eps_detect;
@@ -154,6 +155,12 @@ pub enum FileType {
     /// contact cards) plus the raw source, and an Info summary
     /// (counts / date range / version).
     VObject(VObjectFormat),
+    /// Apple Finder `.DS_Store` — per-folder Desktop Services Store
+    /// (the "Bud1" Buddy-allocator container). Drives a records table
+    /// (one row per stored property: icon position, window geometry,
+    /// view style, …) plus a metadata Info summary. No source view
+    /// (opaque binary), no extract (the records aren't files).
+    DsStore,
     /// Binary / unknown
     Binary,
 }
@@ -358,6 +365,12 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if head.len() >= 4 && &head[..4] == WASM_MAGIC {
         return Some("application/wasm".to_string());
     }
+    // Apple `.DS_Store` — `\0\0\0\1Bud1` Buddy-allocator signature.
+    // `infer` doesn't classify it; the explicit probe routes renamed
+    // and stdin-piped stores to the viewer.
+    if ds_store_detect::sniff_magic(head) {
+        return Some("application/x-apple-dsstore".to_string());
+    }
     // Java class vs Mach-O fat binary — same `CA FE BA BE` magic. A
     // classfile's major_version (big-endian u16 at offset 6) is >= 45
     // (JDK 1.0); a fat Mach-O's nfat_arch slice count there is small
@@ -459,6 +472,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     }
     if mime == "application/pkix-cert" {
         return Some(FileType::Cert(CertFormat::Der));
+    }
+    if mime == "application/x-apple-dsstore" {
+        return Some(FileType::DsStore);
     }
     if mime.starts_with("video/") {
         return Some(FileType::Binary);
@@ -809,6 +825,11 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     if let Some(fmt) = compression_format_from_name(name) {
         return Some(FileType::Compressed(fmt));
     }
+    // `.DS_Store` is a dotfile with no real extension, so it can't route
+    // through the extension table below — match the canonical full name.
+    if ds_store_detect::is_ds_store_name(name) {
+        return Some(FileType::DsStore);
+    }
     let ext = mime::extension_from_name(name)?;
     if let Some(fmt) = comic_detect::format_from_ext(&ext) {
         return Some(FileType::Comic(fmt));
@@ -891,5 +912,22 @@ mod tests {
             }
         );
         assert_eq!(mime, "text/x-shellscript");
+    }
+
+    #[test]
+    fn ds_store_routes_by_name() {
+        assert_eq!(classify_by_name(".DS_Store"), Some(FileType::DsStore));
+        // Case-folded — case-insensitive volumes surface `.ds_store`.
+        assert_eq!(classify_by_name(".ds_store"), Some(FileType::DsStore));
+    }
+
+    #[test]
+    fn ds_store_routes_by_magic() {
+        // The `\0\0\0\1Bud1` signature must route even without the name,
+        // so renamed / stdin-piped stores are recognised.
+        let head = b"\x00\x00\x00\x01Bud1\x00\x00\x18\x00";
+        let mime = head_magic_mime(head).expect("magic recognised");
+        assert_eq!(mime, "application/x-apple-dsstore");
+        assert_eq!(file_type_from_magic_mime(&mime), Some(FileType::DsStore));
     }
 }

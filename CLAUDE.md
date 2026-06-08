@@ -102,7 +102,8 @@ crates/
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
                          disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /
                          keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen),
-                         vobject (vcf/ics — vCard / iCalendar)
+                         vobject (vcf/ics — vCard / iCalendar),
+                         ds_store (Apple .DS_Store — Bud1 Buddy-allocator records table)
   peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + idea-light / solarized-light
                          / github-light + vscode variants + originals: graveyard / candy-floss /
                          victorian)

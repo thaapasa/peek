@@ -19,6 +19,7 @@ pub mod csv;
 pub mod directory;
 pub mod disk_image;
 pub mod document;
+pub mod ds_store;
 pub mod ebook;
 pub mod email;
 pub mod eps;
