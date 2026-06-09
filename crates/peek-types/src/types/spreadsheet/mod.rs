@@ -12,6 +12,7 @@ pub mod extract;
 pub mod info;
 pub mod info_gather;
 pub mod info_render;
+pub mod sheet_list;
 pub mod workbook;
 pub mod xml_props;
 
