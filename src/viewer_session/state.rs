@@ -1413,7 +1413,7 @@ mod tests {
     /// frame so Back returns to the listing.
     #[test]
     fn directory_file_descent_pushes_frame() {
-        // DirectoryMode sorts dirs first then files, so `Bottom`
+        // The directory listing sorts dirs first then files, so `Bottom`
         // always lands on a file row regardless of how many
         // subdirectories test-data picks up.
         let source = fixture_source("test-data");

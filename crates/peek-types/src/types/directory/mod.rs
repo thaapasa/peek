@@ -8,4 +8,4 @@ pub mod info;
 pub mod mode;
 pub mod read;
 
-pub use mode::DirectoryMode;
+pub use mode::DirListSource;

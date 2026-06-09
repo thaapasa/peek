@@ -1,9 +1,8 @@
-//! Row-painting primitives shared by every listing-style view —
-//! [`super::mode::ListingMode`] for container TOCs and
-//! `the directory mode` for on-disk directory
-//! browsing. Both views render identical columns (perms, size, mtime,
-//! name), so column widths, palette, and formatters live here and stay
-//! in sync by construction.
+//! Row-painting primitives shared by the file-shaped listing sources —
+//! [`super::tree_source::TreeListSource`] for container TOCs and the
+//! directory listing for on-disk browsing. Both render identical columns
+//! (perms, size, mtime, name), so column widths, palette, and formatters
+//! live here and stay in sync by construction.
 
 use syntect::highlighting::Color;
 

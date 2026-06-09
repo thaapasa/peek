@@ -4,9 +4,10 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::input::detect::Detected;
-use crate::types::directory::{DirectoryMode, read};
+use crate::types::directory::{DirListSource, read};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
+use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 
 pub fn compose(
@@ -24,7 +25,12 @@ pub fn compose(
         Err(e) => (Vec::new(), vec![format!("Failed to read directory: {e:#}")]),
     };
     let show_parent = parent_link_enabled(path);
-    modes.push(Box::new(DirectoryMode::new(entries, warnings, show_parent)));
+    let source = DirListSource::new(entries, show_parent);
+    modes.push(Box::new(ListingMode::from_source(
+        Box::new(source),
+        "Listing",
+        warnings,
+    )));
     Ok(())
 }
 
