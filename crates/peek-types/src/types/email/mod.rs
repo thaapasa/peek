@@ -17,6 +17,7 @@
 //! is hand-rolled in [`mbox`] (mail-parser parses single messages), which
 //! also yields the byte offsets the subrange descend relies on.
 
+mod attachment_list;
 pub mod compose;
 pub mod extract;
 pub mod info;

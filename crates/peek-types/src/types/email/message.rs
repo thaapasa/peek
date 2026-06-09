@@ -32,6 +32,9 @@ pub struct Attachment {
     /// Stable listing-name / extract-key for this attachment.
     pub key: String,
     pub size: u64,
+    /// `type/subtype` content type (`application/octet-stream` when the
+    /// part declares none). Shown as the listing's content-type column.
+    pub content_type: String,
 }
 
 /// Parse raw message bytes into the owned display view. Returns `None`
@@ -59,6 +62,7 @@ pub fn parse(bytes: &[u8]) -> Option<ParsedEmail> {
         .map(|(key, part)| Attachment {
             key,
             size: part.len() as u64,
+            content_type: content_type(part),
         })
         .collect();
 

@@ -16,7 +16,8 @@ use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, EntryMtime, ListingMode, time_from_epoch_secs};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
 
-use super::message::{self, ParsedEmail};
+use super::attachment_list::AttachmentListSource;
+use super::message;
 use super::renderer::EmailRenderer;
 use super::{EmailFormat as Fmt, mbox};
 
@@ -56,35 +57,20 @@ fn rendered_mode(source: &InputSource) -> Box<dyn Mode> {
 }
 
 /// Build the attachments listing for a message, or `None` when it has no
-/// attachments. Rows extract through the standard `e` pipeline
-/// (`email::extract`).
+/// attachments. Rows show each part's content type and extract through the
+/// standard `e` pipeline (`email::extract`).
 fn attachments_listing(source: &InputSource) -> Option<ListingMode> {
     let bytes = source.read_bytes().ok()?;
     let email = message::parse(&bytes)?;
     if email.attachments.is_empty() {
         return None;
     }
-    let entries = attachment_entries(&email);
-    Some(ListingMode::new(
-        "Email",
+    let listing = AttachmentListSource::new(&email);
+    Some(ListingMode::from_source(
+        Box::new(listing),
         "Attachments",
-        entries,
         Vec::new(),
     ))
-}
-
-fn attachment_entries(email: &ParsedEmail) -> Vec<Entry> {
-    email
-        .attachments
-        .iter()
-        .map(|a| Entry {
-            name: a.key.clone(),
-            size: a.size,
-            mtime: None,
-            mode: None,
-            kind: EntryKind::File,
-        })
-        .collect()
 }
 
 /// Build the mbox message-list TOC with a descend handler that opens the
