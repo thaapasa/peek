@@ -396,6 +396,15 @@ pub trait Mode {
         None
     }
 
+    /// Activate this mode at `pos` as the *target* of an in-frame jump (see
+    /// [`Self::select_jump`]). Distinct from [`Self::set_position`] — which
+    /// also runs on every mode-switch position-restore — so a mode can mark
+    /// the jumped-to spot (Hex highlights the landed byte) without marking
+    /// on ordinary restores. Default just positions, no marking.
+    fn jump_position(&mut self, pos: Position, source: &InputSource) {
+        self.set_position(pos, source);
+    }
+
     /// Set or clear the active text-search query. Searchable modes scan
     /// their content, arm match highlighting, and return a
     /// [`SearchTarget`]: `Owned` when the mode positioned its own scroll

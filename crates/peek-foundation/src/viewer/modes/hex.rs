@@ -21,6 +21,11 @@ pub struct HexMode {
     /// least once before they can scroll, so the cache is always seeded.
     cached_cols: u16,
     cached_rows: usize,
+    /// Absolute offset of a byte to highlight — the position last jumped to
+    /// (e.g. a symbol's location). Set only by [`Mode::jump_position`], so a
+    /// plain scroll or a mode-switch position-restore never marks a byte;
+    /// persists until the next jump. `None` = no highlight.
+    marked: Option<u64>,
 }
 
 impl HexMode {
@@ -37,7 +42,19 @@ impl HexMode {
             label: "hex".to_string(),
             cached_cols: cols,
             cached_rows,
+            marked: None,
         })
+    }
+
+    /// Resolve a `Position` to an absolute byte offset (Line via the
+    /// source's line→byte map). Shared by `set_position` and
+    /// `jump_position`.
+    fn resolve(pos: Position, source: &InputSource) -> Option<u64> {
+        match pos {
+            Position::Byte(b) => Some(b),
+            Position::Line(l) => source.line_to_byte(l),
+            Position::Unknown => None,
+        }
     }
 }
 
@@ -65,7 +82,11 @@ impl Mode for HexMode {
         let mut lines = Vec::with_capacity(rows);
         for (i, row) in buf.chunks(bpr).enumerate() {
             let row_off = self.top_offset + (i * bpr) as u64;
-            lines.push(format_row(ctx.peek_theme, row_off, row, bpr));
+            // Row-relative index of the marked byte, if it falls in this row.
+            let mark = self.marked.and_then(|m| {
+                (m >= row_off && m < row_off + bpr as u64).then(|| (m - row_off) as usize)
+            });
+            lines.push(format_row(ctx.peek_theme, row_off, row, bpr, mark));
         }
         let total = lines.len();
         Ok(Window { lines, total })
@@ -86,7 +107,7 @@ impl Mode for HexMode {
             }
             for (i, row) in buf.chunks(bpr).enumerate() {
                 let row_off = offset + (i * bpr) as u64;
-                out.write_line(&format_row(ctx.peek_theme, row_off, row, bpr))?;
+                out.write_line(&format_row(ctx.peek_theme, row_off, row, bpr, None))?;
             }
             offset += buf.len() as u64;
         }
@@ -139,14 +160,16 @@ impl Mode for HexMode {
     }
 
     fn set_position(&mut self, pos: Position, source: &InputSource) {
-        let byte = match pos {
-            Position::Byte(b) => Some(b),
-            Position::Line(l) => source.line_to_byte(l),
-            Position::Unknown => None,
-        };
-        if let Some(b) = byte {
+        if let Some(b) = Self::resolve(pos, source) {
             self.top_offset = align_down(b, bytes_per_row(self.cached_cols));
         }
+    }
+
+    fn jump_position(&mut self, pos: Position, source: &InputSource) {
+        // Scroll there and mark the exact byte (not the row-aligned top) so
+        // the jumped-to position is visually pinpointed in the dump.
+        self.set_position(pos, source);
+        self.marked = Self::resolve(pos, source);
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

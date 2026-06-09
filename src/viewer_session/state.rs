@@ -720,7 +720,13 @@ impl ViewerState {
             f.last_primary = Some(idx);
         }
         f.position = pos;
+        // Position the target (works for owns-scroll and caller-scrolled
+        // modes alike), then signal the jump so the target can mark the
+        // landed spot — Hex highlights the byte. `set_position` alone
+        // (the restore path) never marks, so plain mode switches don't.
         restore_position(f);
+        let source = f.source.clone();
+        f.modes[idx].jump_position(pos, &source);
     }
 
     fn cycle_view(&mut self, direction: isize) {

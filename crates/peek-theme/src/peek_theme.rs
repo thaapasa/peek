@@ -99,6 +99,13 @@ impl PeekTheme {
         buf.push_str(self.style_mode.reset());
     }
 
+    /// Push a bare background-color escape (no text, no reset). Pair with
+    /// `push_reset`, which clears background and foreground together. See
+    /// `push_fg`.
+    pub fn push_bg(&self, buf: &mut String, color: Color) {
+        buf.push_str(&self.style_mode.bg_seq(color));
+    }
+
     /// Wrap text in a foreground-color escape **without** a trailing reset.
     /// Use this when composing multiple colored segments inside a shared
     /// background (e.g. status lines).
