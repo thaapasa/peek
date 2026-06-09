@@ -542,10 +542,16 @@ impl ViewerState {
             self.flash = Some(format!("peek stack at max depth ({MAX_STACK_DEPTH})"));
             return Ok(());
         }
-        // Mode-provided direct frame (e.g. SQLite table → row viewer)
-        // bypasses the extract pipeline entirely.
         let frame_idx = self.active_frame_idx();
         let active = self.frames[frame_idx].active;
+        // In-frame jump (e.g. object-file symbol → its byte offset in the
+        // Hex view) switches the active mode without touching the stack.
+        if let Some((mode_id, pos)) = self.frames[frame_idx].modes[active].select_jump() {
+            self.jump_to_position(mode_id, pos);
+            return Ok(());
+        }
+        // Mode-provided direct frame (e.g. SQLite table → row viewer)
+        // bypasses the extract pipeline entirely.
         if let Some(result) = self.frames[frame_idx].modes[active].build_descend_frame() {
             return match result {
                 Ok(frame) => self.push_direct_frame(frame),
@@ -694,6 +700,26 @@ impl ViewerState {
         if !f.modes[new_idx].is_aux() {
             f.last_primary = Some(new_idx);
         }
+        restore_position(f);
+    }
+
+    /// Activate `mode_id` in the current frame and seek it to `pos` — the
+    /// in-frame jump behind `Mode::select_jump`. Unlike `set_active`, the
+    /// incoming position is the caller's `pos` (the jump target), not the
+    /// outgoing mode's captured position. The target is typically Hex
+    /// (aux), so `last_primary` is left pointing at the originating view so
+    /// Back / the Hex toggle returns there.
+    fn jump_to_position(&mut self, mode_id: ModeId, pos: Position) {
+        let Some(idx) = self.frame().mode_index(mode_id) else {
+            self.flash = Some(format!("cannot jump: no {mode_id:?} view in this frame"));
+            return;
+        };
+        let f = self.frame_mut();
+        f.active = idx;
+        if !f.modes[idx].is_aux() {
+            f.last_primary = Some(idx);
+        }
+        f.position = pos;
         restore_position(f);
     }
 

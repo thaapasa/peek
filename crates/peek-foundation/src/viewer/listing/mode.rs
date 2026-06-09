@@ -333,6 +333,12 @@ impl Mode for ListingMode {
         self.selected_target()
     }
 
+    fn select_jump(&self) -> Option<(ModeId, Position)> {
+        self.viewport
+            .selected()
+            .and_then(|i| self.source.jump_target(i))
+    }
+
     fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
         // Compute the target first so its immutable borrow ends before the
         // handler's `&mut` borrow begins.

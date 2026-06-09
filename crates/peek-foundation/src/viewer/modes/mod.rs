@@ -385,6 +385,17 @@ pub trait Mode {
         None
     }
 
+    /// Optional override for `Action::Descend` that jumps *within the
+    /// current frame* instead of pushing a new one: switch to the named
+    /// sibling mode and seek it to `Position`. Returning `Some` makes the
+    /// viewer activate `ModeId` at `Position` (e.g. an object file's symbol
+    /// listing jumping to that symbol's byte offset in the Hex view).
+    /// Checked before [`Self::build_descend_frame`]; `None` (default)
+    /// defers to the descend / extract path.
+    fn select_jump(&self) -> Option<(ModeId, Position)> {
+        None
+    }
+
     /// Set or clear the active text-search query. Searchable modes scan
     /// their content, arm match highlighting, and return a
     /// [`SearchTarget`]: `Owned` when the mode positioned its own scroll

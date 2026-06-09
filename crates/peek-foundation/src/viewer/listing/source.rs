@@ -12,7 +12,7 @@
 //! in here without touching the engine.
 
 use crate::theme::PeekTheme;
-use crate::viewer::modes::{ExtractTarget, RenderCtx};
+use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
 
 use super::viewport::RowMeta;
 
@@ -37,6 +37,12 @@ pub trait ListSource {
     /// Extract key for the row, if it has one (a file path, a sheet name).
     /// `None` for rows that can't be extracted (tree directories).
     fn extract_target(&self, idx: usize) -> Option<ExtractTarget>;
+    /// In-frame jump for the row: switch to the named sibling mode and seek
+    /// it to `Position` (e.g. a symbol → its byte offset in the Hex view).
+    /// `None` (default) means the row descends / extracts instead.
+    fn jump_target(&self, _idx: usize) -> Option<(ModeId, Position)> {
+        None
+    }
     /// One `--list` line for the row, or `None` to omit it (tree dirs).
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String>;
     /// Status-segment label, e.g. "ZIP" / "directory".
