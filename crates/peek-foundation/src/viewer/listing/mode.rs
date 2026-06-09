@@ -31,7 +31,10 @@ use crate::viewer::modes::{
     Window,
 };
 use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
-use crate::viewer::ui::{Action, HelpEntry};
+use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, strip_ansi_width};
+
+/// Columns moved per Left/Right keypress — matches `TableMode`'s pan step.
+const H_STEP: usize = 8;
 
 pub struct ListingMode {
     source: Box<dyn ListSource>,
@@ -43,6 +46,10 @@ pub struct ListingMode {
     /// Cached count of selectable rows, for the status segment.
     selectable_count: usize,
     pending_warnings: Vec<String>,
+    /// Horizontal pan offset (leftmost visible column), for reading rows
+    /// wider than the terminal — long symbol / file names. Clamped to the
+    /// widest on-screen row each render.
+    h_scroll: usize,
     viewport: ListingViewport,
     /// Active leaf-name search, if any. Scans every row's name (files +
     /// directories); navigation moves the selection when the match is on a
@@ -84,6 +91,7 @@ impl ListingMode {
             meta,
             selectable_count,
             pending_warnings: warnings,
+            h_scroll: 0,
             viewport,
             search: None,
             descend_handler: None,
@@ -189,12 +197,20 @@ impl Mode for ListingMode {
         // Sticky breadcrumb rows above, content slice below — composed in
         // one pass. Selection only ever lands on a selectable (file) row,
         // which is never in the sticky chain, so sticky rows never light up.
-        let mut lines = Vec::with_capacity(win.sticky.len() + win.content.len());
+        let mut full = Vec::with_capacity(win.sticky.len() + win.content.len());
         for idx in win.sticky.iter().copied().chain(win.content.clone()) {
             let is_sel = Some(idx) == selected;
             let line = self.compose_line(idx, ctx, is_sel);
-            lines.push(row::with_marker(&line, is_sel, ctx.peek_theme));
+            full.push(row::with_marker(&line, is_sel, ctx.peek_theme));
         }
+        // Pan + crop to the terminal width. Bound the pan to the widest
+        // row on screen so Right can't scroll past the content.
+        let max_width = full.iter().map(|l| strip_ansi_width(l)).max().unwrap_or(0);
+        self.h_scroll = self.h_scroll.min(max_width.saturating_sub(1));
+        let lines = full
+            .iter()
+            .map(|l| slice_styled_h(l, self.h_scroll, ctx.term_cols))
+            .collect();
         Ok(Window {
             lines,
             total: self.meta.len(),
@@ -234,6 +250,9 @@ impl Mode for ListingMode {
             Action::PageDown => self.viewport.page(&self.meta, true),
             Action::Top => self.viewport.jump_first(&self.meta),
             Action::Bottom => self.viewport.jump_last(&self.meta),
+            // Pan: clamped against on-screen content width in render_window.
+            Action::ScrollLeft => self.h_scroll = self.h_scroll.saturating_sub(H_STEP),
+            Action::ScrollRight => self.h_scroll = self.h_scroll.saturating_add(H_STEP),
             _ => return false,
         }
         true
@@ -274,6 +293,10 @@ impl Mode for ListingMode {
         if !self.viewport.sticky_enabled() {
             segs.push(("sticky off".to_string(), theme.muted));
         }
+        // Horizontal pan offset — shown only when panned.
+        if self.h_scroll > 0 {
+            segs.push((format!("\u{2192}{}", self.h_scroll), theme.muted));
+        }
         if let Some(search) = &self.search {
             segs.push(search.status_segment(theme));
         }
@@ -283,6 +306,10 @@ impl Mode for ListingMode {
     fn extra_actions(&self) -> &'static [HelpEntry] {
         const ACTIONS: &[HelpEntry] = &[
             (&[Action::ToggleStickyParents], "Pin parent path"),
+            (
+                &[Action::ScrollLeft, Action::ScrollRight],
+                "Pan left / right",
+            ),
             (&[Action::Extract], "Extract selected entry"),
             (&[Action::OpenSearch], "Search names"),
             NEXT_PREV_MATCH_HELP,
