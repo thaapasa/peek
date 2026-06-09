@@ -17,7 +17,7 @@ use syntect::highlighting::Color;
 
 use super::entry::{Entry, EntryKind, EntryMtime};
 use super::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
-use super::viewport::ListingViewport;
+use super::viewport::{ListingViewport, RowMeta};
 use crate::info::RenderOptions;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
@@ -81,6 +81,17 @@ pub(super) struct TreeRow {
     /// Slash-joined inner path for file rows; `None` for directories.
     /// Used as the extract key.
     pub(super) inner_path: Option<String>,
+}
+
+impl RowMeta for TreeRow {
+    fn parent(&self) -> Option<usize> {
+        self.parent_row
+    }
+    /// File rows (those carrying an `inner_path`) are selectable;
+    /// directory rows are containers the selection skips.
+    fn selectable(&self) -> bool {
+        self.inner_path.is_some()
+    }
 }
 
 impl ListingMode {
@@ -150,6 +161,14 @@ impl ListingMode {
             painted_mtime.as_deref(),
             &painted_path,
         )
+    }
+
+    /// Inner path of the selected row — the extract key. `None` when
+    /// nothing is selected or the selected row carries no path.
+    fn selected_inner_path(&self) -> Option<&str> {
+        self.viewport
+            .selected()
+            .and_then(|i| self.rows.get(i).and_then(|r| r.inner_path.as_deref()))
     }
 
     /// Match ranges (in the row's leaf bytes) and which one is the
@@ -356,7 +375,7 @@ impl Mode for ListingMode {
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
         let files = self.file_count;
         let mut segs = Vec::new();
-        let s = match self.viewport.selected_file_pos(&self.rows) {
+        let s = match self.viewport.selected_pos(&self.rows) {
             Some(pos) => format!("{}/{} ({})", pos, files, self.format_name),
             None => format!("{} ({})", files, self.format_name),
         };
@@ -421,8 +440,7 @@ impl Mode for ListingMode {
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        self.viewport
-            .selected_inner_path(&self.rows)
+        self.selected_inner_path()
             .map(|p| ExtractTarget::EntryPath(p.to_string()))
     }
 
@@ -656,10 +674,7 @@ mod tests {
         let lm = sample();
         // Row 2 is the first file row (deep.txt) in the sample tree.
         assert_eq!(lm.viewport.selected(), Some(2));
-        assert_eq!(
-            lm.viewport.selected_inner_path(&lm.rows),
-            Some("sub/deeper/deep.txt")
-        );
+        assert_eq!(lm.selected_inner_path(), Some("sub/deeper/deep.txt"));
     }
 
     #[test]
@@ -668,16 +683,10 @@ mod tests {
         lm.viewport.set_viewport_rows(&lm.rows, 10);
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(3));
-        assert_eq!(
-            lm.viewport.selected_inner_path(&lm.rows),
-            Some("sub/inner.txt")
-        );
+        assert_eq!(lm.selected_inner_path(), Some("sub/inner.txt"));
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(4));
-        assert_eq!(
-            lm.viewport.selected_inner_path(&lm.rows),
-            Some("README.txt")
-        );
+        assert_eq!(lm.selected_inner_path(), Some("README.txt"));
         // Past the last file, selection sticks rather than wrapping.
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(4));
