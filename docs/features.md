@@ -206,9 +206,9 @@ messages still route here.
   is word-wrapped to the viewport. `RenderedTextMode` caches the result per width / theme.
 - **Source** — the raw RFC822 text via `ContentMode`. `--plain` drops the rendered view and
   opens straight on the source.
-- **Attachments** (when present) — a `ListingMode` over the message's MIME attachments; `e`
-  extracts one to disk through the standard extract pipeline (`message/rfc822` → recursive peek
-  on the saved part).
+- **Attachments** (when present) — a listing over the message's MIME attachments, showing each
+  part's **content type** alongside size and name; `e` extracts one to disk through the standard
+  extract pipeline (`message/rfc822` → recursive peek on the saved part).
 
 **`.mbox`** composes a **Messages** TOC (one row per message, prefixed with its index so
 duplicate subjects stay distinct, with the message `Date` in the mtime column) over a hand-rolled
@@ -735,10 +735,13 @@ Three views, Tab-cycled:
   libraries (ELF `DT_NEEDED`, Mach-O dylibs, PE imports). Mirrors `file` + `readelf -d` +
   `otool -L`.
 - **Sections** — `readelf -S`-style table: index, name, address, size, kind.
-- **Symbols** — `nm`-style table: address, size, type, bind, name. Prefers the full `.symtab`,
-  falls back to the dynamic symbol table when the file is stripped.
+- **Symbols** — `nm`-style listing: address, size, type, bind, name. Prefers the full `.symtab`,
+  falls back to the dynamic symbol table when the file is stripped. `/` searches symbol names;
+  `Enter` **jumps the Hex view to the symbol's byte offset** (recovered from the containing
+  section's file range). Undefined / `.bss` symbols list but can't jump — their address shows
+  muted.
 
-The two tables use the shared `TableMode` (the same one classfiles use): the column header
+The Sections table uses the shared `TableMode` (the same one classfiles use): the column header
 stays pinned through vertical scroll, each column is repainted live on a theme cycle,
 `Left`/`Right` pan columns, and `/` searches names (`n`/`p` step matches, panning horizontally
 only as far as needed to reveal an off-screen hit). Column widths fit their content.

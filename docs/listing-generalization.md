@@ -1,9 +1,9 @@
 # Listing mode generalization
 
-> **Status: Steps 1–4 landed (branch `listing-generalization`).** The
-> behavior-preserving refactor is done — generic engine, `ListSource` seam,
-> directory folded in. Steps 5–6 below are product/feature work, not yet
-> started. Update or archive when those land or are dropped.
+> **Status: Steps 1–6 landed (branch `listing-generalization`), bar one
+> deliberately-skipped piece (sqlite, below).** Generic engine + `ListSource`
+> seam, directory folded in, email content-type column, object-file symbol →
+> Hex jump, spreadsheet sheet source. Ready to archive once merged.
 
 Split `ListingMode` into a generic **navigation engine** and a per-consumer
 **row source**, so the listing UI (scroll / paging / selection / search / sticky
@@ -206,25 +206,43 @@ before writing. No surprises; plan holds. Specifics:
    **Side effect:** the mtime column width is now computed once over all rows,
    not per visible slice, so it no longer jitters on scroll.
 
-### Remaining — product/feature work, not behavior-preserving
+### Product/feature work on the seam
 
-5. **Honest sqlite/spreadsheet sources.** Replace the faked `Entry` rows
-   (`size` = row count, `.csv`/`.sql` suffix) + `with_descend_handler` with
-   bespoke `SqliteListSource` / `SheetListSource` and a unified
-   `on_select → SelectOutcome`. This changes how those rows are *modelled* (and
-   risks changing what's rendered), so it needs a deliberate column design — not
-   a mechanical lift. Best done together with the `SelectOutcome`/`Jump` bin
-   change below.
-6. **New consumers:**
-   - **Email** — mbox = list messages (select → descend); multipart = list parts
-     with a content-type column. (Email already uses `ListingMode`; this adds a
-     real non-file column.)
-   - **Binary symbols** — list functions/symbols with an address column, select
-     → `Jump { Hex, Byte(off) }`. Needs the new bin mechanism (`set_active_at`,
-     see Findings) + symbol extraction from object files.
+6. ✅ **New consumers.**
+   - **Email** — the attachments listing got its own `AttachmentListSource`
+     showing each part's **content type** (the file-tree source rendered faked
+     perms + an empty mtime). Threaded `content_type` through `Attachment`.
+     (`9e9e510`)
+   - **Object-file symbols** — `Mode::select_jump` /
+     `ListSource::jump_target` add an *in-frame jump* select-semantic: a row can
+     switch the active mode and seek it (vs extract / descend). The Symbols
+     **table** became a `SymbolListSource` listing (same columns, now
+     name-searchable) where Enter jumps the Hex view to the symbol's file
+     offset, recovered via its section's file range. Bin: `jump_to_position`,
+     checked before `build_descend_frame`. (`cc74f28`)
 
-The seam (steps 1–4) is what unblocks 5–6; each of those is an independent,
-reviewable change with its own design choices.
+   The `Jump` outcome is a narrow defaulted method, *not* the `SelectOutcome`
+   enum the early plan sketched: a unified enum only earns its place once the bin
+   dispatches on it, and a single new method does that with far less churn. The
+   descend handler stays engine-side, so `Extract` / `Frame` are unchanged.
+
+5. **Honest select-table / select-sheet sources** (the listing TOC, not the grid
+   contents):
+   - ✅ **Spreadsheet** (flat) — `SheetListSource` shows bare sheet names instead
+     of faked zero-size `Entry` rows named `Sheet1.csv`. The `.csv` suffix lives
+     on only as the extract / descend key. (`cb74586`)
+   - **SQLite — assessed, deliberately left as-is.** The schema listing is a
+     *tree* (kind groups → entities, two rows per entity: `.sql` schema + `.csv`
+     contents). A bespoke source would have to reimplement tree flattening
+     (`├╴`/`└╴` connectors, parent indices) — work `TreeListSource` already does —
+     purely to change one column's units (the contents row reuses `size` for the
+     row count, a documented, intentional choice, not harmful fakery). That's
+     duplicating the tree machinery for a cosmetic gain → overstretch. The Entry
+     tree + engine descend handler is the right fit here; revisit only if SQLite
+     grows a genuinely non-file column that the `size` slot can't carry.
+
+The seam (steps 1–4) unblocked all of the above; each is an independent,
+reviewable change.
 
 ## Guardrails
 
