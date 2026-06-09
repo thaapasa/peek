@@ -1,24 +1,28 @@
-//! Listing table-of-contents view: tree-style hierarchical listing
-//! with permissions, size, mtime, and name. Generic over the source —
-//! used by archives, ISO 9660 disk images, and any future container
-//! type that produces a [`super::entry::Entry`] tree.
+//! Listing engine: the interactive table-of-contents `Mode`. Owns
+//! navigation (scroll + selection + paging + sticky breadcrumb + leaf-name
+//! search) and the selection marker, painting the one selectable "name"
+//! column itself so search-match and selection highlighting stay in one
+//! place. Everything file-shaped — row data, the perms/size/mtime columns,
+//! the extract key — lives behind a [`ListSource`]; the engine never names
+//! a file field.
 //!
-//! Listing-only: no payload extraction. The mode owns the tree and
-//! a pre-flattened row index; scroll + selection state lives in
-//! [`super::viewport::ListingViewport`], which keeps invariants
-//! (top in range, selection on a file row, selection visible inside
-//! the *content* slot — not behind the sticky breadcrumb) under one
-//! reconcile path so individual mode methods can't drift.
+//! Scroll + selection state lives in [`super::viewport::ListingViewport`],
+//! which keeps the invariants (top in range, selection on a selectable row,
+//! selection visible inside the *content* slot — not behind the sticky
+//! breadcrumb) under one reconcile path so individual methods can't drift.
+//! The viewport runs off a cached [`RowMetaCell`] list (parent + selectable
+//! per row) so it never re-queries the source mid-scroll.
 
 use std::ops::Range;
 
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use super::entry::{Entry, EntryKind, EntryMtime};
-use super::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
-use super::viewport::{ListingViewport, RowMeta};
-use crate::info::RenderOptions;
+use super::entry::Entry;
+use super::row;
+use super::source::{ListSource, NameCell, RowMetaCell};
+use super::tree_source::TreeListSource;
+use super::viewport::ListingViewport;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
@@ -30,85 +34,55 @@ use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry};
 
 pub struct ListingMode {
-    format_name: String,
+    source: Box<dyn ListSource>,
+    /// View label (Mode::label) — "TOC" / "Schema" / "Embeds" / "Listing".
     label: String,
-    /// Pre-flattened tree-walk rows. Populated once at construction;
-    /// scrolling slices into this without rebuilding.
-    rows: Vec<TreeRow>,
-    /// Cached count of file rows (directories excluded). Status segment
-    /// reads it every render; recomputing per-render is O(rows).
-    file_count: usize,
+    /// Cached navigation metadata, one per source row. The viewport reads
+    /// it every scroll tick; querying the source each time would be O(rows).
+    meta: Vec<RowMetaCell>,
+    /// Cached count of selectable rows, for the status segment.
+    selectable_count: usize,
     pending_warnings: Vec<String>,
     viewport: ListingViewport,
-    /// Active leaf-name search, if any. Scans every row's leaf string
-    /// (files + directories); navigation moves the file selection when
-    /// the current match is on a file row, and just scrolls the row
-    /// into view when it's on a directory. The `line` field on each
-    /// match is the row index in `self.rows`.
+    /// Active leaf-name search, if any. Scans every row's name (files +
+    /// directories); navigation moves the selection when the match is on a
+    /// selectable row, and just scrolls otherwise. Each match's `line` is
+    /// the source row index.
     search: Option<SearchState>,
-    /// Synthetic-descend override; `None` = standard extract path. When
-    /// set, [`Mode::build_descend_frame`] hands the selected row's
-    /// `ExtractTarget` to the closure, letting a container build a frame
-    /// over the *current* source instead of extracting to a temp file
-    /// (e.g. SQLite opening a streaming table viewer).
+    /// Synthetic-descend override; `None` = standard extract path. When set,
+    /// [`Mode::build_descend_frame`] hands the selected row's
+    /// [`ExtractTarget`] to the closure, letting a container build a frame
+    /// over the *current* source instead of extracting to a temp file (e.g.
+    /// SQLite opening a streaming table viewer).
     descend_handler: Option<DescendHandler>,
 }
 
 /// Closure installed via [`ListingMode::with_descend_handler`]. Returns
-/// `Some(frame)` to push a synthetic frame for the selected row,
-/// `None` to fall back to the extract pipeline.
+/// `Some(frame)` to push a synthetic frame for the selected row, `None` to
+/// fall back to the extract pipeline.
 type DescendHandler = Box<dyn FnMut(&ExtractTarget) -> Option<Result<DescendFrame>>>;
 
-/// One rendered row in the TOC. Holds enough metadata to render
-/// without traversing the source tree again. Kept `pub(super)` so
-/// the viewport module can read row metadata (parent_row,
-/// inner_path) when computing scroll geometry.
-#[derive(Clone)]
-pub(super) struct TreeRow {
-    /// Composed tree prefix: ancestor segments (`│ ` / `  `) plus this
-    /// row's `├╴` / `└╴` connector. Empty for top-level rows.
-    pub(super) prefix: String,
-    /// Last path segment shown alone — the tree prefix conveys depth.
-    pub(super) leaf: String,
-    pub(super) is_dir: bool,
-    pub(super) size: u64,
-    pub(super) mode: Option<u32>,
-    pub(super) mtime: Option<EntryMtime>,
-    /// Index of the row representing this entry's parent directory in
-    /// `ListingMode::rows`, or `None` for top-level entries. Used to
-    /// build the sticky breadcrumb chain on scroll.
-    pub(super) parent_row: Option<usize>,
-    /// Slash-joined inner path for file rows; `None` for directories.
-    /// Used as the extract key.
-    pub(super) inner_path: Option<String>,
-}
-
-impl RowMeta for TreeRow {
-    fn parent(&self) -> Option<usize> {
-        self.parent_row
-    }
-    /// File rows (those carrying an `inner_path`) are selectable;
-    /// directory rows are containers the selection skips.
-    fn selectable(&self) -> bool {
-        self.inner_path.is_some()
-    }
-}
-
 impl ListingMode {
-    pub fn new(
-        format_name: impl Into<String>,
+    /// Build an engine over any [`ListSource`]. Caches navigation metadata
+    /// and seeds the viewport at the first selectable row.
+    pub fn from_source(
+        source: Box<dyn ListSource>,
         label: impl Into<String>,
-        entries: Vec<Entry>,
         warnings: Vec<String>,
     ) -> Self {
-        let rows = flatten(&entries);
-        let file_count = rows.iter().filter(|r| r.inner_path.is_some()).count();
-        let viewport = ListingViewport::new(&rows);
+        let meta: Vec<RowMetaCell> = (0..source.len())
+            .map(|i| RowMetaCell {
+                parent: source.parent(i),
+                selectable: source.selectable(i),
+            })
+            .collect();
+        let selectable_count = meta.iter().filter(|m| m.selectable).count();
+        let viewport = ListingViewport::new(&meta);
         Self {
-            format_name: format_name.into(),
+            source,
             label: label.into(),
-            rows,
-            file_count,
+            meta,
+            selectable_count,
             pending_warnings: warnings,
             viewport,
             search: None,
@@ -116,10 +90,23 @@ impl ListingMode {
         }
     }
 
+    /// Convenience for file-tree sources (archives, embeds, zip-backed
+    /// documents): build a [`TreeListSource`] from an [`Entry`] tree.
+    /// `format_name` is the status label ("ZIP"), `label` the view name.
+    pub fn new(
+        format_name: impl Into<String>,
+        label: impl Into<String>,
+        entries: Vec<Entry>,
+        warnings: Vec<String>,
+    ) -> Self {
+        let source = TreeListSource::new(format_name, entries);
+        Self::from_source(Box::new(source), label, warnings)
+    }
+
     /// Install a synthetic-descend handler. The closure receives the
     /// selected row's [`ExtractTarget`] on `Action::Descend`; returning
-    /// `Some(frame)` pushes it directly (bypassing extract), `None`
-    /// defers to the standard extract path.
+    /// `Some(frame)` pushes it directly (bypassing extract), `None` defers
+    /// to the standard extract path.
     pub fn with_descend_handler(
         mut self,
         handler: impl FnMut(&ExtractTarget) -> Option<Result<DescendFrame>> + 'static,
@@ -128,113 +115,61 @@ impl ListingMode {
         self
     }
 
-    fn paint_row(
-        &self,
-        row_idx: usize,
-        row: &TreeRow,
-        theme: &PeekTheme,
-        mtime_text: Option<(&str, usize)>,
-        selected: bool,
-    ) -> String {
-        let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
-        let size = row::format_size(if row.is_dir {
-            SizeCell::Dir
-        } else {
-            SizeCell::Bytes(row.size)
-        });
-        let painted_perms = row::paint_perms(&perms, theme);
-        let painted_size = row::paint_size(&size, row.size, row.is_dir, theme);
-        let (ranges, current) = self.leaf_match_ranges(row_idx);
-        let painted_path = paint_tree_path(
-            &row.prefix,
-            &row.leaf,
-            row.is_dir,
-            theme,
-            selected,
-            &ranges,
-            current,
-        );
-        let painted_mtime = mtime_text.map(|(text, width)| row::paint_mtime(text, width, theme));
-        row::compose_row(
-            &painted_perms,
-            &painted_size,
-            painted_mtime.as_deref(),
-            &painted_path,
-        )
-    }
-
-    /// Inner path of the selected row — the extract key. `None` when
-    /// nothing is selected or the selected row carries no path.
-    fn selected_inner_path(&self) -> Option<&str> {
+    /// Inner path / key of the selected row — the extract target.
+    fn selected_target(&self) -> Option<ExtractTarget> {
         self.viewport
             .selected()
-            .and_then(|i| self.rows.get(i).and_then(|r| r.inner_path.as_deref()))
+            .and_then(|i| self.source.extract_target(i))
     }
 
-    /// Match ranges (in the row's leaf bytes) and which one is the
-    /// active cursor, for `paint_row`. Empty when no search is active
-    /// or the row carries no hits.
-    fn leaf_match_ranges(&self, row_idx: usize) -> (Vec<Range<usize>>, Option<usize>) {
+    /// Match ranges (in the row's name bytes) and which one is the active
+    /// cursor, for name painting. Empty when no search or no hits.
+    fn name_match_ranges(&self, idx: usize) -> (Vec<Range<usize>>, Option<usize>) {
         self.search
             .as_ref()
-            .and_then(|s| s.line_overlay(row_idx))
+            .and_then(|s| s.line_overlay(idx))
             .unwrap_or_default()
     }
 
-    /// Bring `row_idx` into view. When it's a file row, update the file
-    /// selection so Extract / Descend target it; when it's a directory,
-    /// only scroll.
-    fn reveal_match(&mut self, row_idx: usize) {
-        if self.rows[row_idx].inner_path.is_some() {
-            self.viewport.select_row(&self.rows, row_idx);
+    /// Bring `idx` into view. When it's selectable, update the selection so
+    /// Extract / Descend target it; otherwise only scroll.
+    fn reveal_match(&mut self, idx: usize) {
+        if self.meta[idx].selectable {
+            self.viewport.select_row(&self.meta, idx);
         } else {
-            self.viewport.scroll_to_row(&self.rows, row_idx);
+            self.viewport.scroll_to_row(&self.meta, idx);
         }
     }
 
     fn step_match(&mut self, delta: isize) {
-        let Some(row_idx) = self.search.as_mut().and_then(|s| s.step(delta)) else {
+        let Some(idx) = self.search.as_mut().and_then(|s| s.step(delta)) else {
             return;
         };
-        self.reveal_match(row_idx);
+        self.reveal_match(idx);
     }
 
-    /// Mtime column is padded to the widest stringified mtime in the
-    /// slice so the path column abuts cleanly. Each row carries its
-    /// `self.rows` index so selection highlighting works through the
-    /// sticky breadcrumb (parent indices fed in alongside the visible
-    /// content slice).
-    fn render_slice_with_indices(
-        &self,
-        slice: &[(usize, TreeRow)],
-        theme: &PeekTheme,
-        opts: RenderOptions,
-        show_mtime: bool,
-    ) -> Vec<String> {
-        let mtimes: Vec<String> = if show_mtime {
-            slice
-                .iter()
-                .map(|(_, r)| format_mtime(r.mtime.as_ref(), opts.utc))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let width = row::mtime_column_width(&mtimes);
-        let selected_idx = self.viewport.selected();
-        slice
-            .iter()
-            .enumerate()
-            .map(|(i, (row_idx, row))| {
-                let mtime_text = if show_mtime {
-                    Some((mtimes[i].as_str(), width))
-                } else {
-                    None
-                };
-                let selected = Some(*row_idx) == selected_idx;
-                let line = self.paint_row(*row_idx, row, theme, mtime_text, selected);
-                row::with_marker(&line, selected, theme)
-            })
-            .collect()
+    /// Compose one row's bare line (no marker): source-painted columns,
+    /// then the engine-painted name with search + selection overlays. The
+    /// 2-space column gutter matches [`row::compose_row`].
+    fn compose_line(&self, idx: usize, ctx: &RenderCtx, selected: bool) -> String {
+        let theme = ctx.peek_theme;
+        let cells = self.source.row_cells(idx, ctx);
+        let (ranges, current) = self.name_match_ranges(idx);
+        let name = paint_name(&cells.name, theme, selected, &ranges, current);
+        let prefix = theme.paint(&cells.prefix, theme.muted);
+        let mut line = String::new();
+        for (i, cell) in cells.left.iter().enumerate() {
+            if i > 0 {
+                line.push_str("  ");
+            }
+            line.push_str(cell);
+        }
+        if !cells.left.is_empty() {
+            line.push_str("  ");
+        }
+        line.push_str(&prefix);
+        line.push_str(&name);
+        line
     }
 }
 
@@ -248,89 +183,43 @@ impl Mode for ListingMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, _scroll: usize, rows: usize) -> Result<Window> {
-        self.viewport.set_viewport_rows(&self.rows, rows);
-        let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        let win = self.viewport.window(&self.rows);
-        // Compose sticky breadcrumb rows + content slice into one
-        // buffer so render_slice computes mtime column width across
-        // the full visible window — keeps columns aligned. Carry the
-        // original row index alongside each row so the selection
-        // highlight fires for the right row regardless of sticky
-        // displacement.
-        let mut combined: Vec<(usize, TreeRow)> =
-            Vec::with_capacity(win.sticky.len() + win.content.len());
-        for idx in &win.sticky {
-            combined.push((*idx, self.rows[*idx].clone()));
+        self.viewport.set_viewport_rows(&self.meta, rows);
+        let win = self.viewport.window(&self.meta);
+        let selected = self.viewport.selected();
+        // Sticky breadcrumb rows above, content slice below — composed in
+        // one pass. Selection only ever lands on a selectable (file) row,
+        // which is never in the sticky chain, so sticky rows never light up.
+        let mut lines = Vec::with_capacity(win.sticky.len() + win.content.len());
+        for idx in win.sticky.iter().copied().chain(win.content.clone()) {
+            let is_sel = Some(idx) == selected;
+            let line = self.compose_line(idx, ctx, is_sel);
+            lines.push(row::with_marker(&line, is_sel, ctx.peek_theme));
         }
-        for idx in win.content.clone() {
-            combined.push((idx, self.rows[idx].clone()));
-        }
-        let lines =
-            self.render_slice_with_indices(&combined, ctx.peek_theme, ctx.render_opts, show_mtime);
         Ok(Window {
             lines,
-            total: self.rows.len(),
+            total: self.meta.len(),
         })
     }
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         // Non-interactive: no selection highlight, no marker prefix.
-        let show_mtime = ctx.term_cols >= MTIME_HIDE_BELOW_COLS;
-        let mtimes: Vec<String> = if show_mtime {
-            self.rows
-                .iter()
-                .map(|r| format_mtime(r.mtime.as_ref(), ctx.render_opts.utc))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        let width = row::mtime_column_width(&mtimes);
-        for (i, row) in self.rows.iter().enumerate() {
-            let mtime_text = if show_mtime {
-                Some((mtimes[i].as_str(), width))
-            } else {
-                None
-            };
-            out.write_line(&self.paint_row(i, row, ctx.peek_theme, mtime_text, false))?;
+        for idx in 0..self.meta.len() {
+            out.write_line(&self.compose_line(idx, ctx, false))?;
         }
         Ok(())
     }
 
-    /// Flat-paths variant for `peek --list`. Files only, no tree
-    /// connectors, no directories — each line carries the full
-    /// `inner_path` so it can be copy-pasted into `--extract` without
-    /// editing.
     fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        let theme = ctx.peek_theme;
-        for tree_row in &self.rows {
-            let Some(path) = &tree_row.inner_path else {
-                continue;
-            };
-            let perms = row::format_perms(
-                if tree_row.is_dir { 'd' } else { '-' },
-                tree_row.mode,
-                tree_row.is_dir,
-            );
-            let size = row::format_size(if tree_row.is_dir {
-                SizeCell::Dir
-            } else {
-                SizeCell::Bytes(tree_row.size)
-            });
-            let painted_perms = row::paint_perms(&perms, theme);
-            let painted_size = row::paint_size(&size, tree_row.size, tree_row.is_dir, theme);
-            let painted_path = theme.paint(path, theme.foreground);
-            out.write_line(&row::compose_row(
-                &painted_perms,
-                &painted_size,
-                None,
-                &painted_path,
-            ))?;
+        for idx in 0..self.source.len() {
+            if let Some(line) = self.source.flat_line(idx, ctx.peek_theme) {
+                out.write_line(&line)?;
+            }
         }
         Ok(())
     }
 
     fn total_lines(&self) -> Option<usize> {
-        Some(self.rows.len())
+        Some(self.meta.len())
     }
 
     fn owns_scroll(&self) -> bool {
@@ -339,12 +228,12 @@ impl Mode for ListingMode {
 
     fn scroll(&mut self, action: Action) -> bool {
         match action {
-            Action::ScrollUp => self.viewport.move_selection(&self.rows, false),
-            Action::ScrollDown => self.viewport.move_selection(&self.rows, true),
-            Action::PageUp => self.viewport.page(&self.rows, false),
-            Action::PageDown => self.viewport.page(&self.rows, true),
-            Action::Top => self.viewport.jump_first(&self.rows),
-            Action::Bottom => self.viewport.jump_last(&self.rows),
+            Action::ScrollUp => self.viewport.move_selection(&self.meta, false),
+            Action::ScrollDown => self.viewport.move_selection(&self.meta, true),
+            Action::PageUp => self.viewport.page(&self.meta, false),
+            Action::PageDown => self.viewport.page(&self.meta, true),
+            Action::Top => self.viewport.jump_first(&self.meta),
+            Action::Bottom => self.viewport.jump_last(&self.meta),
             _ => return false,
         }
         true
@@ -355,7 +244,7 @@ impl Mode for ListingMode {
     }
 
     fn on_resize(&mut self, _term_cols: usize, term_rows: usize) {
-        self.viewport.set_viewport_rows(&self.rows, term_rows);
+        self.viewport.set_viewport_rows(&self.meta, term_rows);
     }
 
     fn tracks_position(&self) -> bool {
@@ -368,16 +257,17 @@ impl Mode for ListingMode {
 
     fn set_position(&mut self, pos: Position, _source: &InputSource) {
         if let Position::Line(l) = pos {
-            self.viewport.set_top(&self.rows, l);
+            self.viewport.set_top(&self.meta, l);
         }
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        let files = self.file_count;
+        let total = self.selectable_count;
+        let label = self.source.source_label();
         let mut segs = Vec::new();
-        let s = match self.viewport.selected_pos(&self.rows) {
-            Some(pos) => format!("{}/{} ({})", pos, files, self.format_name),
-            None => format!("{} ({})", files, self.format_name),
+        let s = match self.viewport.selected_pos(&self.meta) {
+            Some(pos) => format!("{pos}/{total} ({label})"),
+            None => format!("{total} ({label})"),
         };
         segs.push((s, theme.muted));
         // Sticky on is the default — only call out the off state.
@@ -394,7 +284,7 @@ impl Mode for ListingMode {
         const ACTIONS: &[HelpEntry] = &[
             (&[Action::ToggleStickyParents], "Pin parent path"),
             (&[Action::Extract], "Extract selected entry"),
-            (&[Action::OpenSearch], "Search leaf names"),
+            (&[Action::OpenSearch], "Search names"),
             NEXT_PREV_MATCH_HELP,
         ];
         ACTIONS
@@ -403,7 +293,7 @@ impl Mode for ListingMode {
     fn handle(&mut self, action: Action) -> Handled {
         match action {
             Action::ToggleStickyParents => {
-                self.viewport.toggle_sticky(&self.rows);
+                self.viewport.toggle_sticky(&self.meta);
                 Handled::Yes
             }
             Action::NextMatch => {
@@ -430,24 +320,23 @@ impl Mode for ListingMode {
                 return SearchTarget::Owned;
             }
         };
-        let search = SearchState::scan(self.rows.iter().map(|r| r.leaf.as_str()), query);
+        let search = SearchState::scan((0..self.source.len()).map(|i| self.source.name(i)), query);
         let first = search.first_line();
         self.search = Some(search);
-        if let Some(row_idx) = first {
-            self.reveal_match(row_idx);
+        if let Some(idx) = first {
+            self.reveal_match(idx);
         }
         SearchTarget::Owned
     }
 
     fn extract_target(&self) -> Option<ExtractTarget> {
-        self.selected_inner_path()
-            .map(|p| ExtractTarget::EntryPath(p.to_string()))
+        self.selected_target()
     }
 
     fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
-        // Compute the target first so its immutable borrow ends before
-        // the handler's `&mut` borrow begins.
-        let target = self.extract_target()?;
+        // Compute the target first so its immutable borrow ends before the
+        // handler's `&mut` borrow begins.
+        let target = self.selected_target()?;
         let handler = self.descend_handler.as_mut()?;
         handler(&target)
     }
@@ -457,143 +346,54 @@ impl Mode for ListingMode {
     }
 }
 
-fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
-    // Top level: render flush-left without tree connectors. Every
-    // depth-1 row would otherwise carry the same `├╴` / `└╴` at
-    // column 0, which is visual noise without payload.
-    let mut rows = Vec::new();
-    for entry in entries {
-        let is_dir = entry.is_dir();
-        let inner_path = (!is_dir).then(|| entry.name.clone());
-        rows.push(TreeRow {
-            prefix: String::new(),
-            leaf: entry.name.clone(),
-            is_dir,
-            size: entry.size,
-            mode: entry.mode,
-            mtime: entry.mtime.clone(),
-            parent_row: None,
-            inner_path,
-        });
-        if let EntryKind::Dir { children } = &entry.kind {
-            let parent = rows.len() - 1;
-            walk(children, Some(parent), "", &entry.name, &mut rows);
-        }
-    }
-    rows
-}
-
-#[cfg(test)]
-pub(super) fn flatten_for_test(entries: &[Entry]) -> Vec<TreeRow> {
-    flatten(entries)
-}
-
-fn walk(
-    entries: &[Entry],
-    parent_row: Option<usize>,
-    parent_prefix: &str,
-    parent_path: &str,
-    rows: &mut Vec<TreeRow>,
-) {
-    let count = entries.len();
-    for (i, entry) in entries.iter().enumerate() {
-        let is_last = i + 1 == count;
-        // 2-column connectors: corner/tee + thin half-line ("╴", U+2574)
-        // that ends at the cell boundary so the leaf abuts cleanly
-        // without a separator space. Continuation columns are 2 chars
-        // wide as well — vertical bar + space, or two spaces under the
-        // last child of a parent.
-        let connector = if is_last {
-            "\u{2514}\u{2574}"
-        } else {
-            "\u{251c}\u{2574}"
-        };
-        let is_dir = entry.is_dir();
-        let inner_full = format!("{parent_path}/{}", entry.name);
-        let inner_path = (!is_dir).then(|| inner_full.clone());
-        rows.push(TreeRow {
-            prefix: format!("{parent_prefix}{connector}"),
-            leaf: entry.name.clone(),
-            is_dir,
-            size: entry.size,
-            mode: entry.mode,
-            mtime: entry.mtime.clone(),
-            parent_row,
-            inner_path,
-        });
-        if let EntryKind::Dir { children } = &entry.kind {
-            let cont = if is_last { "  " } else { "\u{2502} " };
-            let next_prefix = format!("{parent_prefix}{cont}");
-            let new_parent = rows.len() - 1;
-            walk(children, Some(new_parent), &next_prefix, &inner_full, rows);
-        }
-    }
-}
-
-fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
-    use std::time::SystemTime;
-    let Some(mtime) = mtime else {
-        return "-".to_string();
-    };
-    match mtime {
-        EntryMtime::Utc(t) => match t.duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
-            Err(_) => "-".to_string(),
-        },
-        EntryMtime::LocalNaive {
-            year,
-            month,
-            day,
-            hour,
-            minute,
-        } => format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}"),
-    }
-}
-
-/// Tree prefix in muted, leaf name in foreground (or accent for dirs),
-/// with a trailing `/` for directory entries. When `selected`, the
-/// leaf gets a `selection`-coloured background — a stronger cue than
-/// the arrow alone for which row the next extract action will target.
-///
-/// `match_ranges` (with optional `current_match` index) overlays the
-/// search-match background on the matched portion of the leaf. When
-/// the row is also selected, the selection bg takes priority (matches
-/// repaint over it once the selection bg has been laid down).
-fn paint_tree_path(
-    prefix: &str,
-    leaf: &str,
-    is_dir: bool,
+/// Paint the name column: accent for dirs (with a trailing `/`), foreground
+/// for files. `match_ranges` (with optional `current_match`) overlays the
+/// search-match background on the matched bytes; when the row is selected
+/// the selection bg is laid down last so it reads as the active row.
+fn paint_name(
+    name: &NameCell,
     theme: &PeekTheme,
     selected: bool,
     match_ranges: &[Range<usize>],
     current_match: Option<usize>,
 ) -> String {
-    let leaf_color = if is_dir {
+    let color = if name.is_dir {
         theme.accent
     } else {
         theme.foreground
     };
-    let trailing = if is_dir { "/" } else { "" };
-
-    // Paint the leaf, then optionally overlay search-match backgrounds
-    // on it. overlay_matches operates on a styled string and skips its
-    // SGR escapes, so the foreground colour stays intact outside hits.
-    let mut painted_leaf = theme.paint(leaf, leaf_color);
+    // Paint the leaf, then overlay search-match backgrounds. overlay_matches
+    // skips SGR escapes, so the foreground colour survives outside hits.
+    let mut painted = theme.paint(&name.text, color);
     if !match_ranges.is_empty() {
-        painted_leaf = overlay_matches(&painted_leaf, match_ranges, current_match, theme);
+        painted = overlay_matches(&painted, match_ranges, current_match, theme);
     }
-    if !trailing.is_empty() {
-        painted_leaf.push_str(&theme.paint(trailing, theme.muted));
+    if name.is_dir {
+        painted.push_str(&theme.paint("/", theme.muted));
     }
     if selected {
-        painted_leaf = theme.paint_bg(&painted_leaf, theme.selection);
+        painted = theme.paint_bg(&painted, theme.selection);
     }
-    format!("{}{painted_leaf}", theme.paint(prefix, theme.muted))
+    painted
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::viewer::listing::entry::EntryKind;
+
+    impl ListingMode {
+        fn selected_path(&self) -> Option<String> {
+            match self
+                .viewport
+                .selected()
+                .and_then(|i| self.source.extract_target(i))
+            {
+                Some(ExtractTarget::EntryPath(p)) => Some(p),
+                _ => None,
+            }
+        }
+    }
 
     /// Build a minimal listing tree:
     ///   sub/                  (row 0)
@@ -647,46 +447,23 @@ mod tests {
     }
 
     #[test]
-    fn parent_row_indices_populated() {
-        let lm = sample();
-        let parents: Vec<Option<usize>> = lm.rows.iter().map(|r| r.parent_row).collect();
-        assert_eq!(parents, vec![None, Some(0), Some(1), Some(0), None]);
-    }
-
-    #[test]
-    fn inner_path_built_for_files_only() {
-        let lm = sample();
-        let paths: Vec<Option<String>> = lm.rows.iter().map(|r| r.inner_path.clone()).collect();
-        assert_eq!(
-            paths,
-            vec![
-                None,                                    // sub/
-                None,                                    // sub/deeper/
-                Some("sub/deeper/deep.txt".to_string()), // file
-                Some("sub/inner.txt".to_string()),       // file
-                Some("README.txt".to_string()),          // file
-            ]
-        );
-    }
-
-    #[test]
     fn initial_selection_is_first_file() {
         let lm = sample();
         // Row 2 is the first file row (deep.txt) in the sample tree.
         assert_eq!(lm.viewport.selected(), Some(2));
-        assert_eq!(lm.selected_inner_path(), Some("sub/deeper/deep.txt"));
+        assert_eq!(lm.selected_path().as_deref(), Some("sub/deeper/deep.txt"));
     }
 
     #[test]
     fn scroll_down_advances_selection_to_next_file_skipping_dirs() {
         let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(3));
-        assert_eq!(lm.selected_inner_path(), Some("sub/inner.txt"));
+        assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(4));
-        assert_eq!(lm.selected_inner_path(), Some("README.txt"));
+        assert_eq!(lm.selected_path().as_deref(), Some("README.txt"));
         // Past the last file, selection sticks rather than wrapping.
         lm.scroll(Action::ScrollDown);
         assert_eq!(lm.viewport.selected(), Some(4));
@@ -695,7 +472,7 @@ mod tests {
     #[test]
     fn scroll_up_walks_back_through_files() {
         let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
         lm.scroll(Action::Bottom);
         lm.scroll(Action::ScrollUp);
         assert_eq!(lm.viewport.selected(), Some(3));
@@ -709,7 +486,7 @@ mod tests {
     #[test]
     fn top_and_bottom_jump_to_first_last_file() {
         let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
         lm.scroll(Action::Bottom);
         assert_eq!(lm.viewport.selected(), Some(4));
         lm.scroll(Action::Top);
@@ -717,152 +494,28 @@ mod tests {
     }
 
     #[test]
-    fn page_down_snaps_selection_to_visible_file() {
+    fn search_moves_selection_to_matching_file() {
         let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 2);
-        lm.scroll(Action::PageDown);
-        let sel = lm.viewport.selected().expect("expected selection");
-        let win = lm.viewport.window(&lm.rows);
-        assert!(
-            win.content.contains(&sel) || win.sticky.contains(&sel),
-            "selection {sel} should sit in window {:?}",
-            win
-        );
-        assert!(
-            lm.rows[sel].inner_path.is_some(),
-            "selection must be a file"
-        );
-    }
-
-    #[test]
-    fn status_segments_show_selected_over_files_total() {
-        let lm = sample();
-        let tm = crate::theme::ThemeManager::new(
-            crate::theme::PeekThemeName::IdeaDark,
-            crate::theme::StyleMode::Plain,
-        );
-        let segs = lm.status_segments(tm.peek_theme());
-        // 3 files in sample tree; deep.txt is selected (1st file).
-        assert_eq!(segs[0].0, "1/3 (test)");
-    }
-
-    fn plain_theme() -> crate::theme::ThemeManager {
-        crate::theme::ThemeManager::new(
-            crate::theme::PeekThemeName::IdeaDark,
-            crate::theme::StyleMode::Plain,
-        )
-    }
-
-    #[test]
-    fn search_matches_files_and_directories_by_leaf() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        // "inner" matches one file leaf.
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
         lm.set_search(Some("inner"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
-        // Selection moved to the file match (row 3 = inner.txt).
         assert_eq!(lm.viewport.selected(), Some(3));
+        assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
     }
 
     #[test]
-    fn search_includes_directory_leaves() {
+    fn search_on_directory_scrolls_without_changing_selection() {
         let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        lm.set_search(Some("deeper"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
-        // Match is a directory (row 1) — file selection must stay on
-        // the original first file (deep.txt = row 2).
-        assert_eq!(lm.viewport.selected(), Some(2));
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
+        let before = lm.viewport.selected();
+        lm.set_search(Some("deeper")); // a directory row
+        // Selection (file-only) unchanged; the dir is just scrolled in.
+        assert_eq!(lm.viewport.selected(), before);
     }
 
     #[test]
-    fn search_leaf_only_no_full_path_matches() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        // "sub/" appears in the joined path but not in any single leaf.
-        lm.set_search(Some("sub/"));
-        assert_eq!(
-            lm.search.as_ref().unwrap().match_count(),
-            0,
-            "search is leaf-scoped — slashes never match"
-        );
-    }
-
-    #[test]
-    fn search_step_cycles_with_wrap() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        // ".txt" appears on every file leaf (3 files).
-        lm.set_search(Some(".txt"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 3);
-        let first = lm.viewport.selected();
-        assert!(first.is_some(), "first match should select a row");
-
-        lm.handle(Action::NextMatch);
-        let second = lm.viewport.selected();
-        assert_ne!(first, second, "next moves selection to a new match row");
-
-        lm.handle(Action::NextMatch);
-        lm.handle(Action::NextMatch);
-        // Wrapped around to the first match.
-        assert_eq!(lm.viewport.selected(), first);
-    }
-
-    #[test]
-    fn search_smart_case() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        // All-lowercase → case-insensitive: matches README.txt.
-        lm.set_search(Some("readme"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
-        // Mixed-case → case-sensitive: original casing must match.
-        lm.set_search(Some("README"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 1);
-        lm.set_search(Some("Readme"));
-        assert_eq!(lm.search.as_ref().unwrap().match_count(), 0);
-    }
-
-    #[test]
-    fn back_clears_search() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        lm.set_search(Some("inner"));
-        assert!(lm.search.is_some());
-        assert_eq!(lm.handle(Action::Back), Handled::Yes);
-        assert!(lm.search.is_none());
-        // Back with no search falls through.
-        assert_eq!(lm.handle(Action::Back), Handled::No);
-    }
-
-    #[test]
-    fn search_empty_query_clears() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        lm.set_search(Some("inner"));
-        assert!(lm.search.is_some());
-        lm.set_search(Some(""));
-        assert!(lm.search.is_none());
-        lm.set_search(Some("inner"));
-        assert!(lm.search.is_some());
-        lm.set_search(None);
-        assert!(lm.search.is_none());
-    }
-
-    #[test]
-    fn status_segment_shows_search_position() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.rows, 10);
-        let tm = plain_theme();
-        let theme = tm.peek_theme();
-        lm.set_search(Some(".txt"));
-        let segs = lm.status_segments(theme);
-        assert!(segs.iter().any(|(s, _)| s == "1/3"));
-        lm.set_search(Some("zzz"));
-        let segs = lm.status_segments(theme);
-        assert!(segs.iter().any(|(s, _)| s == "no match"));
-        lm.set_search(None);
-        let segs = lm.status_segments(theme);
-        assert!(!segs.iter().any(|(s, _)| s == "1/3"));
-        assert!(!segs.iter().any(|(s, _)| s == "no match"));
+    fn status_segment_counts_files_only() {
+        let lm = sample();
+        // 3 files in the tree (deep.txt, inner.txt, README.txt).
+        assert_eq!(lm.selectable_count, 3);
     }
 }

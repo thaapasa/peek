@@ -313,59 +313,46 @@ fn last_selectable_row<R: RowMeta>(rows: &[R]) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::entry::{Entry, EntryKind};
-    use super::super::mode::{TreeRow, flatten_for_test};
     use super::*;
 
-    /// Same shape as the ListingMode test fixture:
-    ///   sub/                  (row 0)
-    ///     deeper/             (row 1, parent=0)
-    ///       deep.txt          (row 2, parent=1)
-    ///     inner.txt           (row 3, parent=0)
-    ///   README.txt            (row 4, parent=None)
-    fn sample_rows() -> Vec<TreeRow> {
-        let entries = vec![
-            Entry {
-                name: "sub".into(),
-                size: 0,
-                mtime: None,
-                mode: None,
-                kind: EntryKind::Dir {
-                    children: vec![
-                        Entry {
-                            name: "deeper".into(),
-                            size: 0,
-                            mtime: None,
-                            mode: None,
-                            kind: EntryKind::Dir {
-                                children: vec![Entry {
-                                    name: "deep.txt".into(),
-                                    size: 4,
-                                    mtime: None,
-                                    mode: None,
-                                    kind: EntryKind::File,
-                                }],
-                            },
-                        },
-                        Entry {
-                            name: "inner.txt".into(),
-                            size: 5,
-                            mtime: None,
-                            mode: None,
-                            kind: EntryKind::File,
-                        },
-                    ],
-                },
-            },
-            Entry {
-                name: "README.txt".into(),
-                size: 8,
-                mtime: None,
-                mode: None,
-                kind: EntryKind::File,
-            },
-        ];
-        flatten_for_test(&entries)
+    /// Minimal `RowMeta` test row — just the two fields the engine needs,
+    /// decoupling the viewport tests from any concrete list source.
+    struct Row {
+        parent: Option<usize>,
+        selectable: bool,
+    }
+
+    impl RowMeta for Row {
+        fn parent(&self) -> Option<usize> {
+            self.parent
+        }
+        fn selectable(&self) -> bool {
+            self.selectable
+        }
+    }
+
+    /// Build rows from `(parent, selectable)` specs.
+    fn rows(specs: &[(Option<usize>, bool)]) -> Vec<Row> {
+        specs
+            .iter()
+            .map(|&(parent, selectable)| Row { parent, selectable })
+            .collect()
+    }
+
+    /// Same shape as the listing test fixture:
+    ///   sub/                  (row 0, dir)
+    ///     deeper/             (row 1, parent=0, dir)
+    ///       deep.txt          (row 2, parent=1, file)
+    ///     inner.txt           (row 3, parent=0, file)
+    ///   README.txt            (row 4, file)
+    fn sample_rows() -> Vec<Row> {
+        rows(&[
+            (None, false),
+            (Some(0), false),
+            (Some(1), true),
+            (Some(0), true),
+            (None, true),
+        ])
     }
 
     #[test]
@@ -419,51 +406,19 @@ mod tests {
     /// could fall behind by `sticky_len` rows before scroll fired.
     #[test]
     fn selection_stays_within_content_slot_with_sticky() {
-        // Build a deeper tree so sticky kicks in:
-        //   a/
-        //     b/
-        //       c/
-        //         f1.txt
-        //         f2.txt
-        //         f3.txt
-        let entries = vec![Entry {
-            name: "a".into(),
-            size: 0,
-            mtime: None,
-            mode: None,
-            kind: EntryKind::Dir {
-                children: vec![Entry {
-                    name: "b".into(),
-                    size: 0,
-                    mtime: None,
-                    mode: None,
-                    kind: EntryKind::Dir {
-                        children: vec![Entry {
-                            name: "c".into(),
-                            size: 0,
-                            mtime: None,
-                            mode: None,
-                            kind: EntryKind::Dir {
-                                children: (1..=3)
-                                    .map(|i| Entry {
-                                        name: format!("f{i}.txt"),
-                                        size: 1,
-                                        mtime: None,
-                                        mode: None,
-                                        kind: EntryKind::File,
-                                    })
-                                    .collect(),
-                            },
-                        }],
-                    },
-                }],
-            },
-        }];
-        let rows = flatten_for_test(&entries);
-        // Rows: 0:a, 1:b, 2:c, 3:f1, 4:f2, 5:f3.
+        // Deep tree so sticky kicks in:
+        //   0:a/ 1:b/ 2:c/ 3:f1 4:f2 5:f3
+        let rows = rows(&[
+            (None, false),
+            (Some(0), false),
+            (Some(1), false),
+            (Some(2), true),
+            (Some(2), true),
+            (Some(2), true),
+        ]);
         let mut vp = ListingViewport::new(&rows);
         // Viewport 4 → sticky cap = 4/3 = 1. With selection visiting
-        // f3.txt, sticky chain pins one ancestor → content slot = 3.
+        // f3, sticky chain pins one ancestor → content slot = 3.
         vp.set_viewport_rows(&rows, 4);
         vp.jump_last(&rows);
         let w = vp.window(&rows);
