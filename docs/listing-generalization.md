@@ -1,6 +1,9 @@
 # Listing mode generalization
 
-> **Status: Planned.** In-progress plan. Delete or archive when landed.
+> **Status: Steps 1–4 landed (branch `listing-generalization`).** The
+> behavior-preserving refactor is done — generic engine, `ListSource` seam,
+> directory folded in. Steps 5–6 below are product/feature work, not yet
+> started. Update or archive when those land or are dropped.
 
 Split `ListingMode` into a generic **navigation engine** and a per-consumer
 **row source**, so the listing UI (scroll / paging / selection / search / sticky
@@ -181,27 +184,47 @@ before writing. No surprises; plan holds. Specifics:
 
 ## Sequence
 
-1. **Extract the nav engine.** Make `ListingViewport` depend on a small
-   row-metadata view (`parent`, `selectable`, name text) instead of `TreeRow`
-   fields directly. No behavior change.
-2. **Introduce `ListSource` + `RowCells` + `SelectOutcome`** (`Extract` +
-   `Frame` only). `ListingMode` becomes a thin shell: holds a `Box<dyn
-   ListSource>` + the viewport, dispatches `on_select` to push frame / extract.
-3. **Port archive** to a `ListSource` (tree, `Extract`). Tree-build
-   (`from_flat_paths`/`flatten`) moves behind the file-tree provider. Proves the
-   tree + extract path is unchanged.
-4. **Fold `DirectoryMode` into the engine** as a flat all-selectable
-   `ListSource`. Deletes the duplicate. Concrete surface-area win. Directory
-   keeps its file columns via `row::`.
-5. **Port spreadsheet + sqlite** to `on_select → Frame`. Deletes
-   `with_descend_handler` and the faked-file `Entry` rows. Proves the file-model
-   abuse is gone.
-6. **Payoff (new consumers):**
-   - **Email** — mbox = list messages (select → descend into message);
-     multipart = list parts with a content-type column. Best first new consumer;
-     `Frame` / `Extract` semantics fit directly.
+1. ✅ **Extract the nav engine.** `ListingViewport` now runs off a `RowMeta`
+   trait (`parent` + `selectable`) instead of `TreeRow` fields. (`cf870d2`)
+2. ✅ **Introduce `ListSource` + `RowCells`.** `ListingMode` is a thin engine
+   over `Box<dyn ListSource>` + the viewport; `TreeListSource` is the first
+   impl, carrying the `Entry` tree + file columns. Steps 2 and 3 landed
+   together — a trait with no impl isn't independently testable. (`7967b99`)
+3. ✅ **Archive (and every tree consumer) ported.** `ListingMode::new` builds a
+   `TreeListSource`, so archive / pdf / epub / docx / odt / comic / audio /
+   notebook / disk-image / email / spreadsheet / sqlite are untouched. (`7967b99`)
+4. ✅ **Folded the directory viewer in.** `DirectoryMode` → `DirListSource`
+   (flat, all-selectable); ~120 lines of duplicated navigation deleted. (`b684c6c`)
+
+   **Deviation from original plan:** the descend handler stays *engine*-side
+   (`ListingMode` keeps `descend_handler` + `with_descend_handler`), not on the
+   source. That kept all 12 consumers — including the sqlite/spreadsheet handler
+   sites — unchanged, so steps 2–4 are a zero-churn, behavior-preserving lift.
+   `SelectOutcome` was therefore *not* introduced: a unified enum is dead weight
+   until the bin dispatches on it, which only pays off with `Jump` (step 6).
+
+   **Side effect:** the mtime column width is now computed once over all rows,
+   not per visible slice, so it no longer jitters on scroll.
+
+### Remaining — product/feature work, not behavior-preserving
+
+5. **Honest sqlite/spreadsheet sources.** Replace the faked `Entry` rows
+   (`size` = row count, `.csv`/`.sql` suffix) + `with_descend_handler` with
+   bespoke `SqliteListSource` / `SheetListSource` and a unified
+   `on_select → SelectOutcome`. This changes how those rows are *modelled* (and
+   risks changing what's rendered), so it needs a deliberate column design — not
+   a mechanical lift. Best done together with the `SelectOutcome`/`Jump` bin
+   change below.
+6. **New consumers:**
+   - **Email** — mbox = list messages (select → descend); multipart = list parts
+     with a content-type column. (Email already uses `ListingMode`; this adds a
+     real non-file column.)
    - **Binary symbols** — list functions/symbols with an address column, select
-     → `Jump { Hex, Byte(off) }`. Needs the new-mechanism step first.
+     → `Jump { Hex, Byte(off) }`. Needs the new bin mechanism (`set_active_at`,
+     see Findings) + symbol extraction from object files.
+
+The seam (steps 1–4) is what unblocks 5–6; each of those is an independent,
+reviewable change with its own design choices.
 
 ## Guardrails
 
