@@ -33,7 +33,8 @@ pub fn compose(
     {
         let sections = super::tables::build_sections(&loaded.file);
         modes.push(Box::new(TableMode::new("Sections", sections)));
-        let (symbols, warnings) = super::symbol_list::build_from_file(&loaded.file);
+        let (symbols, warnings) =
+            super::symbol_list::build_from_file(&loaded.file, loaded.slice_offset);
         modes.push(Box::new(ListingMode::from_source(
             Box::new(symbols),
             "Symbols",

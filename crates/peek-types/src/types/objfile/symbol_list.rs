@@ -34,8 +34,14 @@ pub struct SymbolListSource {
 }
 
 /// Build the symbol listing from a parsed object file, plus any notice
-/// (stripped / dynamic-fallback) to surface through Info.
-pub fn build_from_file(file: &object::File<'_>) -> (SymbolListSource, Vec<String>) {
+/// (stripped / dynamic-fallback) to surface through Info. `slice_offset` is
+/// the file offset of the parsed slice within the original input (non-zero
+/// for a universal Mach-O), added so a symbol's slice-relative file offset
+/// maps to the whole-file Hex view.
+pub fn build_from_file(
+    file: &object::File<'_>,
+    slice_offset: u64,
+) -> (SymbolListSource, Vec<String>) {
     let mut symbols: Vec<_> = file.symbols().collect();
     let mut from_dynamic = false;
     if symbols.is_empty() {
@@ -51,7 +57,7 @@ pub fn build_from_file(file: &object::File<'_>) -> (SymbolListSource, Vec<String
             kind: symbol_kind_label(sym.kind()),
             bind: bind_label(sym),
             name: sym.name().unwrap_or("<invalid>").to_string(),
-            file_offset: file_offset_of(file, sym),
+            file_offset: file_offset_of(file, sym).map(|off| off + slice_offset),
         })
         .collect();
 
@@ -219,7 +225,7 @@ mod tests {
     fn symbols_listed_with_in_bounds_jump_offsets() {
         let bytes = fixture("tiny.dylib");
         let loaded = super::super::load::load(&bytes).expect("parse object");
-        let (src, _warnings) = build_from_file(&loaded.file);
+        let (src, _warnings) = build_from_file(&loaded.file, loaded.slice_offset);
         assert!(src.len() > 0, "fixture should carry symbols");
         // Every defined symbol that resolves to a jump target must point
         // inside the file, and the jump must be a Hex byte position.
@@ -242,7 +248,39 @@ mod tests {
     fn symbols_do_not_extract() {
         let bytes = fixture("tiny.dylib");
         let loaded = super::super::load::load(&bytes).expect("parse object");
-        let (src, _) = build_from_file(&loaded.file);
+        let (src, _) = build_from_file(&loaded.file, loaded.slice_offset);
         assert!((0..src.len()).all(|i| src.extract_target(i).is_none()));
+    }
+
+    /// Regression: in a universal (fat) Mach-O, section/symbol file offsets
+    /// are relative to the *slice*, but the Hex view spans the whole
+    /// container. The jump offset must include the slice's base offset, so
+    /// it lands inside the selected slice's bytes — not in the inter-slice
+    /// padding near the start of the file, where the un-based offset fell.
+    #[test]
+    fn fat_jump_offsets_are_absolute_into_the_selected_slice() {
+        let bytes = fixture("tiny-fat.dylib");
+        let loaded = super::super::load::load(&bytes).expect("parse fat object");
+        assert!(
+            loaded.slice_offset > 0,
+            "fat fixture should select a slice past the container base"
+        );
+        let slice = loaded.slice_offset..loaded.slice_offset + loaded.data.len() as u64;
+        let (src, _) = build_from_file(&loaded.file, loaded.slice_offset);
+        let mut checked = 0;
+        for i in 0..src.len() {
+            if let Some((_, Position::Byte(off))) = src.jump_target(i) {
+                assert!(
+                    slice.contains(&off),
+                    "offset {off:#x} fell outside the selected slice {slice:#x?} \
+                     — slice base not applied"
+                );
+                checked += 1;
+            }
+        }
+        assert!(
+            checked > 0,
+            "fixture should carry a jumpable function symbol"
+        );
     }
 }
