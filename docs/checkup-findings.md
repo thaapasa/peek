@@ -4,49 +4,6 @@ IDs are stable. Resolved items are deleted but remaining IDs keep their numbers
 so commit / PR references stay valid. Add new IDs at the end of each section
 (don't renumber).
 
-## High
-
-### H7. Zip-bomb gate exists in DOCX/ODT but drifted away in EPUB/CBZ — same helper, four copies
-
-The four zip-backed render paths contain near-identical `open_zip` /
-`read_entry` helpers, and they have already diverged on the one thing
-that matters:
-
-- `crates/peek-types/src/types/document/docx/package.rs:45-64` —
-  `read_entry` gates the **uncompressed** entry size against
-  `RENDER_MAX_BYTES` before allocating, with an explicit zip-bomb comment
-  ("a small DOCX can carry a multi-GB document.xml").
-- `crates/peek-types/src/types/document/odt/package.rs:47-66` —
-  byte-for-byte the same function (only "DOCX"→"ODT" in strings), same
-  comment.
-- `crates/peek-types/src/types/ebook/epub/package.rs:59-67` —
-  `read_entry` has **no cap**: `Vec::with_capacity(file.size() as usize)`
-  + `read_to_end`. Used for every chapter body and image
-  (`epub/read_mode.rs:154`, `:562`) and the OPF.
-- `crates/peek-types/src/types/comic/cbz/package.rs:69-77` — `read_page`,
-  same uncapped shape, feeds the page renderer
-  (`cbz/page_renderer.rs:55`).
-
-`file.size()` is attacker-controlled central-directory metadata, so a
-crafted EPUB/CBZ can force a huge upfront allocation (capacity overflow /
-alloc abort — which the viewer's degrade-to-hex recovery **cannot**
-catch, unlike a render `Err`) or genuinely decompress multi-GB into
-memory. The extract path (`e` key, `--extract`) is safe — the hub routes
-all four through `types::archive::extract`'s spool/cap machinery — only
-the render-time reads are exposed.
-
-This is exactly the dangerous-drift duplication: the protection was added
-to two copies and the other two were missed. Fix: one shared pair next to
-the already-shared `open_seekable` in
-`crates/peek-types/src/types/archive/reader.rs` — `open_zip(source,
-label)` and `read_zip_entry(zip, path, label) -> Result<Bytes>`
-(cap-gated, `String` wrapper for the XML callers) — and delete the four
-copies. The same `> RENDER_MAX_BYTES → bail!("{} MB (> {} MB render
-cap)")` formula also repeats in `types/html/renderer.rs:54-59` and
-`types/document/rtf/parse.rs:185-190`; a tiny
-`ensure_under_render_cap(len, what)` pins the formula once, per the
-conventions' "lift on the first duplicate" rule.
-
 ## Medium
 
 ### M6. The per-type dispatch hubs are a `match file_type` family — wontfix, kept as analysis record
@@ -373,3 +330,19 @@ image mode's `EXTRA_ACTIONS` and the `Action::ZoomPreset(n)` bindings (handled
 on a different path, `image_render/zoom_pan.rs:79`) — adding `ZoomPreset(10)`
 to `bindings()` while forgetting the help row would slip through. Pattern's
 good; needs one more application.
+
+### L13. 16 MB render cap also bounds in-container image payloads
+
+`RENDER_MAX_BYTES` was sized for text payloads ("a 16 MB
+`document.xml`"), but the shared `read_zip_entry` gate now also bounds
+CBZ page and EPUB image reads
+(`crates/peek-types/src/types/comic/cbz/package.rs:67`,
+`crates/peek-types/src/types/ebook/epub/read_mode.rs:562`). A legitimate
+>16 MB archival scan refuses to render inside the container while the
+identical file opened standalone renders fine (the image type reads
+`read_bytes()` uncapped). Not a defect — the safety rationale
+(alloc-abort is uncatchable, unlike a render `Err`) holds for images
+too, the degrade path is soft (warning line; TOC / Info / hex / extract
+all still work), and typical pages run 1–5 MB. Act only if a real
+oversize page/image surfaces; the fix is a second, larger image-payload
+cap passed into `read_zip_entry` per call — not gate removal.

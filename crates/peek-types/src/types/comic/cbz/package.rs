@@ -7,14 +7,12 @@
 //! filename order, matching the convention used by every comic
 //! reader in the wild.
 
-use std::io::Read;
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use bytes::Bytes;
 use zip::ZipArchive;
 
 use crate::input::InputSource;
-use crate::types::archive::reader::{ReadSeek, open_seekable};
+use crate::types::archive::reader::{self, ReadSeek};
 
 /// Image extensions that count as a comic page. Matches what
 /// established readers (Komga, Tachiyomi, ComicRack) accept; uncommon
@@ -34,8 +32,7 @@ pub(crate) struct Page {
 /// by name. Skips directory entries and `__MACOSX/` resource forks
 /// (added by macOS Archive Utility) so they don't pollute the spine.
 pub(crate) fn list_pages(source: &InputSource) -> Result<Vec<Page>> {
-    let reader = open_seekable(source).context("failed to open CBZ container")?;
-    let mut zip = ZipArchive::new(reader).context("failed to read CBZ ZIP")?;
+    let mut zip = open_zip(source)?;
     let mut pages = Vec::new();
     for i in 0..zip.len() {
         let entry = zip.by_index_raw(i)?;
@@ -62,18 +59,13 @@ pub(crate) fn list_pages(source: &InputSource) -> Result<Vec<Page>> {
 /// carrying a mutable reader through the mode, which doesn't pay
 /// for itself at the page-cadence the user actually navigates at.
 pub(crate) fn open_zip(source: &InputSource) -> Result<ZipArchive<Box<dyn ReadSeek>>> {
-    let reader = open_seekable(source)?;
-    Ok(ZipArchive::new(reader)?)
+    reader::open_zip(source, "CBZ")
 }
 
-/// Read one page's bytes out of the ZIP.
+/// Read one page's bytes out of the ZIP. Cap-gated against zip bombs
+/// via the shared archive helper.
 pub(crate) fn read_page(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Bytes> {
-    let mut entry = zip
-        .by_name(path)
-        .with_context(|| format!("CBZ entry {path:?} not found"))?;
-    let mut buf = Vec::with_capacity(entry.size() as usize);
-    entry.read_to_end(&mut buf)?;
-    Ok(Bytes::from(buf))
+    reader::read_zip_entry(zip, path, "CBZ")
 }
 
 fn has_page_extension(name: &str) -> bool {

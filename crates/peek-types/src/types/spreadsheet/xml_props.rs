@@ -5,13 +5,11 @@
 //! vocabulary differences for keywords / dates, so one parser keyed on
 //! the full prefixed element names covers both.
 
-use std::io::{Cursor, Read};
-
 use quick_xml::Reader;
 use quick_xml::events::Event;
-use zip::ZipArchive;
 
 use crate::input::InputSource;
+use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 
 use super::SpreadsheetFormat;
@@ -22,22 +20,14 @@ pub(crate) fn read_metadata(
     source: &InputSource,
     fmt: SpreadsheetFormat,
 ) -> Option<DocumentMetadata> {
-    let bytes = source.read_bytes().ok()?;
-    let mut zip = ZipArchive::new(Cursor::new(bytes)).ok()?;
+    let mut zip = open_zip(source, "workbook").ok()?;
     let entry = if fmt.is_ooxml() {
         "docProps/core.xml"
     } else {
         "meta.xml"
     };
-    let xml = read_entry(&mut zip, entry)?;
+    let xml = read_zip_entry_str(&mut zip, entry, "workbook").ok()?;
     Some(parse_props(&xml))
-}
-
-fn read_entry<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>, name: &str) -> Option<String> {
-    let mut f = zip.by_name(name).ok()?;
-    let mut s = String::new();
-    f.read_to_string(&mut s).ok()?;
-    Some(s)
 }
 
 #[derive(Clone, Copy)]

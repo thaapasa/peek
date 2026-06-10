@@ -1,7 +1,9 @@
 //! Archive listing dispatch: maps an `ArchiveFormat` to its backend
 //! and returns a generic `Vec<Entry>` tree via `viewer::listing`. The
 //! shared `ReadSeek` helper lives here because every backend needs a
-//! seekable reader over the source.
+//! seekable reader over the source, and the cap-gated `open_zip` /
+//! `read_zip_entry` pair because every zip-backed render path (DOCX,
+//! ODT, EPUB, CBZ, spreadsheet props) needs the same zip-bomb gate.
 
 use std::fs::File;
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
@@ -9,11 +11,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use bytes::Bytes;
 use tempfile::NamedTempFile;
+use zip::ZipArchive;
 
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
 use crate::viewer::listing::{Entry, FlatEntry, from_flat_paths};
+use crate::viewer::modes::{RENDER_MAX_BYTES, ensure_under_render_cap};
 
 /// Trait alias for the seekable readers we hand to the zip backend. tar
 /// only needs `Read`, but using one helper for both keeps the call sites
@@ -55,6 +60,53 @@ pub(crate) fn open_seekable(source: &InputSource) -> Result<Box<dyn ReadSeek>> {
             Ok(Box::new(f))
         }
     }
+}
+
+/// Open a ZIP archive over the source. `label` names the container kind
+/// ("EPUB", "DOCX", …) in error messages.
+pub(crate) fn open_zip(source: &InputSource, label: &str) -> Result<ZipArchive<Box<dyn ReadSeek>>> {
+    let reader =
+        open_seekable(source).with_context(|| format!("failed to open {label} container"))?;
+    ZipArchive::new(reader).with_context(|| format!("failed to read {label} archive"))
+}
+
+/// Read one entry's bytes out of an open ZIP. Gates on the *uncompressed*
+/// entry size, not the container — a small container can declare a
+/// multi-GB entry (zip bomb). Above the render cap, refuse before the
+/// whole-entry allocation; the rendered view is dropped and the container
+/// TOC + hex view stand in.
+pub(crate) fn read_zip_entry(
+    zip: &mut ZipArchive<Box<dyn ReadSeek>>,
+    path: &str,
+    label: &str,
+) -> Result<Bytes> {
+    let file = zip
+        .by_name(path)
+        .with_context(|| format!("{label} entry {path:?} not found"))?;
+    let declared = file.size();
+    ensure_under_render_cap(declared, path)?;
+    // The declared size is attacker-controlled metadata and the deflate
+    // decoder doesn't stop at it — bound the actual decompressed read too,
+    // so an entry that lies *small* can't expand past the cap either.
+    let mut buf = Vec::with_capacity(declared as usize);
+    file.take(RENDER_MAX_BYTES + 1).read_to_end(&mut buf)?;
+    if buf.len() as u64 > RENDER_MAX_BYTES {
+        anyhow::bail!(
+            "{path} decompresses past the {} MB render cap (declared {declared} B)",
+            RENDER_MAX_BYTES / (1024 * 1024)
+        );
+    }
+    Ok(Bytes::from(buf))
+}
+
+/// [`read_zip_entry`] decoded as UTF-8, for the XML-payload callers.
+pub(crate) fn read_zip_entry_str(
+    zip: &mut ZipArchive<Box<dyn ReadSeek>>,
+    path: &str,
+    label: &str,
+) -> Result<String> {
+    let bytes = read_zip_entry(zip, path, label)?;
+    String::from_utf8(bytes.into()).with_context(|| format!("{label} entry {path:?} is not UTF-8"))
 }
 
 /// `Read + Seek` window over `[start, start+len)` of a backing file.
@@ -320,6 +372,53 @@ mod tests {
         let src = InputSource::memory(bytes::Bytes::new(), "empty.tar");
         let entries = list_entries(&src, ArchiveFormat::Tar).unwrap();
         assert!(entries.is_empty());
+    }
+
+    fn zip_with_entry(name: &str, data: &[u8]) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        w.start_file(name, opts).unwrap();
+        w.write_all(data).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn read_zip_entry_refuses_over_cap_declared_size() {
+        let data = vec![0u8; (RENDER_MAX_BYTES + 1) as usize];
+        let bytes = zip_with_entry("big.xml", &data);
+        let src = InputSource::memory(bytes::Bytes::from(bytes), "big.zip");
+        let mut zip = open_zip(&src, "TEST").unwrap();
+        let err = read_zip_entry(&mut zip, "big.xml", "TEST").unwrap_err();
+        assert!(format!("{err:#}").contains("render cap"), "got: {err:#}");
+    }
+
+    /// A zip bomb can lie *small*: declare a 1 KB entry but carry deflate
+    /// data that expands to gigabytes. The declared-size gate alone misses
+    /// that — the read itself must stop at the cap. Patches the recorded
+    /// uncompressed sizes (local header at offset 22, central directory
+    /// header at offset 24) down to 1 KB and asserts refusal.
+    #[test]
+    fn read_zip_entry_bounds_actual_decompression_when_declared_size_lies() {
+        let data = vec![0u8; (RENDER_MAX_BYTES + 1) as usize];
+        let mut bytes = zip_with_entry("liar.xml", &data);
+        let lie = 1024u32.to_le_bytes();
+        assert_eq!(&bytes[0..4], b"PK\x03\x04");
+        bytes[22..26].copy_from_slice(&lie);
+        let cdh = bytes
+            .windows(4)
+            .rposition(|w| w == b"PK\x01\x02")
+            .expect("central directory header");
+        bytes[cdh + 24..cdh + 28].copy_from_slice(&lie);
+
+        let src = InputSource::memory(bytes::Bytes::from(bytes), "liar.zip");
+        let mut zip = open_zip(&src, "TEST").unwrap();
+        let file = zip.by_name("liar.xml").unwrap();
+        assert_eq!(file.size(), 1024, "patch must land on the declared size");
+        drop(file);
+        let err = read_zip_entry(&mut zip, "liar.xml", "TEST").unwrap_err();
+        assert!(format!("{err:#}").contains("render cap"), "got: {err:#}");
     }
 
     /// Compressed-tar listings against zero-byte input must finish —

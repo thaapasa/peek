@@ -31,6 +31,28 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PR
 /// inside a small DOCX) stays openable. Mirrors `PRETTY_MAX_BYTES`.
 pub const RENDER_MAX_BYTES: u64 = 16 * 1024 * 1024;
 
+/// Cap-violation message — `None` when `len` fits under
+/// [`RENDER_MAX_BYTES`]. Split from [`ensure_under_render_cap`] for
+/// callers that report the refusal as a warning line instead of an `Err`
+/// (the HTML renderer falls back to raw source).
+pub fn render_cap_exceeded(len: u64, what: &str) -> Option<String> {
+    (len > RENDER_MAX_BYTES).then(|| {
+        format!(
+            "{what} is {} MB (> {} MB render cap)",
+            len / (1024 * 1024),
+            RENDER_MAX_BYTES / (1024 * 1024)
+        )
+    })
+}
+
+/// Refuse a whole-document read when `len` exceeds [`RENDER_MAX_BYTES`].
+pub fn ensure_under_render_cap(len: u64, what: &str) -> Result<()> {
+    match render_cap_exceeded(len, what) {
+        Some(msg) => Err(anyhow::anyhow!(msg)),
+        None => Ok(()),
+    }
+}
+
 /// Turns a parsed document into width-wrapped, ANSI-styled lines.
 ///
 /// Implementors own the parsed document (the AST, the PDF handle, the

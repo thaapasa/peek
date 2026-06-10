@@ -2,7 +2,8 @@
 //!
 //! Rendering is whole-document (html2text has no streaming API), so
 //! very large HTML may pause on first render — typical pages are well
-//! under 1 MB and render instantly. Above [`RENDER_MAX_BYTES`] the render
+//! under 1 MB and render instantly. Above
+//! [`RENDER_MAX_BYTES`](crate::viewer::modes::RENDER_MAX_BYTES) the render
 //! is refused (one warning line) so a multi-hundred-MB page can't blow up
 //! memory or freeze the UI; the raw Source view (always pushed alongside)
 //! stands in. The generic [`RenderedTextMode`] caches the result per
@@ -13,7 +14,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
-use crate::viewer::modes::{ModeId, RENDER_MAX_BYTES, TextRenderer};
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_exceeded};
 
 use super::render;
 
@@ -51,12 +52,8 @@ impl TextRenderer for HtmlRenderer {
     ) -> Result<Vec<String>> {
         self.warning = None;
         let len = self.source.byte_len()?;
-        if len > RENDER_MAX_BYTES {
-            let msg = format!(
-                "HTML is {} MB (> {} MB render cap); showing raw source",
-                len / (1024 * 1024),
-                RENDER_MAX_BYTES / (1024 * 1024)
-            );
+        if let Some(mut msg) = render_cap_exceeded(len, "HTML") {
+            msg.push_str("; showing raw source");
             self.warning = Some(msg.clone());
             return Ok(vec![msg]);
         }
@@ -73,6 +70,7 @@ impl TextRenderer for HtmlRenderer {
 mod tests {
     use super::*;
     use crate::theme::ThemeManager;
+    use crate::viewer::modes::RENDER_MAX_BYTES;
 
     fn theme() -> PeekTheme {
         ThemeManager::new(PeekThemeName::default(), StyleMode::Plain)

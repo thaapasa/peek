@@ -38,7 +38,9 @@ pub use help::HelpMode;
 pub use hex::HexMode;
 pub use info::InfoMode;
 pub use pretty_view::PrettyView;
-pub use rendered_text::{RENDER_MAX_BYTES, RenderedTextMode, TextRenderer};
+pub use rendered_text::{
+    RENDER_MAX_BYTES, RenderedTextMode, TextRenderer, ensure_under_render_cap, render_cap_exceeded,
+};
 
 /// Stable identifier for a mode. Used to look up modes in a stack and
 /// to drive view-switch keybindings (e.g. `i` → Info, `x` → Hex).

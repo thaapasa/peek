@@ -10,28 +10,24 @@
 //! literal text, image refs) and skip everything else.
 
 use std::collections::HashMap;
-use std::io::Read;
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
-use zip::ZipArchive;
 
 use crate::input::InputSource;
-use crate::types::archive::reader::{ReadSeek, open_seekable};
+use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
-use crate::viewer::modes::RENDER_MAX_BYTES;
 
 pub(crate) fn open(source: &InputSource) -> Result<Doc> {
-    let reader = open_seekable(source).context("failed to open DOCX container")?;
-    let mut zip = ZipArchive::new(reader).context("failed to read DOCX archive")?;
+    let mut zip = open_zip(source, "DOCX")?;
 
-    let document_xml =
-        read_entry(&mut zip, "word/document.xml").context("couldn't read word/document.xml")?;
-    let core_xml = read_entry(&mut zip, "docProps/core.xml").ok();
-    let rels_xml = read_entry(&mut zip, "word/_rels/document.xml.rels").ok();
+    let document_xml = read_zip_entry_str(&mut zip, "word/document.xml", "DOCX")
+        .context("couldn't read word/document.xml")?;
+    let core_xml = read_zip_entry_str(&mut zip, "docProps/core.xml", "DOCX").ok();
+    let rels_xml = read_zip_entry_str(&mut zip, "word/_rels/document.xml.rels", "DOCX").ok();
 
     let metadata = core_xml.as_deref().map(parse_core_xml).unwrap_or_default();
     let image_rels = rels_xml
@@ -40,26 +36,6 @@ pub(crate) fn open(source: &InputSource) -> Result<Doc> {
         .unwrap_or_default();
 
     parse_document(&document_xml, metadata, &image_rels)
-}
-
-fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<String> {
-    let mut file = zip
-        .by_name(path)
-        .with_context(|| format!("DOCX entry {path:?} not found"))?;
-    // Gate on the *uncompressed* entry size, not the container — a small
-    // DOCX can carry a multi-GB `document.xml` (zip bomb). Above the cap,
-    // refuse before the whole-entry read; the rendered view is dropped and
-    // the ZIP TOC + hex view stand in.
-    if file.size() > RENDER_MAX_BYTES {
-        anyhow::bail!(
-            "{path} is {} MB (> {} MB render cap)",
-            file.size() / (1024 * 1024),
-            RENDER_MAX_BYTES / (1024 * 1024)
-        );
-    }
-    let mut buf = String::with_capacity(file.size() as usize);
-    file.read_to_string(&mut buf)?;
-    Ok(buf)
 }
 
 // ---------------------------------------------------------------------------

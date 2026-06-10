@@ -295,8 +295,10 @@ as `•`.
 
 A `word/document.xml` over the 16 MB render cap (`RENDER_MAX_BYTES`, gated on the *uncompressed*
 entry size so a zip-bombed body is caught before extraction) drops the **Read** view; the **TOC**
-+ Info + hex views stand in, with the reason surfaced as a TOC warning. ODT (`content.xml`) and
-RTF apply the same cap.
++ Info + hex views stand in, with the reason surfaced as a TOC warning. The gate lives in the
+shared `read_zip_entry` helper (`types/archive/reader.rs`), so ODT (`content.xml`), EPUB chapter
+/ image reads, CBZ page reads, and spreadsheet doc-props go through the same cap; RTF and HTML
+apply it to the whole source.
 
 #### ODT ✅
 

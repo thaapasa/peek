@@ -19,49 +19,26 @@
 //! resolve in v1.
 
 use std::collections::HashMap;
-use std::io::Read;
 
 use anyhow::{Context, Result, anyhow};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
-use zip::ZipArchive;
 
 use crate::input::InputSource;
-use crate::types::archive::reader::{ReadSeek, open_seekable};
+use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
-use crate::viewer::modes::RENDER_MAX_BYTES;
 
 pub fn open(source: &InputSource) -> Result<Doc> {
-    let reader = open_seekable(source).context("failed to open ODT container")?;
-    let mut zip = ZipArchive::new(reader).context("failed to read ODT archive")?;
+    let mut zip = open_zip(source, "ODT")?;
 
-    let content_xml = read_entry(&mut zip, "content.xml").context("couldn't read content.xml")?;
-    let meta_xml = read_entry(&mut zip, "meta.xml").ok();
+    let content_xml =
+        read_zip_entry_str(&mut zip, "content.xml", "ODT").context("couldn't read content.xml")?;
+    let meta_xml = read_zip_entry_str(&mut zip, "meta.xml", "ODT").ok();
 
     let metadata = meta_xml.as_deref().map(parse_meta).unwrap_or_default();
     parse_content(&content_xml, metadata)
-}
-
-fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<String> {
-    let mut file = zip
-        .by_name(path)
-        .with_context(|| format!("ODT entry {path:?} not found"))?;
-    // Gate on the *uncompressed* entry size, not the container — a small
-    // ODT can carry a multi-GB `content.xml` (zip bomb). Above the cap,
-    // refuse before the whole-entry read; the rendered view is dropped and
-    // the ZIP TOC + hex view stand in.
-    if file.size() > RENDER_MAX_BYTES {
-        anyhow::bail!(
-            "{path} is {} MB (> {} MB render cap)",
-            file.size() / (1024 * 1024),
-            RENDER_MAX_BYTES / (1024 * 1024)
-        );
-    }
-    let mut buf = String::with_capacity(file.size() as usize);
-    file.read_to_string(&mut buf)?;
-    Ok(buf)
 }
 
 // ---------------------------------------------------------------------------

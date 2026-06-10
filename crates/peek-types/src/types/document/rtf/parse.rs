@@ -26,7 +26,7 @@ use rtf_parser::{Color as RtfColor, Painter, Paragraph as RtfParagraph, RtfDocum
 use crate::input::InputSource;
 use crate::types::document::DocumentMetadata;
 use crate::viewer::listing::{Entry, EntryKind};
-use crate::viewer::modes::RENDER_MAX_BYTES;
+use crate::viewer::modes::ensure_under_render_cap;
 
 pub(crate) struct Parsed {
     pub metadata: DocumentMetadata,
@@ -182,13 +182,7 @@ pub(crate) fn open_source(source: &InputSource) -> Result<Parsed> {
     // RTF parsing reads + holds the whole document; refuse over the cap so
     // the rendered view is dropped and the hex view stands in.
     let len = source.byte_len().context("failed to stat RTF source")?;
-    if len > RENDER_MAX_BYTES {
-        anyhow::bail!(
-            "RTF is {} MB (> {} MB render cap)",
-            len / (1024 * 1024),
-            RENDER_MAX_BYTES / (1024 * 1024)
-        );
-    }
+    ensure_under_render_cap(len, "RTF")?;
     let bytes = source.read_bytes().context("failed to read RTF source")?;
     let text =
         std::str::from_utf8(&bytes).map_err(|e| anyhow!("RTF body must be ASCII / UTF-8: {e}"))?;
@@ -566,6 +560,7 @@ fn scrape_hex_blob(body: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::viewer::modes::RENDER_MAX_BYTES;
 
     #[test]
     fn open_source_refuses_over_cap_before_reading() {

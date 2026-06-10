@@ -11,8 +11,6 @@
 //! reads can pull bytes by entry name without rerunning the
 //! container/OPF dance.
 
-use std::io::Read;
-
 use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
 use quick_xml::events::Event;
@@ -21,7 +19,7 @@ use quick_xml::reader::Reader;
 use zip::ZipArchive;
 
 use crate::input::InputSource;
-use crate::types::archive::reader::{ReadSeek, open_seekable};
+use crate::types::archive::reader::{self, ReadSeek};
 use crate::types::ebook::Metadata;
 
 /// Bookkeeping for one EPUB. Built once per file open; chapter bodies
@@ -42,8 +40,7 @@ pub(crate) struct Chapter {
 /// Parse the EPUB structure from `source`. Returns the metadata plus
 /// the resolved spine. Does not load chapter bodies.
 pub(crate) fn open(source: &InputSource) -> Result<Package> {
-    let reader = open_seekable(source).context("failed to open EPUB container")?;
-    let mut zip = ZipArchive::new(reader).context("failed to read EPUB ZIP")?;
+    let mut zip = open_zip(source)?;
     let opf_path = read_container_opf_path(&mut zip)?;
     let opf_bytes = read_entry(&mut zip, &opf_path)
         .with_context(|| format!("failed to read OPF at {opf_path}"))?;
@@ -56,14 +53,10 @@ pub(crate) fn open(source: &InputSource) -> Result<Package> {
     })
 }
 
-/// Read one entry from the EPUB ZIP into a fresh buffer.
+/// Read one entry from the EPUB ZIP into a fresh buffer. Cap-gated
+/// against zip bombs via the shared archive helper.
 pub(crate) fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Result<Bytes> {
-    let mut file = zip
-        .by_name(path)
-        .with_context(|| format!("EPUB entry {path:?} not found"))?;
-    let mut buf = Vec::with_capacity(file.size() as usize);
-    file.read_to_end(&mut buf)?;
-    Ok(Bytes::from(buf))
+    reader::read_zip_entry(zip, path, "EPUB")
 }
 
 /// Open a fresh ZIP handle over the source. Each chapter read takes
@@ -71,8 +64,7 @@ pub(crate) fn read_entry(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) ->
 /// a mutable reader through the mode, which doesn't pay for itself
 /// for the chapter cadence.
 pub(crate) fn open_zip(source: &InputSource) -> Result<ZipArchive<Box<dyn ReadSeek>>> {
-    let reader = open_seekable(source)?;
-    Ok(ZipArchive::new(reader)?)
+    reader::open_zip(source, "EPUB")
 }
 
 // ---------------------------------------------------------------------------
