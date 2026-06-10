@@ -182,7 +182,7 @@ interactive core:
   per-mode scroll offsets…"). The recursive-peek `SessionFrame` stack —
   `descend` / `build_descend_frame` / in-frame `select_jump`, breadcrumb,
   `MAX_STACK_DEPTH`, dir→dir frame collapse
-  (`src/viewer_session/state.rs:66-137, 540-665`) — is now the
+  (`src/viewer_session/frame.rs`) — is now the
   centrepiece of the session layer and appears nowhere in the design doc
   (features.md and the manual cover it; the builder-facing doc doesn't).
 - The **Mode trait snippet** (lines 141-171) is missing the whole
@@ -216,23 +216,6 @@ than the family needs; folding `truncate_ansi` onto `slice_styled_h` (or
 documenting why its no-reset output is required by the status line)
 closes the drift window.
 
-### M22. `viewer_session/state.rs` is 4× past the split threshold and holds five concerns
-
-`src/viewer_session/state.rs` (1534 lines, ~1100 non-test) now mixes:
-session-stack management (`SessionFrame`, push/pop/collapse),
-extract/descend orchestration (`descend`, `push_extracted`,
-`push_direct_frame`, `start_extract`), prompt plumbing (`PromptKind`,
-`handle_prompt_key`), render-failure recovery (`retry_frame_detection`,
-`degrade_active_to_hex`), and caller-side scroll math. The conventions
-name this exact signal (~400 lines mixing concerns) and the file already
-shed `ScreenBuffer` once for the same reason. The cleanest cut is the one
-the file's own section banners suggest: move `SessionFrame` + the
-stack/descend/extract block (state.rs:54-137, 509-665 plus the
-prompt-confirm dispatch) into a sibling `viewer_session/` module, leaving
-`state.rs` as mode dispatch + render cache + drawing. Soft refactor
-candidate — the code is healthy, the file is just past the point where a
-reader must hold all five models at once.
-
 ## Low
 
 ### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)
@@ -263,7 +246,7 @@ Trait sig + default at `crates/peek-foundation/src/viewer/modes/mod.rs:300`
 (default ignores `_has_return_target`). Only reader: `modes/hex.rs:164`
 (returns `x:exit hex`); every other impl ignores it (e.g. `paged.rs:542`,
 `ebook/epub/read_mode.rs:295`). Caller threads the bool at
-`src/viewer_session/state.rs:240-243`. Move the bool method-side:
+`src/viewer_session/state.rs:120-123`. Move the bool method-side:
 `ViewerState::has_return_target_for(mode_id)` and let HexMode call it,
 dropping the parameter from the trait. Minor surface-area reduction.
 

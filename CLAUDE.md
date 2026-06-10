@@ -124,8 +124,11 @@ src/                   — the bin: the thin session layer (CLI + the three disp
   compose.rs           — Registry + the FileType→types::<x>::compose dispatch hub (holds ComposeOpts)
   gather/              — the FileType→types::<x> info-gather dispatch hub
   extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)
-  viewer_session/      — ViewerState (mode stack + scroll/view cache + extract/descend dispatch +
-                         prompt slot) + the interactive event loop
+  viewer_session/      — ViewerState (one type, split by concern: state.rs = struct + key
+                         dispatch + apply + mode switching; frame.rs = SessionFrame + the
+                         recursive-peek stack / descend / extract; prompt.rs = modal-prompt slot;
+                         render.rs = view cache + failure recovery + scroll math + draw) + the
+                         interactive event loop
 docs/                  — Builder / agent reference (architecture.md = design + index)
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
 .github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +
