@@ -60,8 +60,9 @@ crates/
                          rows/columns/extract-key — TreeListSource for container TOCs,
                          the directory listing for on-disk browse);
                          table/ (TableMode + RowsTableMode via RowSource);
-                         ui/ primitives (status line / ScreenBuffer / Prompt / Action keys /
-                         term-size); image_render vocab (ImageConfig / ImageMode / zoom / scroll /
+                         ui/ primitives (Action keys / ScreenBuffer / Prompt / styled = the
+                         SGR-aware string family / status line / term = alt-screen + size);
+                         image_render vocab (ImageConfig / ImageMode / zoom / scroll /
                          ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
                          primitives; wrap_scroll; cell_size; highlight. NB: compose_modes /
                          ViewerState / the event loop are NOT here — they're the bin's session layer.

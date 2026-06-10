@@ -2,6 +2,17 @@ use syntect::highlighting::{Color, Theme};
 use syntect::parsing::Scope;
 
 use super::StyleMode;
+use crate::name::{PeekThemeName, load_embedded_theme};
+
+/// Build the semantic [`PeekTheme`] for a named embedded theme at the
+/// given output color mode — the one-stop constructor every viewer
+/// entry point uses.
+pub fn make_peek_theme(name: PeekThemeName, style_mode: StyleMode) -> PeekTheme {
+    let syntect_theme = load_embedded_theme(name.tmtheme_source());
+    let mut t = PeekTheme::from_syntect(&syntect_theme);
+    t.style_mode = style_mode;
+    t
+}
 
 #[rustfmt::skip] const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
 #[rustfmt::skip] const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };

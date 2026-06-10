@@ -197,25 +197,6 @@ longer exists. Fix: refresh the trait snippet from
 `crates/peek-foundation/src/viewer/modes/mod.rs:209-420` and add a short
 "Session stack / recursive peek" subsection to the ViewerState part.
 
-### M21. `viewer/ui/mod.rs` breaks the project's own "mod.rs stays small" rule
-
-`crates/peek-foundation/src/viewer/ui/mod.rs` (852 lines, ~540 non-test)
-is a grab-bag living in a `mod.rs`: alternate-screen lifecycle,
-status-line composition, theme construction, terminal-size + test
-override, **and** the entire SGR-aware string family (`expand_tabs`,
-`strip_ansi_width`, `wrap_styled`, `wrap_styled_words`,
-`hard_split_into`, `count_wrap_segments`, `take_cols`, `slice_styled_h`,
-`truncate_ansi`). The conventions doc explicitly says mod.rs is
-declarations/re-exports only, and the styled-string walkers are one
-coherent concern with their own invariants (escape-skipping, wide-char
-boundaries, style re-emission). Lift them into `ui/styled.rs` (tests
-along). While there: `truncate_ansi` (line 460) is functionally
-`slice_styled_h(s, 0, max)` minus the trailing reset and style
-normalisation — three separate ANSI-walking truncation loops is one more
-than the family needs; folding `truncate_ansi` onto `slice_styled_h` (or
-documenting why its no-reset output is required by the status line)
-closes the drift window.
-
 ## Low
 
 ### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)
