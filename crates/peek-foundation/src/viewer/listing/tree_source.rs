@@ -10,7 +10,7 @@
 //! as the extract key. Directories are rendered but never selectable.
 
 use super::entry::{Entry, EntryKind, EntryMtime};
-use super::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
+use super::row::{self, SizeCell};
 use super::source::{ListSource, NameCell, RowCells};
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
@@ -50,11 +50,8 @@ pub(super) struct TreeRow {
 impl TreeListSource {
     pub fn new(format_name: impl Into<String>, entries: Vec<Entry>) -> Self {
         let rows = flatten(&entries);
-        let mtime_width = rows
-            .iter()
-            .map(|r| format_mtime(r.mtime.as_ref(), false).len())
-            .max()
-            .unwrap_or(0);
+        let mtime_width =
+            row::mtime_column_width(rows.iter().map(|r| format_mtime(r.mtime.as_ref(), false)));
         Self {
             format_name: format_name.into(),
             rows,
@@ -93,21 +90,22 @@ impl ListSource for TreeListSource {
 
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let row = &self.rows[idx];
-        let theme = ctx.peek_theme;
         let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
         let size = row::format_size(if row.is_dir {
             SizeCell::Dir
         } else {
             SizeCell::Bytes(row.size)
         });
-        let mut left = vec![
-            row::paint_perms(&perms, theme),
-            row::paint_size(&size, row.size, row.is_dir, theme),
-        ];
-        if ctx.term_cols >= MTIME_HIDE_BELOW_COLS {
-            let text = format_mtime(row.mtime.as_ref(), ctx.render_opts.utc);
-            left.push(row::paint_mtime(&text, self.mtime_width, theme));
-        }
+        let left = row::file_row_left(
+            &perms,
+            &size,
+            row.size,
+            row.is_dir,
+            self.mtime_width,
+            ctx.term_cols,
+            ctx.peek_theme,
+            || format_mtime(row.mtime.as_ref(), ctx.render_opts.utc),
+        );
         RowCells {
             prefix: row.prefix.clone(),
             left,

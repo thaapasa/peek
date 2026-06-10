@@ -14,7 +14,7 @@
 use std::time::SystemTime;
 
 use crate::theme::PeekTheme;
-use crate::viewer::listing::row::{self, MTIME_HIDE_BELOW_COLS, SizeCell};
+use crate::viewer::listing::row::{self, SizeCell};
 use crate::viewer::listing::{ListSource, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
@@ -42,11 +42,7 @@ impl DirListSource {
             all.push(parent_link_entry());
         }
         all.extend(entries);
-        let mtime_width = all
-            .iter()
-            .map(|e| format_mtime(e.mtime, false).len())
-            .max()
-            .unwrap_or(0);
+        let mtime_width = row::mtime_column_width(all.iter().map(|e| format_mtime(e.mtime, false)));
         Self {
             entries: all,
             mtime_width,
@@ -84,18 +80,19 @@ impl ListSource for DirListSource {
 
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let entry = &self.entries[idx];
-        let theme = ctx.peek_theme;
         let perms = format_perms(entry);
         let size = format_size(entry);
         let is_dir = entry.kind == DirEntryKind::Dir;
-        let mut left = vec![
-            row::paint_perms(&perms, theme),
-            row::paint_size(&size, entry.size, is_dir, theme),
-        ];
-        if ctx.term_cols >= MTIME_HIDE_BELOW_COLS {
-            let text = format_mtime(entry.mtime, ctx.render_opts.utc);
-            left.push(row::paint_mtime(&text, self.mtime_width, theme));
-        }
+        let left = row::file_row_left(
+            &perms,
+            &size,
+            entry.size,
+            is_dir,
+            self.mtime_width,
+            ctx.term_cols,
+            ctx.peek_theme,
+            || format_mtime(entry.mtime, ctx.render_opts.utc),
+        );
         RowCells {
             prefix: String::new(),
             left,

@@ -177,3 +177,109 @@ pub fn paint_mtime(text: &str, width: usize, theme: &PeekTheme) -> String {
     let padded = format!("{text:<width$}");
     theme.paint(&padded, theme.muted)
 }
+
+/// Assemble the left-column cells (perms, size, and — on wide enough
+/// terminals — mtime) for the file-shaped listing sources. Each source
+/// formats its own per-type pieces (perms/size text from its data shape)
+/// and hands them in; this owns the column order and the
+/// [`MTIME_HIDE_BELOW_COLS`] gating so the tree and directory listings
+/// can't drift. `mtime_text` is lazy — not formatted on narrow terminals
+/// where the column is dropped.
+// Eight straight-line cell inputs (source-formatted pieces + render
+// context); grouping them into a struct would only be destructured back
+// out at the two call sites.
+#[allow(clippy::too_many_arguments)]
+pub fn file_row_left(
+    perms: &str,
+    size: &str,
+    size_bytes: u64,
+    is_dir: bool,
+    mtime_width: usize,
+    term_cols: usize,
+    theme: &PeekTheme,
+    mtime_text: impl FnOnce() -> String,
+) -> Vec<String> {
+    let mut left = vec![
+        paint_perms(perms, theme),
+        paint_size(size, size_bytes, is_dir, theme),
+    ];
+    if term_cols >= MTIME_HIDE_BELOW_COLS {
+        left.push(paint_mtime(&mtime_text(), mtime_width, theme));
+    }
+    left
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    fn plain_theme() -> ThemeManager {
+        ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)
+    }
+
+    /// The mtime column is the only width-gated cell: present at and above
+    /// [`MTIME_HIDE_BELOW_COLS`], dropped below it. Pin the breakpoint here
+    /// so both file-shaped sources stay aligned through the one helper.
+    #[test]
+    fn mtime_column_gated_on_term_width() {
+        let tm = plain_theme();
+        let theme = tm.peek_theme();
+        let perms = format_perms('-', None, false);
+        let size = format_size(SizeCell::Bytes(42));
+        let mtime = || "2026-06-10 12:00".to_string();
+
+        let wide = file_row_left(
+            &perms,
+            &size,
+            42,
+            false,
+            16,
+            MTIME_HIDE_BELOW_COLS,
+            theme,
+            mtime,
+        );
+        assert_eq!(wide.len(), 3, "perms + size + mtime at the breakpoint");
+
+        let narrow = file_row_left(
+            &perms,
+            &size,
+            42,
+            false,
+            16,
+            MTIME_HIDE_BELOW_COLS - 1,
+            theme,
+            mtime,
+        );
+        assert_eq!(
+            narrow.len(),
+            2,
+            "mtime dropped one column below the breakpoint"
+        );
+    }
+
+    /// The lazy `mtime_text` closure must not run on narrow terminals where
+    /// the column is dropped — guards the small allocation per visible row.
+    #[test]
+    fn mtime_text_not_formatted_when_column_hidden() {
+        let tm = plain_theme();
+        let theme = tm.peek_theme();
+        let perms = format_perms('-', None, false);
+        let size = format_size(SizeCell::Bytes(0));
+        let mut called = false;
+        file_row_left(
+            &perms,
+            &size,
+            0,
+            true,
+            16,
+            MTIME_HIDE_BELOW_COLS - 1,
+            theme,
+            || {
+                called = true;
+                String::new()
+            },
+        );
+        assert!(!called);
+    }
+}
