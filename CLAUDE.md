@@ -55,7 +55,11 @@ crates/
                          test builds (off in release).
     viewer/            — Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes
                          (content / pretty_view / gutter / hex / info / about / rendered_text<R>);
-                         listing/ (tree TOC); table/ (TableMode + RowsTableMode via RowSource);
+                         listing/ (generic listing engine: ListingMode navigates +
+                         paints the selectable name column over a ListSource that owns
+                         rows/columns/extract-key — TreeListSource for container TOCs,
+                         the directory listing for on-disk browse);
+                         table/ (TableMode + RowsTableMode via RowSource);
                          ui/ primitives (status line / ScreenBuffer / Prompt / Action keys /
                          term-size); image_render vocab (ImageConfig / ImageMode / zoom / scroll /
                          ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search

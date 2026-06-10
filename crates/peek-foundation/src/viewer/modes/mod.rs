@@ -46,8 +46,9 @@ pub use rendered_text::{RENDER_MAX_BYTES, RenderedTextMode, TextRenderer};
 /// A `ModeId` names the **role** the mode fills in its stack, not the
 /// impl type. Multiple Mode impls reuse the same id when they fill the
 /// same slot for different file types: `Content` is used by `ContentMode`,
-/// the generic `TableMode`, and `RowsTableMode`; `Listing` by both
-/// `ListingMode` and `DirectoryMode`; `Rendered` by `RenderedTextMode`,
+/// the generic `TableMode`, and `RowsTableMode`; `Listing` by the single
+/// `ListingMode` engine over any `ListSource` (tree TOC or directory);
+/// `Rendered` by `RenderedTextMode`,
 /// `PagedImageMode`, and `EpubReadMode`. The invariant `compose_modes`
 /// upholds is that each file type's stack has at most one mode per id —
 /// nothing else keys on a single concrete impl per variant.
@@ -241,12 +242,15 @@ pub trait Mode {
         Ok(())
     }
 
-    /// Pipe-render variant used by `peek --list`. Surfaces listings as
-    /// one-path-per-line so the output is easy to feed into `--extract`
-    /// and similar tools (no tree connectors, no directories — just
-    /// extractable inner paths). Default falls through to
-    /// `render_to_pipe` for modes that don't carry a listing; only
-    /// `ListingMode` overrides.
+    /// Pipe-render variant used by `peek --list`. Surfaces a listing one
+    /// row per line. For extractable sources (archives, directories,
+    /// embeds) that's the inner path, ready to feed into `--extract` — no
+    /// tree connectors, no directory rows. Sources whose rows aren't
+    /// extractable instead emit a readable one-line-per-row dump (e.g. an
+    /// object file's symbol table); there's nothing to pipe into
+    /// `--extract`, but the listing is still useful on stdout. Default
+    /// falls through to `render_to_pipe` for modes that don't carry a
+    /// listing; only `ListingMode` overrides.
     fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         self.render_to_pipe(ctx, out)
     }
@@ -382,6 +386,26 @@ pub trait Mode {
     /// whole thing to a temp file to fit the extract pipeline.
     fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> {
         None
+    }
+
+    /// Optional override for `Action::Descend` that jumps *within the
+    /// current frame* instead of pushing a new one: switch to the named
+    /// sibling mode and seek it to `Position`. Returning `Some` makes the
+    /// viewer activate `ModeId` at `Position` (e.g. an object file's symbol
+    /// listing jumping to that symbol's byte offset in the Hex view).
+    /// Checked before [`Self::build_descend_frame`]; `None` (default)
+    /// defers to the descend / extract path.
+    fn select_jump(&self) -> Option<(ModeId, Position)> {
+        None
+    }
+
+    /// Activate this mode at `pos` as the *target* of an in-frame jump (see
+    /// [`Self::select_jump`]). Distinct from [`Self::set_position`] — which
+    /// also runs on every mode-switch position-restore — so a mode can mark
+    /// the jumped-to spot (Hex highlights the landed byte) without marking
+    /// on ordinary restores. Default just positions, no marking.
+    fn jump_position(&mut self, pos: Position, source: &InputSource) {
+        self.set_position(pos, source);
     }
 
     /// Set or clear the active text-search query. Searchable modes scan

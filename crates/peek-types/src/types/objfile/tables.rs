@@ -1,31 +1,14 @@
-//! Object-file Sections / Symbols tables: parse via `object` and build
-//! structured `readelf -S` / `nm`-style table data. Layout and painting
-//! live in the shared `viewer::table::TableMode`.
+//! Object-file Sections table: walk the `object` view into structured
+//! `readelf -S`-style table data. Layout and painting live in the shared
+//! `viewer::table::TableMode`. (Symbols are a listing, not a table — see
+//! [`super::symbol_list`].)
 
-use anyhow::Result;
-use object::{Object, ObjectSection, ObjectSymbol};
+use object::{Object, ObjectSection, SectionKind};
 
-use super::load;
-use crate::input::InputSource;
 use crate::viewer::table::{Align, Cell, CellRole, Table, cell, fit_columns};
 
-/// Both rendered tables for one object file.
-pub struct ObjectTables {
-    pub sections: Table,
-    pub symbols: Table,
-}
-
-/// Parse `source` and build its section and symbol tables.
-pub fn build(source: &InputSource) -> Result<ObjectTables> {
-    let bytes = source.read_bytes()?;
-    let loaded = load::load(&bytes)?;
-    Ok(ObjectTables {
-        sections: build_sections(&loaded.file),
-        symbols: build_symbols(&loaded.file),
-    })
-}
-
-fn build_sections(file: &object::File<'_>) -> Table {
+/// Build the sections table from a parsed object file.
+pub fn build_sections(file: &object::File<'_>) -> Table {
     let rows: Vec<Vec<Cell>> = file
         .sections()
         .enumerate()
@@ -60,68 +43,7 @@ fn build_sections(file: &object::File<'_>) -> Table {
     }
 }
 
-fn build_symbols(file: &object::File<'_>) -> Table {
-    // Prefer the full `.symtab`; fall back to `.dynsym` when the file
-    // has been stripped so a dynamically-linked binary still lists
-    // something useful.
-    let mut symbols: Vec<_> = file.symbols().collect();
-    let mut from_dynamic = false;
-    if symbols.is_empty() {
-        symbols = file.dynamic_symbols().collect();
-        from_dynamic = true;
-    }
-
-    let rows: Vec<Vec<Cell>> = symbols
-        .iter()
-        .map(|sym| {
-            let bind = if sym.is_undefined() {
-                "undef"
-            } else if sym.is_weak() {
-                "weak"
-            } else if sym.is_global() {
-                "global"
-            } else {
-                "local"
-            };
-            vec![
-                cell(format!("{:#x}", sym.address()), CellRole::Address),
-                cell(sym.size().to_string(), CellRole::Numeric),
-                cell(symbol_kind_label(sym.kind()).to_string(), CellRole::Primary),
-                cell(bind.to_string(), CellRole::Tag),
-                cell(
-                    sym.name().unwrap_or("<invalid>").to_string(),
-                    CellRole::Name,
-                ),
-            ]
-        })
-        .collect();
-
-    let columns = fit_columns(
-        &[
-            ("Address", Align::Right),
-            ("Size", Align::Right),
-            ("Type", Align::Left),
-            ("Bind", Align::Left),
-            ("Name", Align::Left),
-        ],
-        &rows,
-    );
-    let notice = if rows.is_empty() {
-        Some("(no symbols — the file is fully stripped)".to_string())
-    } else if from_dynamic {
-        Some(".symtab stripped — showing the dynamic symbol table".to_string())
-    } else {
-        None
-    };
-    Table {
-        columns,
-        rows,
-        notice,
-    }
-}
-
-fn section_kind_label(k: object::SectionKind) -> &'static str {
-    use object::SectionKind;
+fn section_kind_label(k: SectionKind) -> &'static str {
     match k {
         SectionKind::Text => "code",
         SectionKind::Data => "data",
@@ -135,18 +57,5 @@ fn section_kind_label(k: object::SectionKind) -> &'static str {
         SectionKind::Linker => "linker",
         SectionKind::Metadata => "metadata",
         _ => "other",
-    }
-}
-
-fn symbol_kind_label(k: object::SymbolKind) -> &'static str {
-    use object::SymbolKind;
-    match k {
-        SymbolKind::Text => "func",
-        SymbolKind::Data => "data",
-        SymbolKind::Section => "section",
-        SymbolKind::File => "file",
-        SymbolKind::Label => "label",
-        SymbolKind::Tls => "tls",
-        _ => "?",
     }
 }

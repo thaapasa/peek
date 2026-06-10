@@ -15,19 +15,20 @@ Tab cycles three views:
   and the shared libraries the file links against (ELF `DT_NEEDED`, Mach-O dylibs, PE imports —
   shown only when the file has any).
 - **Sections** — a table of every section: index, name, address, size, kind.
-- **Symbols** — a table of every symbol: address, size, type, bind, name. When the file is
+- **Symbols** — a listing of every symbol: address, size, type, bind, name. `Enter` jumps the
+  **Hex** view straight to the selected symbol's byte offset, so you can go from a name to its
+  bytes in one keystroke (the landed byte is highlighted). Symbols with no on-disk location —
+  undefined imports, or `.bss` data — list with a muted address and don't jump. When the file is
   stripped, the dynamic symbol table is shown in place of the missing `.symtab`.
 
-## Tables
+## Navigating sections and symbols
 
-The Sections and Symbols views share a table layout:
-
-- The column header stays pinned at the top while the body scrolls.
-- `Left` / `Right` pan the columns — symbol names are often wider than the terminal.
-- `/` searches names; `n` / `p` step through matches, scrolling only as far as needed to bring
-  each hit on screen.
-- Column widths fit their content.
-- `t` cycles the theme; the table recolours in place.
+- The **Sections** table keeps its column header pinned at the top while the body scrolls; column
+  widths fit their content.
+- `Left` / `Right` pan both views — symbol names are often wider than the terminal.
+- `/` searches names; `n` / `p` step through matches, scrolling or panning only as far as needed to
+  bring each hit on screen.
+- `t` cycles the theme; both views recolour in place.
 
 ## Universal (fat) Mach-O
 
@@ -39,4 +40,7 @@ Wavefront `.obj` 3D model — which shares the extension but is text — still o
 
 ## Limitations
 
-Sections and symbols are views, not extractable files — there is no `e` extract here.
+Sections and symbols are views, not extractable files — there is no `e` extract here, and the
+symbol row's `Enter` jumps within the file rather than opening anything. `peek --list` on an object
+file prints the symbol table (address, size, type, bind, name) as a readable `nm`-style dump — handy
+on stdout, but there are no extract keys to pipe into `--extract`.

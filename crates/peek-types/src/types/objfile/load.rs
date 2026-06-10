@@ -15,6 +15,11 @@ pub struct Loaded<'data> {
     /// Lets format-specific walks (linked libraries) re-parse the same
     /// view the rest of the Info reflects.
     pub data: &'data [u8],
+    /// Byte offset of `data` within the original input — 0 for a plain
+    /// object, the slice's position in the container for a universal
+    /// Mach-O. Section / symbol file offsets are slice-relative, so this
+    /// is the base that maps them back to the whole-file Hex view.
+    pub slice_offset: u64,
     /// `Some` when the input was a fat / universal Mach-O.
     pub fat: Option<FatSummary>,
 }
@@ -43,6 +48,7 @@ pub fn load(data: &[u8]) -> Result<Loaded<'_>> {
             file: object::File::parse(data)
                 .map_err(|e| anyhow!("not a recognised object file: {e}"))?,
             data,
+            slice_offset: 0,
             fat: None,
         }),
     }
@@ -66,11 +72,13 @@ fn load_fat<'data, A: FatArch>(data: &'data [u8], arches: &[A]) -> Result<Loaded
     let slice = arches[selected]
         .data(data)
         .map_err(|e| anyhow!("universal slice unreadable: {e}"))?;
+    let slice_offset: u64 = arches[selected].offset().into();
     let file =
         object::File::parse(slice).map_err(|e| anyhow!("universal slice not parseable: {e}"))?;
     Ok(Loaded {
         file,
         data: slice,
+        slice_offset,
         fat: Some(FatSummary {
             architectures,
             selected,

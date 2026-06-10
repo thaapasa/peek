@@ -51,7 +51,15 @@ pub fn max_top(len: u64, bpr: usize, rows: usize) -> u64 {
 
 /// Format one hex-dump row: themed offset, hex bytes (with mid-gap), and
 /// ASCII column. `bytes` may be shorter than `bpr` for the final row.
-pub fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usize) -> String {
+/// `mark` is the row-relative index of a byte to highlight (jumped-to
+/// position) — its hex and ASCII cells get the selection background.
+pub fn format_row(
+    theme: &PeekTheme,
+    offset: u64,
+    bytes: &[u8],
+    bpr: usize,
+    mark: Option<usize>,
+) -> String {
     // Roughly: 14 visible chars + ~12 ANSI escape bytes per colored span,
     // ~3 spans per byte plus a few framing spans.
     let mut out = String::with_capacity(64 + 40 * bpr);
@@ -70,6 +78,9 @@ pub fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usize) -> S
         }
         if i < bytes.len() {
             let b = bytes[i];
+            if mark == Some(i) {
+                theme.push_bg(&mut out, theme.selection);
+            }
             theme.push_fg(&mut out, byte_color(theme, b));
             let _ = write!(out, "{b:02x}");
             theme.push_reset(&mut out);
@@ -90,11 +101,18 @@ pub fn format_row(theme: &PeekTheme, offset: u64, bytes: &[u8], bpr: usize) -> S
     for i in 0..bpr {
         if i < bytes.len() {
             let b = bytes[i];
-            if (0x20..=0x7e).contains(&b) {
-                let s = (b as char).encode_utf8(&mut buf);
-                theme.paint_into(&mut out, s, theme.value);
+            let (s, color): (&str, _) = if (0x20..=0x7e).contains(&b) {
+                ((b as char).encode_utf8(&mut buf), theme.value)
             } else {
-                theme.paint_into(&mut out, ".", theme.muted);
+                (".", theme.muted)
+            };
+            if mark == Some(i) {
+                theme.push_bg(&mut out, theme.selection);
+                theme.push_fg(&mut out, color);
+                out.push_str(s);
+                theme.push_reset(&mut out);
+            } else {
+                theme.paint_into(&mut out, s, color);
             }
         } else {
             out.push(' ');
@@ -170,8 +188,8 @@ mod tests {
         let theme = test_theme();
         let bytes_0_15: Vec<u8> = (0u8..=15).collect();
         let bytes_16_31: Vec<u8> = (16u8..=31).collect();
-        let row1 = strip_ansi(&format_row(&theme, 0, &bytes_0_15, 16));
-        let row2 = strip_ansi(&format_row(&theme, 16, &bytes_16_31, 16));
+        let row1 = strip_ansi(&format_row(&theme, 0, &bytes_0_15, 16, None));
+        let row2 = strip_ansi(&format_row(&theme, 16, &bytes_16_31, 16, None));
         assert_eq!(
             row1,
             "00000000  00 01 02 03 04 05 06 07  08 09 0a 0b 0c 0d 0e 0f  |................|"
@@ -186,15 +204,27 @@ mod tests {
     fn format_row_renders_printable_ascii() {
         let theme = test_theme();
         let bytes = b"Hello, World!!!\n".to_vec();
-        let row = strip_ansi(&format_row(&theme, 0, &bytes, 16));
+        let row = strip_ansi(&format_row(&theme, 0, &bytes, 16, None));
         // ASCII column should show "Hello, World!!!" then '.' for the newline
         assert!(row.ends_with("|Hello, World!!!.|"));
     }
 
     #[test]
+    fn mark_highlights_without_changing_layout() {
+        let theme = test_theme();
+        let bytes: Vec<u8> = (0u8..16).collect();
+        let plain = format_row(&theme, 0, &bytes, 16, None);
+        let marked = format_row(&theme, 0, &bytes, 16, Some(3));
+        // Highlight is color-only: the visible text is byte-identical.
+        assert_eq!(strip_ansi(&plain), strip_ansi(&marked));
+        // ...but the marked row carries extra background escapes.
+        assert!(marked.len() > plain.len());
+    }
+
+    #[test]
     fn format_row_handles_short_final_row() {
         let theme = test_theme();
-        let row = strip_ansi(&format_row(&theme, 0x1000, b"abcde", 16));
+        let row = strip_ansi(&format_row(&theme, 0x1000, b"abcde", 16, None));
         // 5 bytes followed by 11 byte-slots of "  " (and spacing).
         assert!(row.starts_with("00001000  61 62 63 64 65 "));
         // ASCII column has 5 chars then 11 spaces
@@ -206,7 +236,7 @@ mod tests {
         let theme = test_theme();
         for &bpr in &[8usize, 16, 24, 32, 40] {
             let bytes: Vec<u8> = (0..bpr as u8).collect();
-            let row = strip_ansi(&format_row(&theme, 0, &bytes, bpr));
+            let row = strip_ansi(&format_row(&theme, 0, &bytes, bpr, None));
             assert_eq!(row.len(), 14 + 4 * bpr, "width mismatch for bpr={}", bpr);
         }
     }

@@ -18,6 +18,13 @@ use crossterm::{
 /// during animation playback) and avoids rewriting unchanged regions
 /// (status-only changes touch one row).
 ///
+/// Every row is cropped to the terminal width before it's written, so a
+/// line wider than the screen can't soft-wrap onto the next physical row
+/// and desync this buffer's one-row-per-line model (which would strand the
+/// overflow tail when the next frame clears the wrong row). Modes that
+/// already fit their width pay only a no-op pass; the crop is the single
+/// invariant guard so no mode — present or future — can overflow.
+///
 /// On terminal width change the caller must `invalidate()` — a
 /// byte-equal cached row in a wider terminal would still leave stale
 /// cells beyond its old end without an EL pass.
@@ -65,7 +72,8 @@ impl ScreenBuffer {
         status: &str,
         reset_bytes: &[u8],
     ) -> Result<()> {
-        let (_cols, total_rows) = terminal::size().unwrap_or((80, 24));
+        let (cols, total_rows) = terminal::size().unwrap_or((80, 24));
+        let cols = cols as usize;
         let rows = (total_rows as usize).saturating_sub(1);
 
         let force = std::mem::take(&mut self.force_redraw);
@@ -94,7 +102,10 @@ impl ScreenBuffer {
             // new line is shorter or contains a cursor-jumping control.
             stdout.write_all(reset_bytes)?;
             execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-            stdout.write_all(line.as_bytes())?;
+            // Crop to the terminal width so an over-wide line can't wrap
+            // onto the next physical row (see the type doc). Cheap no-op
+            // for lines that already fit.
+            stdout.write_all(super::truncate_ansi(line, cols).as_bytes())?;
             // Trailing reset so the line's last color attribute doesn't
             // bleed into the next row's pre-clear or the status line.
             stdout.write_all(reset_bytes)?;
@@ -110,7 +121,7 @@ impl ScreenBuffer {
             execute!(stdout, cursor::MoveTo(0, total_rows.saturating_sub(1)))?;
             stdout.write_all(reset_bytes)?;
             execute!(stdout, terminal::Clear(ClearType::UntilNewLine))?;
-            stdout.write_all(status.as_bytes())?;
+            stdout.write_all(super::truncate_ansi(status, cols).as_bytes())?;
         }
 
         stdout.flush()?;

@@ -10,10 +10,11 @@ use crate::input::detect::{ArchiveFormat, Detected, SpreadsheetFormat};
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
-use crate::viewer::listing::{Entry, EntryKind, ListingMode};
+use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 use crate::viewer::table::rows_mode::RowsTableMode;
 
+use super::sheet_list::SheetListSource;
 use super::workbook::Workbook;
 
 /// Suffix on a sheet's listing row. Mirrors SQLite's contents rows:
@@ -30,15 +31,16 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: SpreadsheetFormat,
 ) -> Result<()> {
-    let (entries, warnings) = match Workbook::open(source, fmt) {
-        Ok(wb) => (sheet_entries(&wb.sheet_names()), Vec::new()),
+    let (names, warnings) = match Workbook::open(source, fmt) {
+        Ok(wb) => (wb.sheet_names(), Vec::new()),
         Err(e) => (Vec::new(), vec![format!("Failed to open workbook: {e:#}")]),
     };
 
     let descend_source = source.clone();
     let descend_detected = detected.clone();
-    let listing = ListingMode::new(fmt.label(), "Sheets", entries, warnings).with_descend_handler(
-        move |target| {
+    let sheets = SheetListSource::new(&names, fmt.label());
+    let listing = ListingMode::from_source(Box::new(sheets), "Sheets", warnings)
+        .with_descend_handler(move |target| {
             let ExtractTarget::EntryPath(key) = target else {
                 return None;
             };
@@ -49,8 +51,7 @@ pub fn compose(
                 fmt,
                 name,
             ))
-        },
-    );
+        });
     modes.push(Box::new(listing));
 
     // Secondary view: the workbook's raw zip entries. Browse / extract
@@ -67,19 +68,6 @@ pub fn compose(
         )));
     }
     Ok(())
-}
-
-fn sheet_entries(names: &[String]) -> Vec<Entry> {
-    names
-        .iter()
-        .map(|n| Entry {
-            name: format!("{n}{SHEET_SUFFIX}"),
-            size: 0,
-            mtime: None,
-            mode: None,
-            kind: EntryKind::File,
-        })
-        .collect()
 }
 
 fn build_sheet_frame(

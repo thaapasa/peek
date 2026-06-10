@@ -1,6 +1,9 @@
 # Listing mode generalization
 
-> **Status: Planned.** In-progress plan. Delete or archive when landed.
+> **Status: Steps 1–6 landed (branch `listing-generalization`), bar one
+> deliberately-skipped piece (sqlite, below).** Generic engine + `ListSource`
+> seam, directory folded in, email content-type column, object-file symbol →
+> Hex jump, spreadsheet sheet source. Ready to archive once merged.
 
 Split `ListingMode` into a generic **navigation engine** and a per-consumer
 **row source**, so the listing UI (scroll / paging / selection / search / sticky
@@ -181,27 +184,65 @@ before writing. No surprises; plan holds. Specifics:
 
 ## Sequence
 
-1. **Extract the nav engine.** Make `ListingViewport` depend on a small
-   row-metadata view (`parent`, `selectable`, name text) instead of `TreeRow`
-   fields directly. No behavior change.
-2. **Introduce `ListSource` + `RowCells` + `SelectOutcome`** (`Extract` +
-   `Frame` only). `ListingMode` becomes a thin shell: holds a `Box<dyn
-   ListSource>` + the viewport, dispatches `on_select` to push frame / extract.
-3. **Port archive** to a `ListSource` (tree, `Extract`). Tree-build
-   (`from_flat_paths`/`flatten`) moves behind the file-tree provider. Proves the
-   tree + extract path is unchanged.
-4. **Fold `DirectoryMode` into the engine** as a flat all-selectable
-   `ListSource`. Deletes the duplicate. Concrete surface-area win. Directory
-   keeps its file columns via `row::`.
-5. **Port spreadsheet + sqlite** to `on_select → Frame`. Deletes
-   `with_descend_handler` and the faked-file `Entry` rows. Proves the file-model
-   abuse is gone.
-6. **Payoff (new consumers):**
-   - **Email** — mbox = list messages (select → descend into message);
-     multipart = list parts with a content-type column. Best first new consumer;
-     `Frame` / `Extract` semantics fit directly.
-   - **Binary symbols** — list functions/symbols with an address column, select
-     → `Jump { Hex, Byte(off) }`. Needs the new-mechanism step first.
+1. ✅ **Extract the nav engine.** `ListingViewport` now runs off a `RowMeta`
+   trait (`parent` + `selectable`) instead of `TreeRow` fields. (`cf870d2`)
+2. ✅ **Introduce `ListSource` + `RowCells`.** `ListingMode` is a thin engine
+   over `Box<dyn ListSource>` + the viewport; `TreeListSource` is the first
+   impl, carrying the `Entry` tree + file columns. Steps 2 and 3 landed
+   together — a trait with no impl isn't independently testable. (`7967b99`)
+3. ✅ **Archive (and every tree consumer) ported.** `ListingMode::new` builds a
+   `TreeListSource`, so archive / pdf / epub / docx / odt / comic / audio /
+   notebook / disk-image / email / spreadsheet / sqlite are untouched. (`7967b99`)
+4. ✅ **Folded the directory viewer in.** `DirectoryMode` → `DirListSource`
+   (flat, all-selectable); ~120 lines of duplicated navigation deleted. (`b684c6c`)
+
+   **Deviation from original plan:** the descend handler stays *engine*-side
+   (`ListingMode` keeps `descend_handler` + `with_descend_handler`), not on the
+   source. That kept all 12 consumers — including the sqlite/spreadsheet handler
+   sites — unchanged, so steps 2–4 are a zero-churn, behavior-preserving lift.
+   `SelectOutcome` was therefore *not* introduced: a unified enum is dead weight
+   until the bin dispatches on it, which only pays off with `Jump` (step 6).
+
+   **Side effect:** the mtime column width is now computed once over all rows,
+   not per visible slice, so it no longer jitters on scroll.
+
+### Product/feature work on the seam
+
+6. ✅ **New consumers.**
+   - **Email** — the attachments listing got its own `AttachmentListSource`
+     showing each part's **content type** (the file-tree source rendered faked
+     perms + an empty mtime). Threaded `content_type` through `Attachment`.
+     (`9e9e510`)
+   - **Object-file symbols** — `Mode::select_jump` /
+     `ListSource::jump_target` add an *in-frame jump* select-semantic: a row can
+     switch the active mode and seek it (vs extract / descend). The Symbols
+     **table** became a `SymbolListSource` listing (same columns, now
+     name-searchable) where Enter jumps the Hex view to the symbol's file
+     offset, recovered via its section's file range. Bin: `jump_to_position`,
+     checked before `build_descend_frame`. (`cc74f28`)
+
+   The `Jump` outcome is a narrow defaulted method, *not* the `SelectOutcome`
+   enum the early plan sketched: a unified enum only earns its place once the bin
+   dispatches on it, and a single new method does that with far less churn. The
+   descend handler stays engine-side, so `Extract` / `Frame` are unchanged.
+
+5. **Honest select-table / select-sheet sources** (the listing TOC, not the grid
+   contents):
+   - ✅ **Spreadsheet** (flat) — `SheetListSource` shows bare sheet names instead
+     of faked zero-size `Entry` rows named `Sheet1.csv`. The `.csv` suffix lives
+     on only as the extract / descend key. (`cb74586`)
+   - **SQLite — assessed, deliberately left as-is.** The schema listing is a
+     *tree* (kind groups → entities, two rows per entity: `.sql` schema + `.csv`
+     contents). A bespoke source would have to reimplement tree flattening
+     (`├╴`/`└╴` connectors, parent indices) — work `TreeListSource` already does —
+     purely to change one column's units (the contents row reuses `size` for the
+     row count, a documented, intentional choice, not harmful fakery). That's
+     duplicating the tree machinery for a cosmetic gain → overstretch. The Entry
+     tree + engine descend handler is the right fit here; revisit only if SQLite
+     grows a genuinely non-file column that the `size` slot can't carry.
+
+The seam (steps 1–4) unblocked all of the above; each is an independent,
+reviewable change.
 
 ## Guardrails
 
