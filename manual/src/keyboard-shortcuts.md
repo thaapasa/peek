@@ -10,11 +10,14 @@ help screen — that's the authoritative reference.
 | `q`, `Esc`       | Quit                                    |
 | `Up`, `k`        | Scroll up                               |
 | `Down`, `j`      | Scroll down                             |
-| `PgUp`           | Page up                                 |
-| `PgDn`           | Page down                               |
+| `PgUp`, `u`, `Ctrl+B`, `Ctrl+U` | Page up                  |
+| `PgDn`, `d`, `Ctrl+F`, `Ctrl+D` | Page down                |
 | `Home`, `g`      | Go to top                               |
 | `End`, `G`       | Go to bottom                            |
 | `Left` / `Right` | Pan horizontally / step pages (context) |
+
+The `u` / `d` and Ctrl paging aliases follow `less` / vim muscle memory. `N` is an alias
+for `p` everywhere `n` / `p` step (search matches, pages, chapters, frames).
 
 ## Views and modes
 

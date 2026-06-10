@@ -20,9 +20,10 @@ instantly.
 
 ## Navigation
 
-`Up` / `Down` move a file-selection cursor (skipping directories). The selected leaf gets a
-highlighted background + arrow marker. `Top` / `End` jump to first / last file; PgUp/PgDn
-page-scroll then snap selection to the first visible file.
+The regular [scroll keys](../keyboard-shortcuts.md#navigation) move a file-selection cursor
+(skipping directories). The selected leaf gets a highlighted background + arrow marker.
+Top / bottom jump to the first / last file; paging scrolls a screenful and snaps the
+selection to the first visible file.
 
 A **sticky parent breadcrumb** pins the current top row's ancestor chain to the upper viewport
 rows when scrolled. Toggle with `s`.

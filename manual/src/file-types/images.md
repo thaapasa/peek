@@ -58,9 +58,9 @@ Cycle with `f`:
 | `FitWidth`  | Width fills the terminal; height grows freely → vertical scroll       |
 | `FitHeight` | Height fills the terminal; width grows freely → horizontal scroll     |
 
-Pipe / `--print` output always uses `Contain`. Scroll keys: `Up` / `Down` / `PgUp` / `PgDn` for
-vertical (FitWidth), `Left` / `Right` for horizontal (FitHeight), `Home` / `End` for top-left
-/ bottom-right.
+Pipe / `--print` output always uses `Contain`. The regular
+[scroll keys](../keyboard-shortcuts.md#navigation) move the overflowing axis: vertical under
+FitWidth, horizontal under FitHeight; top / bottom jumps go to top-left / bottom-right.
 
 ## Zoom
 

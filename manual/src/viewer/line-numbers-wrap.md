@@ -14,9 +14,9 @@ On by default for text views (source, structured pretty/raw, plain text, SVG XML
 logical line is sliced into visual rows of width `term_cols - gutter_width`, so the row budget
 accounts for wrapped continuations and the status line never scrolls out of view.
 
-Toggle with `w`. Vertical scroll (`j` / `k`, PgUp / PgDn, Home / End) moves one **visual row**
-at a time when wrap is on — long lines no longer make a single keypress jump over all their
-wrapped rows.
+Toggle with `w`. When wrap is on, the [vertical scroll keys](../keyboard-shortcuts.md#navigation)
+move one **visual row** at a time — long lines no longer make a single keypress jump over all
+their wrapped rows.
 
 The line-number gutter shows the real (logical) line number on the first segment; continuation
 rows have a blank gutter of the same width so wrapped content aligns under its first row.

@@ -1358,8 +1358,8 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 | `Esc`                 | Pop the session stack (exit at depth 1, return to parent otherwise) |
 | `Up` / `k`            | Scroll up                                                           |
 | `Down` / `j`          | Scroll down                                                         |
-| `Page Up`             | Page up                                                             |
-| `Page Down` / `Space` | Page down                                                           |
+| `Page Up` / `u` / `Ctrl+B` / `Ctrl+U` | Page up                                             |
+| `Page Down` / `d` / `Ctrl+F` / `Ctrl+D` | Page down                                         |
 | `Home` / `g`          | Go to top                                                           |
 | `End` / `G`           | Go to bottom                                                        |
 | `Enter`               | Descend into selection (recursive peek)                             |
@@ -1385,7 +1385,7 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 |-----|-----------------------|
 | `/` | Open search prompt    |
 | `n` | Next search match     |
-| `p` | Previous search match |
+| `p` / `N` | Previous search match |
 
 ### Text Views *(context)*
 

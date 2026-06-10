@@ -6,13 +6,19 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 pub struct Binding {
     pub code: KeyCode,
     pub ctrl: bool,
+    /// Show this key in help-screen labels. Always dispatched either way —
+    /// muscle-memory aliases (e.g. `Ctrl+F` paging) work but don't crowd
+    /// the help card; the manual lists them all.
+    pub in_help: bool,
 }
 
 impl Binding {
     #[rustfmt::skip]
-    pub const fn plain(code: KeyCode) -> Self { Self { code, ctrl: false } }
+    pub const fn plain(code: KeyCode) -> Self { Self { code, ctrl: false, in_help: true } }
     #[rustfmt::skip]
-    pub const fn ctrl(c: char) -> Self { Self { code: KeyCode::Char(c), ctrl: true } }
+    pub const fn ctrl(c: char) -> Self { Self { code: KeyCode::Char(c), ctrl: true, in_help: true } }
+    #[rustfmt::skip]
+    pub const fn hidden(self) -> Self { Self { in_help: false, ..self } }
 
     pub fn matches(self, key: KeyEvent) -> bool {
         if self.code != key.code {
@@ -125,7 +131,7 @@ pub enum Action {
     /// arm plus its help entry ("Next / previous chapter") name what
     /// is stepped. Same pattern as `Extract` / `Descend`.
     Next,
-    /// Step backward (`p`); counterpart of [`Action::Next`].
+    /// Step backward (`p` / `N`); counterpart of [`Action::Next`].
     Prev,
     /// Open the text-search prompt (searchable views).
     OpenSearch,
@@ -181,8 +187,8 @@ impl Action {
             Action::Quit                => binds![B::plain(Char('q')), B::ctrl('c')],
             Action::ScrollUp            => binds![B::plain(Up), B::plain(Char('k'))],
             Action::ScrollDown          => binds![B::plain(Down), B::plain(Char('j'))],
-            Action::PageUp              => binds![B::plain(PageUp)],
-            Action::PageDown            => binds![B::plain(PageDown)],
+            Action::PageUp              => binds![B::plain(PageUp), B::plain(Char('u')), B::ctrl('b').hidden(), B::ctrl('u').hidden()],
+            Action::PageDown            => binds![B::plain(PageDown), B::plain(Char('d')), B::ctrl('f').hidden(), B::ctrl('d').hidden()],
             Action::Top                 => binds![B::plain(Home), B::plain(Char('g'))],
             Action::Bottom              => binds![B::plain(End), B::plain(Char('G'))],
             Action::SwitchInfo          => binds![B::plain(Char('i'))],
@@ -207,7 +213,7 @@ impl Action {
             Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
             Action::PlayPause           => binds![B::plain(Char(' '))],
             Action::Next                => binds![B::plain(Char('n'))],
-            Action::Prev                => binds![B::plain(Char('p'))],
+            Action::Prev                => binds![B::plain(Char('p')), B::plain(Char('N'))],
             Action::OpenSearch          => binds![B::plain(Char('/'))],
             Action::ToggleStickyParents => binds![B::plain(Char('s'))],
             Action::Extract             => binds![B::plain(Char('e'))],
@@ -235,10 +241,12 @@ impl Action {
 
     /// Human-readable label of the keys for help screens — the action's
     /// equivalent keys joined with ", " (e.g. "Up, k"). Derived from
-    /// `bindings()`; help entries join several actions' labels with " / ".
+    /// `bindings()`, skipping `hidden()` aliases; help entries join
+    /// several actions' labels with " / ".
     pub fn label_keys(self) -> String {
         self.bindings()
             .iter()
+            .filter(|b| b.in_help)
             .map(|b| b.label())
             .collect::<Vec<_>>()
             .join(", ")
