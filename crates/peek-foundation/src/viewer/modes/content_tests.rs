@@ -342,7 +342,7 @@ fn set_search_finds_matches_and_jumps() {
     assert_eq!(mode.wrap.top_logical(), 1, "jumped to first match's line");
 }
 
-/// `NextMatch` / `PrevMatch` cycle the current-match cursor, wrapping
+/// `Next` / `Prev` cycle the current-match cursor, wrapping
 /// at both ends, and scroll the match's line into view.
 #[test]
 fn next_prev_match_wrap() {
@@ -355,15 +355,15 @@ fn next_prev_match_wrap() {
     assert_eq!(mode.search.as_ref().unwrap().match_count(), 2);
     assert_eq!(mode.wrap.top_logical(), 1);
 
-    assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
+    assert_eq!(mode.handle(Action::Next), Handled::Yes);
     assert_eq!(mode.wrap.top_logical(), 3);
 
     // Forward past the end wraps to the first match.
-    assert_eq!(mode.handle(Action::NextMatch), Handled::Yes);
+    assert_eq!(mode.handle(Action::Next), Handled::Yes);
     assert_eq!(mode.wrap.top_logical(), 1);
 
     // Backward past the start wraps to the last match.
-    assert_eq!(mode.handle(Action::PrevMatch), Handled::Yes);
+    assert_eq!(mode.handle(Action::Prev), Handled::Yes);
     assert_eq!(mode.wrap.top_logical(), 3);
 }
 

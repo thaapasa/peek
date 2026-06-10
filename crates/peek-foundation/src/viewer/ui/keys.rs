@@ -118,38 +118,17 @@ pub enum Action {
     ToggleSoftWrap,
     /// Play / pause an animated image.
     PlayPause,
-    // The three Next* / Prev* pairs below all bind to `n` / `p`. Each
-    // mode handles its own variant; the dispatch is unambiguous because
-    // only one is meaningful per active mode (animations get
-    // NextFrame, EPUB gets NextChapter, ContentMode + searchable views
-    // get NextMatch). Kept as distinct actions on purpose: collapsing
-    // to one `Action::Next` would force each mode's `handle` to
-    // disambiguate "next what" inline, losing the semantic clarity
-    // that lets a reader skim `match action` and see exactly what the
-    // mode does on `n`. Prior `/checkup` rounds revisit this; the
-    // separation is deliberate.
-    /// Advance to the next animation frame.
-    NextFrame,
-    /// Step back to the previous animation frame.
-    PrevFrame,
-    /// Advance to the next chapter (EPUB read mode).
-    NextChapter,
-    /// Step back to the previous chapter (EPUB read mode).
-    PrevChapter,
-    /// Advance to the next face in a font collection (font Specimen mode).
-    NextFace,
-    /// Step back to the previous face (font Specimen mode).
-    PrevFace,
-    /// Jump to the next method (classfile Bytecode mode).
-    NextMethod,
-    /// Jump to the previous method (classfile Bytecode mode).
-    PrevMethod,
-    /// Open the text-search prompt (ContentMode).
+    /// Step forward (`n`) through the active mode's item sequence:
+    /// search match, animation frame, EPUB chapter / PDF page, font
+    /// face, classfile method. One variant for every stepper — only
+    /// one sequence is meaningful per mode, and the mode's `handle`
+    /// arm plus its help entry ("Next / previous chapter") name what
+    /// is stepped. Same pattern as `Extract` / `Descend`.
+    Next,
+    /// Step backward (`p`); counterpart of [`Action::Next`].
+    Prev,
+    /// Open the text-search prompt (searchable views).
     OpenSearch,
-    /// Jump to the next search match (ContentMode).
-    NextMatch,
-    /// Jump to the previous search match (ContentMode).
-    PrevMatch,
     /// Toggle the sticky parent-directory breadcrumb at the top of a
     /// scrolled listing TOC view.
     ToggleStickyParents,
@@ -227,17 +206,9 @@ impl Action {
             Action::ToggleLineNumbers   => binds![B::plain(Char('l'))],
             Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
             Action::PlayPause           => binds![B::plain(Char(' '))],
-            Action::NextFrame           => binds![B::plain(Char('n'))],
-            Action::PrevFrame           => binds![B::plain(Char('p'))],
-            Action::NextChapter         => binds![B::plain(Char('n'))],
-            Action::PrevChapter         => binds![B::plain(Char('p'))],
-            Action::NextFace            => binds![B::plain(Char('n'))],
-            Action::PrevFace            => binds![B::plain(Char('p'))],
-            Action::NextMethod          => binds![B::plain(Char('n'))],
-            Action::PrevMethod          => binds![B::plain(Char('p'))],
+            Action::Next                => binds![B::plain(Char('n'))],
+            Action::Prev                => binds![B::plain(Char('p'))],
             Action::OpenSearch          => binds![B::plain(Char('/'))],
-            Action::NextMatch           => binds![B::plain(Char('n'))],
-            Action::PrevMatch           => binds![B::plain(Char('p'))],
             Action::ToggleStickyParents => binds![B::plain(Char('s'))],
             Action::Extract             => binds![B::plain(Char('e'))],
             Action::Descend             => binds![B::plain(Enter)],

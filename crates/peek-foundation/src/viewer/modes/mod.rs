@@ -161,7 +161,7 @@ pub fn slice_window(lines: &[String], scroll: usize, rows: usize) -> Vec<String>
     lines[start..end].to_vec()
 }
 
-/// `handle` helper for the `NextMatch` / `PrevMatch` keys: step the
+/// `handle` helper for the `Next` / `Prev` keys: step the
 /// search cursor and ask the caller to scroll to the new match's line.
 /// `Handled::Yes` (no scroll) when there's no search or no matches.
 /// Shared by every caller-scrolled searchable mode.
@@ -175,10 +175,8 @@ pub fn step_search(search: &mut Option<SearchState>, delta: isize) -> Handled {
 /// Help row for the `n` / `p` match-navigation keys. Every searchable
 /// mode advertises it identically — declared once here so the wording
 /// stays consistent and can't drift mode to mode.
-pub const NEXT_PREV_MATCH_HELP: HelpEntry = (
-    &[Action::NextMatch, Action::PrevMatch],
-    "Next / previous match",
-);
+pub const NEXT_PREV_MATCH_HELP: HelpEntry =
+    (&[Action::Next, Action::Prev], "Next / previous match");
 
 /// Selection the active mode hands to the bin extract dispatch on the
 /// extract key. Modes without a selection return `None`.

@@ -199,8 +199,8 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
                 self.search = None;
                 Handled::Yes
             }
-            Action::NextMatch => step_search(&mut self.search, 1),
-            Action::PrevMatch => step_search(&mut self.search, -1),
+            Action::Next => step_search(&mut self.search, 1),
+            Action::Prev => step_search(&mut self.search, -1),
             _ => Handled::No,
         }
     }

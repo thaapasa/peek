@@ -553,11 +553,11 @@ impl Mode for ContentMode {
             self.search = None;
             return Handled::Yes;
         }
-        if action == Action::NextMatch {
+        if action == Action::Next {
             self.step_match(1);
             return Handled::Yes;
         }
-        if action == Action::PrevMatch {
+        if action == Action::Prev {
             self.step_match(-1);
             return Handled::Yes;
         }

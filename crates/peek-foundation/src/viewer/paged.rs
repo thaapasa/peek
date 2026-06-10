@@ -210,10 +210,7 @@ pub const CYCLE_FIT_HELP: HelpEntry = (
 /// find a key binding, and the global slice only carries vertical
 /// scroll. Without this entry Left/Right never reach the mode.
 const EXTRA_ACTIONS: &[HelpEntry] = &[
-    (
-        &[Action::NextChapter, Action::PrevChapter],
-        "Next / previous page",
-    ),
+    (&[Action::Next, Action::Prev], "Next / previous page"),
     CYCLE_BACKGROUND_HELP,
     CYCLE_IMAGE_MODE_HELP,
     CYCLE_FIT_HELP,
@@ -509,14 +506,14 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         }
         let count = self.renderer.page_count();
         match action {
-            Action::NextChapter => {
+            Action::Next => {
                 let h = step_paged(&mut self.current, count, 1);
                 if matches!(h, Handled::YesResetScroll) {
                     self.pan.reset_pan();
                 }
                 h
             }
-            Action::PrevChapter => {
+            Action::Prev => {
                 let h = step_paged(&mut self.current, count, -1);
                 if matches!(h, Handled::YesResetScroll) {
                     self.pan.reset_pan();
@@ -612,7 +609,7 @@ mod tests {
             }
         }
         // Unrelated keys fall through untouched.
-        for action in [Action::NextMatch, Action::OpenSearch, Action::Back] {
+        for action in [Action::Next, Action::OpenSearch, Action::Back] {
             assert!(cycle_image_config(action, &mut cfg).is_none());
         }
     }

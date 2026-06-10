@@ -810,11 +810,11 @@ impl Mode for RowsTableMode {
                 self.clamp_top();
                 Handled::Yes
             }
-            Action::NextMatch => {
+            Action::Next => {
                 self.step_match(1);
                 Handled::Yes
             }
-            Action::PrevMatch => {
+            Action::Prev => {
                 self.step_match(-1);
                 Handled::Yes
             }
@@ -1247,24 +1247,24 @@ mod tests {
         assert_eq!(s.cursor, 0);
         assert_eq!(mode.h_col, 0);
 
-        mode.handle(Action::NextMatch);
+        mode.handle(Action::Next);
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.cursor, 1);
         // Second match is in col 1.
         assert_eq!(mode.h_col, 1);
 
-        mode.handle(Action::NextMatch);
+        mode.handle(Action::Next);
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.cursor, 2);
         assert_eq!(mode.h_col, 2);
 
         // Wrap to first match.
-        mode.handle(Action::NextMatch);
+        mode.handle(Action::Next);
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.cursor, 0);
 
         // Backward wraps the other way.
-        mode.handle(Action::PrevMatch);
+        mode.handle(Action::Prev);
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.cursor, 2);
     }

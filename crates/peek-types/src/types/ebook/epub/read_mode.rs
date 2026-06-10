@@ -51,7 +51,7 @@ use super::package::{self, Chapter, Package};
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
         // With a search active these step matches instead of chapters.
-        &[Action::NextChapter, Action::PrevChapter],
+        &[Action::Next, Action::Prev],
         "Next / previous chapter",
     ),
     (&[Action::OpenSearch], "Search"),
@@ -260,14 +260,14 @@ impl Mode for EpubReadMode {
             // `n` / `p` step chapters — but while a search is active
             // they navigate matches instead (Esc clears the search to
             // get chapter stepping back).
-            Action::NextChapter => {
+            Action::Next => {
                 if self.search.is_some() {
                     step_search(&mut self.search, 1)
                 } else {
                     step_paged(&mut self.current, self.chapters.len(), 1)
                 }
             }
-            Action::PrevChapter => {
+            Action::Prev => {
                 if self.search.is_some() {
                     step_search(&mut self.search, -1)
                 } else {

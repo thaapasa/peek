@@ -477,16 +477,8 @@ impl ViewerState {
             // and a deliberate decision about which side handles it.
             Action::ToggleRawSource
             | Action::PlayPause
-            | Action::NextFrame
-            | Action::PrevFrame
-            | Action::NextChapter
-            | Action::PrevChapter
-            | Action::NextFace
-            | Action::PrevFace
-            | Action::NextMethod
-            | Action::PrevMethod
-            | Action::NextMatch
-            | Action::PrevMatch
+            | Action::Next
+            | Action::Prev
             | Action::CycleBackground
             | Action::CycleImageMode
             | Action::CycleFitMode

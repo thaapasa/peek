@@ -295,7 +295,7 @@ UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for pe
 ### Audio Files ☐
 
 - **Audiobook chapters** for `.m4b` containers — MP4 chapter atoms / `chpl` boxes drive
-  a `NextChapter` / `PrevChapter` flow like EPUB. Defer until a real m4b ships up.
+  a `Next` / `Prev` flow like EPUB. Defer until a real m4b ships up.
 - **Multi-picture Cover tab.** Today only the primary (FrontCover or first) visual gets
   the Cover tab; back / artist / leaflet pictures only live in the Embeds listing.
   Could cycle through all visuals in one Cover view with `n` / `p`.

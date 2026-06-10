@@ -323,11 +323,11 @@ impl Mode for ListingMode {
                 self.viewport.toggle_sticky(&self.meta);
                 Handled::Yes
             }
-            Action::NextMatch => {
+            Action::Next => {
                 self.step_match(1);
                 Handled::Yes
             }
-            Action::PrevMatch => {
+            Action::Prev => {
                 self.step_match(-1);
                 Handled::Yes
             }

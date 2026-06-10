@@ -135,32 +135,6 @@ next view triggers a full re-paint.
 Direction: cache keyed by `(PeekThemeName, StyleMode, warnings_len)` —
 same shape `RenderedTextMode` already uses.
 
-### M16. `Action::Next*/Prev*` family — now ten variants / five pairs — leaks mechanism
-
-`crates/peek-foundation/src/viewer/ui/keys.rs:132-152` (variants) and
-`:230-240` (bindings), plus `src/viewer_session/state.rs`. Five pairs
-(`NextFrame/Prev`, `NextChapter/Prev`, `NextFace/Prev`, `NextMethod/Prev`,
-`NextMatch/Prev`) all bind to `n`/`p`; every consumer matches exactly the one
-variant it cares about; the OR-ed `Action::Next* | ...` fall-through arm in
-`state.rs::apply` lists them only so exhaustiveness fires.
-
-The `keys.rs:121` comment defends the split on "semantic clarity at the call
-site" — and itself reads "the three Next*/Prev* pairs", now stale (five
-pairs). With each pair the marginal cost is: every new `n`/`p` consumer needs
-two Action variants, two `bindings()` arms, two more fallthrough-list entries,
-and the mode still does a one-line match (`NextMethod` was the latest add).
-
-Direction: collapse to one `Action::Next` / `Action::Prev` pair. Each
-consumer's `handle()` matches one variant. Help text per-mode already
-names the stepped thing ("Next / previous chapter"), so semantic clarity
-lives at the help layer not the action layer.
-
-Counter (existing comment's defence): a single `Next` loses "skim
-`match action` and see what the mode does on `n`". True for a reader
-scanning the global match, but the mode's `handle` already has *one*
-`Action::Next` arm — its body names what's stepped (`self.anim.step(...)`
-/ `step_paged(...)` / `step_search(...)`). Clarity loss is small.
-
 ### M17. `ContentMode::set_search` streams the entire file per query
 
 `crates/peek-foundation/src/viewer/modes/content.rs:708-735` (raw-branch
@@ -200,8 +174,8 @@ another `_scroll` underscore.
 
 ### M19. `state.rs::apply`'s mode-local fall-through arm is ceremony
 
-`src/viewer_session/state.rs:478-505`. A single `=> Outcome::Unhandled`
-arm OR-ing 28 mode-local `Action` variants, listed explicitly so the
+`src/viewer_session/state.rs:478-497`. A single `=> Outcome::Unhandled`
+arm OR-ing 20 mode-local `Action` variants, listed explicitly so the
 non-exhaustive match flags new variants. Works, but the list keeps growing;
 every new action adds a name in a file that does nothing with it.
 

@@ -256,11 +256,11 @@ impl Mode for TableMode {
 
     fn handle(&mut self, action: Action) -> Handled {
         match action {
-            Action::NextMatch => {
+            Action::Next => {
                 self.step_match(1);
                 Handled::Yes
             }
-            Action::PrevMatch => {
+            Action::Prev => {
                 self.step_match(-1);
                 Handled::Yes
             }

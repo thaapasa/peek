@@ -23,8 +23,8 @@
 //!
 //! ```ignore
 //! // handle:
-//! Action::NextMatch => { self.step_match(1);  Handled::Yes }
-//! Action::PrevMatch => { self.step_match(-1); Handled::Yes }
+//! Action::Next => { self.step_match(1);  Handled::Yes }
+//! Action::Prev => { self.step_match(-1); Handled::Yes }
 //! Action::Back if self.search.is_some() => { self.search = None; Handled::Yes }
 //!
 //! // status_segments:

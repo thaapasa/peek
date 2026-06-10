@@ -48,10 +48,7 @@ pub(crate) struct AnimationMode {
 
 const ANIM_ACTIONS: &[HelpEntry] = &[
     (&[Action::PlayPause], "Play / pause"),
-    (
-        &[Action::NextFrame, Action::PrevFrame],
-        "Next / previous frame",
-    ),
+    (&[Action::Next, Action::Prev], "Next / previous frame"),
     (&[Action::Extract], "Extract current frame as PNG"),
     CYCLE_BACKGROUND_HELP,
     CYCLE_IMAGE_MODE_HELP,
@@ -152,8 +149,8 @@ impl Mode for AnimationMode {
         }
         match action {
             Action::PlayPause => self.anim.play_pause(),
-            Action::NextFrame => self.anim.step(self.frames.len(), true),
-            Action::PrevFrame => self.anim.step(self.frames.len(), false),
+            Action::Next => self.anim.step(self.frames.len(), true),
+            Action::Prev => self.anim.step(self.frames.len(), false),
             _ => Handled::No,
         }
     }

@@ -95,10 +95,7 @@ const SPECIMEN_ACTIONS_WITH_FACE_CYCLE: &[HelpEntry] = &[
         &[Action::ScrollLeft, Action::ScrollRight],
         "Scroll left / right (FitHeight)",
     ),
-    (
-        &[Action::NextFace, Action::PrevFace],
-        "Next / previous face",
-    ),
+    (&[Action::Next, Action::Prev], "Next / previous face"),
     ZOOM_HELP[0],
     ZOOM_HELP[1],
     ZOOM_HELP[2],
@@ -269,14 +266,14 @@ impl Mode for SpecimenMode {
     fn handle(&mut self, action: Action) -> Handled {
         if self.face_count > 1 {
             match action {
-                Action::NextFace => {
+                Action::Next => {
                     return if self.step_face(1) {
                         Handled::Yes
                     } else {
                         Handled::No
                     };
                 }
-                Action::PrevFace => {
+                Action::Prev => {
                     return if self.step_face(-1) {
                         Handled::Yes
                     } else {
