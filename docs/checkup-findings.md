@@ -172,31 +172,6 @@ Two reasonable directions:
 Not urgent. Flag as refactor candidate — every new owns-scroll mode adds
 another `_scroll` underscore.
 
-### M20. architecture.md no longer describes the session layer it documents
-
-`docs/architecture.md` has fallen behind the two biggest changes to the
-interactive core:
-
-- The **ViewerState section** (line ~222) still describes a
-  single-session controller ("mode list, active index, last_primary slot,
-  per-mode scroll offsets…"). The recursive-peek `SessionFrame` stack —
-  `descend` / `build_descend_frame` / in-frame `select_jump`, breadcrumb,
-  `MAX_STACK_DEPTH`, dir→dir frame collapse
-  (`src/viewer_session/frame.rs`) — is now the
-  centrepiece of the session layer and appears nowhere in the design doc
-  (features.md and the manual cover it; the builder-facing doc doesn't).
-- The **Mode trait snippet** (lines 141-171) is missing the whole
-  descend/jump/extract surface added since: `extract_target`,
-  `select_jump`, `build_descend_frame`, `jump_position`,
-  `position`/`set_position`, `render_flat_to_pipe` — and still shows the
-  trait as `pub(crate)` from its pre-workspace-split days.
-
-CLAUDE.md lists architecture.md as must-stay-in-sync; anyone extending
-descend behaviour from the doc will design against a contract that no
-longer exists. Fix: refresh the trait snippet from
-`crates/peek-foundation/src/viewer/modes/mod.rs:209-420` and add a short
-"Session stack / recursive peek" subsection to the ViewerState part.
-
 ## Low
 
 ### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)

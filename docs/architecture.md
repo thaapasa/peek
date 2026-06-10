@@ -139,36 +139,57 @@ bin, `crates/peek-theme/src/…` is the theme crate, `crates/peek-types/src/…`
 ### Mode trait — interactive (`viewer/modes/mod.rs`)
 
 ```rust
-pub(crate) struct Window { pub lines: Vec<String>, pub total: usize }
+pub struct Window { pub lines: Vec<String>, pub total: usize }
 
-pub(crate) trait Mode {
+pub trait Mode {
     fn id(&self) -> ModeId;
     fn label(&self) -> &str;
     fn is_aux(&self) -> bool { false }
+
+    // Rendering
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window>;
-    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        let w = self.render_window(ctx, 0, ctx.term_rows)?;
-        for line in w.lines { out.write_line(&line)?; }
-        Ok(())
-    }
+    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()>
+        { /* default: render_window(0, term_rows), write each line */ }
+    fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()>
+        { /* default: render_to_pipe; ListingMode overrides for --list */ }
     fn total_lines(&self) -> Option<usize> { None }
 
+    // Scroll / resize
     fn owns_scroll(&self) -> bool { false }
     fn scroll(&mut self, _action: Action) -> bool { false }
     fn rerender_on_resize(&self) -> bool { false }
     fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {}
+
+    // Status line + keys
     fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> { vec![] }
     fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> { vec![] }
-    fn extra_actions(&self) -> &'static [(Action, &'static str)] { &[] }
+    fn extra_actions(&self) -> &'static [HelpEntry] { &[] }  // HelpEntry = (&[Action], &str)
     fn handle(&mut self, _action: Action) -> Handled { Handled::No }
+
+    // Time-driven content (animations)
     fn next_tick(&self) -> Option<Duration> { None }
     fn tick(&mut self) -> bool { false }
+
+    // Position tracking (cross-mode "where was I")
     fn tracks_position(&self) -> bool { false }
+    fn position(&self) -> Position { Position::Unknown }
+    fn set_position(&mut self, _pos: Position, _source: &InputSource) {}
+
+    // Async warnings, merged into FileInfo.warnings after each render
     fn take_warnings(&mut self) -> Vec<String> { vec![] }
+
+    // Extract / descend / in-frame jump (see "Session stack" below)
+    fn extract_target(&self) -> Option<ExtractTarget> { None }
+    fn build_descend_frame(&mut self) -> Option<Result<DescendFrame>> { None }
+    fn select_jump(&self) -> Option<(ModeId, Position)> { None }
+    fn jump_position(&mut self, pos: Position, source: &InputSource)
+        { /* default: set_position; Hex also marks the landed byte */ }
+
+    // Text search
     fn set_search(&mut self, _query: Option<&str>) -> SearchTarget { SearchTarget::Owned }
 }
 
-pub(crate) enum Handled { No, Yes, YesResetScroll, YesScrollTo(usize) }
+pub enum Handled { No, Yes, YesResetScroll, YesScrollTo(usize) }
 ```
 
 `render_window` is the single rendering contract. The mode receives a viewport request `(scroll,
@@ -185,6 +206,10 @@ returns its `LineSource.total_lines()` in O(1) so Bottom-jumps don't force a ren
 when it has somewhere to return to). `Handled::YesResetScroll` zeroes the active mode's scroll
 offset (used when an action invalidates the prior position — e.g. ContentMode flipping pretty ↔
 raw).
+
+`extract_target` / `select_jump` / `build_descend_frame` / `jump_position` are the mode side of
+recursive peek — what the extract key saves and what Enter descends into. The session side
+(resolution order, frame stack) is under "Session stack / recursive peek" below.
 
 A `Mode` is one renderable + interactive view of a file. The interactive viewer drives a
 `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x` shortcuts to Info/Help/Hex). Today's modes:
@@ -219,16 +244,51 @@ viewports aren't required.
 `main` picks the pipe primary as the first non-aux mode in the stack, falling back to the first
 mode when all are aux (binary files, where the stack is `[Hex, Info, About, Help]`).
 
-### ViewerState (`src/viewer_session/state.rs`)
+### ViewerState (`src/viewer_session/`)
 
-The interactive controller: mode list, active index, `last_primary` slot (most recent non-aux mode),
-per-mode scroll offsets, lazy per-mode rendered-lines cache, and a `Position` (last known logical
-location in the source). Builds a `RenderCtx` (source, file type, file info, theme) and dispatches
-to the active mode.
+The interactive controller — one type split across four concern files: `state.rs` (the struct +
+key dispatch + `apply` + mode switching), `frame.rs` (`SessionFrame` + the recursive-peek stack /
+descend / extract), `prompt.rs` (the modal-prompt slot and its confirm dispatch), `render.rs`
+(view cache + render-failure recovery + caller-side scroll math + `draw`).
 
-`apply()` handles global actions (scroll, theme cycle, mode switch). The event loop tries the active
-mode's `scroll()` and `handle()` first, then falls through to globals — so mode-local actions (`r`
-raw/pretty, `b` background) stay scoped.
+State splits per-session vs cross-session. Each `SessionFrame` owns one peek session: source,
+detected type, `FileInfo`, the mode list, active index, `last_primary` slot (most recent non-aux
+mode), per-mode scroll offsets, lazy per-mode rendered-view cache, and a `Position` (last known
+logical location in the source). `ViewerState` holds the frame *stack* plus what survives across
+frames: theme, `ScreenBuffer`, the prompt slot, the status flash, and the `ModeBuilder` closure
+(captured at construction so descend can compose modes for a new frame without knowing about
+`Registry` / `Args`).
+
+`apply()` handles session-level actions (scroll, theme cycle, mode switch, extract / descend).
+The event loop tries the active mode's `scroll()` and `handle()` first, then falls through — so
+mode-local actions (`r` raw/pretty, `b` background) stay scoped. The session / mode-local split
+is declared per variant in `Action::is_mode_local` (an exhaustive match: a new variant fails to
+compile until categorised).
+
+### Session stack / recursive peek (`src/viewer_session/frame.rs`)
+
+The stack is a `Vec<SessionFrame>`; the active session is always the last entry. The status-line
+breadcrumb joins the frames' names (`archive.zip > inner.tar > notes.txt`); a frame's
+`breadcrumb_label` overrides its source name when a synthetic frame reuses the parent source
+(SQLite table view shows the table name, not the db file twice).
+
+Enter (`Action::Descend`) resolves through three mode hooks in order:
+
+1. **`select_jump`** — in-frame jump: switch to a sibling mode and seek it to a `Position`
+   (object-file symbol → its byte offset in Hex). No stack change; the target's `jump_position`
+   runs so it can mark the landed spot.
+2. **`build_descend_frame`** — mode-supplied frame, bypassing the extract pipeline. For synthetic
+   views over the *current* source (SQLite table → row viewer) that would otherwise have to
+   materialise to a temp file.
+3. **`extract_target`** — the standard path: extract the selection, `detect` the result,
+   `resolve_transparent` (so descending into an extracted `.gz` lands on the inner content),
+   compose modes via the `ModeBuilder`, push the new frame.
+
+Dir → dir descent *replaces* the current frame instead of pushing, so browsing sibling
+subdirectories doesn't accumulate a stack to back out of. `Back` (Esc) pops; at depth 1 it quits.
+`MAX_STACK_DEPTH` (16) caps the stack so a hostile container that resolves to itself can't grow
+it without bound. Descend failures (no selection, unsupported, broken entry, stack full) flash on
+the status line and leave the current frame active.
 
 ### Position tracking
 
