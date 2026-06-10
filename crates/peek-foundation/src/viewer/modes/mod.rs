@@ -242,12 +242,15 @@ pub trait Mode {
         Ok(())
     }
 
-    /// Pipe-render variant used by `peek --list`. Surfaces listings as
-    /// one-path-per-line so the output is easy to feed into `--extract`
-    /// and similar tools (no tree connectors, no directories — just
-    /// extractable inner paths). Default falls through to
-    /// `render_to_pipe` for modes that don't carry a listing; only
-    /// `ListingMode` overrides.
+    /// Pipe-render variant used by `peek --list`. Surfaces a listing one
+    /// row per line. For extractable sources (archives, directories,
+    /// embeds) that's the inner path, ready to feed into `--extract` — no
+    /// tree connectors, no directory rows. Sources whose rows aren't
+    /// extractable instead emit a readable one-line-per-row dump (e.g. an
+    /// object file's symbol table); there's nothing to pipe into
+    /// `--extract`, but the listing is still useful on stdout. Default
+    /// falls through to `render_to_pipe` for modes that don't carry a
+    /// listing; only `ListingMode` overrides.
     fn render_flat_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         self.render_to_pipe(ctx, out)
     }
