@@ -7,11 +7,10 @@ use std::io::{self, Write};
 use anyhow::Result;
 use clap::CommandFactory;
 
-use peek_foundation::output::paint_logo;
+use peek_foundation::output::{DESCRIPTION, paint_logo};
 use peek_theme::{PeekThemeName, ThemeManager};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
 const MANUAL_URL: &str = "https://thaapasa.github.io/peek/";
 
 pub fn render_version() -> Result<()> {
@@ -120,4 +119,17 @@ pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
 
     out.flush()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DESCRIPTION;
+
+    /// The shared tagline lives in peek-foundation (About renders there,
+    /// where the bin's `CARGO_PKG_DESCRIPTION` is out of reach). This pins
+    /// it to the root manifest's description so the two can't drift.
+    #[test]
+    fn tagline_matches_bin_description() {
+        assert_eq!(DESCRIPTION, env!("CARGO_PKG_DESCRIPTION"));
+    }
 }

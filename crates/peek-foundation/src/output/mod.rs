@@ -4,6 +4,13 @@ pub use print::PrintOutput;
 
 use crate::theme::{PeekTheme, lerp_color};
 
+/// The product tagline, shown under the logo on the About view and the
+/// CLI help screen. Lives here (not `env!("CARGO_PKG_DESCRIPTION")`)
+/// because About renders inside this crate, whose own description is
+/// the library blurb, not the product's. Keep in sync with the root
+/// `Cargo.toml` `description`.
+pub const DESCRIPTION: &str = "Modern terminal file viewer — preview any file, any format";
+
 /// The peek wordmark, shown on the About view and the CLI help/version
 /// screens. One row per element.
 pub const LOGO: &[&str] = &[

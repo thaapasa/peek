@@ -4,13 +4,16 @@ use anyhow::Result;
 use crossterm::terminal;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::output::paint_logo;
+use crate::output::{DESCRIPTION, paint_logo};
 use crate::theme::PeekTheme;
 use crate::viewer::logo_anim::LogoAnimation;
 use crate::viewer::ui::HelpEntry;
 
+// Version / authors / license / repository inherit from the workspace
+// `[workspace.package]`, so this crate's values match the bin's. The
+// description does NOT (each crate keeps its own library blurb) — the
+// product tagline comes from `output::DESCRIPTION` instead.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const DESCRIPTION: &str = env!("CARGO_PKG_DESCRIPTION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const LICENSE: &str = env!("CARGO_PKG_LICENSE");
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
