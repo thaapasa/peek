@@ -20,6 +20,6 @@ mod viewport;
 pub use build::{FlatEntry, from_flat_paths};
 pub use entry::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
 pub use mode::ListingMode;
-pub use source::{ListSource, NameCell, RowCells};
+pub use source::{ListSource, ListingHelp, NameCell, RowCells};
 pub use stats::Stats;
 pub use tree_source::TreeListSource;

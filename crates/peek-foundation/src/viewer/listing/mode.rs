@@ -317,6 +317,32 @@ impl Mode for ListingMode {
         ACTIONS
     }
 
+    /// The help card, filtered by the source's [`ListingHelp`] so flat
+    /// sources don't advertise the sticky toggle, non-extractable
+    /// sources don't advertise extract, and a jump-select source can
+    /// name its actual select action. Dispatch keeps the full static
+    /// card above — an inert key is a harmless no-op.
+    fn help_entries(&self) -> Vec<HelpEntry> {
+        let help = self.source.help();
+        let mut entries: Vec<HelpEntry> = Vec::new();
+        if help.sticky {
+            entries.push((&[Action::ToggleStickyParents], "Pin parent path"));
+        }
+        entries.push((
+            &[Action::ScrollLeft, Action::ScrollRight],
+            "Pan left / right",
+        ));
+        if help.extract {
+            entries.push((&[Action::Extract], "Extract selected entry"));
+        }
+        if let Some(select) = help.select {
+            entries.push(select);
+        }
+        entries.push((&[Action::OpenSearch], "Search names"));
+        entries.push(NEXT_PREV_MATCH_HELP);
+        entries
+    }
+
     fn handle(&mut self, action: Action) -> Handled {
         match action {
             Action::ToggleStickyParents => {
@@ -550,5 +576,73 @@ mod tests {
         let lm = sample();
         // 3 files in the tree (deep.txt, inner.txt, README.txt).
         assert_eq!(lm.selectable_count, 3);
+    }
+
+    /// Minimal flat jump-select source (the symbol-list shape): nothing
+    /// extracts, no row has a parent, selecting jumps.
+    struct FlatJumpSource;
+
+    impl ListSource for FlatJumpSource {
+        fn len(&self) -> usize {
+            1
+        }
+        fn parent(&self, _idx: usize) -> Option<usize> {
+            None
+        }
+        fn selectable(&self, _idx: usize) -> bool {
+            true
+        }
+        fn name(&self, _idx: usize) -> &str {
+            "sym"
+        }
+        fn row_cells(&self, _idx: usize, _ctx: &RenderCtx) -> super::super::source::RowCells {
+            super::super::source::RowCells {
+                prefix: String::new(),
+                left: Vec::new(),
+                name: NameCell {
+                    text: "sym".into(),
+                    is_dir: false,
+                },
+            }
+        }
+        fn extract_target(&self, _idx: usize) -> Option<ExtractTarget> {
+            None
+        }
+        fn flat_line(&self, _idx: usize, _theme: &PeekTheme) -> Option<String> {
+            None
+        }
+        fn source_label(&self) -> &str {
+            "test"
+        }
+        fn help(&self) -> super::super::source::ListingHelp {
+            super::super::source::ListingHelp {
+                extract: false,
+                sticky: false,
+                select: Some((&[Action::Descend], "Jump to symbol in hex")),
+            }
+        }
+    }
+
+    fn help_descriptions(lm: &ListingMode) -> Vec<&'static str> {
+        lm.help_entries().iter().map(|(_, d)| *d).collect()
+    }
+
+    #[test]
+    fn tree_help_card_advertises_sticky_and_extract() {
+        let lm = sample();
+        let descs = help_descriptions(&lm);
+        assert!(descs.contains(&"Pin parent path"));
+        assert!(descs.contains(&"Extract selected entry"));
+        assert!(descs.contains(&"Search names"));
+    }
+
+    #[test]
+    fn flat_jump_help_card_drops_inert_actions_and_names_the_jump() {
+        let lm = ListingMode::from_source(Box::new(FlatJumpSource), "Symbols", Vec::new());
+        let descs = help_descriptions(&lm);
+        assert!(!descs.contains(&"Pin parent path"));
+        assert!(!descs.contains(&"Extract selected entry"));
+        assert!(descs.contains(&"Jump to symbol in hex"));
+        assert!(descs.contains(&"Search names"));
     }
 }

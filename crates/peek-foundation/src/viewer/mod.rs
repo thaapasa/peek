@@ -176,10 +176,9 @@ pub fn append_universal_modes(
     }];
     for m in modes.iter() {
         let entries: Vec<HelpEntry> = m
-            .extra_actions()
-            .iter()
+            .help_entries()
+            .into_iter()
             .filter(|e| !GLOBAL_ACTIONS.contains(e))
-            .copied()
             .collect();
         if !entries.is_empty() {
             help_sections.push(HelpSection {

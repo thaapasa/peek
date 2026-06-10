@@ -313,6 +313,16 @@ pub trait Mode {
         &[]
     }
 
+    /// Help-screen entries for this mode. Defaults to the dispatch card
+    /// (`extra_actions`); override when some advertised actions are inert
+    /// for this instance's configuration (e.g. the listing engine over a
+    /// flat source, where the sticky toggle can never show anything).
+    /// Built once per frame at compose time, so per-instance filtering is
+    /// cheap here — unlike `extra_actions`, which runs on every keypress.
+    fn help_entries(&self) -> Vec<HelpEntry> {
+        self.extra_actions().to_vec()
+    }
+
     /// Handle a mode-local action declared in `extra_actions`.
     ///
     /// Returns whether the action was consumed and, if so, whether the

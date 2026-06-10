@@ -164,6 +164,9 @@ pub trait Mode {
     fn status_segments(&self, _theme: &PeekTheme) -> Vec<(String, Color)> { vec![] }
     fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> { vec![] }
     fn extra_actions(&self) -> &'static [HelpEntry] { &[] }  // HelpEntry = (&[Action], &str)
+    fn help_entries(&self) -> Vec<HelpEntry> { self.extra_actions().to_vec() }
+        // help-screen card; override to drop entries inert for this instance
+        // (ListingMode filters by the source's ListingHelp descriptor)
     fn handle(&mut self, _action: Action) -> Handled { Handled::No }
 
     // Time-driven content (animations)

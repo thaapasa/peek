@@ -6,7 +6,7 @@
 
 use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListSource, NameCell, RowCells};
+use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 use super::message::ParsedEmail;
@@ -81,6 +81,14 @@ impl ListSource for AttachmentListSource {
 
     fn extract_target(&self, idx: usize) -> Option<ExtractTarget> {
         Some(ExtractTarget::EntryPath(self.rows[idx].key.clone()))
+    }
+
+    /// Flat — no parents, so no sticky toggle to advertise.
+    fn help(&self) -> ListingHelp {
+        ListingHelp {
+            sticky: false,
+            ..Default::default()
+        }
     }
 
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {

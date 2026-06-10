@@ -12,8 +12,9 @@
 use object::{Object, ObjectSection, ObjectSymbol};
 
 use crate::theme::PeekTheme;
-use crate::viewer::listing::{ListSource, NameCell, RowCells};
+use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
+use crate::viewer::ui::Action;
 
 struct SymbolRow {
     address: u64,
@@ -149,6 +150,15 @@ impl ListSource for SymbolListSource {
         self.rows[idx]
             .file_offset
             .map(|off| (ModeId::Hex, Position::Byte(off)))
+    }
+
+    /// Flat, nothing extracts; the select action is the hex jump.
+    fn help(&self) -> ListingHelp {
+        ListingHelp {
+            extract: false,
+            sticky: false,
+            select: Some((&[Action::Descend], "Jump to symbol in hex")),
+        }
     }
 
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {

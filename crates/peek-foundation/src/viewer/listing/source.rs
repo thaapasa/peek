@@ -14,6 +14,7 @@
 
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
+use crate::viewer::ui::HelpEntry;
 
 use super::viewport::RowMeta;
 
@@ -48,6 +49,39 @@ pub trait ListSource {
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String>;
     /// Status-segment label, e.g. "ZIP" / "directory".
     fn source_label(&self) -> &str;
+    /// Which engine actions are live for this source — drives the help
+    /// screen only ([`super::mode::ListingMode`]'s dispatch card stays
+    /// static; an inert key is a harmless no-op). The default matches
+    /// the tree shape (extractable rows under parent directories); flat
+    /// and jump-select sources override.
+    fn help(&self) -> ListingHelp {
+        ListingHelp::default()
+    }
+}
+
+/// Help-screen descriptor a [`ListSource`] declares so the listing
+/// engine advertises only the actions that can visibly do something in
+/// this view. Declared, not inferred from rows — a source states its
+/// select semantics directly.
+pub struct ListingHelp {
+    /// Rows extract (`Action::Extract` reaches [`ListSource::extract_target`]).
+    pub extract: bool,
+    /// Rows have parents, so the sticky-breadcrumb toggle is visible.
+    pub sticky: bool,
+    /// Source-specific select semantic, e.g. the symbol list's
+    /// `(Descend, "Jump to symbol in hex")`. `None` when selecting just
+    /// descends/extracts (already covered by the global help entries).
+    pub select: Option<HelpEntry>,
+}
+
+impl Default for ListingHelp {
+    fn default() -> Self {
+        Self {
+            extract: true,
+            sticky: true,
+            select: None,
+        }
+    }
 }
 
 /// Render bundle for a single row. `left` cells are pre-painted and
