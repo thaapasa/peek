@@ -25,7 +25,7 @@
 //! word sits outside the allocator's address space (allocator address 0
 //! maps to file offset 4).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, anyhow, bail};
 
@@ -101,7 +101,7 @@ pub fn parse(data: &[u8]) -> Result<DsStore> {
         records: Vec::new(),
         truncated: false,
     };
-    walk(&alloc, root_node, 0, &mut store);
+    walk(&alloc, root_node, 0, &mut HashSet::new(), &mut store);
     Ok(store)
 }
 
@@ -163,11 +163,22 @@ impl<'a> Allocator<'a> {
 /// Recursively walk a B-tree node, appending records in key order. Any
 /// malformed node or unknown record encoding flips `truncated` and stops
 /// the walk — the records gathered so far stay.
-fn walk(alloc: &Allocator, node_id: u32, depth: usize, store: &mut DsStore) {
+///
+/// `visited` rejects any node id seen before: a well-formed store's
+/// B-tree is a tree, so a revisit means a crafted DAG / cycle. Without
+/// it a shallow leveled DAG (every path under `MAX_DEPTH`) multiplies
+/// visits exponentially while staying within the depth cap.
+fn walk(
+    alloc: &Allocator,
+    node_id: u32,
+    depth: usize,
+    visited: &mut HashSet<u32>,
+    store: &mut DsStore,
+) {
     if store.truncated {
         return;
     }
-    if depth > MAX_DEPTH {
+    if depth > MAX_DEPTH || !visited.insert(node_id) {
         store.truncated = true;
         return;
     }
@@ -186,7 +197,7 @@ fn walk(alloc: &Allocator, node_id: u32, depth: usize, store: &mut DsStore) {
                 store.truncated = true;
                 return;
             };
-            walk(alloc, child, depth + 1, store);
+            walk(alloc, child, depth + 1, visited, store);
             if store.truncated {
                 return;
             }
@@ -198,7 +209,7 @@ fn walk(alloc: &Allocator, node_id: u32, depth: usize, store: &mut DsStore) {
                 }
             }
         }
-        walk(alloc, next, depth + 1, store);
+        walk(alloc, next, depth + 1, visited, store);
     } else {
         for _ in 0..count {
             match read_record(&mut c) {
@@ -476,6 +487,32 @@ mod tests {
     #[test]
     fn rejects_too_small() {
         assert!(parse(b"\x00\x00\x00\x01Bud1").is_err());
+    }
+
+    #[test]
+    fn leveled_dag_marks_truncated_not_hang() {
+        // A crafted shallow DAG: the internal node's separator child and
+        // its rightmost `next` child are the SAME leaf. Every path stays
+        // far under MAX_DEPTH, so only the visited-set guard stops the
+        // revisit (and, scaled up, the exponential blow-up).
+        let mut buf = internal_node_store();
+        // Internal node @ file 0x84: next was 4 (right leaf); point it at
+        // the left leaf (id 3) already reached via the child slot.
+        put_u32(&mut buf, 0x84, 3);
+        let store = parse(&buf).expect("header still parses");
+        assert!(store.truncated);
+        // First traversal of the shared leaf + the separator survived.
+        let names: Vec<&str> = store.records.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["a.txt", "m.txt"]);
+    }
+
+    #[test]
+    fn self_loop_node_marks_truncated_not_hang() {
+        // Internal node whose rightmost `next` child is itself.
+        let mut buf = internal_node_store();
+        put_u32(&mut buf, 0x84, 2); // next → node 2 (itself)
+        let store = parse(&buf).expect("header still parses");
+        assert!(store.truncated);
     }
 
     #[test]
