@@ -160,11 +160,6 @@ fn flatten(entries: &[Entry]) -> Vec<TreeRow> {
     rows
 }
 
-#[cfg(test)]
-pub(super) fn flatten_for_test(entries: &[Entry]) -> Vec<TreeRow> {
-    flatten(entries)
-}
-
 fn walk(
     entries: &[Entry],
     parent_row: Option<usize>,
