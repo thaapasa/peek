@@ -472,29 +472,17 @@ impl ViewerState {
                 Outcome::Redraw
             }
             // Mode-local actions: routed via the mode's own `handle` before
-            // we get here. Listed explicitly so adding a new Action variant
-            // forces a non-exhaustive-match compile error in this function
-            // and a deliberate decision about which side handles it.
-            Action::ToggleRawSource
-            | Action::PlayPause
-            | Action::Next
-            | Action::Prev
-            | Action::CycleBackground
-            | Action::CycleImageMode
-            | Action::CycleFitMode
-            | Action::ScrollLeft
-            | Action::ScrollRight
-            | Action::ToggleLineNumbers
-            | Action::ToggleSoftWrap
-            | Action::CycleBackgroundBack
-            | Action::CycleImageModeBack
-            | Action::ToggleStickyParents
-            | Action::ReflowWidths
-            | Action::ToggleHeader
-            | Action::ZoomIn
-            | Action::ZoomOut
-            | Action::ZoomReset
-            | Action::ZoomPreset(_) => Outcome::Unhandled,
+            // we get here; one not consumed there is a no-op. The
+            // session / mode-local split is declared per variant in
+            // `Action::is_mode_local` (exhaustive match — a new variant
+            // fails to compile there until categorised).
+            other => {
+                debug_assert!(
+                    other.is_mode_local(),
+                    "session action {other:?} has no apply arm"
+                );
+                Outcome::Unhandled
+            }
         })
     }
 

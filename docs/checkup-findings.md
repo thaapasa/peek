@@ -172,18 +172,6 @@ Two reasonable directions:
 Not urgent. Flag as refactor candidate — every new owns-scroll mode adds
 another `_scroll` underscore.
 
-### M19. `state.rs::apply`'s mode-local fall-through arm is ceremony
-
-`src/viewer_session/state.rs:478-497`. A single `=> Outcome::Unhandled`
-arm OR-ing 20 mode-local `Action` variants, listed explicitly so the
-non-exhaustive match flags new variants. Works, but the list keeps growing;
-every new action adds a name in a file that does nothing with it.
-
-Direction: small `Action::category()` (or `is_mode_local()`) on the enum
-itself plus one catch-all arm. Compiler still forces new variants to be
-categorised — author declares the category at the enum site instead of
-the global dispatcher. Not a bug; arm-width smell as the action set grows.
-
 ### M20. architecture.md no longer describes the session layer it documents
 
 `docs/architecture.md` has fallen behind the two biggest changes to the

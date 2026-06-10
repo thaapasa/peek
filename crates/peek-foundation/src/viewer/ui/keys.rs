@@ -248,6 +248,59 @@ impl Action {
         self.bindings().iter().any(|b| b.matches(key))
     }
 
+    /// True for actions consumed by the active mode's `handle`; false
+    /// for session-level actions `ViewerState::apply` implements
+    /// (navigation, mode switching, theme cycling, extract / descend).
+    /// Deliberately exhaustive: a new variant fails to compile here
+    /// until its author declares which side handles it — the session
+    /// dispatcher itself only matches the session group and routes the
+    /// rest through one catch-all.
+    pub fn is_mode_local(self) -> bool {
+        match self {
+            Action::Quit
+            | Action::Back
+            | Action::ScrollUp
+            | Action::ScrollDown
+            | Action::PageUp
+            | Action::PageDown
+            | Action::Top
+            | Action::Bottom
+            | Action::SwitchInfo
+            | Action::ToggleHelp
+            | Action::CycleView
+            | Action::CycleViewBack
+            | Action::CycleTheme
+            | Action::CycleThemeBack
+            | Action::CycleColorMode
+            | Action::CycleColorModeBack
+            | Action::SwitchToHex
+            | Action::SwitchToAbout
+            | Action::OpenSearch
+            | Action::Extract
+            | Action::Descend => false,
+            Action::ToggleRawSource
+            | Action::PlayPause
+            | Action::Next
+            | Action::Prev
+            | Action::CycleBackground
+            | Action::CycleBackgroundBack
+            | Action::CycleImageMode
+            | Action::CycleImageModeBack
+            | Action::CycleFitMode
+            | Action::ScrollLeft
+            | Action::ScrollRight
+            | Action::ToggleLineNumbers
+            | Action::ToggleSoftWrap
+            | Action::ToggleStickyParents
+            | Action::ReflowWidths
+            | Action::ToggleHeader
+            | Action::ZoomIn
+            | Action::ZoomOut
+            | Action::ZoomReset
+            | Action::ZoomPreset(_) => true,
+        }
+    }
+
     /// True for every action that conceptually moves the viewport.
     /// Used by modes that need to consume scroll input when they have
     /// no content to scroll, so the action doesn't bubble up to a
