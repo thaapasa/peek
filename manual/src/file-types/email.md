@@ -19,7 +19,8 @@ Cycled with Tab:
   to the terminal width.
 - **Source** — the raw RFC822 text. `--plain` skips the rendered view and opens straight on the
   source.
-- **Attachments** (only when the message has any) — one row per MIME attachment with its size.
+- **Attachments** (only when the message has any) — one row per MIME attachment with its content
+  type and size.
   Press `e` to [extract](../viewer/extraction.md) the selected attachment to disk; `Enter`
   opens it with a recursive peek.
 - **[Info](../viewer/info-screen.md)** — the header summary (see below).

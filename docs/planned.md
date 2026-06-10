@@ -289,8 +289,6 @@ UDF (DVD / Blu-ray ISOs) deferred — more complex format, niche use case for pe
 
 ### Email ◐
 
-- **Attachment content-type column** in the listing (today rows show name + size only;
-  the listing primitive has no type column).
 - **Inline images** rendered in the body (cid: references resolved against inline
   parts).
 

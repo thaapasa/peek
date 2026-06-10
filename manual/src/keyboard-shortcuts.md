@@ -11,7 +11,7 @@ help screen — that's the authoritative reference.
 | `Up`, `k`        | Scroll up                               |
 | `Down`, `j`      | Scroll down                             |
 | `PgUp`           | Page up                                 |
-| `PgDn`, `Space`  | Page down                               |
+| `PgDn`           | Page down                               |
 | `Home`, `g`      | Go to top                               |
 | `End`, `G`       | Go to bottom                            |
 | `Left` / `Right` | Pan horizontally / step pages (context) |

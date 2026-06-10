@@ -1,9 +1,9 @@
 # Listing mode generalization
 
-> **Status: Steps 1–6 landed (branch `listing-generalization`), bar one
-> deliberately-skipped piece (sqlite, below).** Generic engine + `ListSource`
-> seam, directory folded in, email content-type column, object-file symbol →
-> Hex jump, spreadsheet sheet source. Ready to archive once merged.
+> **Status: Completed 2026-06-10.** Archived for reference. Steps 1–6 landed
+> (PR #19), bar one deliberately-skipped piece (sqlite, below). Generic engine +
+> `ListSource` seam, directory folded in, email content-type column, object-file
+> symbol → Hex jump, spreadsheet sheet source.
 
 Split `ListingMode` into a generic **navigation engine** and a per-consumer
 **row source**, so the listing UI (scroll / paging / selection / search / sticky
