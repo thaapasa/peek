@@ -64,7 +64,8 @@ crates/
                          SGR-aware string family / status line / term = alt-screen + size);
                          image_render vocab (ImageConfig / ImageMode / zoom / scroll /
                          ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
-                         primitives; wrap_scroll; cell_size; highlight. NB: compose_modes /
+                         primitives; wrap_scroll; cell_size; highlight; logo_anim (animated
+                         About logo: sliding gradient + outline flash). NB: compose_modes /
                          ViewerState / the event loop are NOT here — they're the bin's session layer.
     info/              — FileInfo + InfoExtras trait (render_section + json_section) + Extras
                          (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +

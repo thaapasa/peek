@@ -1293,6 +1293,14 @@ every mode the file has at once — it doesn't filter down to just the active mo
 swatches, and a short list of pointers (homepage, license, common keys). Doubles as a theme
 showcase — cycling themes with `t` while on About previews how each theme paints the full palette.
 
+The logo is animated while About is open (`viewer/logo_anim.rs`, driven by the standard
+`Mode::next_tick`/`tick` contract): the gradient slides across the wordmark in a seamless
+ping-pong, and every few seconds two short bright runners trace the wordmark's outline in
+opposite directions from the left corner, meeting at the far edge (white on dark themes, black
+on light). Both painters share one glyph-walking loop (`output::paint_logo_with`); only the
+per-glyph color closure differs. In plain mode (`--color plain` or cycling with `c`) the
+animation is off — About paints the static logo and stops ticking until color comes back.
+
 ### Extraction ✅
 
 Pull an inner item out of a container as a standalone file. Sources currently:

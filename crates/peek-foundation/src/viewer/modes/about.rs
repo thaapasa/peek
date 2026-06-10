@@ -1,9 +1,12 @@
+use std::time::Duration;
+
 use anyhow::Result;
 use crossterm::terminal;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::paint_logo;
 use crate::theme::PeekTheme;
+use crate::viewer::logo_anim::LogoAnimation;
 use crate::viewer::ui::HelpEntry;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -12,7 +15,16 @@ const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
 const LICENSE: &str = env!("CARGO_PKG_LICENSE");
 const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
-pub struct AboutMode;
+pub struct AboutMode {
+    /// Animated logo (rotating gradient + edge flash).
+    logo_anim: LogoAnimation,
+    /// Whether the animation is live. Follows the style mode seen at the
+    /// last render: plain mode strips every escape, so animating would
+    /// redraw an unchanging logo 20× a second — render paints the static
+    /// logo instead and the tick scheduling shuts off. Re-arms when the
+    /// user cycles back to a styled mode.
+    animate: bool,
+}
 
 impl Default for AboutMode {
     fn default() -> Self {
@@ -22,7 +34,10 @@ impl Default for AboutMode {
 
 impl AboutMode {
     pub fn new() -> Self {
-        Self
+        Self {
+            logo_anim: LogoAnimation::new(),
+            animate: true,
+        }
     }
 }
 
@@ -46,8 +61,15 @@ impl Mode for AboutMode {
         let mut lines: Vec<String> = Vec::new();
 
         // Logo with theme-color gradient — gives a quick read on what the
-        // active theme looks like at a glance.
-        for line in paint_logo(pt) {
+        // active theme looks like at a glance. Animated except in plain
+        // mode, where it falls back to the static help-screen logo.
+        self.animate = pt.style_mode.styled();
+        let logo = if self.animate {
+            self.logo_anim.paint(pt)
+        } else {
+            paint_logo(pt)
+        };
+        for line in logo {
             lines.push(line);
         }
         lines.push(String::new());
@@ -110,6 +132,18 @@ impl Mode for AboutMode {
         // SwitchToAbout is global; no extras here. Listed for symmetry
         // with HexMode/InfoMode.
         &[]
+    }
+
+    fn next_tick(&self) -> Option<Duration> {
+        if self.animate {
+            self.logo_anim.next_tick()
+        } else {
+            None
+        }
+    }
+
+    fn tick(&mut self) -> bool {
+        self.animate && self.logo_anim.tick()
     }
 }
 

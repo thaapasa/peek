@@ -16,6 +16,7 @@ pub mod hex;
 pub mod highlight;
 pub mod image_render;
 pub mod listing;
+pub mod logo_anim;
 pub mod modes;
 pub mod paged;
 pub mod search;
