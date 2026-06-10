@@ -4,6 +4,49 @@ IDs are stable. Resolved items are deleted but remaining IDs keep their numbers
 so commit / PR references stay valid. Add new IDs at the end of each section
 (don't renumber).
 
+## High
+
+### H7. Zip-bomb gate exists in DOCX/ODT but drifted away in EPUB/CBZ — same helper, four copies
+
+The four zip-backed render paths contain near-identical `open_zip` /
+`read_entry` helpers, and they have already diverged on the one thing
+that matters:
+
+- `crates/peek-types/src/types/document/docx/package.rs:45-64` —
+  `read_entry` gates the **uncompressed** entry size against
+  `RENDER_MAX_BYTES` before allocating, with an explicit zip-bomb comment
+  ("a small DOCX can carry a multi-GB document.xml").
+- `crates/peek-types/src/types/document/odt/package.rs:47-66` —
+  byte-for-byte the same function (only "DOCX"→"ODT" in strings), same
+  comment.
+- `crates/peek-types/src/types/ebook/epub/package.rs:59-67` —
+  `read_entry` has **no cap**: `Vec::with_capacity(file.size() as usize)`
+  + `read_to_end`. Used for every chapter body and image
+  (`epub/read_mode.rs:154`, `:562`) and the OPF.
+- `crates/peek-types/src/types/comic/cbz/package.rs:69-77` — `read_page`,
+  same uncapped shape, feeds the page renderer
+  (`cbz/page_renderer.rs:55`).
+
+`file.size()` is attacker-controlled central-directory metadata, so a
+crafted EPUB/CBZ can force a huge upfront allocation (capacity overflow /
+alloc abort — which the viewer's degrade-to-hex recovery **cannot**
+catch, unlike a render `Err`) or genuinely decompress multi-GB into
+memory. The extract path (`e` key, `--extract`) is safe — the hub routes
+all four through `types::archive::extract`'s spool/cap machinery — only
+the render-time reads are exposed.
+
+This is exactly the dangerous-drift duplication: the protection was added
+to two copies and the other two were missed. Fix: one shared pair next to
+the already-shared `open_seekable` in
+`crates/peek-types/src/types/archive/reader.rs` — `open_zip(source,
+label)` and `read_zip_entry(zip, path, label) -> Result<Bytes>`
+(cap-gated, `String` wrapper for the XML callers) — and delete the four
+copies. The same `> RENDER_MAX_BYTES → bail!("{} MB (> {} MB render
+cap)")` formula also repeats in `types/html/renderer.rs:54-59` and
+`types/document/rtf/parse.rs:185-190`; a tiny
+`ensure_under_render_cap(len, what)` pins the formula once, per the
+conventions' "lift on the first duplicate" rule.
+
 ## Medium
 
 ### M6. The per-type dispatch hubs are a `match file_type` family — wontfix, kept as analysis record
@@ -209,6 +252,67 @@ Direction: small `Action::category()` (or `is_mode_local()`) on the enum
 itself plus one catch-all arm. Compiler still forces new variants to be
 categorised — author declares the category at the enum site instead of
 the global dispatcher. Not a bug; arm-width smell as the action set grows.
+
+### M20. architecture.md no longer describes the session layer it documents
+
+`docs/architecture.md` has fallen behind the two biggest changes to the
+interactive core:
+
+- The **ViewerState section** (line ~222) still describes a
+  single-session controller ("mode list, active index, last_primary slot,
+  per-mode scroll offsets…"). The recursive-peek `SessionFrame` stack —
+  `descend` / `build_descend_frame` / in-frame `select_jump`, breadcrumb,
+  `MAX_STACK_DEPTH`, dir→dir frame collapse
+  (`src/viewer_session/state.rs:66-137, 540-665`) — is now the
+  centrepiece of the session layer and appears nowhere in the design doc
+  (features.md and the manual cover it; the builder-facing doc doesn't).
+- The **Mode trait snippet** (lines 141-171) is missing the whole
+  descend/jump/extract surface added since: `extract_target`,
+  `select_jump`, `build_descend_frame`, `jump_position`,
+  `position`/`set_position`, `render_flat_to_pipe` — and still shows the
+  trait as `pub(crate)` from its pre-workspace-split days.
+
+CLAUDE.md lists architecture.md as must-stay-in-sync; anyone extending
+descend behaviour from the doc will design against a contract that no
+longer exists. Fix: refresh the trait snippet from
+`crates/peek-foundation/src/viewer/modes/mod.rs:209-420` and add a short
+"Session stack / recursive peek" subsection to the ViewerState part.
+
+### M21. `viewer/ui/mod.rs` breaks the project's own "mod.rs stays small" rule
+
+`crates/peek-foundation/src/viewer/ui/mod.rs` (852 lines, ~540 non-test)
+is a grab-bag living in a `mod.rs`: alternate-screen lifecycle,
+status-line composition, theme construction, terminal-size + test
+override, **and** the entire SGR-aware string family (`expand_tabs`,
+`strip_ansi_width`, `wrap_styled`, `wrap_styled_words`,
+`hard_split_into`, `count_wrap_segments`, `take_cols`, `slice_styled_h`,
+`truncate_ansi`). The conventions doc explicitly says mod.rs is
+declarations/re-exports only, and the styled-string walkers are one
+coherent concern with their own invariants (escape-skipping, wide-char
+boundaries, style re-emission). Lift them into `ui/styled.rs` (tests
+along). While there: `truncate_ansi` (line 460) is functionally
+`slice_styled_h(s, 0, max)` minus the trailing reset and style
+normalisation — three separate ANSI-walking truncation loops is one more
+than the family needs; folding `truncate_ansi` onto `slice_styled_h` (or
+documenting why its no-reset output is required by the status line)
+closes the drift window.
+
+### M22. `viewer_session/state.rs` is 4× past the split threshold and holds five concerns
+
+`src/viewer_session/state.rs` (1534 lines, ~1100 non-test) now mixes:
+session-stack management (`SessionFrame`, push/pop/collapse),
+extract/descend orchestration (`descend`, `push_extracted`,
+`push_direct_frame`, `start_extract`), prompt plumbing (`PromptKind`,
+`handle_prompt_key`), render-failure recovery (`retry_frame_detection`,
+`degrade_active_to_hex`), and caller-side scroll math. The conventions
+name this exact signal (~400 lines mixing concerns) and the file already
+shed `ScreenBuffer` once for the same reason. The cleanest cut is the one
+the file's own section banners suggest: move `SessionFrame` + the
+stack/descend/extract block (state.rs:54-137, 509-665 plus the
+prompt-confirm dispatch) into a sibling `viewer_session/` module, leaving
+`state.rs` as mode dispatch + render cache + drawing. Soft refactor
+candidate — the code is healthy, the file is just past the point where a
+reader must hold all five models at once.
 
 ## Low
 

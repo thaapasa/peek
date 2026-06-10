@@ -7,9 +7,10 @@
 //! so a source only describes that column, it doesn't paint it.
 //!
 //! Today's sources: [`super::tree_source::TreeListSource`] (file-tree TOCs
-//! — archives, ISO images, embedded-file lists, zip-backed documents) and
-//! the directory listing. Future sources (email parts, binary symbols) plug
-//! in here without touching the engine.
+//! — archives, ISO images, embedded-file lists, zip-backed documents), the
+//! directory listing, email attachment lists, and object-file symbol
+//! listings (jump-to-hex via `jump_target`). New sources plug in here
+//! without touching the engine.
 
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
