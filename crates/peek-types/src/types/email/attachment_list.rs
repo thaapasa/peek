@@ -40,7 +40,7 @@ impl AttachmentListSource {
             .collect();
         let ct_width = rows
             .iter()
-            .map(|r| r.content_type.len())
+            .map(|r| r.content_type.chars().count())
             .max()
             .unwrap_or(0)
             .min(CT_MAX_WIDTH);
@@ -49,7 +49,14 @@ impl AttachmentListSource {
 
     fn content_type_cell(&self, idx: usize, theme: &PeekTheme) -> String {
         let ct = &self.rows[idx].content_type;
-        theme.paint(&format!("{ct:<w$}", w = self.ct_width), theme.value)
+        let cell = if ct.chars().count() > self.ct_width {
+            let mut s: String = ct.chars().take(self.ct_width.saturating_sub(1)).collect();
+            s.push('…');
+            s
+        } else {
+            format!("{ct:<w$}", w = self.ct_width)
+        };
+        theme.paint(&cell, theme.value)
     }
 
     fn size_cell(&self, idx: usize, theme: &PeekTheme) -> String {
@@ -161,6 +168,25 @@ mod tests {
             attachment("b", 1, "application/vnd.oasis.opendocument.text"),
         ]));
         assert_eq!(src.ct_width, CT_MAX_WIDTH);
+    }
+
+    /// A type longer than the cap must truncate to exactly the column
+    /// width (with an ellipsis), not push the row's other cells right.
+    #[test]
+    fn over_cap_content_type_truncates_to_column_width() {
+        use crate::theme::{PeekThemeName, StyleMode, make_peek_theme};
+        let long = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        let src = AttachmentListSource::new(&email(vec![
+            attachment("a.png", 1, "image/png"),
+            attachment("b.docx", 1, long),
+        ]));
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::Plain);
+        let short = src.content_type_cell(0, &theme);
+        let truncated = src.content_type_cell(1, &theme);
+        assert_eq!(short.chars().count(), CT_MAX_WIDTH);
+        assert_eq!(truncated.chars().count(), CT_MAX_WIDTH);
+        assert!(truncated.ends_with('…'));
+        assert!(truncated.starts_with("application/vnd.openxmlformats"));
     }
 
     #[test]
