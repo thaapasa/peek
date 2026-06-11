@@ -158,7 +158,10 @@ pub fn view_style_label(code: &str) -> &str {
 }
 
 fn ascii4(b: &[u8]) -> String {
-    b.iter().take(4).map(|&c| c as char).collect()
+    b.iter()
+        .take(4)
+        .map(|&c| super::reader::printable_ascii(c))
+        .collect()
 }
 
 fn be_u32(b: &[u8]) -> u32 {

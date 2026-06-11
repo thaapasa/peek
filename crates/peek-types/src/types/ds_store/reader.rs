@@ -289,24 +289,45 @@ impl<'a> Cursor<'a> {
     }
 
     /// Read `n` bytes as an ASCII string (used for 4-char codes and
-    /// directory names — all ASCII in practice).
+    /// directory names — all ASCII in practice). Bytes outside printable
+    /// ASCII become `.` — these strings reach the terminal verbatim, so
+    /// crafted bytes must not smuggle escape sequences into the output.
     fn ascii(&mut self, n: usize) -> Option<String> {
-        self.take(n).map(|b| b.iter().map(|&c| c as char).collect())
+        self.take(n)
+            .map(|b| b.iter().map(|&c| printable_ascii(c)).collect())
     }
 
     /// Read `units` UTF-16 code units (2 bytes each), big-endian.
+    /// Control characters become U+FFFD for the same terminal-injection
+    /// reason as [`Cursor::ascii`].
     fn utf16_be(&mut self, units: usize) -> Option<String> {
         let b = self.take(units.checked_mul(2)?)?;
         let u16s: Vec<u16> = b
             .chunks_exact(2)
             .map(|p| u16::from_be_bytes([p[0], p[1]]))
             .collect();
-        Some(String::from_utf16_lossy(&u16s))
+        Some(
+            String::from_utf16_lossy(&u16s)
+                .chars()
+                .map(|c| if c.is_control() { '\u{fffd}' } else { c })
+                .collect(),
+        )
     }
 }
 
 fn be_u32(b: &[u8]) -> u32 {
     u32::from_be_bytes([b[0], b[1], b[2], b[3]])
+}
+
+/// Map a raw byte to a displayable char: printable ASCII passes, anything
+/// else (controls, DEL, high bytes that would alias to C1 controls)
+/// becomes `.`.
+pub(super) fn printable_ascii(c: u8) -> char {
+    if (0x20..0x7f).contains(&c) {
+        c as char
+    } else {
+        '.'
+    }
 }
 
 #[cfg(test)]
@@ -513,6 +534,24 @@ mod tests {
         put_u32(&mut buf, 0x84, 2); // next → node 2 (itself)
         let store = parse(&buf).expect("header still parses");
         assert!(store.truncated);
+    }
+
+    /// Record names and codes are attacker bytes that land verbatim in
+    /// the rendered table — an embedded ESC must never survive parsing.
+    #[test]
+    fn control_bytes_in_name_and_code_are_sanitised() {
+        let mut buf = synthetic_store();
+        let leaf = 0x84;
+        // Record layout at leaf+8: nameLen(4) │ name UTF-16 (5 units) │
+        // code(4). Turn the name's first unit ("a") into ESC, and the
+        // code's first byte ("I" of Iloc) into a raw ESC byte.
+        buf[leaf + 12] = 0x00;
+        buf[leaf + 13] = 0x1b;
+        buf[leaf + 22] = 0x1b;
+        let store = parse(&buf).expect("parses");
+        let r = &store.records[0];
+        assert_eq!(r.name, "\u{fffd}.txt");
+        assert_eq!(r.code, ".loc");
     }
 
     #[test]
