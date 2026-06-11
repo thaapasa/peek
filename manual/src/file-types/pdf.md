@@ -17,6 +17,15 @@ Cycled with Tab:
   through the shared image pipeline. `n` / `p` step pages; the status line shows `page X/Y`.
   Zoom / pan via the standard keys ([Zoom & pan](../viewer/zoom-pan.md)). Per-page cache keyed
   by terminal size + render settings; resize or mode cycling re-renders only the visible page.
+
+  `o` toggles the **reconstructed-text overlay**: real words from the PDF's text layer are
+  written over the rendered glyph cells at their page positions, so zooming to roughly one
+  text line per terminal row turns the pixel mush into readable sentences (around 2× zoom for
+  a typical A4 page at full terminal width). Each word is centered in its rendered box and
+  cropped to fit; when zoomed far past 1:1 the word floats inside its (now huge) rendered
+  letters instead of blanking them. Words rendered much smaller than a terminal cell are left
+  alone — zoom in until lines stop colliding. The status line shows `text` while the overlay
+  is active. Only offered when the document has a text layer.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers. Present only when the document has a text layer; image-only scans
   and outlined-vector artwork (`.ai`) have none, so the tab is omitted rather than shown empty.

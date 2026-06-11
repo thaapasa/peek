@@ -121,6 +121,7 @@ mod tests {
             scroll_x: 0,
             scroll_y: 0,
             style_mode: StyleMode::Plain,
+            text_overlay: false,
         }
     }
 

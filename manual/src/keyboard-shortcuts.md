@@ -107,6 +107,7 @@ match's cell into view.
 
 ## Multi-page / multi-chapter (PDF, EPUB, CBZ)
 
-| Key       | Action                            |
-|-----------|-----------------------------------|
-| `n` / `p` | Next / previous page (or chapter) |
+| Key       | Action                                            |
+|-----------|---------------------------------------------------|
+| `n` / `p` | Next / previous page (or chapter)                 |
+| `o`       | Toggle reconstructed-text overlay (PDF read view) |

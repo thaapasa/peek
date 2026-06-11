@@ -163,6 +163,120 @@ impl Doc {
         Ok(text.all())
     }
 
+    /// Extract page `idx`'s text layer as positioned words for the
+    /// reconstructed-text overlay. Characters stream in document order;
+    /// whitespace, control chars, missing bounds, and layout jumps
+    /// (new baseline, large horizontal gap) split words. Each word's
+    /// box is the union of its characters' loose bounds, converted to
+    /// a top-left-origin point space (y grows downward) so the overlay
+    /// projection matches raster coordinates.
+    pub fn page_words(&self, idx: usize) -> Result<super::text_overlay::PageWords> {
+        use super::text_overlay::{PageWords, WordBox};
+
+        let pages = self.inner.document.pages();
+        let page = pages
+            .get(idx as i32)
+            .with_context(|| format!("page {idx} not found"))?;
+        let page_w = page.width().value;
+        let page_h = page.height().value;
+        let text = page.text().context("pdfium page text failed")?;
+
+        // Word accumulator in PDF coordinates (origin bottom-left).
+        struct Accum {
+            text: String,
+            left: f32,
+            right: f32,
+            bottom: f32,
+            top: f32,
+        }
+        let mut words: Vec<WordBox> = Vec::new();
+        let mut cur: Option<Accum> = None;
+        let mut flush = |cur: &mut Option<Accum>| {
+            if let Some(a) = cur.take()
+                && !a.text.is_empty()
+            {
+                words.push(WordBox {
+                    text: a.text,
+                    left: a.left,
+                    // Convert to top-left origin: page top is y = 0.
+                    top: page_h - a.top,
+                    width: a.right - a.left,
+                    height: a.top - a.bottom,
+                });
+            }
+        };
+
+        for ch in text.chars().iter() {
+            let Some(c) = ch.unicode_char() else {
+                // Unmapped glyph (no Unicode for it): end the word —
+                // splicing a replacement char would only add noise.
+                flush(&mut cur);
+                continue;
+            };
+            if c.is_whitespace() || c.is_control() {
+                flush(&mut cur);
+                continue;
+            }
+            // Double-width chars (CJK) break the one-char-per-cell
+            // splice; skip the word rather than misalign the grid.
+            if unicode_width::UnicodeWidthChar::width(c) != Some(1) {
+                flush(&mut cur);
+                continue;
+            }
+            let Ok(b) = ch.loose_bounds() else {
+                flush(&mut cur);
+                continue;
+            };
+            let (l, r, bo, t) = (
+                b.left().value,
+                b.right().value,
+                b.bottom().value,
+                b.top().value,
+            );
+            if t <= bo || r < l {
+                flush(&mut cur);
+                continue;
+            }
+            if let Some(a) = &cur {
+                let h = (a.top - a.bottom).max(t - bo);
+                // Same word only while the baseline band overlaps
+                // and the glyph continues rightward without a gap
+                // wider than the line height (rotated runs and
+                // column jumps land here).
+                let same_line = bo < a.top && t > a.bottom;
+                let adjacent = l >= a.left && (l - a.right) < h;
+                if !(same_line && adjacent) {
+                    flush(&mut cur);
+                }
+            }
+            match &mut cur {
+                Some(a) => {
+                    a.text.push(c);
+                    a.left = a.left.min(l);
+                    a.right = a.right.max(r);
+                    a.bottom = a.bottom.min(bo);
+                    a.top = a.top.max(t);
+                }
+                None => {
+                    cur = Some(Accum {
+                        text: c.to_string(),
+                        left: l,
+                        right: r,
+                        bottom: bo,
+                        top: t,
+                    });
+                }
+            }
+        }
+        flush(&mut cur);
+
+        Ok(PageWords {
+            page_w,
+            page_h,
+            words,
+        })
+    }
+
     /// Document metadata (title / author / subject / keywords / dates).
     /// Empty fields drop to `None` so the renderer can skip them.
     pub fn metadata(&self) -> crate::types::document::DocumentMetadata {

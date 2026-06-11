@@ -360,6 +360,17 @@ yet supported — see [planned.md](planned.md).)
   comic-archive reader uses). `n` / `p` step pages, the status line shows `page X/Y`. Per-page
   cache keyed by `(cols, rows, style, image-mode, background, fit)`; resizing or cycling
   background / image mode / fit re-renders only the visible page.
+
+  `o` toggles the **reconstructed-text overlay** (`types/pdf/text_overlay.rs`): the page's
+  text layer is extracted as positioned words (per-char loose bounds via Pdfium, grouped into
+  words, baseline-snapped per line) and projected through the same page-pt → source-px →
+  effective-cell mapping the rasteriser uses; each word's characters overwrite the rendered
+  glyph cells in its box, keeping the cells' SGR colors (with a contrast nudge when fg ≈ bg so
+  letters don't vanish on blank paper). Words under ~0.55 cell rows are skipped (text lines
+  would collide); words whose box exceeds 3× their char count keep the surrounding glyphs and
+  blank only one delimiter cell per side (overzoom). Single-slot per-page word cache beside
+  the bitmap cache; the toggle + `text` status segment live in `PagedImageMode`, gated by
+  `PageRenderer::supports_text_overlay` so CBZ / image-only PDFs don't advertise a dead key.
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers. Same caching shape as DOCX / RTF (single `(width, style_mode)`
   cache rebuilt on resize). Reachable via Tab. Only present when the document actually carries
