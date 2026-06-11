@@ -230,38 +230,45 @@ impl ListingViewport {
     /// Ancestor chain of the current `top` row, root-most first.
     /// Suppressed when sticky is off, scroll is at row 0, or the top
     /// row has no parent. Capped to `viewport / 3`.
+    ///
+    /// The cap is enforced *inside* the walk (keeping the nearest
+    /// ancestors, same as a post-hoc trim) and every parent index is
+    /// bounds-checked, so a misbehaving [`super::ListSource`] — a
+    /// `parent()` self-loop or an out-of-range index — degrades to a
+    /// short chain instead of hanging or panicking.
     fn sticky_chain<R: RowMeta>(&self, rows: &[R]) -> Vec<usize> {
-        if !self.sticky_enabled || self.top == 0 || rows.is_empty() {
+        if !self.sticky_enabled || self.top == 0 {
             return Vec::new();
         }
         let cap = (self.viewport_rows.max(1) / 3).max(1);
         let mut chain = Vec::new();
-        let mut cur = rows[self.top].parent();
-        while let Some(p) = cur {
+        let mut cur = rows.get(self.top).and_then(R::parent);
+        while chain.len() < cap {
+            let Some(p) = cur else { break };
+            let Some(row) = rows.get(p) else { break };
             chain.push(p);
-            cur = rows[p].parent();
+            cur = row.parent();
         }
         chain.reverse();
-        if chain.len() > cap {
-            chain.drain(..chain.len() - cap);
-        }
         chain
     }
 
     /// Length-only variant of `sticky_chain` that doesn't allocate.
     /// Used inside the reconcile / max_top fix-point loops.
     fn sticky_chain_len_at<R: RowMeta>(&self, rows: &[R], top: usize) -> usize {
-        if !self.sticky_enabled || top == 0 || rows.is_empty() {
+        if !self.sticky_enabled || top == 0 {
             return 0;
         }
         let cap = (self.viewport_rows.max(1) / 3).max(1);
         let mut len = 0usize;
-        let mut cur = rows[top].parent();
-        while let Some(p) = cur {
+        let mut cur = rows.get(top).and_then(R::parent);
+        while len < cap {
+            let Some(p) = cur else { break };
+            let Some(row) = rows.get(p) else { break };
             len += 1;
-            cur = rows[p].parent();
+            cur = row.parent();
         }
-        len.min(cap)
+        len
     }
 
     /// Largest valid `top`. Sticky reduces the content slot below the
@@ -397,6 +404,32 @@ mod tests {
         let w = vp.window(&rows);
         assert!(w.sticky.is_empty());
         assert_eq!(w.content, 0..5);
+    }
+
+    /// A buggy source whose `parent()` self-loops must not hang the
+    /// chain walk — the in-loop cap bounds it. Fields set directly:
+    /// the mutator path clamps `top` to 0 for lists this short.
+    #[test]
+    fn parent_self_loop_terminates_at_cap() {
+        // Row 0's parent is itself.
+        let rows = rows(&[(Some(0), false), (Some(0), true)]);
+        let mut vp = ListingViewport::new(&rows);
+        vp.viewport_rows = 9; // cap = 3
+        vp.top = 1;
+        assert_eq!(vp.sticky_chain(&rows), vec![0, 0, 0]); // capped, not infinite
+        assert_eq!(vp.sticky_chain_len_at(&rows, 1), 3);
+    }
+
+    /// A buggy source returning an out-of-range parent index must not
+    /// panic — the walk just stops there.
+    #[test]
+    fn out_of_range_parent_stops_chain() {
+        let rows = rows(&[(None, false), (Some(99), false), (Some(1), true)]);
+        let mut vp = ListingViewport::new(&rows);
+        vp.viewport_rows = 9;
+        vp.top = 2;
+        assert_eq!(vp.sticky_chain(&rows), vec![1]); // bogus 99 dropped
+        assert_eq!(vp.sticky_chain_len_at(&rows, 2), 1);
     }
 
     /// Regression: with sticky pinning ancestors above the content
