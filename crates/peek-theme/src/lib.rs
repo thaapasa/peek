@@ -17,7 +17,7 @@ pub use manager::ThemeManager;
 pub use name::{PeekThemeName, load_embedded_theme};
 pub use peek_theme::{PeekTheme, lerp_color, make_peek_theme};
 pub use sgr::{
-    ActiveStyle, Attr, RESET_ALL, Sgr, SgrKind, classify, display_width, rgb_to_luminance, scan,
-    write_bg_truecolor, write_fg_truecolor,
+    ActiveStyle, Attr, RESET_ALL, Sgr, SgrKind, ansi16_to_rgb, ansi256_to_rgb, classify,
+    display_width, rgb_to_luminance, scan, write_bg_truecolor, write_fg_truecolor,
 };
 pub use style_mode::StyleMode;

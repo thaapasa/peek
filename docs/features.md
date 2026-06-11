@@ -367,9 +367,12 @@ yet supported — see [planned.md](planned.md).)
   effective-cell mapping the rasteriser uses; each word's characters overwrite the rendered
   glyph cells in its box, keeping the cells' SGR colors. The pair is oriented per cell: the
   half-block renderer assigns a cell's two pixel colors to fg/bg by position, so the letter
-  paints in whichever lies nearer the word's font color (per-char fill color from Pdfium),
-  with a black/white contrast nudge when the pair is too close to read (blank paper). Words
-  under ~0.55 cell rows are skipped (text lines
+  paints in whichever lies nearer the word's font color (per-char fill color from Pdfium,
+  black when undeclared), with a black/white contrast nudge when the pair is too close to
+  read (blank paper). Padding spaces orient the same way (their bg takes the paper side).
+  Orientation works in truecolor, 256-palette, and 16-color output alike — escapes are
+  compared via their nominal RGB and swapped by re-planing, so the stream stays in its
+  palette. Words under ~0.55 cell rows are skipped (text lines
   would collide); words whose box exceeds 3× their char count keep the surrounding glyphs and
   blank only one delimiter cell per side (overzoom). Single-slot per-page word cache beside
   the bitmap cache; the toggle + `text` status segment live in `PagedImageMode`, gated by

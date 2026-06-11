@@ -188,7 +188,7 @@ impl Doc {
             right: f32,
             bottom: f32,
             top: f32,
-            ink: Option<(u8, u8, u8)>,
+            ink: (u8, u8, u8),
         }
         let mut words: Vec<WordBox> = Vec::new();
         let mut cur: Option<Accum> = None;
@@ -261,13 +261,14 @@ impl Doc {
                 }
                 None => {
                     // Word font color from the first char's fill color
-                    // (stroke color for outline-rendered text) — guides
-                    // the overlay's fg/bg orientation per cell.
+                    // (stroke color for outline-rendered text; black
+                    // when the document declares neither) — guides the
+                    // overlay's fg/bg orientation per cell.
                     let ink = ch
                         .fill_color()
                         .or_else(|_| ch.stroke_color())
-                        .ok()
-                        .map(|c| (c.red(), c.green(), c.blue()));
+                        .map(|c| (c.red(), c.green(), c.blue()))
+                        .unwrap_or((0, 0, 0));
                     cur = Some(Accum {
                         text: c.to_string(),
                         left: l,

@@ -158,6 +158,49 @@ pub fn rgb_to_ansi16(r: u8, g: u8, b: u8) -> u8 {
     high + (b_bit << 2) + (g_bit << 1) + r_bit
 }
 
+/// Nominal RGB of one of the 16 base ANSI colors (xterm defaults).
+/// Inverse of [`rgb_to_ansi16`] in spirit only — the base palette is
+/// terminal-configurable, so this is a representative value for color
+/// comparisons, not a guaranteed display color.
+pub fn ansi16_to_rgb(idx: u8) -> (u8, u8, u8) {
+    const XTERM16: [(u8, u8, u8); 16] = [
+        (0, 0, 0),
+        (205, 0, 0),
+        (0, 205, 0),
+        (205, 205, 0),
+        (0, 0, 238),
+        (205, 0, 205),
+        (0, 205, 205),
+        (229, 229, 229),
+        (127, 127, 127),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (92, 92, 255),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 255, 255),
+    ];
+    XTERM16[(idx & 0x0f) as usize]
+}
+
+/// Nominal RGB of an xterm 256-palette index: the 16 base colors, the
+/// 6×6×6 cube (16..=231), and the 24-step grayscale ramp (232..=255).
+pub fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
+    match idx {
+        0..=15 => ansi16_to_rgb(idx),
+        16..=231 => {
+            let i = idx - 16;
+            let level = |c: u8| if c == 0 { 0 } else { 55 + 40 * c };
+            (level(i / 36), level((i / 6) % 6), level(i % 6))
+        }
+        232..=255 => {
+            let v = 8 + 10 * (idx - 232);
+            (v, v, v)
+        }
+    }
+}
+
 // --- escape-sequence scanning ----------------------------------------------
 
 /// One token of a styled string: a run of plain text, or a complete SGR

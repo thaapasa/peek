@@ -38,11 +38,12 @@ pub struct WordBox {
     pub top: f32,
     pub width: f32,
     pub height: f32,
-    /// The word's font color (fill color of its first character), when
-    /// the document declares one. Orients the splice: the half-block
-    /// renderer assigns ink and paper to fg/bg arbitrarily per cell, so
-    /// the splice swaps them when the bg is the one nearer this color.
-    pub ink: Option<Rgb>,
+    /// The word's font color (fill color of its first character; black
+    /// when the document doesn't declare one). Orients the splice: the
+    /// half-block renderer assigns ink and paper to fg/bg arbitrarily
+    /// per cell, so the splice swaps them when the bg is the one nearer
+    /// this color.
+    pub ink: Rgb,
 }
 
 /// 24-bit color triple shared by the word ink and the cell-style
@@ -74,12 +75,15 @@ const OVERZOOM_RATIO: usize = 3;
 const MIN_CONTRAST: i32 = 48;
 
 /// One substituted cell: viewport column, replacement char, and the
-/// word's ink color (None for padding spaces or colorless documents).
+/// word's ink color. Padding spaces carry the ink too — their
+/// background must orient to the word's paper side just like the
+/// letters', or a space lands ink-colored and reads as a dark blob in
+/// the middle of the word.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct OverlayCell {
     pub col: u32,
     pub ch: char,
-    pub ink: Option<Rgb>,
+    pub ink: Rgb,
 }
 
 /// Overlay cells for the current viewport: per viewport row, the
@@ -180,7 +184,7 @@ pub(crate) fn layout(words: &PageWords, map: &GridMap, margin: u32) -> OverlayCe
             row_cells.push(OverlayCell {
                 col: vcol as u32,
                 ch,
-                ink: (ch != ' ').then_some(word.ink).flatten(),
+                ink: word.ink,
             });
         }
     }
@@ -200,11 +204,18 @@ pub(crate) fn layout(words: &PageWords, map: &GridMap, margin: u32) -> OverlayCe
 /// * **Orientation** — the half-block renderer assigns a cell's two
 ///   pixel colors to fg/bg by pixel position, not meaning, so the fg a
 ///   letter would paint in is the *paper* color about half the time.
-///   When the word's ink color is known and the cell's bg sits nearer
-///   to it than the fg does, the pair is swapped.
+///   When the cell's bg sits nearer the word's ink color than the fg
+///   does, the pair is swapped. A padding space orients the same way
+///   (only its bg shows): without the swap it lands ink-colored and
+///   reads as a dark blob inside the word.
 /// * **Contrast** — a letter landing on a low-contrast cell (fg≈bg,
 ///   e.g. blank paper) gets a black/white foreground so it doesn't
 ///   vanish.
+///
+/// Works in every color encoding the renderer emits — truecolor,
+/// 256-palette, and 16-color escapes are all parsed (compared via
+/// their nominal RGB) and swapped by re-planing the cell's own escape,
+/// so the output stays in the line's encoding.
 pub fn splice(line: &str, cells: &[OverlayCell]) -> String {
     if cells.is_empty() {
         return line.to_string();
@@ -235,9 +246,11 @@ pub fn splice(line: &str, cells: &[OverlayCell]) -> String {
     out
 }
 
-/// Tracked truecolor fg/bg of the splice cursor, for the orientation
-/// swap + contrast nudge. Only `38;2;…` / `48;2;…` escapes are parsed —
-/// in 256/16 color modes the overlay keeps cell colors untouched.
+/// Tracked fg/bg of the splice cursor, for the orientation swap +
+/// contrast nudge: the raw escape (to restore / re-plane) plus its
+/// nominal RGB (to compare). Truecolor, 256-palette, and 16-color
+/// escapes are all parsed; in plain mode there are no colors and the
+/// overlay chars land as-is.
 #[derive(Default)]
 struct CellStyle {
     fg: Option<(String, Rgb)>,
@@ -253,33 +266,41 @@ impl CellStyle {
             }
             SgrKind::ResetFg => self.fg = None,
             SgrKind::ResetBg => self.bg = None,
-            SgrKind::Fg => {
-                self.fg = parse_truecolor(esc).map(|rgb| (esc.to_string(), rgb));
-            }
-            SgrKind::Bg => {
-                self.bg = parse_truecolor(esc).map(|rgb| (esc.to_string(), rgb));
+            SgrKind::Fg | SgrKind::Bg => {
+                let slot = if sgr::classify(esc) == SgrKind::Fg {
+                    &mut self.fg
+                } else {
+                    &mut self.bg
+                };
+                *slot = parse_color(esc).map(|rgb| (esc.to_string(), rgb));
             }
             SgrKind::Other => {}
         }
     }
 
-    /// Append the overlay letter with the orientation swap + contrast
+    /// Append the overlay char with the orientation swap + contrast
     /// nudge described on [`splice`], restoring the cell's own colors
     /// after.
     fn push_letter(&self, out: &mut String, cell: OverlayCell) {
-        if cell.ch == ' ' {
-            out.push(cell.ch);
-            return;
-        }
         let (Some((fg_esc, fg_rgb)), Some((bg_esc, bg_rgb))) = (&self.fg, &self.bg) else {
             out.push(cell.ch);
             return;
         };
-        // Orientation: paint the letter in whichever of the cell's two
+        // Orientation: paint the char in whichever of the cell's two
         // colors lies nearer the word's ink, on the other one.
-        let swap = cell
-            .ink
-            .is_some_and(|ink| color_dist(*bg_rgb, ink) < color_dist(*fg_rgb, ink));
+        let swap = color_dist(*bg_rgb, cell.ink) < color_dist(*fg_rgb, cell.ink);
+        if cell.ch == ' ' {
+            // Only the background shows under a space; orient it to
+            // the paper side, no contrast concern.
+            if swap {
+                push_replaned(out, fg_esc, SgrKind::Bg);
+                out.push(cell.ch);
+                out.push_str(bg_esc);
+            } else {
+                out.push(cell.ch);
+            }
+            return;
+        }
         let (letter_fg, letter_bg) = if swap {
             (*bg_rgb, *fg_rgb)
         } else {
@@ -293,13 +314,19 @@ impl CellStyle {
             return;
         }
         if swap {
-            sgr::write_bg_truecolor(out, letter_bg.0, letter_bg.1, letter_bg.2);
+            push_replaned(out, fg_esc, SgrKind::Bg);
         }
         if nudge {
-            let c = if bg_lum > 128 { 0 } else { 255 };
-            sgr::write_fg_truecolor(out, c, c, c);
+            // Black/white in the same encoding as the cell's escapes,
+            // so a 256/16-color stream stays in its palette.
+            let c = if bg_lum > 128 { 0u8 } else { 255 };
+            out.push_str(&match escape_kind(fg_esc) {
+                EscapeKind::TrueColor => format!("\x1b[38;2;{c};{c};{c}m"),
+                EscapeKind::Ansi256 => format!("\x1b[38;5;{}m", if c == 0 { 16 } else { 231 }),
+                EscapeKind::Ansi16 => (if c == 0 { "\x1b[30m" } else { "\x1b[97m" }).to_string(),
+            });
         } else if swap {
-            sgr::write_fg_truecolor(out, letter_fg.0, letter_fg.1, letter_fg.2);
+            push_replaned(out, bg_esc, SgrKind::Fg);
         }
         out.push(cell.ch);
         out.push_str(fg_esc);
@@ -322,22 +349,95 @@ fn color_dist(a: Rgb, b: Rgb) -> u32 {
     d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)
 }
 
-/// Parse the color of a `38;2;r;g;b` / `48;2;r;g;b` escape. Returns
-/// `None` for every other color form.
-fn parse_truecolor(esc: &str) -> Option<Rgb> {
+/// Color-escape encoding, for emitting swaps / nudges in the same
+/// palette the line uses.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum EscapeKind {
+    TrueColor,
+    Ansi256,
+    Ansi16,
+}
+
+/// Classify a fg/bg color escape's encoding by its leading parameter.
+/// Only called on escapes [`parse_color`] accepted.
+fn escape_kind(esc: &str) -> EscapeKind {
+    let lead = lead_param(esc);
+    match lead {
+        38 | 48 => {
+            if esc.contains(";5;") {
+                EscapeKind::Ansi256
+            } else {
+                EscapeKind::TrueColor
+            }
+        }
+        _ => EscapeKind::Ansi16,
+    }
+}
+
+fn lead_param(esc: &str) -> u32 {
+    esc.trim_start_matches("\x1b[")
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0u32, |acc, b| acc * 10 + (b - b'0') as u32)
+}
+
+/// Append `esc` converted to the other plane (fg color emitted as a
+/// bg escape or vice versa), preserving its encoding: `38;…` ↔ `48;…`
+/// for truecolor / 256, `3x` ↔ `4x` and `9x` ↔ `10x` for the base 16.
+fn push_replaned(out: &mut String, esc: &str, to: SgrKind) {
+    let body = esc
+        .trim_start_matches("\x1b[")
+        .trim_end_matches('m')
+        .to_string();
+    let lead = lead_param(esc);
+    let rest = body.split_once(';').map(|(_, r)| r);
+    let new_lead = match (lead, to) {
+        (38, SgrKind::Bg) => 48,
+        (48, SgrKind::Fg) => 38,
+        (30..=37, SgrKind::Bg) => lead + 10,
+        (40..=47, SgrKind::Fg) => lead - 10,
+        (90..=97, SgrKind::Bg) => lead + 10,
+        (100..=107, SgrKind::Fg) => lead - 10,
+        _ => lead, // already on the requested plane
+    };
+    match rest {
+        Some(rest) => {
+            out.push_str(&format!("\x1b[{new_lead};{rest}m"));
+        }
+        None => {
+            out.push_str(&format!("\x1b[{new_lead}m"));
+        }
+    }
+}
+
+/// Parse the nominal RGB of a fg/bg color escape: truecolor
+/// (`38;2;r;g;b`), 256-palette (`38;5;n` via the xterm palette), and
+/// base-16 (`30..=37` / `90..=97` and bg counterparts, via the
+/// nominal xterm table). Returns `None` for malformed escapes.
+fn parse_color(esc: &str) -> Option<Rgb> {
     let body = esc.strip_prefix("\x1b[")?.strip_suffix('m')?;
     let mut parts = body.split(';');
-    let lead = parts.next()?;
-    if lead != "38" && lead != "48" {
-        return None;
+    let lead: u32 = parts.next()?.parse().ok()?;
+    match lead {
+        38 | 48 => match parts.next()? {
+            "2" => {
+                let r: u8 = parts.next()?.parse().ok()?;
+                let g: u8 = parts.next()?.parse().ok()?;
+                let b: u8 = parts.next()?.parse().ok()?;
+                Some((r, g, b))
+            }
+            "5" => {
+                let idx: u8 = parts.next()?.parse().ok()?;
+                Some(sgr::ansi256_to_rgb(idx))
+            }
+            _ => None,
+        },
+        30..=37 => Some(sgr::ansi16_to_rgb((lead - 30) as u8)),
+        90..=97 => Some(sgr::ansi16_to_rgb((lead - 90 + 8) as u8)),
+        40..=47 => Some(sgr::ansi16_to_rgb((lead - 40) as u8)),
+        100..=107 => Some(sgr::ansi16_to_rgb((lead - 100 + 8) as u8)),
+        _ => None,
     }
-    if parts.next()? != "2" {
-        return None;
-    }
-    let r: u8 = parts.next()?.parse().ok()?;
-    let g: u8 = parts.next()?.parse().ok()?;
-    let b: u8 = parts.next()?.parse().ok()?;
-    Some((r, g, b))
 }
 
 #[cfg(test)]
@@ -374,14 +474,17 @@ mod tests {
             top,
             width,
             height,
-            ink: None,
+            ink: (0, 0, 0),
         }
     }
 
-    /// Letter cell without an ink color, for splice tests where only
-    /// geometry matters.
+    /// Black-ink cell, for splice tests where only geometry matters.
     fn cell(col: u32, ch: char) -> OverlayCell {
-        OverlayCell { col, ch, ink: None }
+        OverlayCell {
+            col,
+            ch,
+            ink: (0, 0, 0),
+        }
     }
 
     fn row_string(cells: &OverlayCells, row: u32, width: usize) -> String {
@@ -527,10 +630,62 @@ mod tests {
     }
 
     #[test]
-    fn splice_space_never_color_nudged() {
+    fn splice_space_untouched_on_paper_oriented_cell() {
+        // Bg already the paper side (white, ink black) — a space needs
+        // no escape at all, and never a contrast nudge.
         let line = "\x1b[38;2;250;250;250m\x1b[48;2;255;255;255mAB";
         let out = splice(line, &[cell(0, ' ')]);
         assert_eq!(out, "\x1b[38;2;250;250;250m\x1b[48;2;255;255;255m B");
+    }
+
+    #[test]
+    fn splice_space_orients_bg_to_paper_side() {
+        // Inverted cell (white fg, near-black bg, ink black): only the
+        // bg shows under a space, so it takes the cell's paper color —
+        // the fg re-planed to a bg escape — and is restored after.
+        let line = "\x1b[38;2;255;255;255m\x1b[48;2;10;10;10mAB";
+        let out = splice(line, &[cell(0, ' ')]);
+        assert_eq!(
+            out,
+            "\x1b[38;2;255;255;255m\x1b[48;2;10;10;10m\
+             \x1b[48;2;255;255;255m \x1b[48;2;10;10;10mB"
+        );
+    }
+
+    #[test]
+    fn splice_swaps_in_ansi256_palette() {
+        // 256-mode cell: white fg (231) on black bg (16), black ink →
+        // swap, emitted by re-planing the cell's own `;5;` escapes so
+        // the stream stays in the 256 palette.
+        let line = "\x1b[38;5;231m\x1b[48;5;16mAB";
+        let out = splice(line, &[cell(0, 'x')]);
+        assert_eq!(
+            out,
+            "\x1b[38;5;231m\x1b[48;5;16m\
+             \x1b[48;5;231m\x1b[38;5;16mx\
+             \x1b[38;5;231m\x1b[48;5;16mB"
+        );
+    }
+
+    #[test]
+    fn splice_swaps_in_ansi16_palette() {
+        // 16-color cell: bright-white fg (97) on black bg (40), black
+        // ink → swap via the `9x` → `10x` / `4x` → `3x` plane shift.
+        let line = "\x1b[97m\x1b[40mAB";
+        let out = splice(line, &[cell(0, 'x')]);
+        assert_eq!(out, "\x1b[97m\x1b[40m\x1b[107m\x1b[30mx\x1b[97m\x1b[40mB");
+    }
+
+    #[test]
+    fn splice_nudges_in_ansi256_palette() {
+        // 256-mode near-white-on-white cell: nudge emits the palette's
+        // black (16), not a truecolor escape.
+        let line = "\x1b[38;5;255m\x1b[48;5;231mAB";
+        let out = splice(line, &[cell(0, 'x')]);
+        assert_eq!(
+            out,
+            "\x1b[38;5;255m\x1b[48;5;231m\x1b[38;5;16mx\x1b[38;5;255mB"
+        );
     }
 
     #[test]
@@ -542,7 +697,7 @@ mod tests {
         let ink = OverlayCell {
             col: 0,
             ch: 'x',
-            ink: Some((0, 0, 0)),
+            ink: (0, 0, 0),
         };
         let out = splice(line, &[ink]);
         assert_eq!(
@@ -561,7 +716,7 @@ mod tests {
         let ink = OverlayCell {
             col: 0,
             ch: 'x',
-            ink: Some((0, 0, 0)),
+            ink: (0, 0, 0),
         };
         let out = splice(line, &[ink]);
         assert_eq!(out, "\x1b[38;2;10;10;10m\x1b[48;2;255;255;255mxB");
@@ -577,7 +732,7 @@ mod tests {
         let ink = OverlayCell {
             col: 0,
             ch: 'x',
-            ink: Some((255, 255, 255)),
+            ink: (255, 255, 255),
         };
         let out = splice(line, &[ink]);
         assert_eq!(
