@@ -188,6 +188,7 @@ impl Doc {
             right: f32,
             bottom: f32,
             top: f32,
+            ink: Option<(u8, u8, u8)>,
         }
         let mut words: Vec<WordBox> = Vec::new();
         let mut cur: Option<Accum> = None;
@@ -202,6 +203,7 @@ impl Doc {
                     top: page_h - a.top,
                     width: a.right - a.left,
                     height: a.top - a.bottom,
+                    ink: a.ink,
                 });
             }
         };
@@ -258,12 +260,21 @@ impl Doc {
                     a.top = a.top.max(t);
                 }
                 None => {
+                    // Word font color from the first char's fill color
+                    // (stroke color for outline-rendered text) — guides
+                    // the overlay's fg/bg orientation per cell.
+                    let ink = ch
+                        .fill_color()
+                        .or_else(|_| ch.stroke_color())
+                        .ok()
+                        .map(|c| (c.red(), c.green(), c.blue()));
                     cur = Some(Accum {
                         text: c.to_string(),
                         left: l,
                         right: r,
                         bottom: bo,
                         top: t,
+                        ink,
                     });
                 }
             }

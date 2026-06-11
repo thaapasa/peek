@@ -365,8 +365,11 @@ yet supported — see [planned.md](planned.md).)
   text layer is extracted as positioned words (per-char loose bounds via Pdfium, grouped into
   words, baseline-snapped per line) and projected through the same page-pt → source-px →
   effective-cell mapping the rasteriser uses; each word's characters overwrite the rendered
-  glyph cells in its box, keeping the cells' SGR colors (with a contrast nudge when fg ≈ bg so
-  letters don't vanish on blank paper). Words under ~0.55 cell rows are skipped (text lines
+  glyph cells in its box, keeping the cells' SGR colors. The pair is oriented per cell: the
+  half-block renderer assigns a cell's two pixel colors to fg/bg by position, so the letter
+  paints in whichever lies nearer the word's font color (per-char fill color from Pdfium),
+  with a black/white contrast nudge when the pair is too close to read (blank paper). Words
+  under ~0.55 cell rows are skipped (text lines
   would collide); words whose box exceeds 3× their char count keep the surrounding glyphs and
   blank only one delimiter cell per side (overzoom). Single-slot per-page word cache beside
   the bitmap cache; the toggle + `text` status segment live in `PagedImageMode`, gated by
