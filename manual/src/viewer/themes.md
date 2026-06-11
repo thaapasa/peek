@@ -25,7 +25,7 @@ whole UI in the new theme — syntax-highlighted code, info screens, help, gradi
 everything.
 
 The About screen (`a`) doubles as a theme showcase: cycling themes while on About previews how
-each one paints the full palette.
+each one paints the full palette. The animated logo can be paused / resumed with `Space`.
 
 ## How it works
 

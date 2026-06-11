@@ -1300,6 +1300,8 @@ opposite directions from the left corner, meeting at the far edge (white on dark
 on light). Both painters share one glyph-walking loop (`output::paint_logo_with`); only the
 per-glyph color closure differs. In plain mode (`--color plain` or cycling with `c`) the
 animation is off — About paints the static logo and stops ticking until color comes back.
+`Space` (`Action::PlayPause`, same key the image animation modes use) pauses / resumes the
+animation, freezing it on the current frame; while paused the tick scheduling stops entirely.
 
 ### Extraction ✅
 

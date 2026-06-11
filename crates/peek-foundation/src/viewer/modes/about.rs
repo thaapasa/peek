@@ -3,11 +3,11 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::terminal;
 
-use super::{Mode, ModeId, RenderCtx, Window, slice_window};
+use super::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::{DESCRIPTION, paint_logo};
 use crate::theme::PeekTheme;
 use crate::viewer::logo_anim::LogoAnimation;
-use crate::viewer::ui::HelpEntry;
+use crate::viewer::ui::{Action, HelpEntry};
 
 // Version / authors / license / repository inherit from the workspace
 // `[workspace.package]`, so this crate's values match the bin's. The
@@ -27,6 +27,10 @@ pub struct AboutMode {
     /// logo instead and the tick scheduling shuts off. Re-arms when the
     /// user cycles back to a styled mode.
     animate: bool,
+    /// User-requested pause (Space). Orthogonal to `animate`: that one
+    /// tracks whether the style mode *can* animate, this one whether the
+    /// user *wants* it to. The animation freezes on its current frame.
+    paused: bool,
 }
 
 impl Default for AboutMode {
@@ -40,6 +44,7 @@ impl AboutMode {
         Self {
             logo_anim: LogoAnimation::new(),
             animate: true,
+            paused: false,
         }
     }
 }
@@ -123,6 +128,7 @@ impl Mode for AboutMode {
             "Cycle themes (compare them on this screen)",
         ));
         lines.push(tip_line(pt, "c", "Cycle output color encoding"));
+        lines.push(tip_line(pt, "Space", "Pause / resume the logo animation"));
         lines.push(tip_line(pt, "h / ?", "Full keybinding reference"));
         lines.push(tip_line(pt, "a / Tab", "Exit this screen"));
 
@@ -132,13 +138,21 @@ impl Mode for AboutMode {
     }
 
     fn extra_actions(&self) -> &'static [HelpEntry] {
-        // SwitchToAbout is global; no extras here. Listed for symmetry
-        // with HexMode/InfoMode.
-        &[]
+        &[(&[Action::PlayPause], "Pause / resume logo animation")]
+    }
+
+    fn handle(&mut self, action: Action) -> Handled {
+        match action {
+            Action::PlayPause => {
+                self.paused = !self.paused;
+                Handled::Yes
+            }
+            _ => Handled::No,
+        }
     }
 
     fn next_tick(&self) -> Option<Duration> {
-        if self.animate {
+        if self.animate && !self.paused {
             self.logo_anim.next_tick()
         } else {
             None
@@ -146,7 +160,7 @@ impl Mode for AboutMode {
     }
 
     fn tick(&mut self) -> bool {
-        self.animate && self.logo_anim.tick()
+        self.animate && !self.paused && self.logo_anim.tick()
     }
 }
 
