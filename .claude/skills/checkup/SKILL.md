@@ -33,6 +33,13 @@ against it, and judge the design itself against reality:
 - `docs/conventions.md` — coding rules and patterns
 - `CLAUDE.md` — file map and the three north stars (clean architecture,
   stream don't load, low cognitive load)
+- `docs/checkup-findings.md` — open findings and **wontfix records** from
+  prior rounds. Do not re-report anything recorded there: open items are
+  already known, wontfix records are settled decisions. The records are
+  not immunity, though — if the cited situation has changed (the code
+  moved, the declining rationale no longer holds, a stated reopen trigger
+  fired), it is your responsibility to revalidate and surface it as a
+  *new* finding that says explicitly what changed since the record.
 - `git log --oneline -30` — recent direction; what's been churning
 
 The three north stars are the lens. But also question them: a north

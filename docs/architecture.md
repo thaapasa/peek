@@ -214,6 +214,16 @@ raw).
 recursive peek — what the extract key saves and what Enter descends into. The session side
 (resolution order, frame stack) is under "Session stack / recursive peek" below.
 
+Two deliberate asymmetries in the trait surface, examined and kept (checkup M18 / L4):
+`render_window`'s `scroll` is dead for `owns_scroll() = true` modes — they keep their own position
+(byte offset, wrap-aware line, page index) and ignore the caller's. A `ScrolledMode` /
+`OwnsScrollMode` trait split would drop the dead parameter but bifurcate the mode vocabulary and
+`ViewerState`'s dispatch — too much surface for one ignored argument, with most data modes owning
+scroll anyway. Likewise `status_hints(has_return_target)` is read only by `HexMode`: the parameter
+stays because it is the only channel for session context to reach a foundation-crate mode — the
+Cargo layering bars modes from calling back into the bin's `ViewerState`, and a mode-side setter
+would mean hand-synced state at every mode switch.
+
 A `Mode` is one renderable + interactive view of a file. The interactive viewer drives a
 `Vec<Box<dyn Mode>>`: Tab cycles modes (with `i`/`h`/`x` shortcuts to Info/Help/Hex). Today's modes:
 
@@ -313,6 +323,15 @@ Factory built once from CLI args. Holds the shared `ThemeManager` plus the resol
 `plain_mode` flags consumed during composition. Provides `compose_modes(source, detected, args)`,
 the single dispatcher that produces the mode stack consumed by both the interactive event loop and
 the pipe path.
+
+`--plain` is deliberately more than `--color plain` (checkup M12, merge declined). `StyleMode::Plain`
+only drops ANSI escapes at the encoder; `plain_mode` additionally suppresses structured
+pretty-print, skips the syntect pipeline entirely (`syntax_token = None`), and disables the
+rendered views for SVG / HTML / Markdown. A user asking for sterile *colors* still expects
+pretty-print and rendered views to work, so the two flags must not be conflated. Known wart:
+`main.rs` mutates `args.color` to `Plain` when `--plain` is set — correct but hides the user's
+actual `--color` choice; compute an `effective_color` at theme construction instead next time the
+argument plumbing is touched.
 
 ### HexMode (`viewer/modes/hex.rs`)
 
@@ -620,6 +639,25 @@ wiring-sites checklist. Quick summary:
 So a new type is: a peek-detect entry, a peek-types module, and up to three one-line dispatch arms
 in the bin (compose / gather / extract).
 See [conventions.md → File types](conventions.md#file-types).
+
+### Why the dispatch arms stay explicit (no `FileTypeRegistry`)
+
+A `trait FileTypeRegistry` wiring all the per-type dispatch sites at one place was considered and
+declined after the 6th file type proved the cost was acceptable (checkup M6):
+
+- **Detection can't join.** `detect.rs` *produces* the `FileType` from magic / extension / content
+  sniff — there is no `FileType` value to dispatch on yet, so a `FileType → impl` registry can
+  never absorb all the wiring sites.
+- **Format sub-enums break a 1:1 type→impl map.** `Archive(fmt)`, `Document(fmt)`, `Audio(fmt)`,
+  `Cert(fmt)` dispatch on the inner format too; a uniform per-type trait fits them awkwardly.
+- **The explicit `match` is compiler-enforced completeness.** A missing compose / extract / gather
+  arm is a compile error; a registry trait with defaulted methods would silently no-op instead.
+  `compose_modes` also keeps the whole dispatch table readable in one file, where a wide trait with
+  no-op defaults trades that map for scattered impls and click-through.
+
+Touching ~6 sites per new type is mechanical and compiler-guided — low cognitive load. Revisit only
+if a dispatcher can someday silently fall through and ship a bug; today a missing `mime` / info
+arm degrades visibly (a `?` mime, an absent Info section), never silently.
 
 Example — PDF (`crates/peek-types/src/types/pdf/compose.rs`):
 
