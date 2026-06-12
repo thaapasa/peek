@@ -92,20 +92,6 @@ at theme construction without mutating args. Tiny win, not worth a
 commit on its own; fold in next time `main.rs` argument plumbing gets
 touched.
 
-### M10. `ContentMode` is 736 lines, near the conventions refactor signal
-
-`crates/peek-foundation/src/viewer/modes/content.rs` already shed
-`content_rendering`, `content_pipe`, `content_tests`, `pretty_view`,
-`gutter`, `wrap_scroll`. What's left is five concerns: window prepare
-(raw catch-up + pretty cache refresh, `prepare_window`), visual-row emission
-with overlay/wrap (`emit_window`, `emit_visual_rows`, `usable_width`), search
-wiring, `Mode` impl, keyboard/state plumbing. The window-prepare + emit pair
-is its own concern — a `WindowRenderer` taking `(rendering, line_source,
-highlighter, gutter, wrap, search)` borrows would let `ContentMode`'s impl fit
-on screen. (The old "`clamp_top` called twice per render" note no longer
-holds — a plain `render_window` pass clamps once, at the end; the second clamp
-only happens on a scroll/search action that itself re-clamps before rendering.)
-
 ### M13. `gather_capped_text` reads the file twice
 
 `crates/peek-types/src/types/text/info_gather.rs:45-53`:
@@ -238,8 +224,8 @@ good; needs one more application.
 `document.xml`"), but the shared `read_zip_entry` gate now also bounds
 CBZ page and EPUB image reads
 (`crates/peek-types/src/types/comic/cbz/package.rs:67`,
-`crates/peek-types/src/types/ebook/epub/read_mode.rs:562`). A legitimate
->16 MB archival scan refuses to render inside the container while the
+`crates/peek-types/src/types/ebook/epub/read_mode.rs:562`). A legitimate >16 MB
+archival scan refuses to render inside the container while the
 identical file opened standalone renders fine (the image type reads
 `read_bytes()` uncapped). Not a defect — the safety rationale
 (alloc-abort is uncatchable, unlike a render `Err`) holds for images

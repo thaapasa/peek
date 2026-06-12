@@ -25,6 +25,7 @@ mod about;
 mod content;
 mod content_pipe;
 mod content_rendering;
+mod content_window;
 mod gutter;
 mod help;
 mod hex;
