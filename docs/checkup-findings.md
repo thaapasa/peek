@@ -150,22 +150,6 @@ clean channel for session context to reach hint rendering; most modes
 never override `status_hints` at all, so the cost is one `_`-prefixed
 name in the trait default.
 
-### L7. `viewer/paged.rs` at 735 lines mixes four concerns
-
-`crates/peek-foundation/src/viewer/paged.rs` holds `PageCacheKey` (44),
-`CachedRender` (67), `render_cached` (114), `step_paged` (139),
-`cycle_image_config` (159), the `PageRenderer` trait (286), the
-`PagedImageMode<R>` impl (352-553), plus the in-file `#[cfg(test)] mod tests`
-(554-735). Past the conventions ~400-line refactor signal
-(`docs/conventions.md`) for mixed-concern files. The multi-page CBZ
-regression tests want to live next to the real renderer rather than the
-generic shell.
-
-Direction: lift `PagedImageMode<R>` + its tests into `viewer/paged/mode.rs`;
-keep `paged/mod.rs` as primitives (`PageCacheKey`, `render_cached`,
-`step_paged`, `pipe_walk_pages`, `cycle_image_config`, help constants,
-`PageRenderer` trait).
-
 ### L9. `Action::ZoomPreset(n)` help/handler pin test missing
 
 `crates/peek-foundation/src/viewer/paged.rs:593` has
