@@ -131,15 +131,24 @@ another `_scroll` underscore.
 
 ## Low
 
-### L4. `Mode::status_hints(has_return_target)` parameter only read by `HexMode`
+### L4. `Mode::status_hints(has_return_target)` parameter only read by `HexMode` — wontfix, kept as analysis record
 
 Trait sig + default at `crates/peek-foundation/src/viewer/modes/mod.rs:300`
-(default ignores `_has_return_target`). Only reader: `modes/hex.rs:164`
-(returns `x:exit hex`); every other impl ignores it (e.g. `paged.rs:542`,
-`ebook/epub/read_mode.rs:295`). Caller threads the bool at
-`src/viewer_session/state.rs:120-123`. Move the bool method-side:
-`ViewerState::has_return_target_for(mode_id)` and let HexMode call it,
-dropping the parameter from the trait. Minor surface-area reduction.
+(default ignores `_has_return_target`). Only reader: HexMode
+(returns `x:exit hex`); every other impl ignores it. Caller threads the
+bool at `src/viewer_session/state.rs:121-125`.
+
+**Remedy declined: the proposed fix can't compile.** `HexMode` lives in
+`peek-foundation`, `ViewerState` in the bin — the Cargo layering bars a
+mode from calling back into the session layer, so
+`ViewerState::has_return_target_for(mode_id)` is unreachable from the
+impl that needs it. The alternatives are all worse than one defaulted
+parameter: a `set_return_target` setter on the mode means hand-synced
+state at every mode switch; appending the hint session-side means the
+session layer carrying hex-specific knowledge. The parameter *is* the
+clean channel for session context to reach hint rendering; most modes
+never override `status_hints` at all, so the cost is one `_`-prefixed
+name in the trait default.
 
 ### L7. `viewer/paged.rs` at 735 lines mixes four concerns
 
