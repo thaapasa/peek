@@ -41,24 +41,40 @@ pub fn compute_grid(
     fit: FitMode,
 ) -> (u32, u32) {
     let aspect = term.cell_h_over_w.max(0.1);
-    let (cols, rows) = if forced_width > 0 {
-        let rows = (img_h as f64 * forced_width as f64 / (img_w as f64 * aspect)) as u32;
-        (forced_width, rows.max(1))
-    } else {
-        match fit {
-            FitMode::Contain => contain_grid(img_w, img_h, term, aspect),
-            FitMode::FitWidth => {
-                let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
-                (term.cols.max(1), rows.max(1))
-            }
-            FitMode::FitHeight => {
-                let cols = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
-                (cols.max(1), term.rows.max(1))
-            }
+    if forced_width > 0 {
+        // `--width` is the user's own axis — honor it past the fit cap
+        // instead of folding it into `clamp_grid`, which would quietly
+        // shrink an explicit `--width 2000` to 1024. Only the *derived*
+        // rows axis is file-controlled (aspect-ratio metadata), so only
+        // it gets the [`MAX_FIT_CELLS`] defence; an extreme aspect
+        // squashes rather than overriding the requested width. The
+        // width itself is capped at [`MAX_FORCED_WIDTH_CELLS`] only as
+        // a typo / OOM guard.
+        let cols = forced_width.min(MAX_FORCED_WIDTH_CELLS);
+        let rows = (img_h as f64 * cols as f64 / (img_w as f64 * aspect)) as u32;
+        return (cols, rows.clamp(1, MAX_FIT_CELLS));
+    }
+    let (cols, rows) = match fit {
+        FitMode::Contain => contain_grid(img_w, img_h, term, aspect),
+        FitMode::FitWidth => {
+            let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
+            (term.cols.max(1), rows.max(1))
+        }
+        FitMode::FitHeight => {
+            let cols = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
+            (cols.max(1), term.rows.max(1))
         }
     };
     clamp_grid(cols, rows)
 }
+
+/// Sanity ceiling on an explicit `--width`, in cells. Far above any real
+/// terminal or pipe consumer, low enough that the downstream pixel
+/// buffers (`cells × CELL_W/H × 4` bytes) and the cell→pixel arithmetic
+/// stay in range when a typo'd width meets a tall image. Distinct from
+/// [`MAX_FIT_CELLS`], which defends the file-controlled derived axis —
+/// the user's explicit axis is honored well past the fit cap.
+const MAX_FORCED_WIDTH_CELLS: u32 = 2048;
 
 /// Ceiling on a grid axis, in cells. `FitWidth` / `FitHeight` /
 /// `--width` derive one axis from the image's aspect ratio — metadata
@@ -66,7 +82,8 @@ pub fn compute_grid(
 /// grid (`cells × CELL_W/H × 4` bytes), so an extreme aspect would
 /// otherwise size them into gigabytes. 1024 cells is ~10 terminal
 /// heights of scroll; the worst buffer stays ~150 MB at a 300-col
-/// terminal.
+/// terminal. An explicit `--width` is *not* subject to this cap (see
+/// `compute_grid`'s forced path) — only its derived rows axis is.
 const MAX_FIT_CELLS: u32 = 1024;
 
 /// Clamp a grid into the [`MAX_FIT_CELLS`] box, preserving the cell
@@ -828,9 +845,26 @@ mod tests {
         let (cols, rows) = compute_grid(10_000_000, 1, term, 0, FitMode::FitHeight);
         assert!(cols <= MAX_FIT_CELLS, "cols {cols}");
         assert!(rows >= 1, "rows {rows}");
-        // --width is clamped too.
-        let (_, rows) = compute_grid(1, 10_000_000, term, 80, FitMode::Contain);
+        // --width: the derived rows axis is clamped, the explicit width
+        // is honored as given (the file's aspect can't shrink it).
+        let (cols, rows) = compute_grid(1, 10_000_000, term, 80, FitMode::Contain);
+        assert_eq!(cols, 80, "explicit width survives an extreme aspect");
         assert!(rows <= MAX_FIT_CELLS, "forced-width rows {rows}");
+    }
+
+    /// An explicit `--width` above [`MAX_FIT_CELLS`] must be honored,
+    /// not silently folded into the fit clamp — `--width 2000` emits
+    /// 2000 columns. Only the typo-guard ceiling bounds it.
+    #[test]
+    fn forced_width_is_honored_past_the_fit_cap() {
+        let term = cell_size::term_size(120, 40);
+        // Wide image so derived rows stay small: width is the user's call.
+        let (cols, rows) = compute_grid(4000, 100, term, 2000, FitMode::Contain);
+        assert_eq!(cols, 2000);
+        assert!((1..=MAX_FIT_CELLS).contains(&rows), "rows {rows}");
+        // The sanity ceiling still applies.
+        let (cols, _) = compute_grid(4000, 100, term, 1_000_000, FitMode::Contain);
+        assert_eq!(cols, MAX_FORCED_WIDTH_CELLS);
     }
 
     #[test]

@@ -41,7 +41,8 @@ use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{
-    MAX_MATCHES, SearchTarget, find_matches, overlay_matches, smart_case_sensitive,
+    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, SearchTarget, find_matches, overlay_matches,
+    smart_case_sensitive,
 };
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
@@ -97,6 +98,9 @@ pub struct RowsTableMode {
     label: &'static str,
     /// Active cell-scoped search, or `None`. Cleared by `Back` / empty query.
     search: Option<CellSearch>,
+    /// Warnings produced by recent operations (a truncated search scan),
+    /// drained by `take_warnings` into `FileInfo.warnings`.
+    pending_warnings: Vec<String>,
 }
 
 /// Match-position cache for an active cell-scoped search. Each
@@ -109,6 +113,10 @@ struct CellSearch {
     matches: Vec<CellMatch>,
     /// Active-match index into `matches`. Unused when `matches` is empty.
     cursor: usize,
+    /// The scan stopped early — [`MAX_MATCHES`] or the byte budget hit.
+    /// Matches past the stop point are unknown; the status segment marks
+    /// the counts as partial.
+    truncated: bool,
 }
 
 #[derive(Clone)]
@@ -161,6 +169,7 @@ impl RowsTableMode {
             cached_rows: 0,
             label,
             search: None,
+            pending_warnings: Vec::new(),
         }
     }
 
@@ -276,41 +285,60 @@ impl RowsTableMode {
         (ranges, current)
     }
 
-    /// Build a [`CellSearch`] spanning the whole file. `ensure_all`
-    /// makes the total definite; then each record is pulled into the
-    /// source's sliding window via `ensure_row` just before it's read,
-    /// so the scan stays exhaustive without ever holding more than one
-    /// window in memory — the window slides forward as the scan walks.
-    fn build_search(&mut self, query: &str) -> CellSearch {
-        let _ = self.source.ensure_all();
+    /// Build a [`CellSearch`] over up to `max_bytes` of cell text. Each
+    /// record is pulled into the source's sliding window via
+    /// `ensure_row` just before it's read, so the scan walks the file
+    /// without ever holding more than one window in memory. The walk is
+    /// budgeted like every streaming scan ([`SEARCH_SCAN_MAX_BYTES`] /
+    /// [`MAX_MATCHES`]) — an unindexed multi-GB CSV would otherwise
+    /// freeze the UI for a full file read on every zero-hit query.
+    /// Stopping early marks the search truncated so the status segment
+    /// reports the counts as partial.
+    fn build_search_capped(&mut self, query: &str, max_bytes: u64) -> CellSearch {
         let sensitive = smart_case_sensitive(query);
         let mut matches: Vec<CellMatch> = Vec::new();
         let cols = self.widths.len();
-        let loaded = self.source.loaded();
-        'records: for record_idx in 0..loaded {
-            let _ = self.source.ensure_row(record_idx);
-            if self.source.row_is_malformed(record_idx) {
-                continue;
-            }
-            let Some(cells) = self.source.row(record_idx) else {
-                continue;
+        let mut truncated = false;
+        let mut scanned: u64 = 0;
+        let mut record_idx = 0usize;
+        'records: loop {
+            let Ok(bound) = self.source.ensure_row(record_idx) else {
+                break;
             };
-            for (col_idx, cell) in cells.iter().enumerate().take(cols) {
-                let raw = cell.as_deref().unwrap_or("");
-                let display = display_cell(raw);
-                for r in find_matches(&display, query, sensitive) {
-                    matches.push(CellMatch {
-                        record_idx,
-                        col_idx,
-                        range: r,
-                    });
-                    if matches.len() >= MAX_MATCHES {
-                        break 'records;
+            if record_idx >= bound {
+                break;
+            }
+            if scanned >= max_bytes {
+                truncated = true;
+                break;
+            }
+            if !self.source.row_is_malformed(record_idx)
+                && let Some(cells) = self.source.row(record_idx)
+            {
+                for (col_idx, cell) in cells.iter().enumerate().take(cols) {
+                    let raw = cell.as_deref().unwrap_or("");
+                    let display = display_cell(raw);
+                    scanned += display.len() as u64;
+                    for r in find_matches(&display, query, sensitive) {
+                        matches.push(CellMatch {
+                            record_idx,
+                            col_idx,
+                            range: r,
+                        });
+                        if matches.len() >= MAX_MATCHES {
+                            truncated = true;
+                            break 'records;
+                        }
                     }
                 }
             }
+            record_idx += 1;
         }
-        CellSearch { matches, cursor: 0 }
+        CellSearch {
+            matches,
+            cursor: 0,
+            truncated,
+        }
     }
 
     /// Step the search cursor by `delta`, wrapping at both ends, and
@@ -862,12 +890,20 @@ impl Mode for RowsTableMode {
         if !self.has_header {
             segs.push(("Header off".to_string(), theme.label));
         }
-        // Search position, shown only while a search is active.
+        // Search position, shown only while a search is active. A
+        // truncated scan marks the counts as lower bounds (`3/40+`,
+        // `no match (partial scan)`) so they never claim full-file
+        // coverage they don't have.
         if let Some(s) = &self.search {
             let label = if s.matches.is_empty() {
-                "no match".to_string()
+                if s.truncated {
+                    "no match (partial scan)".to_string()
+                } else {
+                    "no match".to_string()
+                }
             } else {
-                format!("{}/{}", s.cursor + 1, s.matches.len())
+                let plus = if s.truncated { "+" } else { "" };
+                format!("{}/{}{plus}", s.cursor + 1, s.matches.len())
             };
             segs.push((label, theme.label));
         }
@@ -882,10 +918,22 @@ impl Mode for RowsTableMode {
                 return SearchTarget::Owned;
             }
         };
-        let search = self.build_search(query);
+        let search = self.build_search_capped(query, SEARCH_SCAN_MAX_BYTES);
+        if search.truncated {
+            // Identical text per push — the session layer dedupes, so
+            // repeated truncated queries warn once.
+            self.pending_warnings.push(format!(
+                "search covers only the first {} MB of cell text",
+                SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
+            ));
+        }
         self.search = Some(search);
         self.scroll_to_current_match();
         SearchTarget::Owned
+    }
+
+    fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.pending_warnings)
     }
 }
 
@@ -1341,6 +1389,115 @@ mod tests {
         assert_eq!(s.matches.len(), 1);
         // It's in column 3 (description), not the title / author columns.
         assert_eq!(s.matches[0].col_idx, 3);
+    }
+
+    /// Lazily-loading [`RowSource`] for the search-walk tests: rows
+    /// materialise only as `ensure_row` asks for them, like the CSV
+    /// sliding window. Pins that the search walk drives the source
+    /// forward itself instead of relying on a prior `ensure_all`.
+    struct LazyRows {
+        rows: Vec<Vec<Option<String>>>,
+        loaded: usize,
+    }
+
+    impl RowSource for LazyRows {
+        fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+            self.loaded = self.loaded.max((idx + 1).min(self.rows.len()));
+            Ok(self.loaded)
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            self.loaded = self.rows.len();
+            Ok(())
+        }
+        fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+            (idx < self.loaded).then(|| self.rows[idx].as_slice())
+        }
+        fn loaded(&self) -> usize {
+            self.loaded
+        }
+        fn total(&self) -> Option<usize> {
+            None
+        }
+        fn column_count(&self) -> usize {
+            1
+        }
+    }
+
+    fn lazy_mode(cells: &[&str]) -> RowsTableMode {
+        let rows = cells.iter().map(|c| vec![Some(c.to_string())]).collect();
+        RowsTableMode::new(
+            Box::new(LazyRows { rows, loaded: 1 }),
+            vec![Alignment::Left],
+            false,
+            "Table",
+        )
+    }
+
+    /// The search walk must pull records past the initially-loaded seed
+    /// all the way to EOF (when within budget) — a match in the last,
+    /// not-yet-materialised record is still found.
+    #[test]
+    fn search_walks_lazy_source_to_end_within_budget() {
+        let mut mode = lazy_mode(&["alpha", "beta", "needle"]);
+        assert_eq!(mode.source.loaded(), 1, "only the seed row loaded");
+        mode.set_search(Some("needle"));
+        let s = mode.search.as_ref().unwrap();
+        assert_eq!(s.matches.len(), 1);
+        assert_eq!(s.matches[0].record_idx, 2);
+        assert!(!s.truncated);
+    }
+
+    /// The record walk stops at the byte budget instead of reading the
+    /// whole source — the M17 freeze for tables. Matches past the stop
+    /// point are unknown, so the result is marked truncated.
+    #[test]
+    fn search_record_walk_stops_at_byte_budget() {
+        let cells: Vec<String> = (0..100).map(|i| format!("hit {i:04}")).collect();
+        let refs: Vec<&str> = cells.iter().map(String::as_str).collect();
+        let mut mode = lazy_mode(&refs);
+
+        // 8-byte cells; a 30-byte budget admits only a few records.
+        let s = mode.build_search_capped("hit", 30);
+        assert!(s.truncated);
+        let n = s.matches.len();
+        assert!(
+            (1..100).contains(&n),
+            "should find some but not all matches, got {n}"
+        );
+
+        // Unbounded budget: complete and not truncated.
+        let s = mode.build_search_capped("hit", u64::MAX);
+        assert!(!s.truncated);
+        assert_eq!(s.matches.len(), 100);
+    }
+
+    /// Truncated counts must read as lower bounds in the status bar.
+    #[test]
+    fn search_status_marks_truncated_counts_partial() {
+        let cells: Vec<String> = (0..50).map(|i| format!("hit {i:04}")).collect();
+        let refs: Vec<&str> = cells.iter().map(String::as_str).collect();
+        let mut mode = lazy_mode(&refs);
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+
+        let s = mode.build_search_capped("hit", 30);
+        assert!(s.truncated);
+        mode.search = Some(s);
+        let segs = mode.status_segments(&theme);
+        assert!(
+            segs.iter()
+                .any(|(t, _)| t.starts_with("1/") && t.ends_with('+')),
+            "truncated count must end with '+': {segs:?}"
+        );
+
+        let s = mode.build_search_capped("zzz", 30);
+        assert!(s.truncated);
+        mode.search = Some(s);
+        let segs = mode.status_segments(&theme);
+        assert!(
+            segs.iter().any(|(t, _)| t == "no match (partial scan)"),
+            "zero-hit truncated scan must say partial: {segs:?}"
+        );
     }
 
     /// A table wider than the viewport must not emit a line wider than

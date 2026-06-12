@@ -65,7 +65,9 @@ overrides — covers misnamed files.
 ## Encoding
 
 UTF-8 is native. UTF-16 LE and UTF-16 BE inputs are detected by BOM and transparently
-transcoded to UTF-8 at the byte-source boundary.
+transcoded to UTF-8 at the byte-source boundary. The transcode holds the whole file in
+memory (unlike the streaming UTF-8 path), so it is capped at 32 MB — a larger UTF-16 file
+opens with the raw Source view only, and a warning explains why the table view is missing.
 
 ## Malformed records
 
@@ -81,12 +83,14 @@ the status bar shows the running malformed count.
 `/` opens the search prompt. Matches are scoped to a single cell — a
 query that would span the comma between two columns yields nothing.
 Substring scan, smart-case (all-lowercase query → case-insensitive; any
-uppercase → case-sensitive). Search spans the whole file, not just the
-loaded rows — even on a multi-gigabyte CSV peek pages through every
-record without loading it all into memory. `n` / `p` step through
-matches, wrapping at the ends; the viewport scrolls vertically and pans
-horizontally to bring each match's cell into view. `Esc` clears the
-search.
+uppercase → case-sensitive). Search reaches past the loaded rows — peek
+pages through the records without loading them all into memory — but the
+scan is budgeted at 256 MB of cell text per query so a multi-gigabyte
+CSV never freezes the viewer; a capped scan marks its counts as partial
+(`12/3400+`, `no match (partial scan)`) and raises a warning. `n` / `p`
+step through matches, wrapping at the ends; the viewport scrolls
+vertically and pans horizontally to bring each match's cell into view.
+`Esc` clears the search.
 
 ## Print mode
 

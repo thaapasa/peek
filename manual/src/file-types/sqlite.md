@@ -93,9 +93,10 @@ The contents view shares its rendering with the CSV viewer — it's the same
 
 ### Search caveat
 
-Cell-scoped search currently only covers the **buffered window** (1000 rows around the
-current viewport). Matches outside that range aren't surfaced. Predicate-pushdown
-queries (`LIKE` / `GLOB`) and incremental full-scan search are planned.
+Cell-scoped search pages the 1000-row window across the table, so it reaches past the
+rows currently buffered, but the walk is budgeted at 256 MB of cell text per query — a
+capped scan marks its counts as partial (`12/3400+`, `no match (partial scan)`) and
+raises a warning. Predicate-pushdown queries (`LIKE` / `GLOB`) are planned.
 
 ## Info section
 
@@ -115,7 +116,7 @@ peek exits.
 
 ## Limitations
 
-- Cell-scoped search only covers the current 1000-row window.
+- Cell-scoped search scans at most 256 MB of cell text per query (counts marked partial past it).
 - `WAL` / `-journal` / `-shm` sidecar files are not inspected.
 - SQLCipher-encrypted databases are not supported.
 - A custom-query prompt (`:SELECT …`) is not implemented.

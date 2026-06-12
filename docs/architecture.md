@@ -590,7 +590,7 @@ shape (per-record caps, pixel ceilings, count caps) stays local to its site.
 |---|---|---|---|
 | `WHOLE_DOC_BYTES` | 32 MB | materialize **and transform** (5–20× expansion, blocks the UI during parse+highlight) | `RENDER_MAX_BYTES` (rendered views + `read_zip_entry` payloads), `PRETTY_MAX_BYTES` (structured pretty-print), the UTF-16 CSV transcode (`csv/parse.rs`) |
 | `SIDECAR_PARSE_BYTES` | 64 MB | whole-text read, small derived output | `SIDECAR_TEXT_LIMIT` (markdown / SQL / CSS info), the UTF-16 text-stats decode (`text/info_gather.rs`), `DMG_PLIST_MAX_BYTES` |
-| `BULK_WALK_BYTES` | 256 MB | one bounded pass over untrusted / unbounded data, nothing proportional retained | `MAX_DECOMPRESS_BYTES` (transparent decompress), `MAX_EXTRACT_BYTES` (per archive entry), `SEARCH_SCAN_MAX_BYTES` (raw-content search), `STATIC_LIB_SUMMARY_CAP` (`ar` object-member summary — materialized whole but held for one pass; real `.a` files exceed the sidecar budget) |
+| `BULK_WALK_BYTES` | 256 MB | one bounded pass over untrusted / unbounded data, nothing proportional retained | `MAX_DECOMPRESS_BYTES` (transparent decompress), `MAX_EXTRACT_BYTES` (per archive entry), `SEARCH_SCAN_MAX_BYTES` (raw-content + table-cell search), `STATIC_LIB_SUMMARY_CAP` (`ar` object-member summary — materialized whole but held for one pass; real `.a` files exceed the sidecar budget) |
 
 Gate helpers — call one of these rather than hand-rolling a check:
 

@@ -1,6 +1,13 @@
 //! Per-type compose: aligned table view + paired Source ContentMode for
 //! CSV / TSV. Info / Hex / Help / About are appended by the central
 //! `Registry::compose_modes` tail.
+//!
+//! A source that won't open as CSV (e.g. an over-cap UTF-16 file whose
+//! transcode the memory budget refuses) degrades to the Source view
+//! alone — the streaming raw view works on any bytes — with the reason
+//! carried as a warning. It must not fail the whole open: every sibling
+//! budget gate degrades, and `main.rs` turns a compose error into a
+//! process-level failure.
 
 use std::rc::Rc;
 
@@ -23,12 +30,17 @@ pub fn compose(
     modes: &mut Vec<Box<dyn Mode>>,
     fmt: CsvFormat,
 ) -> Result<()> {
-    let data = CsvData::open(source, fmt)?;
-    modes.push(Box::new(build_csv_mode(data)));
+    let table_refused = match CsvData::open(source, fmt) {
+        Ok(data) => {
+            modes.push(Box::new(build_csv_mode(data)));
+            None
+        }
+        Err(e) => Some(format!("table view unavailable: {e:#}")),
+    };
     // Paired Source view: raw CSV bytes, no syntax token (no robust CSV
     // syntax shipped with two-face).
     let line_source = source.open_line_source()?;
-    modes.push(Box::new(ContentMode::new(
+    let mut content = ContentMode::new(
         source.clone(),
         line_source,
         Rc::clone(&ctx.theme_manager),
@@ -38,7 +50,11 @@ pub fn compose(
             line_numbers: args.line_numbers,
             ..Default::default()
         },
-    )));
+    );
+    if let Some(warning) = table_refused {
+        content.push_warning(warning);
+    }
+    modes.push(Box::new(content));
     Ok(())
 }
 
@@ -81,4 +97,60 @@ pub fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use bytes::Bytes;
+
+    use super::*;
+    use crate::input::detect::FileType;
+    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    /// A CSV whose table view refuses to open (here: an over-cap UTF-16
+    /// file whose transcode the memory budget rejects) must degrade to
+    /// the Source view with a warning — not propagate the error.
+    /// `main.rs` turns a compose error into a process-level failure, so
+    /// a propagated refusal would lose Source / Hex / Info entirely.
+    #[test]
+    fn over_cap_utf16_degrades_to_source_view() {
+        let cap = crate::input::limits::WHOLE_DOC_BYTES as usize;
+        let mut buf = vec![0xFF, 0xFE];
+        buf.resize(cap + 2, b' ');
+        let source = InputSource::stdin(Bytes::from(buf));
+        let detected = Detected {
+            file_type: FileType::Csv(CsvFormat::Csv),
+            magic_mime: None,
+            decompressed_from: None,
+        };
+        let args = ComposeOpts {
+            theme: PeekThemeName::IdeaDark,
+            color: StyleMode::Plain,
+            plain: true,
+            raw: false,
+            line_numbers: false,
+            no_svg_anim: false,
+            language: None,
+            width: 0,
+            margin: 0,
+            image_mode: String::new(),
+            background: String::new(),
+            edge_density: 0.0,
+        };
+        let ctx = ComposeCtx {
+            theme_manager: Rc::new(ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)),
+        };
+        let mut modes: Vec<Box<dyn Mode>> = Vec::new();
+        compose(&source, &detected, &args, &ctx, &mut modes, CsvFormat::Csv)
+            .expect("over-cap UTF-16 must degrade, not fail the open");
+        assert_eq!(modes.len(), 1, "only the Source view composes");
+        assert_eq!(modes[0].label(), "Source");
+        let warnings = modes[0].take_warnings();
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("table view unavailable")),
+            "the refusal reason must surface as a warning: {warnings:?}"
+        );
+    }
 }

@@ -46,9 +46,9 @@ cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-spe
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
 line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/
-`p` cycle matches) works in the text / source / structured views; the raw text scan is budgeted at
-256 MB per query (`SEARCH_SCAN_MAX_BYTES`) — past it the counts show as partial (`12/3400+`) and a
-warning surfaces.
+`p` cycle matches) works in the text / source / structured views; the raw text scan and the
+CSV / SQLite table-cell scan are budgeted at 256 MB per query (`SEARCH_SCAN_MAX_BYTES`) — past it
+the counts show as partial (`12/3400+`) and a warning surfaces.
 
 ### Print Mode ✅
 
@@ -515,12 +515,16 @@ date / string / mixed) is sampled from the seed and rendered in the info section
 columns (int / float only) are right-aligned in the body and header so digits line up. The
 file's total record count, delimiter, encoding, and malformed-row counter sit alongside the
 column stats. Encoding is UTF-8 native, with transparent UTF-16 LE/BE → UTF-8 transcode at
-the byte-source boundary. Multi-line cells (embedded `\n` from a quoted record) collapse to
-one visual row with a muted `↵` glyph marking the line break; `\t` becomes a space and
-`\r` is dropped so nothing can break the terminal cursor. `/` opens a single-cell-scoped
-search (substring, smart-case) that spans the whole file — it pages the window across every
-record rather than holding them all, so it stays exhaustive at bounded memory; `n` / `p`
-step matches, panning columns and scrolling rows to bring each match into view. The exact
+the byte-source boundary; the transcode materialises the whole file, so it's gated at the
+32 MB whole-doc budget — an over-cap UTF-16 file degrades to the Source view alone with a
+warning instead of failing the open. Multi-line cells (embedded `\n` from a quoted record)
+collapse to one visual row with a muted `↵` glyph marking the line break; `\t` becomes a
+space and `\r` is dropped so nothing can break the terminal cursor. `/` opens a
+single-cell-scoped search (substring, smart-case) that pages the window across the records
+rather than holding them all; the walk shares the 256 MB `SEARCH_SCAN_MAX_BYTES` budget, so
+a capped scan marks its counts as partial (`12/3400+`, `no match (partial scan)`) and raises
+a warning; `n` / `p` step matches, panning columns and scrolling rows to bring each match
+into view. The exact
 total record count (and jump-to-end) is settled by a one-time streaming count pass that
 discards cells; until then the info view shows `N (partial)`. Malformed records (over 4 MiB raw,
 over 10 000 physical lines, or rejected by the csv crate) render as a single `<error>` row in

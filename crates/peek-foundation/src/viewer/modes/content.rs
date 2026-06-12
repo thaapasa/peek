@@ -195,6 +195,13 @@ impl ContentMode {
         }
     }
 
+    /// Queue a warning for the next `take_warnings` drain. Lets a
+    /// compose path that degraded to this mode (e.g. a CSV whose table
+    /// view refused to open) carry the reason into `FileInfo.warnings`.
+    pub fn push_warning(&mut self, warning: String) {
+        self.pending_warnings.push(warning);
+    }
+
     /// Visible columns left for content after the line-number gutter —
     /// the shared math lives in
     /// [`content_window::usable_width`](super::content_window::usable_width).

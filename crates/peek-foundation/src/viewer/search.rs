@@ -66,15 +66,15 @@ use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
 /// the state reports [`SearchState::truncated`].
 pub const MAX_MATCHES: usize = 100_000;
 
-/// Byte budget for a search scan over a *streaming* source
-/// (ContentMode's raw branch — the one searchable view whose data isn't
-/// already behind a size cap). Without it every `/`-Enter walks the
-/// whole file, so a zero-hit query on a multi-GB log pays seconds of
-/// frozen UI per query. 256 MB keeps the worst case around a second;
-/// matches past the budget aren't found, which the status line (`+` /
-/// `partial scan`) and a warning surface honestly. In-memory scans
-/// (rendered views, tables, listings, pretty text) are bounded by their
-/// own caps and don't need this.
+/// Byte budget for a search scan over a *streaming* source —
+/// ContentMode's raw branch and `RowsTableMode`'s record walk, the two
+/// searchable views whose data isn't already behind a size cap. Without
+/// it every `/`-Enter walks the whole file, so a zero-hit query on a
+/// multi-GB log or CSV pays seconds of frozen UI per query. 256 MB
+/// keeps the worst case around a second; matches past the budget aren't
+/// found, which the status line (`+` / `partial scan`) and a warning
+/// surface honestly. In-memory scans (rendered views, listings, pretty
+/// text) are bounded by their own caps and don't need this.
 pub const SEARCH_SCAN_MAX_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
 
 /// Outcome of `Mode::set_search` — tells the caller whether the mode
