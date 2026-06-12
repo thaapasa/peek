@@ -527,8 +527,11 @@ impl Mode for ContentMode {
     /// search. Smart-case: an all-lowercase query matches
     /// case-insensitively, any uppercase makes it case-sensitive.
     ///
-    /// The scan is one full pass over the active branch — `LineSource`
-    /// when raw, the pretty-printed string when pretty. `ContentMode`
+    /// The scan is one pass over the active branch — `LineSource` when
+    /// raw, the pretty-printed string when pretty. The raw branch is the
+    /// one searchable view over unbounded data, so its pass is budgeted
+    /// at [`SEARCH_SCAN_MAX_BYTES`]; a truncated scan pushes a warning
+    /// and the status segment marks the counts partial. `ContentMode`
     /// owns its scroll, so it positions itself on the first match and
     /// returns `Owned`.
     fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
@@ -545,11 +548,20 @@ impl Mode for ContentMode {
         } else {
             // `iter_all` yields `Result<String>`; a decode error becomes
             // an empty line so line indices stay aligned with the view.
-            SearchState::scan(
+            SearchState::scan_capped(
                 self.line_source.iter_all().map(|r| r.unwrap_or_default()),
                 query,
+                search::SEARCH_SCAN_MAX_BYTES,
             )
         };
+        if search.truncated() {
+            // Identical text per push — the session layer dedupes, so
+            // repeated truncated queries warn once.
+            self.pending_warnings.push(format!(
+                "search covers only the first {} MB",
+                search::SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
+            ));
+        }
         let first = search.first_line();
         self.search = Some(search);
         if let Some(line) = first {

@@ -14,24 +14,7 @@ Live tracker for `/checkup` findings. Keeping it up to date:
   holds, a reopen trigger fired — checkup must revalidate and surface a fresh finding saying what
   changed.
 
-## Medium
-
-### M17. `ContentMode::set_search` streams the entire file per query
-
-`crates/peek-foundation/src/viewer/modes/content.rs:708-735` (raw-branch
-scan at `722-725`). Each `/`-then-Enter pulls every line through
-`self.line_source.iter_all().map(...)` into `SearchState::scan`.
-`MAX_MATCHES = 100_000` caps match *storage* but the streaming read isn't
-capped — `'scan: for ... break 'scan` in `search::SearchState::scan` exits
-only after the match cap, so a zero-hit query on a 1 GB log walks the whole
-file every search. Violates the spirit of "stream, don't load" even while
-streaming — the cost is paid per query, not per session.
-
-Two directions:
-
-- Cheap: cap by *bytes scanned* in addition to match count, so a no-match
-  search on a multi-GB file degrades cleanly with a status warning.
-- Invasive: move scanning to a background thread that streams matches in.
+No active findings.
 
 ## Wontfix records
 

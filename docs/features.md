@@ -46,7 +46,9 @@ cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-spe
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
 line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/
-`p` cycle matches) works in the text / source / structured views.
+`p` cycle matches) works in the text / source / structured views; the raw text scan is budgeted at
+256 MB per query (`SEARCH_SCAN_MAX_BYTES`) — past it the counts show as partial (`12/3400+`) and a
+warning surfaces.
 
 ### Print Mode ✅
 

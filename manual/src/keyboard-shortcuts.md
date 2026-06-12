@@ -47,6 +47,10 @@ it — the viewer jumps to the first match. `n` / `p` cycle through matches (wra
 ends); the status line shows `cur/total`. `Esc` while a search is active clears the matches
 (press it again to leave the viewer); an empty-query Enter also clears the search.
 
+On very large files the text view scans the first 256 MB per query so the viewer never
+freezes for a multi-gigabyte read; a capped scan marks its counts as partial (`12/3400+`,
+`no match (partial scan)`) and raises a warning.
+
 The same `/` search works in the rendered HTML view, the EPUB, DOCX / ODT / RTF, and PDF read
 views. In the EPUB Read view `n` / `p` normally step chapters — while a search is active they
 navigate matches instead, and `Esc` clears the search to get chapter stepping back.

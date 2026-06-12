@@ -62,8 +62,20 @@ use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
 
 /// Hard cap on collected search matches. A pathological query (a single
 /// common letter in a huge file) would otherwise build an unbounded
-/// `Vec`; past the cap the scan stops and the count reflects the cap.
+/// `Vec`; past the cap the scan stops, the count reflects the cap, and
+/// the state reports [`SearchState::truncated`].
 pub const MAX_MATCHES: usize = 100_000;
+
+/// Byte budget for a search scan over a *streaming* source
+/// (ContentMode's raw branch — the one searchable view whose data isn't
+/// already behind a size cap). Without it every `/`-Enter walks the
+/// whole file, so a zero-hit query on a multi-GB log pays seconds of
+/// frozen UI per query. 256 MB keeps the worst case around a second;
+/// matches past the budget aren't found, which the status line (`+` /
+/// `partial scan`) and a warning surface honestly. In-memory scans
+/// (rendered views, tables, listings, pretty text) are bounded by their
+/// own caps and don't need this.
+pub const SEARCH_SCAN_MAX_BYTES: u64 = 256 * 1024 * 1024;
 
 /// Outcome of `Mode::set_search` — tells the caller whether the mode
 /// already scrolled to the first match itself, or hands back a line for
@@ -259,6 +271,10 @@ struct MatchPos {
 pub struct SearchState {
     matches: Vec<MatchPos>,
     current: usize,
+    /// The scan stopped before the source ran out — [`MAX_MATCHES`] or a
+    /// byte budget hit. Matches (and the total) past the stop point are
+    /// unknown; the status segment marks the counts as partial.
+    truncated: bool,
 }
 
 impl SearchState {
@@ -269,13 +285,35 @@ impl SearchState {
     /// [`MAX_MATCHES`]. `lines` is anything string-like (`&str`,
     /// `String`, `&String`) so streamed and cached sources both fit.
     pub fn scan<S: AsRef<str>>(lines: impl Iterator<Item = S>, query: &str) -> SearchState {
+        Self::scan_capped(lines, query, u64::MAX)
+    }
+
+    /// [`scan`](Self::scan) with a byte budget for streaming sources:
+    /// stop (and mark the state truncated) once the cumulative visible
+    /// length of consumed lines reaches `max_bytes`. Callers over
+    /// unbounded data pass [`SEARCH_SCAN_MAX_BYTES`]; in-memory callers
+    /// use plain `scan`.
+    pub fn scan_capped<S: AsRef<str>>(
+        lines: impl Iterator<Item = S>,
+        query: &str,
+        max_bytes: u64,
+    ) -> SearchState {
         let sensitive = smart_case_sensitive(query);
         let mut matches = Vec::new();
+        let mut truncated = false;
+        let mut scanned: u64 = 0;
         'scan: for (idx, line) in lines.enumerate() {
-            let visible = strip_ansi(line.as_ref());
+            if scanned >= max_bytes {
+                truncated = true;
+                break;
+            }
+            let line = line.as_ref();
+            scanned += line.len() as u64 + 1;
+            let visible = strip_ansi(line);
             for range in find_matches(&visible, query, sensitive) {
                 matches.push(MatchPos { line: idx, range });
                 if matches.len() >= MAX_MATCHES {
+                    truncated = true;
                     break 'scan;
                 }
             }
@@ -283,7 +321,14 @@ impl SearchState {
         SearchState {
             matches,
             current: 0,
+            truncated,
         }
+    }
+
+    /// True when the scan stopped early (match cap or byte budget) —
+    /// the match list and total are lower bounds, not the full file.
+    pub fn truncated(&self) -> bool {
+        self.truncated
     }
 
     /// Total match count.
@@ -329,13 +374,22 @@ impl SearchState {
     }
 
     /// Status-line segment for the active search: `cur/total` in the
-    /// muted colour, or `no match` in the warning colour.
+    /// muted colour, or `no match` in the warning colour. A truncated
+    /// scan marks the total as a lower bound (`12/3400+`, `no match
+    /// (partial scan)`) so the counts never claim full-file coverage
+    /// they don't have.
     pub fn status_segment(&self, theme: &PeekTheme) -> (String, Color) {
         if self.matches.is_empty() {
-            ("no match".to_string(), theme.warning)
+            let label = if self.truncated {
+                "no match (partial scan)"
+            } else {
+                "no match"
+            };
+            (label.to_string(), theme.warning)
         } else {
+            let plus = if self.truncated { "+" } else { "" };
             (
-                format!("{}/{}", self.current + 1, self.matches.len()),
+                format!("{}/{}{plus}", self.current + 1, self.matches.len()),
                 theme.muted,
             )
         }
@@ -407,6 +461,47 @@ mod tests {
         assert_eq!(reveal_h_scroll(0, 20, 5, 40), 5);
         // No geometry — unchanged.
         assert_eq!(reveal_h_scroll(7, 0, 10, 15), 7);
+    }
+
+    #[test]
+    fn scan_capped_stops_at_byte_budget_and_marks_truncated() {
+        // 10-byte lines (incl. the counted newline); budget admits ~3.
+        let lines = (0..100).map(|i| format!("hit {i:04}"));
+        let s = SearchState::scan_capped(lines, "hit", 30);
+        assert!(s.truncated());
+        let n = s.match_count();
+        assert!(
+            (1..100).contains(&n),
+            "should find some but not all matches, got {n}"
+        );
+
+        // Same data, unbounded budget: complete and not truncated.
+        let lines = (0..100).map(|i| format!("hit {i:04}"));
+        let s = SearchState::scan_capped(lines, "hit", u64::MAX);
+        assert!(!s.truncated());
+        assert_eq!(s.match_count(), 100);
+    }
+
+    #[test]
+    fn scan_marks_truncated_at_match_cap() {
+        let s = SearchState::scan((0..MAX_MATCHES + 10).map(|_| "x"), "x");
+        assert!(s.truncated());
+        assert_eq!(s.match_count(), MAX_MATCHES);
+    }
+
+    #[test]
+    fn status_segment_marks_partial_counts() {
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+
+        let full = SearchState::scan(["hit", "hit"].iter(), "hit");
+        assert_eq!(full.status_segment(&theme).0, "1/2");
+
+        let capped = SearchState::scan_capped((0..50).map(|_| "hit"), "hit", 10);
+        assert!(capped.truncated());
+        assert!(capped.status_segment(&theme).0.ends_with('+'));
+
+        let no_hit = SearchState::scan_capped((0..50).map(|_| "miss"), "zzz", 10);
+        assert_eq!(no_hit.status_segment(&theme).0, "no match (partial scan)");
     }
 
     #[test]
