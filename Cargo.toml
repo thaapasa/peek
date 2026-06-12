@@ -16,7 +16,7 @@ members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/
 # = true` to inherit). One version line for the whole workspace — the release
 # pipeline bumps this; see docs/release.md.
 [workspace.package]
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 # Honest floor: the tree already calls stdlib items stabilized in 1.87
 # (lines.rs, csv/parse.rs, font, glyph_atlas const ctx). The Info-view
