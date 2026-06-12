@@ -22,7 +22,9 @@
 //! readable somewhere.
 //!
 //! Pure cell geometry + string splicing — no Pdfium types — so the
-//! whole layout is unit-testable without a document.
+//! whole pipeline is unit-testable without a document: the
+//! [`WordAccumulator`] groups raw per-char facts into words, [`layout`]
+//! projects them, [`splice`] paints them.
 
 use std::collections::HashMap;
 
@@ -56,6 +58,134 @@ pub struct PageWords {
     pub page_w: f32,
     pub page_h: f32,
     pub words: Vec<WordBox>,
+}
+
+/// Loose bounds of one character in PDF page coordinates (origin
+/// bottom-left, y grows upward — the raw space Pdfium reports).
+#[derive(Clone, Copy, Debug)]
+pub struct CharBounds {
+    pub left: f32,
+    pub right: f32,
+    pub bottom: f32,
+    pub top: f32,
+}
+
+/// Groups a page's characters (streamed in document order) into
+/// [`WordBox`]es. Owns every split rule — whitespace / control chars,
+/// unmapped glyphs, non-single-width chars, missing or degenerate
+/// bounds, baseline-band misses, and layout jumps (gap wider than the
+/// line height, leftward motion) all end the current word — plus the
+/// bbox union and the bottom-left → top-left y-flip. The FFI walk in
+/// `package::Doc::page_words` only extracts per-char facts and feeds
+/// them here, so the grouping geometry stays unit-testable without
+/// Pdfium.
+pub struct WordAccumulator {
+    page_h: f32,
+    words: Vec<WordBox>,
+    cur: Option<Accum>,
+}
+
+/// In-progress word in PDF coordinates (origin bottom-left).
+struct Accum {
+    text: String,
+    left: f32,
+    right: f32,
+    bottom: f32,
+    top: f32,
+    ink: Rgb,
+}
+
+impl WordAccumulator {
+    pub fn new(page_h: f32) -> Self {
+        Self {
+            page_h,
+            words: Vec::new(),
+            cur: None,
+        }
+    }
+
+    /// Feed the next character in document order. `c` is `None` for an
+    /// unmapped glyph (no Unicode for it — splicing a replacement char
+    /// would only add noise); `bounds` is `None` when Pdfium can't
+    /// report them. `ink` is the char's font color, evaluated only when
+    /// the char starts a new word (it's an FFI call at the real call
+    /// site).
+    pub fn push(&mut self, c: Option<char>, bounds: Option<CharBounds>, ink: impl FnOnce() -> Rgb) {
+        let Some(c) = c else {
+            self.flush();
+            return;
+        };
+        if c.is_whitespace() || c.is_control() {
+            self.flush();
+            return;
+        }
+        // Double-width chars (CJK) break the one-char-per-cell splice;
+        // skip the word rather than misalign the grid.
+        if unicode_width::UnicodeWidthChar::width(c) != Some(1) {
+            self.flush();
+            return;
+        }
+        let Some(b) = bounds else {
+            self.flush();
+            return;
+        };
+        if b.top <= b.bottom || b.right < b.left {
+            self.flush();
+            return;
+        }
+        if let Some(a) = &self.cur {
+            let h = (a.top - a.bottom).max(b.top - b.bottom);
+            // Same word only while the baseline band overlaps and the
+            // glyph continues rightward without a gap wider than the
+            // line height (rotated runs and column jumps land here).
+            let same_line = b.bottom < a.top && b.top > a.bottom;
+            let adjacent = b.left >= a.left && (b.left - a.right) < h;
+            if !(same_line && adjacent) {
+                self.flush();
+            }
+        }
+        match &mut self.cur {
+            Some(a) => {
+                a.text.push(c);
+                a.left = a.left.min(b.left);
+                a.right = a.right.max(b.right);
+                a.bottom = a.bottom.min(b.bottom);
+                a.top = a.top.max(b.top);
+            }
+            None => {
+                self.cur = Some(Accum {
+                    text: c.to_string(),
+                    left: b.left,
+                    right: b.right,
+                    bottom: b.bottom,
+                    top: b.top,
+                    ink: ink(),
+                });
+            }
+        }
+    }
+
+    /// End the final word and return the accumulated boxes.
+    pub fn finish(mut self) -> Vec<WordBox> {
+        self.flush();
+        self.words
+    }
+
+    fn flush(&mut self) {
+        if let Some(a) = self.cur.take()
+            && !a.text.is_empty()
+        {
+            self.words.push(WordBox {
+                text: a.text,
+                left: a.left,
+                // Convert to top-left origin: page top is y = 0.
+                top: self.page_h - a.top,
+                width: a.right - a.left,
+                height: a.top - a.bottom,
+                ink: a.ink,
+            });
+        }
+    }
 }
 
 /// Smallest rendered word height (in effective cell rows) that still
@@ -222,7 +352,7 @@ pub fn splice(line: &str, cells: &[OverlayCell]) -> String {
     }
     let mut out = String::with_capacity(line.len() + cells.len() * 8);
     let mut col: u32 = 0;
-    let mut style = CellStyle::default();
+    let mut style = sgr::ActiveStyle::default();
     for tok in sgr::scan(line) {
         match tok {
             Sgr::Esc(esc) => {
@@ -235,7 +365,7 @@ pub fn splice(line: &str, cells: &[OverlayCell]) -> String {
                     let replacement =
                         (w == 1).then(|| cells.iter().rev().find(|c| c.col == col).copied());
                     match replacement.flatten() {
-                        Some(cell) => style.push_letter(&mut out, cell),
+                        Some(cell) => push_letter(&style, &mut out, cell),
                         None => out.push(ch),
                     }
                     col += w;
@@ -246,93 +376,65 @@ pub fn splice(line: &str, cells: &[OverlayCell]) -> String {
     out
 }
 
-/// Tracked fg/bg of the splice cursor, for the orientation swap +
-/// contrast nudge: the raw escape (to restore / re-plane) plus its
-/// nominal RGB (to compare). Truecolor, 256-palette, and 16-color
-/// escapes are all parsed; in plain mode there are no colors and the
-/// overlay chars land as-is.
-#[derive(Default)]
-struct CellStyle {
-    fg: Option<(String, Rgb)>,
-    bg: Option<(String, Rgb)>,
-}
-
-impl CellStyle {
-    fn observe(&mut self, esc: &str) {
-        match sgr::classify(esc) {
-            SgrKind::ResetAll => {
-                self.fg = None;
-                self.bg = None;
-            }
-            SgrKind::ResetFg => self.fg = None,
-            SgrKind::ResetBg => self.bg = None,
-            SgrKind::Fg | SgrKind::Bg => {
-                let slot = if sgr::classify(esc) == SgrKind::Fg {
-                    &mut self.fg
-                } else {
-                    &mut self.bg
-                };
-                *slot = parse_color(esc).map(|rgb| (esc.to_string(), rgb));
-            }
-            SgrKind::Other => {}
-        }
-    }
-
-    /// Append the overlay char with the orientation swap + contrast
-    /// nudge described on [`splice`], restoring the cell's own colors
-    /// after.
-    fn push_letter(&self, out: &mut String, cell: OverlayCell) {
-        let (Some((fg_esc, fg_rgb)), Some((bg_esc, bg_rgb))) = (&self.fg, &self.bg) else {
-            out.push(cell.ch);
-            return;
-        };
-        // Orientation: paint the char in whichever of the cell's two
-        // colors lies nearer the word's ink, on the other one.
-        let swap = color_dist(*bg_rgb, cell.ink) < color_dist(*fg_rgb, cell.ink);
-        if cell.ch == ' ' {
-            // Only the background shows under a space; orient it to
-            // the paper side, no contrast concern.
-            if swap {
-                push_replaned(out, fg_esc, SgrKind::Bg);
-                out.push(cell.ch);
-                out.push_str(bg_esc);
-            } else {
-                out.push(cell.ch);
-            }
-            return;
-        }
-        let (letter_fg, letter_bg) = if swap {
-            (*bg_rgb, *fg_rgb)
-        } else {
-            (*fg_rgb, *bg_rgb)
-        };
-        // Contrast: a still-invisible letter gets a black/white fg.
-        let bg_lum = lum(letter_bg);
-        let nudge = (lum(letter_fg) as i32 - bg_lum as i32).abs() < MIN_CONTRAST;
-        if !swap && !nudge {
-            out.push(cell.ch);
-            return;
-        }
-        if swap {
-            push_replaned(out, fg_esc, SgrKind::Bg);
-        }
-        if nudge {
-            // Black/white in the same encoding as the cell's escapes,
-            // so a 256/16-color stream stays in its palette.
-            let c = if bg_lum > 128 { 0u8 } else { 255 };
-            out.push_str(&match escape_kind(fg_esc) {
-                EscapeKind::TrueColor => format!("\x1b[38;2;{c};{c};{c}m"),
-                EscapeKind::Ansi256 => format!("\x1b[38;5;{}m", if c == 0 { 16 } else { 231 }),
-                EscapeKind::Ansi16 => (if c == 0 { "\x1b[30m" } else { "\x1b[97m" }).to_string(),
-            });
-        } else if swap {
-            push_replaned(out, bg_esc, SgrKind::Fg);
-        }
+/// Append the overlay char with the orientation swap + contrast nudge
+/// described on [`splice`], restoring the cell's own colors after.
+/// `style` is the splice cursor's tracked fg/bg; unless both carry a
+/// parseable color (plain mode has none) the char lands as-is.
+fn push_letter(style: &sgr::ActiveStyle, out: &mut String, cell: OverlayCell) {
+    let (fg_esc, bg_esc) = (style.fg(), style.bg());
+    let (Some(fg_rgb), Some(bg_rgb)) = (sgr::escape_to_rgb(fg_esc), sgr::escape_to_rgb(bg_esc))
+    else {
         out.push(cell.ch);
-        out.push_str(fg_esc);
+        return;
+    };
+    // Orientation: paint the char in whichever of the cell's two
+    // colors lies nearer the word's ink, on the other one.
+    let swap = color_dist(bg_rgb, cell.ink) < color_dist(fg_rgb, cell.ink);
+    if cell.ch == ' ' {
+        // Only the background shows under a space; orient it to
+        // the paper side, no contrast concern.
         if swap {
+            sgr::write_replaned(out, fg_esc, SgrKind::Bg);
+            out.push(cell.ch);
             out.push_str(bg_esc);
+        } else {
+            out.push(cell.ch);
         }
+        return;
+    }
+    let (letter_fg, letter_bg) = if swap {
+        (bg_rgb, fg_rgb)
+    } else {
+        (fg_rgb, bg_rgb)
+    };
+    // Contrast: a still-invisible letter gets a black/white fg.
+    let bg_lum = lum(letter_bg);
+    let nudge = (lum(letter_fg) as i32 - bg_lum as i32).abs() < MIN_CONTRAST;
+    if !swap && !nudge {
+        out.push(cell.ch);
+        return;
+    }
+    if swap {
+        sgr::write_replaned(out, fg_esc, SgrKind::Bg);
+    }
+    if nudge {
+        // Black/white in the same encoding as the cell's escapes,
+        // so a 256/16-color stream stays in its palette.
+        let c = if bg_lum > 128 { 0u8 } else { 255 };
+        match sgr::color_encoding(fg_esc) {
+            sgr::ColorEncoding::TrueColor => sgr::write_fg_truecolor(out, c, c, c),
+            sgr::ColorEncoding::Ansi256 => {
+                sgr::write_fg_ansi256(out, if c == 0 { 16 } else { 231 })
+            }
+            sgr::ColorEncoding::Ansi16 => sgr::write_fg_ansi16(out, if c == 0 { 0 } else { 15 }),
+        }
+    } else if swap {
+        sgr::write_replaned(out, bg_esc, SgrKind::Fg);
+    }
+    out.push(cell.ch);
+    out.push_str(fg_esc);
+    if swap {
+        out.push_str(bg_esc);
     }
 }
 
@@ -347,97 +449,6 @@ fn color_dist(a: Rgb, b: Rgb) -> u32 {
         (d * d) as u32
     };
     d(a.0, b.0) + d(a.1, b.1) + d(a.2, b.2)
-}
-
-/// Color-escape encoding, for emitting swaps / nudges in the same
-/// palette the line uses.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum EscapeKind {
-    TrueColor,
-    Ansi256,
-    Ansi16,
-}
-
-/// Classify a fg/bg color escape's encoding by its leading parameter.
-/// Only called on escapes [`parse_color`] accepted.
-fn escape_kind(esc: &str) -> EscapeKind {
-    let lead = lead_param(esc);
-    match lead {
-        38 | 48 => {
-            if esc.contains(";5;") {
-                EscapeKind::Ansi256
-            } else {
-                EscapeKind::TrueColor
-            }
-        }
-        _ => EscapeKind::Ansi16,
-    }
-}
-
-fn lead_param(esc: &str) -> u32 {
-    esc.trim_start_matches("\x1b[")
-        .bytes()
-        .take_while(u8::is_ascii_digit)
-        .fold(0u32, |acc, b| acc * 10 + (b - b'0') as u32)
-}
-
-/// Append `esc` converted to the other plane (fg color emitted as a
-/// bg escape or vice versa), preserving its encoding: `38;…` ↔ `48;…`
-/// for truecolor / 256, `3x` ↔ `4x` and `9x` ↔ `10x` for the base 16.
-fn push_replaned(out: &mut String, esc: &str, to: SgrKind) {
-    let body = esc
-        .trim_start_matches("\x1b[")
-        .trim_end_matches('m')
-        .to_string();
-    let lead = lead_param(esc);
-    let rest = body.split_once(';').map(|(_, r)| r);
-    let new_lead = match (lead, to) {
-        (38, SgrKind::Bg) => 48,
-        (48, SgrKind::Fg) => 38,
-        (30..=37, SgrKind::Bg) => lead + 10,
-        (40..=47, SgrKind::Fg) => lead - 10,
-        (90..=97, SgrKind::Bg) => lead + 10,
-        (100..=107, SgrKind::Fg) => lead - 10,
-        _ => lead, // already on the requested plane
-    };
-    match rest {
-        Some(rest) => {
-            out.push_str(&format!("\x1b[{new_lead};{rest}m"));
-        }
-        None => {
-            out.push_str(&format!("\x1b[{new_lead}m"));
-        }
-    }
-}
-
-/// Parse the nominal RGB of a fg/bg color escape: truecolor
-/// (`38;2;r;g;b`), 256-palette (`38;5;n` via the xterm palette), and
-/// base-16 (`30..=37` / `90..=97` and bg counterparts, via the
-/// nominal xterm table). Returns `None` for malformed escapes.
-fn parse_color(esc: &str) -> Option<Rgb> {
-    let body = esc.strip_prefix("\x1b[")?.strip_suffix('m')?;
-    let mut parts = body.split(';');
-    let lead: u32 = parts.next()?.parse().ok()?;
-    match lead {
-        38 | 48 => match parts.next()? {
-            "2" => {
-                let r: u8 = parts.next()?.parse().ok()?;
-                let g: u8 = parts.next()?.parse().ok()?;
-                let b: u8 = parts.next()?.parse().ok()?;
-                Some((r, g, b))
-            }
-            "5" => {
-                let idx: u8 = parts.next()?.parse().ok()?;
-                Some(sgr::ansi256_to_rgb(idx))
-            }
-            _ => None,
-        },
-        30..=37 => Some(sgr::ansi16_to_rgb((lead - 30) as u8)),
-        90..=97 => Some(sgr::ansi16_to_rgb((lead - 90 + 8) as u8)),
-        40..=47 => Some(sgr::ansi16_to_rgb((lead - 40) as u8)),
-        100..=107 => Some(sgr::ansi16_to_rgb((lead - 100 + 8) as u8)),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -495,6 +506,142 @@ mod tests {
             }
         }
         s.into_iter().collect()
+    }
+
+    /// Bounds for a char `i` chars into a line: 4pt wide, sitting on
+    /// baseline band 90..98 (PDF coords, origin bottom-left).
+    fn b(i: usize) -> Option<CharBounds> {
+        Some(CharBounds {
+            left: 10.0 + i as f32 * 4.0,
+            right: 14.0 + i as f32 * 4.0,
+            bottom: 90.0,
+            top: 98.0,
+        })
+    }
+
+    fn black() -> Rgb {
+        (0, 0, 0)
+    }
+
+    /// Accumulate `events` on a 100pt-high page and return the words.
+    fn accumulate(events: &[(Option<char>, Option<CharBounds>)]) -> Vec<WordBox> {
+        let mut acc = WordAccumulator::new(100.0);
+        for (c, bounds) in events {
+            acc.push(*c, *bounds, black);
+        }
+        acc.finish()
+    }
+
+    fn texts(words: &[WordBox]) -> Vec<&str> {
+        words.iter().map(|w| w.text.as_str()).collect()
+    }
+
+    #[test]
+    fn accumulator_unions_bounds_and_flips_y() {
+        let words = accumulate(&[(Some('a'), b(0)), (Some('b'), b(1))]);
+        assert_eq!(texts(&words), ["ab"]);
+        let w = &words[0];
+        // Union of both chars' boxes, y flipped to top-left origin:
+        // top = page_h - 98.
+        assert_eq!((w.left, w.top), (10.0, 2.0));
+        assert_eq!((w.width, w.height), (8.0, 8.0));
+    }
+
+    #[test]
+    fn accumulator_splits_on_whitespace_and_unmapped_glyphs() {
+        let words = accumulate(&[
+            (Some('a'), b(0)),
+            (Some(' '), b(1)),
+            (Some('b'), b(2)),
+            (None, b(3)), // unmapped glyph
+            (Some('c'), b(4)),
+        ]);
+        assert_eq!(texts(&words), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn accumulator_splits_on_wide_char_and_missing_or_degenerate_bounds() {
+        let words = accumulate(&[
+            (Some('a'), b(0)),
+            (Some('世'), b(1)), // double-width: splits, never joins
+            (Some('b'), b(2)),
+            (Some('c'), None), // no bounds
+            (Some('d'), b(4)),
+            // Degenerate box (top <= bottom).
+            (
+                Some('e'),
+                Some(CharBounds {
+                    left: 30.0,
+                    right: 34.0,
+                    bottom: 98.0,
+                    top: 90.0,
+                }),
+            ),
+            (Some('f'), b(6)),
+        ]);
+        assert_eq!(texts(&words), ["a", "b", "d", "f"]);
+    }
+
+    #[test]
+    fn accumulator_splits_when_baseline_band_misses() {
+        // Second char floats entirely above the first's band
+        // (superscript / new rotated run): bottom >= first's top.
+        let high = Some(CharBounds {
+            left: 14.0,
+            right: 18.0,
+            bottom: 99.0,
+            top: 107.0,
+        });
+        let words = accumulate(&[(Some('a'), b(0)), (Some('b'), high)]);
+        assert_eq!(texts(&words), ["a", "b"]);
+    }
+
+    #[test]
+    fn accumulator_splits_on_gap_wider_than_line_height() {
+        // Line height 8pt; next char starts 9pt past the previous
+        // right edge → new word. A snug char (gap < 8) joins.
+        let far = Some(CharBounds {
+            left: 23.0,
+            right: 27.0,
+            bottom: 90.0,
+            top: 98.0,
+        });
+        let words = accumulate(&[(Some('a'), b(0)), (Some('b'), far)]);
+        assert_eq!(texts(&words), ["a", "b"]);
+
+        let snug = Some(CharBounds {
+            left: 20.0,
+            right: 24.0,
+            bottom: 90.0,
+            top: 98.0,
+        });
+        let words = accumulate(&[(Some('a'), b(0)), (Some('b'), snug)]);
+        assert_eq!(texts(&words), ["ab"]);
+    }
+
+    #[test]
+    fn accumulator_splits_on_leftward_jump() {
+        // Next char starts left of the word's left edge (column wrap /
+        // RTL run) even though the baseline matches.
+        let words = accumulate(&[(Some('a'), b(2)), (Some('b'), b(0))]);
+        assert_eq!(texts(&words), ["a", "b"]);
+    }
+
+    #[test]
+    fn accumulator_takes_ink_from_first_char_only() {
+        let mut acc = WordAccumulator::new(100.0);
+        let mut calls = 0;
+        let mut push = |acc: &mut WordAccumulator, c: char, i: usize| {
+            acc.push(Some(c), b(i), || {
+                calls += 1;
+                (calls, 0, 0)
+            });
+        };
+        push(&mut acc, 'a', 0);
+        push(&mut acc, 'b', 1);
+        let words = acc.finish();
+        assert_eq!(calls, 1, "ink closure must run once per word");
+        assert_eq!(words[0].ink, (1, 0, 0));
     }
 
     #[test]

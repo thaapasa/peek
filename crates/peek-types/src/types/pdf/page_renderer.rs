@@ -11,8 +11,13 @@
 //! upscales pixels rather than re-rasterising; pushing the source
 //! higher than the cap would need either a smaller cache footprint
 //! per page or Pdfium's clip-rect render API to skip the rest of the
-//! page entirely. Single-slot cache means stepping `n` / `p` evicts
-//! the prior page — bounded memory regardless of document length.
+//! page entirely. Single-slot caches (the bitmap, and a matching slot
+//! for the text layer's positioned words) mean stepping `n` / `p`
+//! evicts the prior page — bounded memory regardless of document
+//! length. Also hosts the lazily-probed "has a text layer" flag that
+//! gates the overlay toggle, and the `render_page` step that splices
+//! the reconstructed-text overlay over the rendered lines when it's
+//! on.
 
 use std::cell::{OnceCell, RefCell};
 use std::sync::Arc;

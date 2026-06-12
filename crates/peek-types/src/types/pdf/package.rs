@@ -164,14 +164,14 @@ impl Doc {
     }
 
     /// Extract page `idx`'s text layer as positioned words for the
-    /// reconstructed-text overlay. Characters stream in document order;
-    /// whitespace, control chars, missing bounds, and layout jumps
-    /// (new baseline, large horizontal gap) split words. Each word's
-    /// box is the union of its characters' loose bounds, converted to
-    /// a top-left-origin point space (y grows downward) so the overlay
-    /// projection matches raster coordinates.
+    /// reconstructed-text overlay. A thin FFI walk: per character it
+    /// pulls the Unicode char, the loose bounds, and (lazily, once per
+    /// word) the fill color — stroke color for outline-rendered text,
+    /// black when the document declares neither — and feeds them to
+    /// the pure [`super::text_overlay::WordAccumulator`], which owns
+    /// every split / union / y-flip rule.
     pub fn page_words(&self, idx: usize) -> Result<super::text_overlay::PageWords> {
-        use super::text_overlay::{PageWords, WordBox};
+        use super::text_overlay::{CharBounds, PageWords, WordAccumulator};
 
         let pages = self.inner.document.pages();
         let page = pages
@@ -181,111 +181,26 @@ impl Doc {
         let page_h = page.height().value;
         let text = page.text().context("pdfium page text failed")?;
 
-        // Word accumulator in PDF coordinates (origin bottom-left).
-        struct Accum {
-            text: String,
-            left: f32,
-            right: f32,
-            bottom: f32,
-            top: f32,
-            ink: (u8, u8, u8),
-        }
-        let mut words: Vec<WordBox> = Vec::new();
-        let mut cur: Option<Accum> = None;
-        let mut flush = |cur: &mut Option<Accum>| {
-            if let Some(a) = cur.take()
-                && !a.text.is_empty()
-            {
-                words.push(WordBox {
-                    text: a.text,
-                    left: a.left,
-                    // Convert to top-left origin: page top is y = 0.
-                    top: page_h - a.top,
-                    width: a.right - a.left,
-                    height: a.top - a.bottom,
-                    ink: a.ink,
-                });
-            }
-        };
-
+        let mut acc = WordAccumulator::new(page_h);
         for ch in text.chars().iter() {
-            let Some(c) = ch.unicode_char() else {
-                // Unmapped glyph (no Unicode for it): end the word —
-                // splicing a replacement char would only add noise.
-                flush(&mut cur);
-                continue;
-            };
-            if c.is_whitespace() || c.is_control() {
-                flush(&mut cur);
-                continue;
-            }
-            // Double-width chars (CJK) break the one-char-per-cell
-            // splice; skip the word rather than misalign the grid.
-            if unicode_width::UnicodeWidthChar::width(c) != Some(1) {
-                flush(&mut cur);
-                continue;
-            }
-            let Ok(b) = ch.loose_bounds() else {
-                flush(&mut cur);
-                continue;
-            };
-            let (l, r, bo, t) = (
-                b.left().value,
-                b.right().value,
-                b.bottom().value,
-                b.top().value,
-            );
-            if t <= bo || r < l {
-                flush(&mut cur);
-                continue;
-            }
-            if let Some(a) = &cur {
-                let h = (a.top - a.bottom).max(t - bo);
-                // Same word only while the baseline band overlaps
-                // and the glyph continues rightward without a gap
-                // wider than the line height (rotated runs and
-                // column jumps land here).
-                let same_line = bo < a.top && t > a.bottom;
-                let adjacent = l >= a.left && (l - a.right) < h;
-                if !(same_line && adjacent) {
-                    flush(&mut cur);
-                }
-            }
-            match &mut cur {
-                Some(a) => {
-                    a.text.push(c);
-                    a.left = a.left.min(l);
-                    a.right = a.right.max(r);
-                    a.bottom = a.bottom.min(bo);
-                    a.top = a.top.max(t);
-                }
-                None => {
-                    // Word font color from the first char's fill color
-                    // (stroke color for outline-rendered text; black
-                    // when the document declares neither) — guides the
-                    // overlay's fg/bg orientation per cell.
-                    let ink = ch
-                        .fill_color()
-                        .or_else(|_| ch.stroke_color())
-                        .map(|c| (c.red(), c.green(), c.blue()))
-                        .unwrap_or((0, 0, 0));
-                    cur = Some(Accum {
-                        text: c.to_string(),
-                        left: l,
-                        right: r,
-                        bottom: bo,
-                        top: t,
-                        ink,
-                    });
-                }
-            }
+            let bounds = ch.loose_bounds().ok().map(|b| CharBounds {
+                left: b.left().value,
+                right: b.right().value,
+                bottom: b.bottom().value,
+                top: b.top().value,
+            });
+            acc.push(ch.unicode_char(), bounds, || {
+                ch.fill_color()
+                    .or_else(|_| ch.stroke_color())
+                    .map(|c| (c.red(), c.green(), c.blue()))
+                    .unwrap_or((0, 0, 0))
+            });
         }
-        flush(&mut cur);
 
         Ok(PageWords {
             page_w,
             page_h,
-            words,
+            words: acc.finish(),
         })
     }
 

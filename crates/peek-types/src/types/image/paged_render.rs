@@ -92,17 +92,6 @@ pub(crate) fn render_image_window_mapped(
         };
         return (render, map);
     }
-    // Reproduce the zoomed path's scroll clamp so the map reports the
-    // origin actually rendered.
-    let zv = crate::viewer::image_render::zoom::ZoomedView {
-        base_cols: prep.cols,
-        base_rows: prep.rows,
-        term_cols: args.term.cols,
-        term_rows: args.term.rows,
-        zoom: args.zoom.factor(),
-    };
-    let (mut sx, mut sy) = (args.scroll_x, args.scroll_y);
-    zv.clamp_scroll(&mut sx, &mut sy);
     let result = image_render::render_prepared_zoomed(
         &prep,
         &config,
@@ -116,8 +105,8 @@ pub(crate) fn render_image_window_mapped(
         effective_rows: result.effective_rows,
         viewport_cols: result.viewport_cols,
         viewport_rows: result.viewport_rows,
-        scroll_x: sx,
-        scroll_y: sy,
+        scroll_x: result.scroll_x,
+        scroll_y: result.scroll_y,
         src_w,
         src_h,
     };
