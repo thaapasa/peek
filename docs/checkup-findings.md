@@ -14,7 +14,18 @@ Live tracker for `/checkup` findings. Keeping it up to date:
   holds, a reopen trigger fired — checkup must revalidate and surface a fresh finding saying what
   changed.
 
-No active findings.
+## Low
+
+### L14. Archive entry metadata is unbounded by entry count
+
+The archive backends collect one `FlatEntry` per member
+(`types/archive/backends/*.rs`) and `TreeListSource` flattens them all into
+rows — both O(entry count) with no cap. A 10M-entry archive costs roughly
+300–500 MB of listing metadata before anything renders. Per-entry *payload*
+reads are capped; the *count* isn't. Surfaced by the 2026-06-12 memory
+audit. Fix shape is a product decision: cap the listing at N entries with a
+"showing first N" marker, or accept (real archives rarely exceed ~100k
+entries and the cost is linear, not explosive).
 
 ## Wontfix records
 
