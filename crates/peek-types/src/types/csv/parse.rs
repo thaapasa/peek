@@ -91,20 +91,29 @@ pub struct Record {
     /// arises in other sources (SQLite).
     pub cells: Vec<Option<String>>,
     pub malformed: bool,
+    /// Raw byte span of the record in the source — what the parse
+    /// actually consumed. Feeds [`RowSource::row_scan_bytes`] so the
+    /// search byte budget charges malformed records their true cost
+    /// (their `cells` are empty, so a cell-text charge would be zero
+    /// and a mostly-malformed multi-GB file would be re-walked
+    /// end-to-end on every query).
+    pub bytes: u64,
 }
 
 impl Record {
-    fn ok(cells: Vec<Option<String>>) -> Self {
+    fn ok(cells: Vec<Option<String>>, bytes: u64) -> Self {
         Self {
             cells,
             malformed: false,
+            bytes,
         }
     }
 
-    fn error() -> Self {
+    fn error(bytes: u64) -> Self {
         Self {
             cells: Vec::new(),
             malformed: true,
+            bytes,
         }
     }
 }
@@ -399,6 +408,10 @@ impl RowSource for CsvData {
         self.record(idx).map(|r| r.malformed).unwrap_or(false)
     }
 
+    fn row_scan_bytes(&self, idx: usize) -> u64 {
+        self.record(idx).map(|r| r.bytes).unwrap_or(0)
+    }
+
     fn loaded(&self) -> usize {
         self.loaded()
     }
@@ -423,25 +436,32 @@ fn read_next(
     reader: &mut csv::Reader<Box<dyn ReadSeek>>,
     last_line: &mut u64,
 ) -> Result<Option<Record>> {
+    // The reader sits at the start of this record; after `read_record`
+    // it sits at the start of the next — the difference is the raw span
+    // the parse consumed, charged to the search byte budget.
+    let start_byte = reader.position().byte();
     let mut sr = csv::StringRecord::new();
     match reader.read_record(&mut sr) {
         Ok(true) => {
-            let pos_line = reader.position().clone().line();
+            let pos = reader.position();
+            let raw_bytes = pos.byte().saturating_sub(start_byte);
+            let pos_line = pos.line();
             let span = pos_line.saturating_sub(*last_line);
             *last_line = pos_line;
             let bytes_total: usize = sr.iter().map(|c| c.len()).sum();
             if span > MAX_RECORD_LINES || bytes_total > MAX_RECORD_BYTES {
-                return Ok(Some(Record::error()));
+                return Ok(Some(Record::error(raw_bytes)));
             }
             let cells = sr.iter().map(|s| Some(s.to_string())).collect();
-            Ok(Some(Record::ok(cells)))
+            Ok(Some(Record::ok(cells, raw_bytes)))
         }
         Ok(false) => Ok(None),
         Err(_) => {
             // csv crate's reader auto-resyncs at the next newline on the
             // next read_record call, so we just emit an error row and
             // let the caller continue.
-            Ok(Some(Record::error()))
+            let raw_bytes = reader.position().byte().saturating_sub(start_byte);
+            Ok(Some(Record::error(raw_bytes)))
         }
     }
 }
@@ -812,6 +832,37 @@ mod tests {
         let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
         assert_eq!(data.seed.len(), 3);
         assert_eq!(data.seed[1].cells, some_cells(&["one\ntwo", "x"]));
+    }
+
+    /// Record byte spans track the raw bytes the parse consumed —
+    /// malformed records included, whose cells are empty. The search
+    /// byte budget charges these spans via `row_scan_bytes`; a zero
+    /// span on malformed records would let a mostly-malformed file
+    /// escape the budget entirely.
+    #[test]
+    fn record_bytes_track_raw_span_including_malformed() {
+        // Middle record carries invalid UTF-8 — a csv read error,
+        // surfaced as a malformed record.
+        let mut buf = Vec::new();
+        buf.extend_from_slice(b"a,b\n");
+        buf.extend_from_slice(b"bad,\xFF\xFE\n");
+        buf.extend_from_slice(b"last,z\n");
+        let body_len = buf.len() as u64;
+        let src = InputSource::stdin(Bytes::from(buf));
+        let data = CsvData::open(&src, CsvFormat::Csv).unwrap();
+        assert_eq!(data.seed.len(), 3);
+        assert!(!data.seed[0].malformed);
+        assert!(data.seed[1].malformed, "invalid UTF-8 must flag the record");
+        assert_eq!(data.seed[0].bytes, 4, "span of 'a,b\\n'");
+        assert!(
+            data.seed[1].bytes > 0,
+            "malformed record must report its raw span"
+        );
+        // No gaps: the three spans cover the whole body.
+        let total: u64 = data.seed.iter().map(|r| r.bytes).sum();
+        assert_eq!(total, body_len);
+        // The RowSource view the search budget sees.
+        assert_eq!(data.row_scan_bytes(1), data.seed[1].bytes);
     }
 
     #[test]

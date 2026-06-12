@@ -603,7 +603,9 @@ Gate helpers — call one of these rather than hand-rolling a check:
 
 Deliberately local limits (different shapes, not class members): CSV `MAX_RECORD_BYTES` /
 `MAX_RECORD_LINES` (per record), `MAX_MATCHES` (count), animation per-frame / cumulative budgets,
-`PDFIUM_RENDER_CAP_PX` (pixel ceiling), ISO `MAX_DIR_BYTES` (metadata sanity bound).
+`PDFIUM_RENDER_CAP_PX` / `SVG_RASTER_CAP_PX` (pixel ceilings), `MAX_FIT_CELLS` /
+`MAX_FORCED_WIDTH_CELLS` (image cell-grid ceilings, `types/image/pipeline/render.rs`), ISO
+`MAX_DIR_BYTES` (metadata sanity bound).
 
 ## Adding a new file type
 

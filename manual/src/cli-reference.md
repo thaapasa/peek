@@ -10,7 +10,7 @@
 | `--theme`        | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)  |
 | `--color`        | `-C`  | Output color encoding — see [Color modes](./viewer/colors.md) |
 | `--language`     | `-L`  | Force syntax language                                         |
-| `--width`        | `-w`  | Image rendering width in characters                           |
+| `--width`        | `-w`  | Image rendering width in characters (capped at 2048)          |
 | `--image-mode`   | `-m`  | Image render mode (full / block / geo / ascii / contour)      |
 | `--background`   |       | Image transparency background (auto / black / white / checkerboard) |
 | `--margin`       |       | Image margin in transparent pixels                            |

@@ -74,7 +74,7 @@ pub struct Args {
     #[arg(short = 'L', long, hide_short_help = true)]
     pub language: Option<String>,
 
-    /// Image rendering width in characters (0 = auto-fit terminal)
+    /// Image rendering width in characters (0 = auto-fit terminal, max 2048)
     #[arg(short = 'w', long, default_value = "0", hide_short_help = true)]
     pub width: u32,
 

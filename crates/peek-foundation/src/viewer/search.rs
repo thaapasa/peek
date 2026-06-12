@@ -264,6 +264,21 @@ struct MatchPos {
     range: Range<usize>,
 }
 
+/// Why a scan stopped before the source ran out. Carried by
+/// [`SearchState`] (and the table view's cell search) so the truncation
+/// warning can name the actual cause — a match-cap stop must not claim
+/// a byte budget that was never applied.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum ScanStop {
+    /// Cumulative scanned bytes reached the budget
+    /// ([`SEARCH_SCAN_MAX_BYTES`] for the streaming callers).
+    ByteBudget,
+    /// The match list reached [`MAX_MATCHES`].
+    MatchCap,
+    /// The source errored mid-walk (table record walk only).
+    Error,
+}
+
 /// The result of a search scan: every match (flat, ordered by
 /// `(line, range.start)`) plus the index `n`/`p` cycle through. Shared
 /// by every searchable mode — each scans its own lines into one of
@@ -271,10 +286,10 @@ struct MatchPos {
 pub struct SearchState {
     matches: Vec<MatchPos>,
     current: usize,
-    /// The scan stopped before the source ran out — [`MAX_MATCHES`] or a
-    /// byte budget hit. Matches (and the total) past the stop point are
-    /// unknown; the status segment marks the counts as partial.
-    truncated: bool,
+    /// `Some` when the scan stopped before the source ran out, with the
+    /// cause. Matches (and the total) past the stop point are unknown;
+    /// the status segment marks the counts as partial.
+    stop: Option<ScanStop>,
 }
 
 impl SearchState {
@@ -300,11 +315,11 @@ impl SearchState {
     ) -> SearchState {
         let sensitive = smart_case_sensitive(query);
         let mut matches = Vec::new();
-        let mut truncated = false;
+        let mut stop = None;
         let mut scanned: u64 = 0;
         'scan: for (idx, line) in lines.enumerate() {
             if scanned >= max_bytes {
-                truncated = true;
+                stop = Some(ScanStop::ByteBudget);
                 break;
             }
             let line = line.as_ref();
@@ -313,7 +328,7 @@ impl SearchState {
             for range in find_matches(&visible, query, sensitive) {
                 matches.push(MatchPos { line: idx, range });
                 if matches.len() >= MAX_MATCHES {
-                    truncated = true;
+                    stop = Some(ScanStop::MatchCap);
                     break 'scan;
                 }
             }
@@ -321,14 +336,19 @@ impl SearchState {
         SearchState {
             matches,
             current: 0,
-            truncated,
+            stop,
         }
     }
 
     /// True when the scan stopped early (match cap or byte budget) —
     /// the match list and total are lower bounds, not the full file.
     pub fn truncated(&self) -> bool {
-        self.truncated
+        self.stop.is_some()
+    }
+
+    /// Why the scan stopped early, `None` when it covered the source.
+    pub fn stop(&self) -> Option<ScanStop> {
+        self.stop
     }
 
     /// Total match count.
@@ -385,7 +405,7 @@ impl SearchState {
             theme.muted
         };
         (
-            count_status_label(self.current, self.matches.len(), self.truncated),
+            count_status_label(self.current, self.matches.len(), self.truncated()),
             color,
         )
     }
@@ -411,15 +431,23 @@ pub fn count_status_label(current: usize, total: usize, truncated: bool) -> Stri
     }
 }
 
-/// Warning text pushed when a streaming scan stops at
-/// [`SEARCH_SCAN_MAX_BYTES`]. `scanned` names what the budget covered —
-/// `""` for plain file text, `" of cell text"` for the table walk —
-/// keeping the two sites' wording in lockstep with the budget constant.
-pub fn truncated_scan_warning(scanned: &str) -> String {
-    format!(
-        "search covers only the first {} MB{scanned}",
-        SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
-    )
+/// Warning text pushed when a scan stops early, worded by cause — a
+/// match-cap or error stop must not claim the 256 MB byte budget.
+/// `scanned` names what the byte budget covered — `""` for plain file
+/// text, `" of cell text"` for the table walk — keeping the two sites'
+/// wording in lockstep with the budget constant.
+pub fn truncated_scan_warning(stop: ScanStop, scanned: &str) -> String {
+    match stop {
+        ScanStop::ByteBudget => format!(
+            "search covers only the first {} MB{scanned}",
+            SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
+        ),
+        ScanStop::MatchCap => format!(
+            "search stopped after {} matches; counts are partial",
+            MAX_MATCHES
+        ),
+        ScanStop::Error => "search stopped early on a read error; counts are partial".to_string(),
+    }
 }
 
 /// Paint search-match backgrounds onto a freshly-sliced viewport. `win`
@@ -494,7 +522,7 @@ mod tests {
         // 10-byte lines (incl. the counted newline); budget admits ~3.
         let lines = (0..100).map(|i| format!("hit {i:04}"));
         let s = SearchState::scan_capped(lines, "hit", 30);
-        assert!(s.truncated());
+        assert_eq!(s.stop(), Some(ScanStop::ByteBudget));
         let n = s.match_count();
         assert!(
             (1..100).contains(&n),
@@ -511,8 +539,20 @@ mod tests {
     #[test]
     fn scan_marks_truncated_at_match_cap() {
         let s = SearchState::scan((0..MAX_MATCHES + 10).map(|_| "x"), "x");
-        assert!(s.truncated());
+        assert_eq!(s.stop(), Some(ScanStop::MatchCap));
         assert_eq!(s.match_count(), MAX_MATCHES);
+    }
+
+    /// Each stop cause must produce a warning that names what actually
+    /// happened — a match-cap stop claiming the 256 MB byte budget was
+    /// the original bug.
+    #[test]
+    fn truncated_scan_warning_words_each_cause() {
+        assert!(truncated_scan_warning(ScanStop::ByteBudget, "").contains("256 MB"));
+        let cap = truncated_scan_warning(ScanStop::MatchCap, "");
+        assert!(cap.contains("matches") && !cap.contains("MB"));
+        let err = truncated_scan_warning(ScanStop::Error, "");
+        assert!(err.contains("error") && !err.contains("MB"));
     }
 
     #[test]

@@ -85,7 +85,7 @@ query that would span the comma between two columns yields nothing.
 Substring scan, smart-case (all-lowercase query → case-insensitive; any
 uppercase → case-sensitive). Search reaches past the loaded rows — peek
 pages through the records without loading them all into memory — but the
-scan is budgeted at 256 MB of cell text per query so a multi-gigabyte
+scan is budgeted at 256 MB of record data per query so a multi-gigabyte
 CSV never freezes the viewer; a capped scan marks its counts as partial
 (`12/3400+`, `no match (partial scan)`) and raises a warning. `n` / `p`
 step through matches, wrapping at the ends; the viewport scrolls

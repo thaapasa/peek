@@ -41,7 +41,7 @@ use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{
-    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, SearchTarget, count_status_label, find_matches,
+    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, ScanStop, SearchTarget, count_status_label, find_matches,
     overlay_matches, smart_case_sensitive, truncated_scan_warning,
 };
 use crate::viewer::table::row_source::RowSource;
@@ -113,10 +113,10 @@ struct CellSearch {
     matches: Vec<CellMatch>,
     /// Active-match index into `matches`. Unused when `matches` is empty.
     cursor: usize,
-    /// The scan stopped early — [`MAX_MATCHES`] or the byte budget hit.
-    /// Matches past the stop point are unknown; the status segment marks
-    /// the counts as partial.
-    truncated: bool,
+    /// `Some` when the scan stopped early, with the cause. Matches past
+    /// the stop point are unknown; the status segment marks the counts
+    /// as partial.
+    stop: Option<ScanStop>,
 }
 
 #[derive(Clone)]
@@ -285,20 +285,24 @@ impl RowsTableMode {
         (ranges, current)
     }
 
-    /// Build a [`CellSearch`] over up to `max_bytes` of cell text. Each
-    /// record is pulled into the source's sliding window via
+    /// Build a [`CellSearch`] over up to `max_bytes` of record bytes.
+    /// Each record is pulled into the source's sliding window via
     /// `ensure_row` just before it's read, so the scan walks the file
     /// without ever holding more than one window in memory. The walk is
     /// budgeted like every streaming scan ([`SEARCH_SCAN_MAX_BYTES`] /
     /// [`MAX_MATCHES`]) — an unindexed multi-GB CSV would otherwise
     /// freeze the UI for a full file read on every zero-hit query.
-    /// Stopping early marks the search truncated so the status segment
-    /// reports the counts as partial.
+    /// Every record is charged [`RowSource::row_scan_bytes`], malformed
+    /// ones included — they're parsed (and paid for) before the
+    /// malformed flag is known, so a budget that skipped them would walk
+    /// a mostly-malformed multi-GB file end-to-end. Stopping early marks
+    /// the search truncated so the status segment reports the counts as
+    /// partial.
     fn build_search_capped(&mut self, query: &str, max_bytes: u64) -> CellSearch {
         let sensitive = smart_case_sensitive(query);
         let mut matches: Vec<CellMatch> = Vec::new();
         let cols = self.widths.len();
-        let mut truncated = false;
+        let mut stop = None;
         let mut scanned: u64 = 0;
         let mut record_idx = 0usize;
         'records: loop {
@@ -306,23 +310,23 @@ impl RowsTableMode {
             // the file, so the counts must report as partial, same as a
             // budget stop.
             let Ok(bound) = self.source.ensure_row(record_idx) else {
-                truncated = true;
+                stop = Some(ScanStop::Error);
                 break;
             };
             if record_idx >= bound {
                 break;
             }
             if scanned >= max_bytes {
-                truncated = true;
+                stop = Some(ScanStop::ByteBudget);
                 break;
             }
+            scanned += self.source.row_scan_bytes(record_idx);
             if !self.source.row_is_malformed(record_idx)
                 && let Some(cells) = self.source.row(record_idx)
             {
                 for (col_idx, cell) in cells.iter().enumerate().take(cols) {
                     let raw = cell.as_deref().unwrap_or("");
                     let display = display_cell(raw);
-                    scanned += display.len() as u64;
                     for r in find_matches(&display, query, sensitive) {
                         matches.push(CellMatch {
                             record_idx,
@@ -330,7 +334,7 @@ impl RowsTableMode {
                             range: r,
                         });
                         if matches.len() >= MAX_MATCHES {
-                            truncated = true;
+                            stop = Some(ScanStop::MatchCap);
                             break 'records;
                         }
                     }
@@ -341,7 +345,7 @@ impl RowsTableMode {
         CellSearch {
             matches,
             cursor: 0,
-            truncated,
+            stop,
         }
     }
 
@@ -900,7 +904,7 @@ impl Mode for RowsTableMode {
         // coverage they don't have.
         if let Some(s) = &self.search {
             segs.push((
-                count_status_label(s.cursor, s.matches.len(), s.truncated),
+                count_status_label(s.cursor, s.matches.len(), s.stop.is_some()),
                 theme.label,
             ));
         }
@@ -916,11 +920,11 @@ impl Mode for RowsTableMode {
             }
         };
         let search = self.build_search_capped(query, SEARCH_SCAN_MAX_BYTES);
-        if search.truncated {
+        if let Some(stop) = search.stop {
             // Identical text per push — the session layer dedupes, so
             // repeated truncated queries warn once.
             self.pending_warnings
-                .push(truncated_scan_warning(" of cell text"));
+                .push(truncated_scan_warning(stop, " of table data"));
         }
         self.search = Some(search);
         self.scroll_to_current_match();
@@ -1439,7 +1443,7 @@ mod tests {
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.matches.len(), 1);
         assert_eq!(s.matches[0].record_idx, 2);
-        assert!(!s.truncated);
+        assert!(s.stop.is_none());
     }
 
     /// The record walk stops at the byte budget instead of reading the
@@ -1453,7 +1457,7 @@ mod tests {
 
         // 8-byte cells; a 30-byte budget admits only a few records.
         let s = mode.build_search_capped("hit", 30);
-        assert!(s.truncated);
+        assert_eq!(s.stop, Some(ScanStop::ByteBudget));
         let n = s.matches.len();
         assert!(
             (1..100).contains(&n),
@@ -1462,8 +1466,77 @@ mod tests {
 
         // Unbounded budget: complete and not truncated.
         let s = mode.build_search_capped("hit", u64::MAX);
-        assert!(!s.truncated);
+        assert!(s.stop.is_none());
         assert_eq!(s.matches.len(), 100);
+    }
+
+    /// Lazy source whose rows are all malformed: zero cell text, but a
+    /// real per-record parse cost reported via `row_scan_bytes` — the
+    /// shape of a CSV gone malformed after a stray quote. `max_ensured`
+    /// is shared out so the test can observe how deep the walk went.
+    struct MalformedRows {
+        total: usize,
+        row_cost: u64,
+        max_ensured: Rc<std::cell::Cell<usize>>,
+    }
+
+    impl RowSource for MalformedRows {
+        fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+            self.max_ensured.set(self.max_ensured.get().max(idx));
+            Ok(self.total)
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn row(&self, _idx: usize) -> Option<&[Option<String>]> {
+            Some(&[])
+        }
+        fn row_is_malformed(&self, _idx: usize) -> bool {
+            true
+        }
+        fn row_scan_bytes(&self, _idx: usize) -> u64 {
+            self.row_cost
+        }
+        fn loaded(&self) -> usize {
+            self.total
+        }
+        fn total(&self) -> Option<usize> {
+            Some(self.total)
+        }
+        fn column_count(&self) -> usize {
+            1
+        }
+        fn malformed_count(&self) -> usize {
+            self.total
+        }
+    }
+
+    /// Malformed records expose no cell text but still cost a parse, so
+    /// they must be charged to the byte budget — otherwise a
+    /// mostly-malformed multi-GB file is re-walked end-to-end on every
+    /// query, the exact freeze the budget exists to prevent.
+    #[test]
+    fn search_budget_charges_malformed_records() {
+        let max_ensured = Rc::new(std::cell::Cell::new(0));
+        let mut mode = RowsTableMode::new(
+            Box::new(MalformedRows {
+                total: 1000,
+                row_cost: 10,
+                max_ensured: Rc::clone(&max_ensured),
+            }),
+            vec![Alignment::Left],
+            false,
+            "Table",
+        );
+        // 1000 records × 10 bytes each; a 100-byte budget admits ~10.
+        let s = mode.build_search_capped("x", 100);
+        assert_eq!(s.stop, Some(ScanStop::ByteBudget));
+        assert!(s.matches.is_empty(), "malformed rows produce no matches");
+        let walked = max_ensured.get();
+        assert!(
+            walked <= 12,
+            "walk must stop near the budget, not cover all 1000 records; ensured up to {walked}"
+        );
     }
 
     /// [`RowSource`] whose pull fails partway through, like an I/O error
@@ -1513,7 +1586,11 @@ mod tests {
             "Table",
         );
         let s = mode.build_search_capped("hit", u64::MAX);
-        assert!(s.truncated, "error-terminated scan must report partial");
+        assert_eq!(
+            s.stop,
+            Some(ScanStop::Error),
+            "error-terminated scan must report partial"
+        );
         assert_eq!(s.matches.len(), 3, "matches up to the failure point");
     }
 
@@ -1527,7 +1604,7 @@ mod tests {
         let theme = tm.peek_theme().clone();
 
         let s = mode.build_search_capped("hit", 30);
-        assert!(s.truncated);
+        assert!(s.stop.is_some());
         mode.search = Some(s);
         let segs = mode.status_segments(&theme);
         assert!(
@@ -1537,7 +1614,7 @@ mod tests {
         );
 
         let s = mode.build_search_capped("zzz", 30);
-        assert!(s.truncated);
+        assert!(s.stop.is_some());
         mode.search = Some(s);
         let segs = mode.status_segments(&theme);
         assert!(

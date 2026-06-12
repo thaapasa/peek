@@ -561,11 +561,11 @@ impl Mode for ContentMode {
                 search::SEARCH_SCAN_MAX_BYTES,
             )
         };
-        if search.truncated() {
+        if let Some(stop) = search.stop() {
             // Identical text per push — the session layer dedupes, so
             // repeated truncated queries warn once.
             self.pending_warnings
-                .push(search::truncated_scan_warning(""));
+                .push(search::truncated_scan_warning(stop, ""));
         }
         let first = search.first_line();
         self.search = Some(search);

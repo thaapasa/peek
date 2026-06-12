@@ -63,6 +63,24 @@ pub trait RowSource {
         false
     }
 
+    /// Bytes the search byte budget charges for row `idx`. Default: the
+    /// summed cell text length — right for in-memory sources. Streaming
+    /// sources should override with the record's raw byte span so the
+    /// budget tracks parse cost: a malformed CSV record exposes zero
+    /// cells but cost up to a full record parse, and a budget that
+    /// charged it nothing would re-walk a mostly-malformed multi-GB
+    /// file on every query.
+    fn row_scan_bytes(&self, idx: usize) -> u64 {
+        self.row(idx)
+            .map(|cells| {
+                cells
+                    .iter()
+                    .map(|c| c.as_deref().unwrap_or("").len() as u64)
+                    .sum()
+            })
+            .unwrap_or(0)
+    }
+
     /// Number of rows currently accessible without further calls to
     /// [`Self::ensure_row`]. For windowed sources this is the total
     /// row count.

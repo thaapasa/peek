@@ -1558,7 +1558,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--theme`        | `-t`  | Syntax highlighting theme                                                                                         | ✅      |
 | `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)                                                          | ✅      |
 | `--language`     | `-L`  | Force syntax language                                                                                             | ✅      |
-| `--width`        | `-w`  | Image rendering width in characters                                                                               | ✅      |
+| `--width`        | `-w`  | Image rendering width in characters (capped at 2048, `MAX_FORCED_WIDTH_CELLS`)                                    | ✅      |
 | `--image-mode`   | `-m`  | Image rendering mode                                                                                              | ✅      |
 | `--edge-density` |       | Edge density target for `--image-mode contour`                                                                    | ✅      |
 | `--info`         | `-i`  | Show file info instead of contents                                                                                | ✅      |
