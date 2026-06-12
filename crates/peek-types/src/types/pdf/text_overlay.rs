@@ -268,6 +268,11 @@ pub(crate) fn layout(words: &PageWords, map: &GridMap, margin: u32) -> OverlayCe
                 row
             }
         };
+        let vrow = row - map.scroll_y as i64;
+        if vrow < 0 || vrow >= map.viewport_rows as i64 {
+            continue;
+        }
+
         let col0_f = cell_x(word.left);
         let col1_f = cell_x(word.left + word.width);
         let box_cells = ((col1_f - col0_f).round() as i64).max(1) as usize;
@@ -301,10 +306,6 @@ pub(crate) fn layout(words: &PageWords, map: &GridMap, margin: u32) -> OverlayCe
             (placed, col0_f.round() as i64)
         };
 
-        let vrow = row - map.scroll_y as i64;
-        if vrow < 0 || vrow >= map.viewport_rows as i64 {
-            continue;
-        }
         let row_cells = out.entry(vrow as u32).or_default();
         for (i, ch) in placed.into_iter().enumerate() {
             let vcol = start_col + i as i64 - map.scroll_x as i64;

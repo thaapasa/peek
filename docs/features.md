@@ -368,7 +368,8 @@ yet supported — see [planned.md](planned.md).)
   glyph cells in its box, keeping the cells' SGR colors. The pair is oriented per cell: the
   half-block renderer assigns a cell's two pixel colors to fg/bg by position, so the letter
   paints in whichever lies nearer the word's font color (per-char fill color from Pdfium,
-  black when undeclared), with a black/white contrast nudge when the pair is too close to
+  stroke color for outlined text, black when neither is declared), with a black/white
+  contrast nudge when the pair is too close to
   read (blank paper). Padding spaces orient the same way (their bg takes the paper side).
   Orientation works in truecolor, 256-palette, and 16-color output alike — escapes are
   compared via their nominal RGB and swapped by re-planing, so the stream stays in its
