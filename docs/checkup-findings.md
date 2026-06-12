@@ -131,19 +131,6 @@ another `_scroll` underscore.
 
 ## Low
 
-### L3. Image-config help consts re-listed across image modes — largely resolved
-
-The 4-element literal block the finding targeted was extracted into three
-named consts (`CYCLE_BACKGROUND_HELP`, `CYCLE_IMAGE_MODE_HELP`,
-`CYCLE_FIT_HELP`) at `crates/peek-foundation/src/viewer/paged.rs:192-203`.
-What remains is each image mode re-listing those three consts inline in its
-`EXTRA_ACTIONS`: `paged.rs:217-219`, `image/mode.rs:79-81`,
-`image/animation_mode.rs:56-58`, `svg/animation_mode.rs:77-79`,
-`font/specimen_mode.rs:78-80` and `91-93`, and `ebook/epub/read_mode.rs:61-69`
-(epub deliberately diverges with "cover image" labels). That's a reference to
-shared consts, not a copied array — low value to dedup further. Accept the
-small re-list or add a build helper; close if not worth it.
-
 ### L4. `Mode::status_hints(has_return_target)` parameter only read by `HexMode`
 
 Trait sig + default at `crates/peek-foundation/src/viewer/modes/mod.rs:300`
@@ -180,7 +167,7 @@ on a different path, `image_render/zoom_pan.rs:79`) — adding `ZoomPreset(10)`
 to `bindings()` while forgetting the help row would slip through. Pattern's
 good; needs one more application.
 
-### L13. 16 MB render cap also bounds in-container image payloads
+### L13. 16 MB render cap also bounds in-container image payloads — wontfix, kept as analysis record
 
 `RENDER_MAX_BYTES` was sized for text payloads ("a 16 MB
 `document.xml`"), but the shared `read_zip_entry` gate now also bounds
