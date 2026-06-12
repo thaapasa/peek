@@ -1,18 +1,36 @@
 use anyhow::Result;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
+use crate::theme::{PeekThemeName, StyleMode};
 
-pub struct InfoMode;
+#[derive(Default)]
+pub struct InfoMode {
+    /// Wrapped styled lines from the last render, kept so a scroll
+    /// keystroke slices instead of re-theming every field. Same shape
+    /// as `RenderedTextMode`'s cache.
+    cache: Option<InfoCache>,
+}
 
-impl Default for InfoMode {
-    fn default() -> Self {
-        Self::new()
-    }
+/// Everything that changes the rendered output. `warnings_len` covers
+/// the one part of `FileInfo` that mutates mid-session — the session
+/// layer appends (deduped) mode warnings, so the length moves whenever
+/// the content does. `render_opts` is CLI-fixed and needs no key part.
+#[derive(PartialEq, Eq)]
+struct CacheKey {
+    width: usize,
+    theme_name: PeekThemeName,
+    style_mode: StyleMode,
+    warnings_len: usize,
+}
+
+struct InfoCache {
+    key: CacheKey,
+    lines: Vec<String>,
 }
 
 impl InfoMode {
     pub fn new() -> Self {
-        Self
+        Self::default()
     }
 }
 
@@ -26,10 +44,20 @@ impl Mode for InfoMode {
     }
 
     fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
-        let rendered = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
-        let full = wrap_info_lines(&rendered, ctx.term_cols);
+        let key = CacheKey {
+            width: ctx.term_cols,
+            theme_name: ctx.theme_name,
+            style_mode: ctx.peek_theme.style_mode,
+            warnings_len: ctx.file_info.warnings.len(),
+        };
+        if self.cache.as_ref().is_none_or(|c| c.key != key) {
+            let rendered = crate::info::render(ctx.file_info, ctx.peek_theme, ctx.render_opts);
+            let lines = wrap_info_lines(&rendered, ctx.term_cols);
+            self.cache = Some(InfoCache { key, lines });
+        }
+        let full = &self.cache.as_ref().expect("cache populated").lines;
         let total = full.len();
-        let lines = slice_window(&full, scroll, rows);
+        let lines = slice_window(full, scroll, rows);
         Ok(Window { lines, total })
     }
 
@@ -67,6 +95,69 @@ fn wrap_info_lines(rendered: &[String], width: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::wrap_info_lines;
+    use super::*;
+    use crate::info::{FileInfo, NoExtras, RenderOptions};
+    use crate::theme::ThemeManager;
+
+    fn synthetic_file_info() -> FileInfo {
+        FileInfo {
+            file_name: "x".to_string(),
+            path: "x".to_string(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: Box::new(NoExtras),
+        }
+    }
+
+    fn make_ctx<'a>(
+        file_info: &'a FileInfo,
+        peek_theme: &'a crate::theme::PeekTheme,
+    ) -> RenderCtx<'a> {
+        RenderCtx {
+            file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 24,
+        }
+    }
+
+    #[test]
+    fn scroll_reuses_cached_lines_and_warnings_invalidate() {
+        let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let peek_theme = tm.peek_theme().clone();
+        let mut file_info = synthetic_file_info();
+        let mut mode = InfoMode::new();
+
+        let w1 = mode
+            .render_window(&make_ctx(&file_info, &peek_theme), 0, 10)
+            .unwrap();
+        let cached_ptr = mode.cache.as_ref().unwrap().lines.as_ptr();
+
+        // Scroll with nothing changed: the cache must survive untouched.
+        let w2 = mode
+            .render_window(&make_ctx(&file_info, &peek_theme), 1, 10)
+            .unwrap();
+        assert_eq!(w1.total, w2.total);
+        assert_eq!(cached_ptr, mode.cache.as_ref().unwrap().lines.as_ptr());
+
+        // A new warning must invalidate and surface in the output.
+        file_info.warnings.push("late mode warning".to_string());
+        let w3 = mode
+            .render_window(&make_ctx(&file_info, &peek_theme), 0, 50)
+            .unwrap();
+        assert!(w3.total > w1.total, "warning line should appear");
+        assert!(
+            w3.lines.iter().any(|l| l.contains("late mode warning")),
+            "warning text should render"
+        );
+    }
 
     #[test]
     fn fitting_lines_keep_their_column_padding() {

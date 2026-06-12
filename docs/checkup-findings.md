@@ -92,22 +92,6 @@ at theme construction without mutating args. Tiny win, not worth a
 commit on its own; fold in next time `main.rs` argument plumbing gets
 touched.
 
-### M15. `InfoMode::render_window` re-builds every styled line per call
-
-`crates/peek-foundation/src/viewer/modes/info.rs:28-34`. Calls
-`crate::info::render(...)` to build every themed line from scratch each
-invocation — every scroll keystroke re-themes character data. Only Mode that
-re-themes on every `render_window` (and `rerender_on_resize` returns true).
-`ViewerState` invalidates the view-cache via `f.views[i] = None` on theme
-changes, but the underlying styled lines get rebuilt regardless.
-
-As more file types push async warnings (audio, PDF page-extract failures,
-CSV malformed counts), the warnings-edit path clears the InfoMode cache and
-next view triggers a full re-paint.
-
-Direction: cache keyed by `(PeekThemeName, StyleMode, warnings_len)` —
-same shape `RenderedTextMode` already uses.
-
 ### M17. `ContentMode::set_search` streams the entire file per query
 
 `crates/peek-foundation/src/viewer/modes/content.rs:708-735` (raw-branch
