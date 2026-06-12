@@ -37,18 +37,28 @@ pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
 /// burning RAM on a parse that would just be noise anyway.
 pub const SIDECAR_TEXT_LIMIT: u64 = 64 * 1024 * 1024;
 
-/// Capped whole-file read for a sidecar parser. Returns the streaming
-/// [`TextStats`] paired with the full decoded text, or `None` when the
-/// source is over [`SIDECAR_TEXT_LIMIT`], isn't valid UTF-8, or can't be
-/// read — in which case the caller drops to the generic text/binary
-/// fallback.
+/// Capped whole-file read for a sidecar parser. Returns the [`TextStats`]
+/// paired with the full decoded text, or `None` when the source is over
+/// [`SIDECAR_TEXT_LIMIT`], isn't valid UTF-8, or can't be read — in which
+/// case the caller drops to the generic text/binary fallback.
+///
+/// One read: the sidecar parse needs the whole text in memory anyway, so
+/// the stats run over that buffer instead of a separate streaming pass
+/// (which would double the I/O). UTF-16 returns `None` — the sidecar
+/// parsers take UTF-8 text.
 pub fn gather_capped_text(source: &InputSource) -> Option<(TextStats, String)> {
-    let bs = source.open_byte_source().ok()?;
-    if bs.len() > SIDECAR_TEXT_LIMIT {
+    if source.byte_len().ok()? > SIDECAR_TEXT_LIMIT {
         return None;
     }
-    let stats = gather_text_stats(source)?;
-    let text = source.read_text().ok()?;
+    let bytes = source.read_bytes().ok()?;
+    let (encoding, offset) = detect_bom(&bytes[..bytes.len().min(4)]);
+    if matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be) {
+        return None;
+    }
+    let text = std::str::from_utf8(&bytes).ok()?.to_owned();
+    // `offset` is the BOM's byte length (0 or 3) — a char boundary, so
+    // the slice is safe; stats skip the BOM like the streaming pass does.
+    let stats = stats_from_str(&text[offset as usize..], encoding);
     Some((stats, text))
 }
 
@@ -176,7 +186,13 @@ fn decode_utf16_stats(
         })
         .collect();
     let s = String::from_utf16_lossy(&units);
+    Some(stats_from_str(&s, encoding))
+}
 
+/// Synchronous [`TextStats`] over an already-loaded string — the in-memory
+/// counterpart of [`stream_utf8`], shared by the UTF-16 path and
+/// [`gather_capped_text`]'s single-read path.
+fn stats_from_str(s: &str, encoding: Encoding) -> TextStats {
     let mut state = ScanState::new();
     for ch in s.chars() {
         state.consume(ch);
@@ -184,7 +200,7 @@ fn decode_utf16_stats(
     let shebang = s
         .strip_prefix("#!")
         .and_then(|rest| rest.lines().next().map(|l| l.trim().to_string()));
-    Some(state.finish(encoding, shebang))
+    state.finish(encoding, shebang)
 }
 
 // ---------------------------------------------------------------------------
@@ -520,5 +536,41 @@ mod tests {
     fn truncated_utf8_returns_none() {
         let src = InputSource::stdin(Bytes::from_static(&[0xe4, 0xbd]));
         assert!(gather_text_stats(&src).is_none());
+    }
+
+    #[test]
+    fn capped_text_matches_streaming_stats() {
+        let src = stdin_source("#!/bin/sh\necho hi\n\n\tdone\n");
+        let (stats, text) = gather_capped_text(&src).unwrap();
+        assert_eq!(text, "#!/bin/sh\necho hi\n\n\tdone\n");
+        let streamed = gather_text_stats(&src).unwrap();
+        assert_eq!(stats.line_count, streamed.line_count);
+        assert_eq!(stats.word_count, streamed.word_count);
+        assert_eq!(stats.char_count, streamed.char_count);
+        assert_eq!(stats.shebang, streamed.shebang);
+        assert_eq!(stats.blank_lines, streamed.blank_lines);
+    }
+
+    #[test]
+    fn capped_text_skips_bom_in_stats_keeps_it_in_text() {
+        let mut bytes = vec![0xEF, 0xBB, 0xBF];
+        bytes.extend_from_slice(b"hi\n");
+        let src = InputSource::stdin(Bytes::from(bytes));
+        let (stats, text) = gather_capped_text(&src).unwrap();
+        assert!(matches!(stats.encoding, Encoding::Utf8Bom));
+        assert_eq!(stats.char_count, 3); // "hi\n", BOM not counted
+        assert!(text.starts_with('\u{FEFF}'));
+    }
+
+    #[test]
+    fn capped_text_rejects_utf16() {
+        let src = InputSource::stdin(Bytes::from_static(&[0xFF, 0xFE, b'h', 0, b'i', 0]));
+        assert!(gather_capped_text(&src).is_none());
+    }
+
+    #[test]
+    fn capped_text_rejects_invalid_utf8() {
+        let src = InputSource::stdin(Bytes::from_static(&[0x80, 0x80]));
+        assert!(gather_capped_text(&src).is_none());
     }
 }

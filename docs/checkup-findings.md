@@ -92,19 +92,6 @@ at theme construction without mutating args. Tiny win, not worth a
 commit on its own; fold in next time `main.rs` argument plumbing gets
 touched.
 
-### M13. `gather_capped_text` reads the file twice
-
-`crates/peek-types/src/types/text/info_gather.rs:45-53`:
-`gather_text_stats(source)?` streams the byte source for stats, then
-`source.read_text()?` re-walks from offset 0 to build the String for the
-language-specific gather. For an 8 MB CSS file that's 16 MB of I/O for one
-info screen. Every caller of `gather_capped_text` inherits the double-read —
-code/markdown/sql/css all route through it (e.g.
-`markdown/info_gather.rs:20-26`), so the scope is wider than the original
-code/markdown-only framing. Either expose `gather_text_stats_with_body`
-returning `(TextStats, String)`, or skip the stats pass when the body read
-will walk the whole text anyway.
-
 ### M15. `InfoMode::render_window` re-builds every styled line per call
 
 `crates/peek-foundation/src/viewer/modes/info.rs:28-34`. Calls
