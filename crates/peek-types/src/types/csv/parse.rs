@@ -476,7 +476,8 @@ fn sniff_encoding(head: &[u8]) -> (Encoding, usize, bool) {
 /// record position. UTF-16: the source is transcoded to a UTF-8 `Vec`
 /// up front and served from a `Cursor`. That fully materialises the
 /// file in memory; UTF-16 CSV is rare and the windowing memory bound
-/// doesn't apply to it (documented limitation).
+/// doesn't apply to it, so the read is gated at the whole-doc budget —
+/// a UTF-16 BOM on a huge file must not buy an unbounded load.
 fn build_body_reader(
     source: &InputSource,
     encoding: Encoding,
@@ -489,6 +490,16 @@ fn build_body_reader(
             Ok(Box::new(ByteStream::range(bs, body_offset as u64, len)))
         }
         Encoding::Utf16Le | Encoding::Utf16Be => {
+            let len = source.byte_len()?;
+            let cap = crate::input::limits::WHOLE_DOC_BYTES;
+            if len > cap {
+                anyhow::bail!(
+                    "UTF-16 CSV is {} MB (> {} MB cap): transcoding holds the whole file in \
+                     memory, unlike the streaming UTF-8 path",
+                    len / (1024 * 1024),
+                    cap / (1024 * 1024)
+                );
+            }
             let raw = source.read_bytes()?;
             let payload = &raw[body_offset..];
             let transcoded = transcode_utf16(payload, encoding)?;
@@ -829,6 +840,21 @@ mod tests {
         assert!(data.has_bom);
         assert_eq!(data.seed[0].cells, some_cells(&["a", "b"]));
         assert_eq!(data.seed[1].cells, some_cells(&["1", "2"]));
+    }
+
+    #[test]
+    fn utf16_over_cap_refuses_instead_of_transcoding() {
+        // UTF-16 BOM on a body past the whole-doc cap: open must refuse
+        // with the cap message, not materialise + transcode the file.
+        let cap = crate::input::limits::WHOLE_DOC_BYTES as usize;
+        let mut buf = vec![0xFF, 0xFE];
+        buf.resize(cap + 2, b' ');
+        let src = InputSource::stdin(Bytes::from(buf));
+        let err = match CsvData::open(&src, CsvFormat::Csv) {
+            Ok(_) => panic!("over-cap UTF-16 CSV must refuse"),
+            Err(e) => e,
+        };
+        assert!(err.to_string().contains("cap"), "got: {err:#}");
     }
 
     #[test]

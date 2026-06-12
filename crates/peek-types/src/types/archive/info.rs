@@ -68,11 +68,17 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
 ///
 /// This reads the whole archive once for random-access member slices —
 /// the same whole-file cost the object-file viewer pays, and acceptable
-/// for the same reason (static libraries are not multi-GB streams). Only
-/// the first object member is fully parsed (for its architecture); the
-/// per-member object check is a cheap `FileKind` magic read.
+/// for the same reason (static libraries are not multi-GB streams). The
+/// read is still gated at the sidecar budget so a hostile rename can't
+/// turn the assumption into an unbounded load — over the cap the info
+/// screen just drops this section. Only the first object member is
+/// fully parsed (for its architecture); the per-member object check is
+/// a cheap `FileKind` magic read.
 fn static_lib_summary(source: &InputSource, format: ArchiveFormat) -> Option<StaticLibSummary> {
     if format != ArchiveFormat::Ar {
+        return None;
+    }
+    if source.byte_len().ok()? > crate::input::limits::SIDECAR_PARSE_BYTES {
         return None;
     }
     let bytes = source.read_bytes().ok()?;

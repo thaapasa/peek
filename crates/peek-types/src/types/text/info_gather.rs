@@ -24,8 +24,12 @@ pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
     // Detect BOM up-front; advance past it for the rest of the scan.
     let head = bs.read_range(0, 4).ok()?;
     let (encoding, offset) = detect_bom(&head);
-    if let Some(stats) = decode_utf16_stats(bs.as_ref(), encoding, offset, total) {
-        return Some(stats);
+    if matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be) {
+        // UTF-16 must not fall through to the UTF-8 scan: UTF-16-LE
+        // ASCII is byte-valid UTF-8 (chars + NULs), so the fallthrough
+        // would produce confidently wrong stats. A `None` here (over
+        // the cap, or unreadable) means the binary fallback.
+        return decode_utf16_stats(bs.as_ref(), encoding, offset, total);
     }
 
     stream_utf8(bs.as_ref(), encoding, offset, total)
@@ -166,7 +170,9 @@ fn stream_utf8(
 /// Synchronous text analysis on a fully-loaded string. UTF-16 files in the
 /// wild are essentially always small config / script files, so in-memory
 /// decoding here is fine — chunked streaming would have to track surrogate
-/// pairs across boundaries for marginal gain.
+/// pairs across boundaries for marginal gain. The load is still gated at
+/// the sidecar budget so a UTF-16 BOM prefixed onto a huge file degrades
+/// to the binary fallback instead of a multiple-of-filesize load.
 fn decode_utf16_stats(
     bs: &dyn ByteSource,
     encoding: Encoding,
@@ -174,6 +180,9 @@ fn decode_utf16_stats(
     total: u64,
 ) -> Option<TextStats> {
     if !matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be) {
+        return None;
+    }
+    if total > crate::input::limits::SIDECAR_PARSE_BYTES {
         return None;
     }
     let body = bs.read_range(offset, (total - offset) as usize).ok()?;
@@ -566,6 +575,19 @@ mod tests {
     fn capped_text_rejects_utf16() {
         let src = InputSource::stdin(Bytes::from_static(&[0xFF, 0xFE, b'h', 0, b'i', 0]));
         assert!(gather_capped_text(&src).is_none());
+    }
+
+    #[test]
+    fn utf16_stats_over_cap_fall_to_binary_not_utf8_scan() {
+        // UTF-16-LE ASCII is byte-valid UTF-8 (chars + NULs), so an
+        // over-cap UTF-16 file must return None (binary fallback)
+        // rather than fall through to the UTF-8 scan and report
+        // confidently wrong stats.
+        let cap = crate::input::limits::SIDECAR_PARSE_BYTES as usize;
+        let mut buf = vec![0xFF, 0xFE];
+        buf.resize(cap + 2, b' ');
+        let src = InputSource::stdin(Bytes::from(buf));
+        assert!(gather_text_stats(&src).is_none());
     }
 
     #[test]
