@@ -41,21 +41,49 @@ pub fn compute_grid(
     fit: FitMode,
 ) -> (u32, u32) {
     let aspect = term.cell_h_over_w.max(0.1);
-    if forced_width > 0 {
+    let (cols, rows) = if forced_width > 0 {
         let rows = (img_h as f64 * forced_width as f64 / (img_w as f64 * aspect)) as u32;
-        return (forced_width, rows.max(1));
-    }
-    match fit {
-        FitMode::Contain => contain_grid(img_w, img_h, term, aspect),
-        FitMode::FitWidth => {
-            let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
-            (term.cols.max(1), rows.max(1))
+        (forced_width, rows.max(1))
+    } else {
+        match fit {
+            FitMode::Contain => contain_grid(img_w, img_h, term, aspect),
+            FitMode::FitWidth => {
+                let rows = (img_h as f64 * term.cols as f64 / (img_w as f64 * aspect)) as u32;
+                (term.cols.max(1), rows.max(1))
+            }
+            FitMode::FitHeight => {
+                let cols = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
+                (cols.max(1), term.rows.max(1))
+            }
         }
-        FitMode::FitHeight => {
-            let cols = (img_w as f64 * term.rows as f64 * aspect / img_h as f64) as u32;
-            (cols.max(1), term.rows.max(1))
-        }
+    };
+    clamp_grid(cols, rows)
+}
+
+/// Ceiling on a grid axis, in cells. `FitWidth` / `FitHeight` /
+/// `--width` derive one axis from the image's aspect ratio — metadata
+/// the file controls — and the downstream pixel buffers scale with the
+/// grid (`cells × CELL_W/H × 4` bytes), so an extreme aspect would
+/// otherwise size them into gigabytes. 1024 cells is ~10 terminal
+/// heights of scroll; the worst buffer stays ~150 MB at a 300-col
+/// terminal.
+const MAX_FIT_CELLS: u32 = 1024;
+
+/// Clamp a grid into the [`MAX_FIT_CELLS`] box, preserving the cell
+/// aspect ratio — an over-ceiling fit degrades to containment inside
+/// the capped box (proportionate, scrollable, bounded) rather than a
+/// squashed render.
+fn clamp_grid(cols: u32, rows: u32) -> (u32, u32) {
+    let (mut cols, mut rows) = (cols.max(1), rows.max(1));
+    if rows > MAX_FIT_CELLS {
+        cols = ((cols as f64 * MAX_FIT_CELLS as f64 / rows as f64) as u32).max(1);
+        rows = MAX_FIT_CELLS;
     }
+    if cols > MAX_FIT_CELLS {
+        rows = ((rows as f64 * MAX_FIT_CELLS as f64 / cols as f64) as u32).max(1);
+        cols = MAX_FIT_CELLS;
+    }
+    (cols, rows)
 }
 
 fn contain_grid(img_w: u32, img_h: u32, term: TermSize, aspect: f64) -> (u32, u32) {
@@ -639,6 +667,13 @@ pub fn render_prepared(
 /// Uses magic-byte format detection rather than file extension so a
 /// misnamed file (e.g. PNG renamed to `.svg`) still decodes correctly
 /// when the detection layer routes it to the image viewer.
+///
+/// Decode allocation is bounded by the `image` crate's default
+/// `Limits` (512 MiB max alloc — both paths construct an
+/// `ImageReader`, which applies them), so a header claiming absurd
+/// dimensions fails cleanly instead of alloc-aborting. Deliberately
+/// above the in-house caps: a legitimate 100-megapixel photo should
+/// still open.
 pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
     match source {
         InputSource::File(path) => image::ImageReader::open(path)
@@ -652,6 +687,18 @@ pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
             image::load_from_memory(&buf).context("failed to decode image")
         }
     }
+}
+
+/// Ceiling on the SVG rasterise target per axis — the analogue of the
+/// PDF renderer's `PDFIUM_RENDER_CAP_PX`.
+const SVG_RASTER_CAP_PX: u32 = 4096;
+
+/// `base × bucket`, capped at [`SVG_RASTER_CAP_PX`] — but never below
+/// `base` itself, so a grid that already exceeds the cap at zoom 1
+/// still renders at its base size.
+fn cap_raster_axis(base: u32, bucket: u32) -> u32 {
+    base.saturating_mul(bucket)
+        .clamp(1, base.max(SVG_RASTER_CAP_PX))
 }
 
 /// Run the rasterize → margin → composite pipeline for an SVG source.
@@ -717,9 +764,13 @@ fn prepare_svg_inner(
         _ => (cols * CELL_W, rows * CELL_H),
     };
     // Rasterise the source bitmap at `bucket × base` so the ROI crop
-    // at zoom > 1 reads native detail rather than upscaling pixels.
-    let px_w = base_px_w.saturating_mul(bucket).max(1);
-    let px_h = base_px_h.saturating_mul(bucket).max(1);
+    // at zoom > 1 reads native detail rather than upscaling pixels —
+    // but cap each axis (pdfium's 4096 px ceiling, same idea): a large
+    // terminal grid times a deep zoom bucket would otherwise reach
+    // multi-GB pixmaps. Past the cap zoom still works, the crop just
+    // upscales instead of re-rasterising sharper.
+    let px_w = cap_raster_axis(base_px_w, bucket);
+    let px_h = cap_raster_axis(base_px_h, bucket);
     let scale_x = px_w as f64 / padded_w as f64;
     let scale_y = px_h as f64 / padded_h as f64;
     let target_margin_x = (margin as f64 * scale_x).round() as u32;
@@ -758,4 +809,48 @@ fn prepare_svg_inner(
         cols,
         rows,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::cell_size;
+
+    #[test]
+    fn extreme_aspect_grid_is_clamped_and_proportionate() {
+        let term = cell_size::term_size(300, 100);
+        // 1 px wide, 10M px tall at FitWidth: unclamped rows would be in
+        // the millions; the clamp contains the grid in the capped box.
+        let (cols, rows) = compute_grid(1, 10_000_000, term, 0, FitMode::FitWidth);
+        assert!(rows <= MAX_FIT_CELLS, "rows {rows}");
+        assert!(cols >= 1 && cols <= 300, "cols {cols}");
+        // 10M px wide, 1 px tall at FitHeight: same on the other axis.
+        let (cols, rows) = compute_grid(10_000_000, 1, term, 0, FitMode::FitHeight);
+        assert!(cols <= MAX_FIT_CELLS, "cols {cols}");
+        assert!(rows >= 1, "rows {rows}");
+        // --width is clamped too.
+        let (_, rows) = compute_grid(1, 10_000_000, term, 80, FitMode::Contain);
+        assert!(rows <= MAX_FIT_CELLS, "forced-width rows {rows}");
+    }
+
+    #[test]
+    fn normal_grids_pass_through_unclamped() {
+        let term = cell_size::term_size(120, 40);
+        let (cols, rows) = compute_grid(800, 600, term, 0, FitMode::Contain);
+        assert!(cols <= 120 && rows <= 40, "{cols}x{rows}");
+        let (cols, rows) = compute_grid(800, 1600, term, 0, FitMode::FitWidth);
+        assert_eq!(cols, 120);
+        assert!(rows > 40 && rows <= MAX_FIT_CELLS, "rows {rows}");
+    }
+
+    #[test]
+    fn raster_axis_caps_zoom_target_but_never_below_base() {
+        // Base under the cap: bucket multiplies until the cap.
+        assert_eq!(cap_raster_axis(640, 1), 640);
+        assert_eq!(cap_raster_axis(640, 4), 2560);
+        assert_eq!(cap_raster_axis(640, 100), SVG_RASTER_CAP_PX);
+        // Base already over the cap (tall clamped grid): stays at base.
+        assert_eq!(cap_raster_axis(8000, 1), 8000);
+        assert_eq!(cap_raster_axis(8000, 16), 8000);
+    }
 }
