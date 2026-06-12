@@ -14,7 +14,29 @@
 use super::scroll::{self, ScrollBounds};
 use super::zoom::{ZoomLevel, anchor_zoom_change};
 use crate::viewer::modes::Handled;
-use crate::viewer::ui::Action;
+use crate::viewer::ui::{Action, HelpEntry};
+
+/// Help row for the digit zoom presets [`ZoomPanState::handle_zoom`]
+/// accepts. Kept next to the handler — and pinned to the key bindings
+/// by `zoom_preset_help_pinned_to_bindings_and_handler` — so adding a
+/// preset binding without the help row (or vice versa) fails a test
+/// instead of shipping a silent mismatch. Image / animation / specimen
+/// / paged modes splice this into their `extra_actions` (the same
+/// pattern as the `CYCLE_*_HELP` consts in `viewer::paged`).
+pub const ZOOM_PRESET_HELP: HelpEntry = (
+    &[
+        Action::ZoomPreset(1),
+        Action::ZoomPreset(2),
+        Action::ZoomPreset(3),
+        Action::ZoomPreset(4),
+        Action::ZoomPreset(5),
+        Action::ZoomPreset(6),
+        Action::ZoomPreset(7),
+        Action::ZoomPreset(8),
+        Action::ZoomPreset(9),
+    ],
+    "Zoom 1×–9×",
+);
 
 /// Scroll bounds suitable for the active view: the effective grid
 /// minus the terminal-clamped viewport, on each axis. Used by every
@@ -105,6 +127,40 @@ mod tests {
             max_y: 0,
             viewport_cols,
             viewport_rows,
+        }
+    }
+
+    /// The preset help row, the key bindings, and the zoom handler must
+    /// agree on the preset set — adding `ZoomPreset(10)` to `bindings()`
+    /// while forgetting the help row (or vice versa) must fail here.
+    #[test]
+    fn zoom_preset_help_pinned_to_bindings_and_handler() {
+        let advertised: Vec<u8> = ZOOM_PRESET_HELP
+            .0
+            .iter()
+            .map(|a| match a {
+                Action::ZoomPreset(n) => *n,
+                other => panic!("non-preset action {other:?} in ZOOM_PRESET_HELP"),
+            })
+            .collect();
+        // Bindings and help advertise exactly the same presets. The
+        // probe range extends past the advertised max so a new binding
+        // outside the help row is caught.
+        let max_probe = advertised.iter().max().copied().unwrap_or(0) + 10;
+        for n in 0..=max_probe {
+            assert_eq!(
+                !Action::ZoomPreset(n).bindings().is_empty(),
+                advertised.contains(&n),
+                "ZoomPreset({n}): key binding and ZOOM_PRESET_HELP row disagree",
+            );
+        }
+        // The handler consumes every advertised preset.
+        let mut s = ZoomPanState::new();
+        for &action in ZOOM_PRESET_HELP.0 {
+            assert!(
+                s.handle_zoom(action, bounds(80, 24)).is_some(),
+                "{action:?} advertised but handle_zoom ignores it",
+            );
         }
     }
 

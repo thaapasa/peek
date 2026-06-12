@@ -15,7 +15,9 @@ use super::{
 };
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
-use crate::viewer::image_render::{ImageConfig, ScrollBounds, ViewBounds, ZoomPanState};
+use crate::viewer::image_render::{
+    ImageConfig, ScrollBounds, ViewBounds, ZOOM_PRESET_HELP, ZoomPanState,
+};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
 
@@ -41,20 +43,7 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
     ),
     (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
     (&[Action::ZoomReset], "Reset zoom to 1×"),
-    (
-        &[
-            Action::ZoomPreset(1),
-            Action::ZoomPreset(2),
-            Action::ZoomPreset(3),
-            Action::ZoomPreset(4),
-            Action::ZoomPreset(5),
-            Action::ZoomPreset(6),
-            Action::ZoomPreset(7),
-            Action::ZoomPreset(8),
-            Action::ZoomPreset(9),
-        ],
-        "Zoom 1×–9×",
-    ),
+    ZOOM_PRESET_HELP,
 ];
 
 /// Paged-image read mode generic over its [`PageRenderer`].

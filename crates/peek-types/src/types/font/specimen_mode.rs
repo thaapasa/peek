@@ -19,6 +19,7 @@ use crate::types::image::scroll::ScrollBounds;
 use crate::types::image::view::ImageView;
 use crate::types::image::zoom::integer_bucket;
 use crate::viewer::cell_size;
+use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -58,20 +59,7 @@ struct CachedFrame {
 const ZOOM_HELP: &[HelpEntry] = &[
     (&[Action::ZoomIn, Action::ZoomOut], "Zoom in / out"),
     (&[Action::ZoomReset], "Reset zoom to 1×"),
-    (
-        &[
-            Action::ZoomPreset(1),
-            Action::ZoomPreset(2),
-            Action::ZoomPreset(3),
-            Action::ZoomPreset(4),
-            Action::ZoomPreset(5),
-            Action::ZoomPreset(6),
-            Action::ZoomPreset(7),
-            Action::ZoomPreset(8),
-            Action::ZoomPreset(9),
-        ],
-        "Zoom 1×–9×",
-    ),
+    ZOOM_PRESET_HELP,
 ];
 
 const SPECIMEN_ACTIONS: &[HelpEntry] = &[

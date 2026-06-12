@@ -21,4 +21,4 @@ pub use config::{Background, FitMode, ImageConfig, TermSize};
 pub use image_mode::ImageMode;
 pub use scroll::ScrollBounds;
 pub use zoom::ZoomLevel;
-pub use zoom_pan::{ViewBounds, ZoomPanState};
+pub use zoom_pan::{ViewBounds, ZOOM_PRESET_HELP, ZoomPanState};

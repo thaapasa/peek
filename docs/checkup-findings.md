@@ -150,16 +150,6 @@ clean channel for session context to reach hint rendering; most modes
 never override `status_hints` at all, so the cost is one `_`-prefixed
 name in the trait default.
 
-### L9. `Action::ZoomPreset(n)` help/handler pin test missing
-
-`crates/peek-foundation/src/viewer/paged.rs:593` has
-`image_config_help_pinned_to_handler` pinning the `CYCLE_*_HELP` rows to
-`cycle_image_config`. Same gap exists for the `Zoom 1×-9×` help row in every
-image mode's `EXTRA_ACTIONS` and the `Action::ZoomPreset(n)` bindings (handled
-on a different path, `image_render/zoom_pan.rs:79`) — adding `ZoomPreset(10)`
-to `bindings()` while forgetting the help row would slip through. Pattern's
-good; needs one more application.
-
 ### L13. 16 MB render cap also bounds in-container image payloads — wontfix, kept as analysis record
 
 `RENDER_MAX_BYTES` was sized for text payloads ("a 16 MB
