@@ -75,7 +75,7 @@ pub const MAX_MATCHES: usize = 100_000;
 /// `partial scan`) and a warning surface honestly. In-memory scans
 /// (rendered views, tables, listings, pretty text) are bounded by their
 /// own caps and don't need this.
-pub const SEARCH_SCAN_MAX_BYTES: u64 = 256 * 1024 * 1024;
+pub const SEARCH_SCAN_MAX_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
 
 /// Outcome of `Mode::set_search` — tells the caller whether the mode
 /// already scrolled to the first match itself, or hands back a line for

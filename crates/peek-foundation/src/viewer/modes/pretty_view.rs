@@ -24,7 +24,7 @@ use crate::viewer::highlight_lines;
 /// pretty-printer exists. Above this size the branch refuses and the
 /// raw streamed view takes over, so a multi-GB JSON-shaped log stays
 /// openable.
-pub const PRETTY_MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub const PRETTY_MAX_BYTES: u64 = crate::input::limits::WHOLE_DOC_BYTES;
 
 /// Injected whole-document pretty-printer: raw text → re-indented text,
 /// or a parse error whose `Display` becomes a warning. Boxed so the

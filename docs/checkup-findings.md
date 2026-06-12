@@ -47,9 +47,9 @@ Proposed fix can't compile: Cargo layering bars foundation modes from calling ba
 than one defaulted parameter — it is the channel for session context to reach hint rendering.
 Rationale: `architecture.md` → Mode trait.
 
-### L13. 16 MB render cap also bounds in-container image payloads
+### L13. The whole-doc render cap also bounds in-container image payloads
 
 Intentional: alloc-abort safety holds for images too, the degrade path is a soft warning, typical
 pages run 1–5 MB. Rationale on `RENDER_MAX_BYTES` (`viewer/modes/rendered_text.rs`). Reopen if a
-real >16 MB page/image surfaces; the fix is a second, larger image-payload cap passed into
+real over-cap page/image surfaces; the fix is a second, larger image-payload cap passed into
 `read_zip_entry` per call — not gate removal.

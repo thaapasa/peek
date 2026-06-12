@@ -7,6 +7,7 @@
 //! everything above builds on it.
 
 pub mod compression;
+pub mod limits;
 pub mod lines;
 pub mod source;
 pub mod stdin;

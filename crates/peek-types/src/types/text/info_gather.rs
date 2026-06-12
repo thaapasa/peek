@@ -35,7 +35,7 @@ pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
 /// CSS). Above this we keep only the streaming text stats and skip the
 /// language-specific pass — so multi-GB dumps stay openable without
 /// burning RAM on a parse that would just be noise anyway.
-pub const SIDECAR_TEXT_LIMIT: u64 = 64 * 1024 * 1024;
+pub const SIDECAR_TEXT_LIMIT: u64 = crate::input::limits::SIDECAR_PARSE_BYTES;
 
 /// Capped whole-file read for a sidecar parser. Returns the [`TextStats`]
 /// paired with the full decoded text, or `None` when the source is over

@@ -140,7 +140,7 @@ fn render_window_matches_whole_file_highlight() {
 /// sees the streamed raw view instead.
 #[test]
 fn pretty_cap_falls_back_to_raw_with_warning() {
-    // Pad past PRETTY_MAX_BYTES (16 MB) with valid JSON.
+    // Pad past PRETTY_MAX_BYTES with valid JSON.
     let mut buf = String::with_capacity(PRETTY_MAX_BYTES as usize + 1024);
     buf.push('[');
     let entry = "0,";

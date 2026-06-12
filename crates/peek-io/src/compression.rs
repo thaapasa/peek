@@ -73,11 +73,11 @@ impl CompressionFormat {
     }
 }
 
-/// Hard cap on a transparently-decompressed bare stream. Matches the
-/// archive entry cap (`extract.rs::MAX_EXTRACT_BYTES`) — a single
+/// Hard cap on a transparently-decompressed bare stream. Same class as
+/// the archive entry cap (`extract.rs::MAX_EXTRACT_BYTES`) — a single
 /// decompressed file shouldn't be allowed to balloon past the same
 /// limit a single extracted archive entry has.
-pub const MAX_DECOMPRESS_BYTES: u64 = 256 * 1024 * 1024;
+pub const MAX_DECOMPRESS_BYTES: u64 = crate::limits::BULK_WALK_BYTES;
 
 /// Decompress `raw` according to `fmt`. Returns the inner bytes, or an
 /// error explaining the codec failure / cap breach.

@@ -140,7 +140,7 @@ fn read_dmg_trailer(source: &InputSource) -> anyhow::Result<Bytes> {
 /// Upper bound on the embedded plist we'll read into memory. Real DMG
 /// plists run a few KB to low single-digit MB; this only guards a corrupt
 /// length field from driving a huge allocation.
-const DMG_PLIST_MAX_BYTES: u64 = 64 * 1024 * 1024;
+const DMG_PLIST_MAX_BYTES: u64 = crate::input::limits::SIDECAR_PARSE_BYTES;
 
 /// Read the embedded XML plist and decode its blkx tables into partition
 /// rows. Touches only the plist region — no payload bytes.

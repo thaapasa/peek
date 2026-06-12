@@ -189,7 +189,7 @@ notebooks piped via stdin route to the cell viewer rather than the generic JSON 
 
 The Info view shows the structured XML stats (root element, element counts).
 
-`html2text` holds the whole document in memory, so HTML over a 16 MB render cap
+`html2text` holds the whole document in memory, so HTML over the render cap (`RENDER_MAX_BYTES`)
 (`RENDER_MAX_BYTES`) skips the rendered view — it shows one warning line and the **Source** view
 stands in. Keeps a pathological multi-hundred-MB page openable.
 
@@ -295,7 +295,7 @@ Lists currently render as flat bullets — numbering cascade resolution from `nu
 (numbered lists, nested numbering schemes) isn't done yet; everything that has a `numPr` shows
 as `•`.
 
-A `word/document.xml` over the 16 MB render cap (`RENDER_MAX_BYTES`, gated on the *uncompressed*
+A `word/document.xml` over the render cap (`RENDER_MAX_BYTES`, gated on the *uncompressed*
 entry size so a zip-bombed body is caught before extraction) drops the **Read** view; the **TOC**
 + Info + hex views stand in, with the reason surfaced as a TOC warning. The gate lives in the
 shared `read_zip_entry` helper (`types/archive/reader.rs`), so ODT (`content.xml`), EPUB chapter

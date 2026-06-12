@@ -357,7 +357,7 @@ forward — typical top-to-bottom reading is cheap; pathological backward jumps 
 one-time cost. Theme cycle resets state too (cached styles are theme-derived); color cycle takes
 effect on the next `feed()` without a reset.
 
-Pretty-print is whole-file with a 16 MB cap (`PRETTY_MAX_BYTES` in `content.rs`). Above the cap
+Pretty-print is whole-file with a cap (`PRETTY_MAX_BYTES` = the whole-doc budget class). Above the cap
 ContentMode pushes a warning, clears `use_pretty`, and the streamed raw view takes over. Below the
 cap, pretty-print runs lazily on first access; the parsed text is cached, and the highlighted-pretty
 form (when a syntax token is set) is cached keyed by `(theme, color)` so a cycle invalidates and
@@ -578,6 +578,33 @@ For binary files (stack: `[Hex, Info, About, Help]`, no primary), `last_primary`
 exiting an aux falls back to mode 0 (Hex itself), so `x` from standalone hex is a no-op, and Tab
 toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 
+## Memory budgets
+
+Every size gate in the workspace draws its number from one of three budget classes in
+`peek-io::limits` (reachable as `crate::input::limits` from foundation / types / bin). The classes
+are named by consumption shape; per-site constants alias a class and keep their domain name plus
+local rationale. Membership is by rationale, not by number — a byte limit guarding a different
+shape (per-record caps, pixel ceilings, count caps) stays local to its site.
+
+| Class | Size | Shape | Members |
+|---|---|---|---|
+| `WHOLE_DOC_BYTES` | 32 MB | materialize **and transform** (5–20× expansion, blocks the UI during parse+highlight) | `RENDER_MAX_BYTES` (rendered views + `read_zip_entry` payloads), `PRETTY_MAX_BYTES` (structured pretty-print) |
+| `SIDECAR_PARSE_BYTES` | 64 MB | whole-text read, small derived output | `SIDECAR_TEXT_LIMIT` (markdown / SQL / CSS info), `DMG_PLIST_MAX_BYTES` |
+| `BULK_WALK_BYTES` | 256 MB | one bounded pass over untrusted / unbounded data, nothing proportional retained | `MAX_DECOMPRESS_BYTES` (transparent decompress), `MAX_EXTRACT_BYTES` (per archive entry), `SEARCH_SCAN_MAX_BYTES` (raw-content search) |
+
+Gate helpers — call one of these rather than hand-rolling a check:
+
+- `ensure_under_render_cap(len, what)` / `render_cap_exceeded(len, what)`
+  (`viewer/modes/rendered_text.rs`) — refuse / warn before a whole-document read.
+- `read_zip_entry` (`types/archive/reader.rs`) — gated zip-entry payload read (declared *and*
+  actual size).
+- `gather_capped_text` (`types/text/info_gather.rs`) — capped whole-text read for sidecar parsers.
+- `SearchState::scan_capped` (`viewer/search.rs`) — byte-budgeted scan over a streaming source.
+
+Deliberately local limits (different shapes, not class members): CSV `MAX_RECORD_BYTES` /
+`MAX_RECORD_LINES` (per record), `MAX_MATCHES` (count), animation per-frame / cumulative budgets,
+`PDFIUM_RENDER_CAP_PX` (pixel ceiling), ISO `MAX_DIR_BYTES` (metadata sanity bound).
+
 ## Adding a new file type
 
 See [conventions.md → File types](conventions.md#file-types) for the complete owned-files /
@@ -594,6 +621,10 @@ wiring-sites checklist. Quick summary:
    already live in `peek-foundation` (`viewer/`); prefer wrapping one over a bespoke `Mode`. Add a
    `ModeId` variant if a mode must be toggleable by id. Override `render_to_pipe` if the default
    (materialize-then-write) wastes memory or violates byte-fidelity for that mode.
+   **Any whole-file or whole-payload read must be gated**: pick a budget class from
+   "Memory budgets" above and call the matching gate helper (`ensure_under_render_cap` for
+   renders, `gather_capped_text` for sidecar parses, `read_zip_entry` for container payloads)
+   before the read — never `read_bytes()` / `read_text()` bare.
 3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then **one arm in the
    bin's `src/compose.rs`** (`Registry::compose_modes`) delegating to it. Hex / Info / About / Help
    are appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).

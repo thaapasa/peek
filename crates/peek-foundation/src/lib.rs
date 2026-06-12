@@ -33,6 +33,9 @@ pub use peek_theme as theme;
 /// the binary's own `src/input` façade (minus the CLI-level stdin dispatch,
 /// which needs `Args` and stays in the bin).
 pub mod input {
+    /// `crate::input::limits` — the memory-budget classes every size
+    /// gate aliases.
+    pub use peek_io::limits;
     pub use peek_io::{ByteSource, InputSource, LineSource};
     pub use peek_io::{source, stream};
 

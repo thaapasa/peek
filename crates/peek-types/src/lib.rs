@@ -32,6 +32,9 @@ pub use peek_foundation::impl_info_extras;
 /// Thin façade over `peek-io` + `peek-detect`, mirroring the foundation's
 /// own `input` façade so `crate::input::*` resolves here too.
 pub mod input {
+    /// `crate::input::limits` — the memory-budget classes every size
+    /// gate aliases.
+    pub use peek_io::limits;
     pub use peek_io::{ByteSource, InputSource, LineSource};
     pub use peek_io::{source, stream};
 

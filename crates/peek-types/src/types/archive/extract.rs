@@ -26,7 +26,7 @@ use crate::types::archive::reader::open_seekable;
 /// the `Vec<u8>` fallback path — the spool-to-tempfile path bypasses
 /// this since disk, not RAM, is the limit. Setting `--no-tempfile`
 /// drops the cap as well: the user explicitly chose the memory path.
-const MAX_EXTRACT_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_EXTRACT_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
 
 /// Spool threshold: at or above this many bytes (or when the entry's
 /// declared size is unknown), [`materialise`] writes to a

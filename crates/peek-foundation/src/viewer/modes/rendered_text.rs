@@ -34,10 +34,10 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PR
 /// EPUB image reads. Intentional even though the cap was sized for text:
 /// alloc-abort is uncatchable so the safety rationale holds for images
 /// too, the degrade path is a soft warning (TOC / Info / hex / extract
-/// keep working), and typical pages run 1–5 MB. If a real >16 MB page
+/// keep working), and typical pages run 1–5 MB. If a real over-cap page
 /// ever surfaces, add a second, larger image-payload cap passed into
 /// `read_zip_entry` per call — don't remove the gate.
-pub const RENDER_MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub const RENDER_MAX_BYTES: u64 = crate::input::limits::WHOLE_DOC_BYTES;
 
 /// Cap-violation message — `None` when `len` fits under
 /// [`RENDER_MAX_BYTES`]. Split from [`ensure_under_render_cap`] for
