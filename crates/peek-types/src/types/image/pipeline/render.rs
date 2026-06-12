@@ -69,11 +69,19 @@ pub fn compute_grid(
 }
 
 /// Sanity ceiling on an explicit `--width`, in cells. Far above any real
-/// terminal or pipe consumer, low enough that the downstream pixel
-/// buffers (`cells × CELL_W/H × 4` bytes) and the cell→pixel arithmetic
-/// stay in range when a typo'd width meets a tall image. Distinct from
-/// [`MAX_FIT_CELLS`], which defends the file-controlled derived axis —
-/// the user's explicit axis is honored well past the fit cap.
+/// terminal or pipe consumer, low enough that the cell→pixel arithmetic
+/// stays in `u32` range when a typo'd width meets a tall image. Distinct
+/// from [`MAX_FIT_CELLS`], which defends the file-controlled derived
+/// axis — the user's explicit axis is honored well past the fit cap.
+///
+/// Memory worst case is deliberately bigger than the fit path's: at
+/// this ceiling with the rows axis at [`MAX_FIT_CELLS`], the pixel
+/// buffer is `2048·8 × 1024·16 × 4 B` ≈ 1 GiB — roughly 7× the fit
+/// path's ~150 MB. Capping the cols×rows *area* instead would squash a
+/// legitimate square image at `--width 2048` (true aspect needs the
+/// full 1024 rows), and shrinking cols would override the explicit
+/// width this path exists to honor. The 1 GiB case is opt-in: it takes
+/// an explicit near-ceiling `--width`, never file content alone.
 const MAX_FORCED_WIDTH_CELLS: u32 = 2048;
 
 /// Ceiling on a grid axis, in cells. `FitWidth` / `FitHeight` /

@@ -379,21 +379,47 @@ impl SearchState {
     /// (partial scan)`) so the counts never claim full-file coverage
     /// they don't have.
     pub fn status_segment(&self, theme: &PeekTheme) -> (String, Color) {
-        if self.matches.is_empty() {
-            let label = if self.truncated {
-                "no match (partial scan)"
-            } else {
-                "no match"
-            };
-            (label.to_string(), theme.warning)
+        let color = if self.matches.is_empty() {
+            theme.warning
         } else {
-            let plus = if self.truncated { "+" } else { "" };
-            (
-                format!("{}/{}{plus}", self.current + 1, self.matches.len()),
-                theme.muted,
-            )
-        }
+            theme.muted
+        };
+        (
+            count_status_label(self.current, self.matches.len(), self.truncated),
+            color,
+        )
     }
+}
+
+/// Status-label text for a search count: `cur/total` (`+` suffix marks
+/// the total as a lower bound after a truncated scan) or `no match`
+/// (`no match (partial scan)` when truncated). The one home for the
+/// partial-scan wording — [`SearchState`] and the table view's cell
+/// search render different match structs but must agree on this label,
+/// or the status bar contradicts itself across views.
+pub fn count_status_label(current: usize, total: usize, truncated: bool) -> String {
+    if total == 0 {
+        let label = if truncated {
+            "no match (partial scan)"
+        } else {
+            "no match"
+        };
+        label.to_string()
+    } else {
+        let plus = if truncated { "+" } else { "" };
+        format!("{}/{}{plus}", current + 1, total)
+    }
+}
+
+/// Warning text pushed when a streaming scan stops at
+/// [`SEARCH_SCAN_MAX_BYTES`]. `scanned` names what the budget covered —
+/// `""` for plain file text, `" of cell text"` for the table walk —
+/// keeping the two sites' wording in lockstep with the budget constant.
+pub fn truncated_scan_warning(scanned: &str) -> String {
+    format!(
+        "search covers only the first {} MB{scanned}",
+        SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
+    )
 }
 
 /// Paint search-match backgrounds onto a freshly-sliced viewport. `win`

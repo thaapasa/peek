@@ -41,8 +41,8 @@ use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{
-    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, SearchTarget, find_matches, overlay_matches,
-    smart_case_sensitive,
+    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, SearchTarget, count_status_label, find_matches,
+    overlay_matches, smart_case_sensitive, truncated_scan_warning,
 };
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
@@ -302,7 +302,11 @@ impl RowsTableMode {
         let mut scanned: u64 = 0;
         let mut record_idx = 0usize;
         'records: loop {
+            // An I/O error ends the scan early — the walk didn't cover
+            // the file, so the counts must report as partial, same as a
+            // budget stop.
             let Ok(bound) = self.source.ensure_row(record_idx) else {
+                truncated = true;
                 break;
             };
             if record_idx >= bound {
@@ -895,17 +899,10 @@ impl Mode for RowsTableMode {
         // `no match (partial scan)`) so they never claim full-file
         // coverage they don't have.
         if let Some(s) = &self.search {
-            let label = if s.matches.is_empty() {
-                if s.truncated {
-                    "no match (partial scan)".to_string()
-                } else {
-                    "no match".to_string()
-                }
-            } else {
-                let plus = if s.truncated { "+" } else { "" };
-                format!("{}/{}{plus}", s.cursor + 1, s.matches.len())
-            };
-            segs.push((label, theme.label));
+            segs.push((
+                count_status_label(s.cursor, s.matches.len(), s.truncated),
+                theme.label,
+            ));
         }
         segs
     }
@@ -922,10 +919,8 @@ impl Mode for RowsTableMode {
         if search.truncated {
             // Identical text per push — the session layer dedupes, so
             // repeated truncated queries warn once.
-            self.pending_warnings.push(format!(
-                "search covers only the first {} MB of cell text",
-                SEARCH_SCAN_MAX_BYTES / (1024 * 1024)
-            ));
+            self.pending_warnings
+                .push(truncated_scan_warning(" of cell text"));
         }
         self.search = Some(search);
         self.scroll_to_current_match();
@@ -1469,6 +1464,57 @@ mod tests {
         let s = mode.build_search_capped("hit", u64::MAX);
         assert!(!s.truncated);
         assert_eq!(s.matches.len(), 100);
+    }
+
+    /// [`RowSource`] whose pull fails partway through, like an I/O error
+    /// mid-file. Wraps [`LazyRows`] and errors past `fail_at`.
+    struct FailingRows {
+        inner: LazyRows,
+        fail_at: usize,
+    }
+
+    impl RowSource for FailingRows {
+        fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+            if idx >= self.fail_at {
+                anyhow::bail!("synthetic read error");
+            }
+            self.inner.ensure_row(idx)
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            anyhow::bail!("synthetic read error");
+        }
+        fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+            self.inner.row(idx)
+        }
+        fn loaded(&self) -> usize {
+            self.inner.loaded()
+        }
+        fn total(&self) -> Option<usize> {
+            None
+        }
+        fn column_count(&self) -> usize {
+            1
+        }
+    }
+
+    /// An I/O error mid-walk ends the scan without covering the file, so
+    /// the result must be marked truncated — otherwise the status bar
+    /// reports an error-terminated count as complete coverage.
+    #[test]
+    fn search_record_walk_error_marks_truncated() {
+        let rows = (0..10).map(|i| vec![Some(format!("hit {i}"))]).collect();
+        let mut mode = RowsTableMode::new(
+            Box::new(FailingRows {
+                inner: LazyRows { rows, loaded: 1 },
+                fail_at: 3,
+            }),
+            vec![Alignment::Left],
+            false,
+            "Table",
+        );
+        let s = mode.build_search_capped("hit", u64::MAX);
+        assert!(s.truncated, "error-terminated scan must report partial");
+        assert_eq!(s.matches.len(), 3, "matches up to the failure point");
     }
 
     /// Truncated counts must read as lower bounds in the status bar.
