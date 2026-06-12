@@ -22,13 +22,14 @@ use anyhow::Result;
 use crate::input::InputSource;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::markdown::render_markdown;
-use crate::viewer::modes::{ModeId, TextRenderer};
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_exceeded};
 
 use super::model::{Cell, CellKind, Notebook, Output};
 
 pub(crate) struct NotebookRenderer {
     source: InputSource,
     theme_manager: Rc<ThemeManager>,
+    warning: Option<String>,
 }
 
 impl NotebookRenderer {
@@ -36,6 +37,7 @@ impl NotebookRenderer {
         Self {
             source,
             theme_manager,
+            warning: None,
         }
     }
 }
@@ -56,6 +58,15 @@ impl TextRenderer for NotebookRenderer {
         theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
+        // Whole-notebook parse + markdown synthesis — gate like the
+        // other whole-document renderers (HTML / markdown).
+        self.warning = None;
+        let len = self.source.byte_len()?;
+        if let Some(mut msg) = render_cap_exceeded(len, "notebook") {
+            msg.push_str("; see the source view");
+            self.warning = Some(msg.clone());
+            return Ok(vec![msg]);
+        }
         let text = self.source.read_text()?;
         let md = match Notebook::parse(&text) {
             Some(nb) => to_markdown(&nb),
@@ -71,6 +82,10 @@ impl TextRenderer for NotebookRenderer {
             &self.theme_manager,
             theme_name,
         )
+    }
+
+    fn take_warnings(&mut self) -> Vec<String> {
+        self.warning.take().into_iter().collect()
     }
 }
 
@@ -170,6 +185,28 @@ fn push_fence(md: &mut String, body: &str, lang: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::viewer::modes::RENDER_MAX_BYTES;
+
+    #[test]
+    fn over_cap_refuses_with_warning_not_a_full_render() {
+        let big = vec![b' '; (RENDER_MAX_BYTES + 1) as usize];
+        let tm = Rc::new(ThemeManager::new(
+            PeekThemeName::default(),
+            StyleMode::Plain,
+        ));
+        let mut r = NotebookRenderer::new(InputSource::memory(big, "huge.ipynb"), Rc::clone(&tm));
+        let lines = r
+            .render(
+                80,
+                tm.peek_theme(),
+                PeekThemeName::default(),
+                StyleMode::Plain,
+            )
+            .unwrap();
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("render cap"), "got: {:?}", lines[0]);
+        assert_eq!(r.take_warnings().len(), 1);
+    }
 
     #[test]
     fn image_notes_use_listing_names_in_order() {

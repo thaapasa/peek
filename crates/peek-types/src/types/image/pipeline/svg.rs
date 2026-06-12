@@ -87,6 +87,24 @@ fn rasterize_tree(tree: &resvg::usvg::Tree, width: u32, height: u32) -> Result<D
 }
 
 fn load_svg(source: &InputSource) -> Result<resvg::usvg::Tree> {
+    // usvg materializes the whole document into a parse tree — gate the
+    // read like the other whole-document renders. The XML source view
+    // still streams the full file.
+    crate::viewer::modes::ensure_under_render_cap(source.byte_len()?, "SVG")?;
     let svg_data = source.read_bytes().context("failed to read SVG")?;
     resvg::usvg::Tree::from_data(&svg_data, &usvg_options()).context("failed to parse SVG")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::viewer::modes::RENDER_MAX_BYTES;
+
+    #[test]
+    fn over_cap_svg_refuses_before_reading() {
+        let big = vec![b' '; (RENDER_MAX_BYTES + 1) as usize];
+        let src = InputSource::memory(big, "huge.svg");
+        let err = svg_dimensions(&src).unwrap_err();
+        assert!(err.to_string().contains("render cap"), "got: {err}");
+    }
 }

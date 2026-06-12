@@ -146,8 +146,13 @@ pub enum ParseOutcome {
     Unsupported(String),
 }
 
-/// Try to extract a CSS animation model from an SVG source.
+/// Try to extract a CSS animation model from an SVG source. Over the
+/// render cap the SVG can't be rasterized anyway (`load_svg` gates the
+/// same class), so the probe reports "not animated" instead of reading.
 pub fn try_parse(source: &InputSource) -> Result<Option<AnimatedSvg>> {
+    if crate::viewer::modes::render_cap_exceeded(source.byte_len()?, "SVG").is_some() {
+        return Ok(None);
+    }
     let bytes = source
         .read_bytes()
         .context("failed to read SVG for animation parse")?;
