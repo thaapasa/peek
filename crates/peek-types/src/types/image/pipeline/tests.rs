@@ -284,6 +284,15 @@ fn render_zoomed_clamps_scroll_to_effective_grid() {
         over.effective_rows.saturating_sub(over.viewport_rows),
     );
     assert_eq!(over.lines, max.lines);
+    // The clamped origin is reported back — overlay painters project
+    // through it, so it must match the origin actually rendered.
+    assert_eq!(
+        (over.scroll_x, over.scroll_y),
+        (
+            over.effective_cols.saturating_sub(over.viewport_cols),
+            over.effective_rows.saturating_sub(over.viewport_rows)
+        )
+    );
 }
 
 #[test]

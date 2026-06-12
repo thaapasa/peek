@@ -18,6 +18,7 @@ pub mod info_gather;
 pub mod info_render;
 pub mod package;
 pub mod page_renderer;
+pub mod text_overlay;
 pub mod text_renderer;
 
 pub use info::PdfStats;

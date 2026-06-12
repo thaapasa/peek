@@ -498,6 +498,11 @@ pub struct ZoomedRender {
     pub effective_rows: u32,
     pub viewport_cols: u32,
     pub viewport_rows: u32,
+    /// Scroll origin actually rendered (post-clamp), in effective
+    /// cells. Overlay painters project through this — reporting it
+    /// here keeps the clamp in one place.
+    pub scroll_x: u32,
+    pub scroll_y: u32,
 }
 
 /// Render the visible viewport of an image at zoom > 1 by cropping the
@@ -587,6 +592,8 @@ pub fn render_prepared_zoomed(
         effective_rows,
         viewport_cols,
         viewport_rows,
+        scroll_x,
+        scroll_y,
     }
 }
 

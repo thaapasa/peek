@@ -215,6 +215,10 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
     CYCLE_IMAGE_MODE_HELP,
     CYCLE_FIT_HELP,
     (
+        &[Action::ToggleTextOverlay],
+        "Toggle reconstructed-text overlay",
+    ),
+    (
         &[Action::ScrollLeft, Action::ScrollRight],
         "Pan left / right (when zoomed or fit=FitHeight)",
     ),
@@ -266,6 +270,11 @@ pub struct RenderArgs {
     pub scroll_x: u32,
     pub scroll_y: u32,
     pub style_mode: StyleMode,
+    /// Reconstructed-text overlay (`o`): renderers with a text layer
+    /// (PDF) overwrite rendered glyph cells with the document's real
+    /// words at their page positions. Renderers without a text layer
+    /// ignore the flag.
+    pub text_overlay: bool,
 }
 
 /// Renders the visible viewport of one page of a paged-image document
@@ -283,6 +292,14 @@ pub struct RenderArgs {
 pub trait PageRenderer {
     /// Total page count.
     fn page_count(&self) -> usize;
+
+    /// Whether this renderer can honor [`RenderArgs::text_overlay`] —
+    /// true only when the source carries a text layer with positions
+    /// (PDF). Gates the `o` toggle and its help row so image-only
+    /// sources (CBZ, scans) don't advertise a dead key.
+    fn supports_text_overlay(&self) -> bool {
+        false
+    }
 
     /// Render page `idx` for the visible viewport at the requested zoom
     /// / pan state in `args`. Render failures should degrade to a
@@ -335,6 +352,9 @@ pub struct PagedImageMode<R: PageRenderer> {
     current: usize,
     warnings: Vec<String>,
     pan: ZoomPanState,
+    /// Reconstructed-text overlay state (`o`). Only flippable when the
+    /// renderer reports `supports_text_overlay`; stays false otherwise.
+    text_overlay: bool,
     /// Last viewport rendered into, captured at the end of
     /// `render_window`. Read by `handle` / `scroll` to compute scroll
     /// bounds and zoom anchoring without re-running the renderer.
@@ -360,6 +380,7 @@ impl<R: PageRenderer> PagedImageMode<R> {
             current: 0,
             warnings: Vec::new(),
             pan: ZoomPanState::new(),
+            text_overlay: false,
             last_viewport_cols: 0,
             last_viewport_rows: 0,
             last_effective_cols: 0,
@@ -398,6 +419,7 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             scroll_x: self.pan.scroll_x,
             scroll_y: self.pan.scroll_y,
             style_mode: ctx.peek_theme.style_mode,
+            text_overlay: self.text_overlay,
         };
         let render =
             self.renderer
@@ -463,6 +485,7 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             scroll_x: 0,
             scroll_y: 0,
             style_mode: ctx.peek_theme.style_mode,
+            text_overlay: self.text_overlay,
         };
         let renderer = &self.renderer;
         let config = self.image_config;
@@ -483,7 +506,26 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         EXTRA_ACTIONS
     }
 
+    fn help_entries(&self) -> Vec<HelpEntry> {
+        // Drop the overlay row when the source has no text layer —
+        // the key is inert there (CBZ, image-only PDFs).
+        EXTRA_ACTIONS
+            .iter()
+            .filter(|(keys, _)| {
+                self.renderer.supports_text_overlay() || !keys.contains(&Action::ToggleTextOverlay)
+            })
+            .copied()
+            .collect()
+    }
+
     fn handle(&mut self, action: Action) -> Handled {
+        if action == Action::ToggleTextOverlay {
+            if !self.renderer.supports_text_overlay() {
+                return Handled::No;
+            }
+            self.text_overlay = !self.text_overlay;
+            return Handled::Yes;
+        }
         if let Some(h) = cycle_image_config(action, &mut self.image_config) {
             // Fit change invalidates the rendered grid; reset pan.
             if matches!(action, Action::CycleFitMode) {
@@ -532,6 +574,9 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
         let mut out = vec![(format!("page {}/{}", self.current + 1, count), theme.muted)];
         if !self.pan.zoom.is_one() {
             out.push((self.pan.zoom.label(), theme.label));
+        }
+        if self.text_overlay {
+            out.push(("text".to_string(), theme.label));
         }
         out
     }

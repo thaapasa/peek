@@ -116,6 +116,11 @@ pub enum Action {
     /// JSON/YAML/TOML/XML only). No global fallback — modes that don't
     /// consume `r` ignore it.
     ToggleRawSource,
+    /// Toggle the reconstructed-text overlay in paged image views
+    /// (PDF): real words from the document's text layer are written
+    /// over the rendered glyph cells at their page positions. Only
+    /// offered when the renderer carries a text layer.
+    ToggleTextOverlay,
     /// Toggle the line-number gutter in text views.
     ToggleLineNumbers,
     /// Toggle soft wrap in text views. When on, vertical scroll moves
@@ -209,6 +214,7 @@ impl Action {
             Action::ScrollLeft          => binds![B::plain(Left)],
             Action::ScrollRight         => binds![B::plain(Right)],
             Action::ToggleRawSource     => binds![B::plain(Char('r'))],
+            Action::ToggleTextOverlay   => binds![B::plain(Char('o'))],
             Action::ToggleLineNumbers   => binds![B::plain(Char('l'))],
             Action::ToggleSoftWrap      => binds![B::plain(Char('w'))],
             Action::PlayPause           => binds![B::plain(Char(' '))],
@@ -287,6 +293,7 @@ impl Action {
             | Action::Extract
             | Action::Descend => false,
             Action::ToggleRawSource
+            | Action::ToggleTextOverlay
             | Action::PlayPause
             | Action::Next
             | Action::Prev

@@ -163,6 +163,47 @@ impl Doc {
         Ok(text.all())
     }
 
+    /// Extract page `idx`'s text layer as positioned words for the
+    /// reconstructed-text overlay. A thin FFI walk: per character it
+    /// pulls the Unicode char, the loose bounds, and (lazily, once per
+    /// word) the fill color — stroke color for outline-rendered text,
+    /// black when the document declares neither — and feeds them to
+    /// the pure [`super::text_overlay::WordAccumulator`], which owns
+    /// every split / union / y-flip rule.
+    pub fn page_words(&self, idx: usize) -> Result<super::text_overlay::PageWords> {
+        use super::text_overlay::{CharBounds, PageWords, WordAccumulator};
+
+        let pages = self.inner.document.pages();
+        let page = pages
+            .get(idx as i32)
+            .with_context(|| format!("page {idx} not found"))?;
+        let page_w = page.width().value;
+        let page_h = page.height().value;
+        let text = page.text().context("pdfium page text failed")?;
+
+        let mut acc = WordAccumulator::new(page_h);
+        for ch in text.chars().iter() {
+            let bounds = ch.loose_bounds().ok().map(|b| CharBounds {
+                left: b.left().value,
+                right: b.right().value,
+                bottom: b.bottom().value,
+                top: b.top().value,
+            });
+            acc.push(ch.unicode_char(), bounds, || {
+                ch.fill_color()
+                    .or_else(|_| ch.stroke_color())
+                    .map(|c| (c.red(), c.green(), c.blue()))
+                    .unwrap_or((0, 0, 0))
+            });
+        }
+
+        Ok(PageWords {
+            page_w,
+            page_h,
+            words: acc.finish(),
+        })
+    }
+
     /// Document metadata (title / author / subject / keywords / dates).
     /// Empty fields drop to `None` so the renderer can skip them.
     pub fn metadata(&self) -> crate::types::document::DocumentMetadata {

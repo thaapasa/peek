@@ -158,6 +158,49 @@ pub fn rgb_to_ansi16(r: u8, g: u8, b: u8) -> u8 {
     high + (b_bit << 2) + (g_bit << 1) + r_bit
 }
 
+/// Nominal RGB of one of the 16 base ANSI colors (xterm defaults).
+/// Inverse of [`rgb_to_ansi16`] in spirit only — the base palette is
+/// terminal-configurable, so this is a representative value for color
+/// comparisons, not a guaranteed display color.
+pub fn ansi16_to_rgb(idx: u8) -> (u8, u8, u8) {
+    const XTERM16: [(u8, u8, u8); 16] = [
+        (0, 0, 0),
+        (205, 0, 0),
+        (0, 205, 0),
+        (205, 205, 0),
+        (0, 0, 238),
+        (205, 0, 205),
+        (0, 205, 205),
+        (229, 229, 229),
+        (127, 127, 127),
+        (255, 0, 0),
+        (0, 255, 0),
+        (255, 255, 0),
+        (92, 92, 255),
+        (255, 0, 255),
+        (0, 255, 255),
+        (255, 255, 255),
+    ];
+    XTERM16[(idx & 0x0f) as usize]
+}
+
+/// Nominal RGB of an xterm 256-palette index: the 16 base colors, the
+/// 6×6×6 cube (16..=231), and the 24-step grayscale ramp (232..=255).
+pub fn ansi256_to_rgb(idx: u8) -> (u8, u8, u8) {
+    match idx {
+        0..=15 => ansi16_to_rgb(idx),
+        16..=231 => {
+            let i = idx - 16;
+            let level = |c: u8| if c == 0 { 0 } else { 55 + 40 * c };
+            (level(i / 36), level((i / 6) % 6), level(i % 6))
+        }
+        232..=255 => {
+            let v = 8 + 10 * (idx - 232);
+            (v, v, v)
+        }
+    }
+}
+
 // --- escape-sequence scanning ----------------------------------------------
 
 /// One token of a styled string: a run of plain text, or a complete SGR
@@ -243,18 +286,108 @@ pub enum SgrKind {
 /// `0`/`39`/`49` resets; an empty parameter list (`\x1b[m`) is a full
 /// reset.
 pub fn classify(esc: &str) -> SgrKind {
-    let body = esc.strip_prefix("\x1b[").unwrap_or(esc);
-    let first = body
-        .bytes()
-        .take_while(u8::is_ascii_digit)
-        .fold(0u32, |acc, b| acc * 10 + (b - b'0') as u32);
-    match first {
+    match lead_param(esc) {
         0 => SgrKind::ResetAll,
         39 => SgrKind::ResetFg,
         49 => SgrKind::ResetBg,
         38 | 30..=37 | 90..=97 => SgrKind::Fg,
         48 | 40..=47 | 100..=107 => SgrKind::Bg,
         _ => SgrKind::Other,
+    }
+}
+
+/// Leading numeric parameter of an SGR escape (`0` for an empty list).
+fn lead_param(esc: &str) -> u32 {
+    esc.strip_prefix("\x1b[")
+        .unwrap_or(esc)
+        .bytes()
+        .take_while(u8::is_ascii_digit)
+        .fold(0u32, |acc, b| acc * 10 + (b - b'0') as u32)
+}
+
+/// Color-escape encoding family. For callers that must emit *derived*
+/// escapes (a swap, a contrast nudge) into a stream without breaking
+/// its palette: a 256-color line must stay 256-color.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ColorEncoding {
+    TrueColor,
+    Ansi256,
+    Ansi16,
+}
+
+/// Classify a fg/bg color escape's encoding by its leading parameter.
+/// Meaningful only for escapes [`classify`] reports as `Fg` / `Bg`.
+pub fn color_encoding(esc: &str) -> ColorEncoding {
+    match lead_param(esc) {
+        38 | 48 => {
+            // The mode marker is positional (second parameter) — a
+            // substring scan would misread a truecolor component of 5.
+            let body = esc.strip_prefix("\x1b[").unwrap_or(esc);
+            let body = body.strip_suffix('m').unwrap_or(body);
+            match body.split(';').nth(1) {
+                Some("5") => ColorEncoding::Ansi256,
+                _ => ColorEncoding::TrueColor,
+            }
+        }
+        _ => ColorEncoding::Ansi16,
+    }
+}
+
+/// Nominal RGB of a fg/bg color escape: truecolor (`38;2;r;g;b`),
+/// 256-palette (`38;5;n` via the xterm palette), and base-16
+/// (`30..=37` / `90..=97` and bg counterparts, via the nominal xterm
+/// table). Returns `None` for malformed or non-color escapes.
+pub fn escape_to_rgb(esc: &str) -> Option<(u8, u8, u8)> {
+    let body = esc.strip_prefix("\x1b[")?.strip_suffix('m')?;
+    let mut parts = body.split(';');
+    let lead: u32 = parts.next()?.parse().ok()?;
+    match lead {
+        38 | 48 => match parts.next()? {
+            "2" => {
+                let r: u8 = parts.next()?.parse().ok()?;
+                let g: u8 = parts.next()?.parse().ok()?;
+                let b: u8 = parts.next()?.parse().ok()?;
+                Some((r, g, b))
+            }
+            "5" => {
+                let idx: u8 = parts.next()?.parse().ok()?;
+                Some(ansi256_to_rgb(idx))
+            }
+            _ => None,
+        },
+        30..=37 => Some(ansi16_to_rgb((lead - 30) as u8)),
+        90..=97 => Some(ansi16_to_rgb((lead - 90 + 8) as u8)),
+        40..=47 => Some(ansi16_to_rgb((lead - 40) as u8)),
+        100..=107 => Some(ansi16_to_rgb((lead - 100 + 8) as u8)),
+        _ => None,
+    }
+}
+
+/// Append `esc` converted to the other plane (a fg color emitted as a
+/// bg escape or vice versa), preserving its encoding: `38;…` ↔ `48;…`
+/// for truecolor / 256, `3x` ↔ `4x` and `9x` ↔ `10x` for the base 16.
+/// `to` must be `Fg` or `Bg`; an escape already on that plane is
+/// appended unchanged.
+pub fn write_replaned(buf: &mut String, esc: &str, to: SgrKind) {
+    let body = esc.trim_start_matches("\x1b[").trim_end_matches('m');
+    let lead = lead_param(esc);
+    let rest = body.split_once(';').map(|(_, r)| r);
+    let new_lead = match (lead, to) {
+        (38, SgrKind::Bg) => 48,
+        (48, SgrKind::Fg) => 38,
+        (30..=37, SgrKind::Bg) => lead + 10,
+        (40..=47, SgrKind::Fg) => lead - 10,
+        (90..=97, SgrKind::Bg) => lead + 10,
+        (100..=107, SgrKind::Fg) => lead - 10,
+        _ => lead, // already on the requested plane
+    };
+    match rest {
+        Some(rest) => {
+            let _ = write!(buf, "\x1b[{new_lead};{rest}m");
+        }
+        None => {
+            let _ = write!(buf, "\x1b[{new_lead}m");
+        }
     }
 }
 
@@ -301,6 +434,11 @@ impl ActiveStyle {
     /// The active foreground escape, or `""` when none.
     pub fn fg(&self) -> &str {
         &self.fg
+    }
+
+    /// The active background escape, or `""` when none.
+    pub fn bg(&self) -> &str {
+        &self.bg
     }
 
     /// Append the active foreground then background escapes to `buf`.
@@ -353,6 +491,58 @@ mod tests {
         assert_eq!(classify("\x1b[41m"), SgrKind::Bg);
         assert_eq!(classify("\x1b[101m"), SgrKind::Bg);
         assert_eq!(classify("\x1b[1m"), SgrKind::Other);
+    }
+
+    #[test]
+    fn color_encoding_classifies_by_lead_and_mode_marker() {
+        assert_eq!(color_encoding("\x1b[38;2;1;2;3m"), ColorEncoding::TrueColor);
+        assert_eq!(color_encoding("\x1b[48;2;1;2;3m"), ColorEncoding::TrueColor);
+        assert_eq!(color_encoding("\x1b[38;5;100m"), ColorEncoding::Ansi256);
+        assert_eq!(color_encoding("\x1b[48;5;100m"), ColorEncoding::Ansi256);
+        // Truecolor with a 5-valued component must not read as 256-palette.
+        assert_eq!(
+            color_encoding("\x1b[38;2;5;10;20m"),
+            ColorEncoding::TrueColor
+        );
+        assert_eq!(color_encoding("\x1b[48;2;0;5;5m"), ColorEncoding::TrueColor);
+        assert_eq!(color_encoding("\x1b[31m"), ColorEncoding::Ansi16);
+        assert_eq!(color_encoding("\x1b[103m"), ColorEncoding::Ansi16);
+    }
+
+    #[test]
+    fn escape_to_rgb_parses_every_color_family() {
+        assert_eq!(escape_to_rgb("\x1b[38;2;1;2;3m"), Some((1, 2, 3)));
+        assert_eq!(escape_to_rgb("\x1b[48;2;9;8;7m"), Some((9, 8, 7)));
+        assert_eq!(escape_to_rgb("\x1b[38;5;231m"), Some(ansi256_to_rgb(231)));
+        assert_eq!(escape_to_rgb("\x1b[31m"), Some(ansi16_to_rgb(1)));
+        assert_eq!(escape_to_rgb("\x1b[97m"), Some(ansi16_to_rgb(15)));
+        assert_eq!(escape_to_rgb("\x1b[44m"), Some(ansi16_to_rgb(4)));
+        assert_eq!(escape_to_rgb("\x1b[101m"), Some(ansi16_to_rgb(9)));
+        // Malformed / non-color escapes.
+        assert_eq!(escape_to_rgb("\x1b[1m"), None);
+        assert_eq!(escape_to_rgb("\x1b[38;9;1m"), None);
+        assert_eq!(escape_to_rgb("\x1b[38;2;1;2m"), None);
+        assert_eq!(escape_to_rgb(""), None);
+    }
+
+    #[test]
+    fn write_replaned_swaps_planes_in_every_encoding() {
+        let replaned = |esc: &str, to: SgrKind| {
+            let mut s = String::new();
+            write_replaned(&mut s, esc, to);
+            s
+        };
+        assert_eq!(
+            replaned("\x1b[38;2;1;2;3m", SgrKind::Bg),
+            "\x1b[48;2;1;2;3m"
+        );
+        assert_eq!(replaned("\x1b[48;5;100m", SgrKind::Fg), "\x1b[38;5;100m");
+        assert_eq!(replaned("\x1b[31m", SgrKind::Bg), "\x1b[41m");
+        assert_eq!(replaned("\x1b[44m", SgrKind::Fg), "\x1b[34m");
+        assert_eq!(replaned("\x1b[97m", SgrKind::Bg), "\x1b[107m");
+        assert_eq!(replaned("\x1b[103m", SgrKind::Fg), "\x1b[93m");
+        // Already on the requested plane → unchanged.
+        assert_eq!(replaned("\x1b[31m", SgrKind::Fg), "\x1b[31m");
     }
 
     #[test]

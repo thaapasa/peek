@@ -18,7 +18,8 @@ Modern terminal file viewer — preview any file, any format.
   extract, workbook metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT,
-  RTF, EPUB, CBZ
+  RTF, EPUB, CBZ. PDF pages render as images with an optional reconstructed-text overlay (`o`)
+  that writes the real text over the pixels at matching zoom
 - **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing +
   extract, message-list drill-in
 - **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards
