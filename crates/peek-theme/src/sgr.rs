@@ -320,10 +320,13 @@ pub enum ColorEncoding {
 pub fn color_encoding(esc: &str) -> ColorEncoding {
     match lead_param(esc) {
         38 | 48 => {
-            if esc.contains(";5;") {
-                ColorEncoding::Ansi256
-            } else {
-                ColorEncoding::TrueColor
+            // The mode marker is positional (second parameter) — a
+            // substring scan would misread a truecolor component of 5.
+            let body = esc.strip_prefix("\x1b[").unwrap_or(esc);
+            let body = body.strip_suffix('m').unwrap_or(body);
+            match body.split(';').nth(1) {
+                Some("5") => ColorEncoding::Ansi256,
+                _ => ColorEncoding::TrueColor,
             }
         }
         _ => ColorEncoding::Ansi16,
@@ -496,6 +499,12 @@ mod tests {
         assert_eq!(color_encoding("\x1b[48;2;1;2;3m"), ColorEncoding::TrueColor);
         assert_eq!(color_encoding("\x1b[38;5;100m"), ColorEncoding::Ansi256);
         assert_eq!(color_encoding("\x1b[48;5;100m"), ColorEncoding::Ansi256);
+        // Truecolor with a 5-valued component must not read as 256-palette.
+        assert_eq!(
+            color_encoding("\x1b[38;2;5;10;20m"),
+            ColorEncoding::TrueColor
+        );
+        assert_eq!(color_encoding("\x1b[48;2;0;5;5m"), ColorEncoding::TrueColor);
         assert_eq!(color_encoding("\x1b[31m"), ColorEncoding::Ansi16);
         assert_eq!(color_encoding("\x1b[103m"), ColorEncoding::Ansi16);
     }
