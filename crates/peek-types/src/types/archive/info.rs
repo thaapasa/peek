@@ -26,6 +26,10 @@ pub struct ArchiveStats {
     /// Present when an `ar` archive's members are object files — i.e. a
     /// static library — summarising the object payload.
     pub static_lib: Option<StaticLibSummary>,
+    /// True when the `ar` archive exceeded [`STATIC_LIB_SUMMARY_CAP`] and
+    /// the object-member probe was skipped — the summary may exist but
+    /// wasn't read. Surfaced as a note row so the absence isn't silent.
+    pub static_lib_skipped: bool,
 }
 
 /// Summary of a static library (`.a` / `.lib`): how many members are
@@ -40,6 +44,7 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
     match list_entries(source, format) {
         Ok(entries) => {
             let stats = Stats::from_root(format.label(), &entries);
+            let (static_lib, static_lib_skipped) = static_lib_summary(source, format);
             Box::new(ArchiveStats {
                 format_name: stats.format_name,
                 entry_count: stats.entry_count,
@@ -47,7 +52,8 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
                 dir_count: stats.dir_count,
                 total_uncompressed_size: stats.total_size,
                 error: None,
-                static_lib: static_lib_summary(source, format),
+                static_lib,
+                static_lib_skipped,
             })
         }
         Err(e) => Box::new(ArchiveStats {
@@ -58,29 +64,46 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
             total_uncompressed_size: 0,
             error: Some(format!("{e:#}")),
             static_lib: None,
+            static_lib_skipped: false,
         }),
     }
 }
 
-/// Summarise an `ar` archive's object members. Returns `None` for
-/// non-`ar` formats and for `ar` archives with no object members (e.g. a
-/// `.deb`, whose members are tarballs).
-///
-/// This reads the whole archive once for random-access member slices —
-/// the same whole-file cost the object-file viewer pays, and acceptable
-/// for the same reason (static libraries are not multi-GB streams). The
-/// read is still gated at the sidecar budget so a hostile rename can't
-/// turn the assumption into an unbounded load — over the cap the info
-/// screen just drops this section. Only the first object member is
-/// fully parsed (for its architecture); the per-member object check is
-/// a cheap `FileKind` magic read.
-fn static_lib_summary(source: &InputSource, format: ArchiveFormat) -> Option<StaticLibSummary> {
+/// Whole-archive read cap for the object-member summary. The buffer is
+/// materialized whole (the `ar` parser wants random-access member
+/// slices) but held only for this one summary pass with no expansion —
+/// and real static libraries (libLLVM.a, ML framework bundles) routinely
+/// run hundreds of MB, where the sidecar budget would drop the section
+/// for legitimate inputs. So this aliases the bulk-walk budget; over the
+/// cap the info view shows a "summary skipped" note instead.
+const STATIC_LIB_SUMMARY_CAP: u64 = crate::input::limits::BULK_WALK_BYTES;
+
+/// Probe an `ar` archive's object members. `(None, false)` for non-`ar`
+/// formats and for `ar` archives with no object members (e.g. a `.deb`,
+/// whose members are tarballs); `(None, true)` when the archive exceeds
+/// [`STATIC_LIB_SUMMARY_CAP`] and the probe was skipped.
+fn static_lib_summary(
+    source: &InputSource,
+    format: ArchiveFormat,
+) -> (Option<StaticLibSummary>, bool) {
     if format != ArchiveFormat::Ar {
-        return None;
+        return (None, false);
     }
-    if source.byte_len().ok()? > crate::input::limits::SIDECAR_PARSE_BYTES {
-        return None;
+    match source.byte_len() {
+        Ok(len) if len > STATIC_LIB_SUMMARY_CAP => return (None, true),
+        Ok(_) => {}
+        Err(_) => return (None, false),
     }
+    (parse_static_lib(source), false)
+}
+
+/// The whole-file probe behind [`static_lib_summary`]: read the archive
+/// once for random-access member slices — the same whole-file cost the
+/// object-file viewer pays. Only the first object member is fully parsed
+/// (for its architecture); the per-member object check is a cheap
+/// `FileKind` magic read. Callers gate the read at
+/// [`STATIC_LIB_SUMMARY_CAP`].
+fn parse_static_lib(source: &InputSource) -> Option<StaticLibSummary> {
     let bytes = source.read_bytes().ok()?;
     let archive = object::read::archive::ArchiveFile::parse(&*bytes).ok()?;
     let mut object_members = 0usize;
@@ -180,6 +203,11 @@ struct ArchiveMain {
         skip_serializing_if = "Option::is_none"
     )]
     total_size: Option<Value>,
+    // Present only when the static-library probe was skipped over the
+    // read cap — absence of the summary block would otherwise be silent.
+    #[info(label = "Static library", skip_if = "Option::is_none")]
+    #[serde(rename = "static_lib_skipped", skip_serializing_if = "Option::is_none")]
+    static_lib_note: Option<Value>,
 }
 
 impl From<&ArchiveStats> for ArchiveView {
@@ -197,6 +225,16 @@ impl From<&ArchiveStats> for ArchiveView {
                         format!("{} bytes", thousands_sep(s.total_uncompressed_size)),
                         Role::Value,
                         json!(s.total_uncompressed_size),
+                    )
+                }),
+                static_lib_note: s.static_lib_skipped.then(|| {
+                    Value::split(
+                        format!(
+                            "summary skipped (archive > {} MB)",
+                            STATIC_LIB_SUMMARY_CAP / (1024 * 1024)
+                        ),
+                        Role::Muted,
+                        json!(true),
                     )
                 }),
             },
@@ -260,8 +298,9 @@ mod tests {
     /// architecture is read from the first one.
     #[test]
     fn static_lib_summary_counts_objects() {
-        let lib = static_lib_summary(&fixture("tiny.a"), ArchiveFormat::Ar)
-            .expect("tiny.a is a static library");
+        let (lib, skipped) = static_lib_summary(&fixture("tiny.a"), ArchiveFormat::Ar);
+        let lib = lib.expect("tiny.a is a static library");
+        assert!(!skipped);
         assert_eq!(lib.object_members, 3);
         assert_eq!(lib.architecture.as_deref(), Some("AArch64"));
     }
@@ -270,12 +309,47 @@ mod tests {
     /// tarballs) gets no static-library summary.
     #[test]
     fn non_object_ar_has_no_summary() {
-        assert!(static_lib_summary(&fixture("hello.deb"), ArchiveFormat::Ar).is_none());
+        assert!(
+            static_lib_summary(&fixture("hello.deb"), ArchiveFormat::Ar)
+                .0
+                .is_none()
+        );
     }
 
     /// Non-`ar` formats are never treated as static libraries.
     #[test]
     fn non_ar_format_skipped() {
-        assert!(static_lib_summary(&fixture("archive.zip"), ArchiveFormat::Zip).is_none());
+        assert!(
+            static_lib_summary(&fixture("archive.zip"), ArchiveFormat::Zip)
+                .0
+                .is_none()
+        );
+    }
+
+    /// An over-cap probe skip is surfaced, not silent: a note row in
+    /// print and `static_lib_skipped: true` in JSON.
+    #[test]
+    fn skipped_probe_emits_note() {
+        let stats = ArchiveStats {
+            format_name: "ar",
+            entry_count: 1,
+            file_count: 1,
+            dir_count: 0,
+            total_uncompressed_size: 1,
+            error: None,
+            static_lib: None,
+            static_lib_skipped: true,
+        };
+        let (_, json) = json_section(&stats);
+        assert_eq!(json["static_lib_skipped"], serde_json::json!(true));
+        let theme = PeekTheme::from_syntect(&crate::theme::load_embedded_theme(
+            crate::theme::PeekThemeName::IdeaDark.tmtheme_source(),
+        ));
+        let mut lines = Vec::new();
+        render_section(&mut lines, &stats, &theme);
+        assert!(
+            lines.iter().any(|l| l.contains("summary skipped")),
+            "got: {lines:?}"
+        );
     }
 }

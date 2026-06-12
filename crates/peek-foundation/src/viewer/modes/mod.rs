@@ -41,6 +41,7 @@ pub use info::InfoMode;
 pub use pretty_view::PrettyView;
 pub use rendered_text::{
     RENDER_MAX_BYTES, RenderedTextMode, TextRenderer, ensure_under_render_cap, render_cap_exceeded,
+    render_cap_placeholder,
 };
 
 /// Stable identifier for a mode. Used to look up modes in a stack and

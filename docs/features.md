@@ -190,8 +190,8 @@ notebooks piped via stdin route to the cell viewer rather than the generic JSON 
 The Info view shows the structured XML stats (root element, element counts).
 
 `html2text` holds the whole document in memory, so HTML over the render cap (`RENDER_MAX_BYTES`)
-(`RENDER_MAX_BYTES`) skips the rendered view — it shows one warning line and the **Source** view
-stands in. Keeps a pathological multi-hundred-MB page openable.
+skips the rendered view — it shows one warning line and the **Source** view stands in. Keeps a
+pathological multi-hundred-MB page openable.
 
 #### Email ◐
 

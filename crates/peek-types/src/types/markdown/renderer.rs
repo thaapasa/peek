@@ -15,7 +15,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
-use crate::viewer::modes::{ModeId, TextRenderer, render_cap_exceeded};
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 
 use super::render;
 
@@ -51,12 +51,9 @@ impl TextRenderer for MarkdownRenderer {
         theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
-        self.warning = None;
         let len = self.source.byte_len()?;
-        if let Some(mut msg) = render_cap_exceeded(len, "markdown") {
-            msg.push_str("; see the source view");
-            self.warning = Some(msg.clone());
-            return Ok(vec![msg]);
+        if let Some(lines) = render_cap_placeholder(len, "markdown", &mut self.warning) {
+            return Ok(lines);
         }
         let text = self.source.read_text()?;
         render::render(

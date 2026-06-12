@@ -27,14 +27,17 @@
 
 /// Materialize-and-transform budget: whole-document renders (HTML /
 /// DOCX / RTF / Markdown / notebook), structured pretty-print, zip-entry
-/// payloads feeding those renders.
+/// payloads feeding those renders, the UTF-16 CSV transcode.
 pub const WHOLE_DOC_BYTES: u64 = 32 * 1024 * 1024;
 
 /// Whole-text parse with small derived output: sidecar text parsers
-/// (markdown / SQL / CSS info), DMG property-list extraction.
+/// (markdown / SQL / CSS info), the UTF-16 text-stats decode, DMG
+/// property-list extraction.
 pub const SIDECAR_PARSE_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Single bounded walk over untrusted / unbounded data: transparent
 /// decompression, per-entry archive extraction, the raw-content search
-/// scan.
+/// scan, the static-library object-member summary (materialized whole,
+/// but held for one pass with no expansion — and real `.a` files run
+/// hundreds of MB, past the sidecar budget).
 pub const BULK_WALK_BYTES: u64 = 256 * 1024 * 1024;

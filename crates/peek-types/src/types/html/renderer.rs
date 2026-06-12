@@ -14,7 +14,7 @@ use anyhow::Result;
 
 use crate::input::InputSource;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
-use crate::viewer::modes::{ModeId, TextRenderer, render_cap_exceeded};
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 
 use super::render;
 
@@ -50,12 +50,9 @@ impl TextRenderer for HtmlRenderer {
         _theme_name: PeekThemeName,
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
-        self.warning = None;
         let len = self.source.byte_len()?;
-        if let Some(mut msg) = render_cap_exceeded(len, "HTML") {
-            msg.push_str("; showing raw source");
-            self.warning = Some(msg.clone());
-            return Ok(vec![msg]);
+        if let Some(lines) = render_cap_placeholder(len, "HTML", &mut self.warning) {
+            return Ok(lines);
         }
         let bytes = self.source.read_bytes()?;
         render::render(&bytes, width.max(20), style_mode)

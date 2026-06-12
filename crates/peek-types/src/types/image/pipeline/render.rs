@@ -823,7 +823,7 @@ mod tests {
         // the millions; the clamp contains the grid in the capped box.
         let (cols, rows) = compute_grid(1, 10_000_000, term, 0, FitMode::FitWidth);
         assert!(rows <= MAX_FIT_CELLS, "rows {rows}");
-        assert!(cols >= 1 && cols <= 300, "cols {cols}");
+        assert!((1..=300).contains(&cols), "cols {cols}");
         // 10M px wide, 1 px tall at FitHeight: same on the other axis.
         let (cols, rows) = compute_grid(10_000_000, 1, term, 0, FitMode::FitHeight);
         assert!(cols <= MAX_FIT_CELLS, "cols {cols}");

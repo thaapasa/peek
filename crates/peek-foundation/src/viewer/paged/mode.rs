@@ -183,8 +183,7 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
             .scroll(action, ScrollBounds::clamped(max_x, max_y, page_y))
     }
 
-    /// Print mode walks every page in order, separated by a blank line.
-    /// Honors the cache so already-rendered pages reuse their output;
+    /// Print mode walks every page in order, separated by a blank line;
     /// the interactive view stays single-page. Forces zoom = 1× and
     /// pan = origin for the duration — pipe output is non-interactive,
     /// so the user's live zoom can't help and would only widen lines

@@ -22,7 +22,7 @@ use anyhow::Result;
 use crate::input::InputSource;
 use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::markdown::render_markdown;
-use crate::viewer::modes::{ModeId, TextRenderer, render_cap_exceeded};
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 
 use super::model::{Cell, CellKind, Notebook, Output};
 
@@ -60,12 +60,9 @@ impl TextRenderer for NotebookRenderer {
     ) -> Result<Vec<String>> {
         // Whole-notebook parse + markdown synthesis — gate like the
         // other whole-document renderers (HTML / markdown).
-        self.warning = None;
         let len = self.source.byte_len()?;
-        if let Some(mut msg) = render_cap_exceeded(len, "notebook") {
-            msg.push_str("; see the source view");
-            self.warning = Some(msg.clone());
-            return Ok(vec![msg]);
+        if let Some(lines) = render_cap_placeholder(len, "notebook", &mut self.warning) {
+            return Ok(lines);
         }
         let text = self.source.read_text()?;
         let md = match Notebook::parse(&text) {

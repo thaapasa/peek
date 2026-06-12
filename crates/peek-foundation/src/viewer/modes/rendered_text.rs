@@ -61,6 +61,23 @@ pub fn ensure_under_render_cap(len: u64, what: &str) -> Result<()> {
     }
 }
 
+/// The warning-line degrade path shared by the soft-refusing renderers
+/// (HTML / markdown / notebook): always clears `warning`, and over the
+/// cap stores the message there (drained via `take_warnings`, surfaced
+/// in Info) and returns the one-line placeholder body. `None` means
+/// under cap — proceed with the real render.
+pub fn render_cap_placeholder(
+    len: u64,
+    what: &str,
+    warning: &mut Option<String>,
+) -> Option<Vec<String>> {
+    *warning = render_cap_exceeded(len, what).map(|mut msg| {
+        msg.push_str("; see the source view");
+        msg
+    });
+    warning.clone().map(|msg| vec![msg])
+}
+
 /// Turns a parsed document into width-wrapped, ANSI-styled lines.
 ///
 /// Implementors own the parsed document (the AST, the PDF handle, the

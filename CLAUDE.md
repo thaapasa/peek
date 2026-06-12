@@ -38,7 +38,8 @@ crates/
   peek-io/             — input foundation: InputSource (File / Memory / FileRange / TempFile) +
                          ByteSource + LineSource (streaming, anchor-indexed) + ByteStream; the
                          bare single-stream codecs (gz/bz2/xz/zst/lz4/br) + CompressionFormat;
-                         stdin read + /dev/tty reopen. Depends on nothing in-tree.
+                         stdin read + /dev/tty reopen; limits (the memory-budget classes every
+                         size gate aliases). Depends on nothing in-tree.
   peek-detect/         — file-type detection: FileType + every per-type format enum +
                          magic-byte / extension / content-sniff classification (detect/) + mime
                          (RFC 6838) + transparent decompress-then-redetect (resolve_transparent).
