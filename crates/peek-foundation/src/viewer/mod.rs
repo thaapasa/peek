@@ -12,7 +12,6 @@ use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
 
 pub mod cell_size;
-pub mod hex;
 pub mod highlight;
 pub mod image_render;
 pub mod listing;

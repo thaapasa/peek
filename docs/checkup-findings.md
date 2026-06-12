@@ -131,15 +131,6 @@ another `_scroll` underscore.
 
 ## Low
 
-### L1. `viewer/hex.rs` (primitives) and `viewer/modes/hex.rs` (Mode impl)
-
-Two files for one concept. The four primitive functions in
-`crates/peek-foundation/src/viewer/hex.rs` (`bytes_per_row`, `align_down`,
-`max_top`, `format_row`) are called only from the Mode in
-`viewer/modes/hex.rs`. Split is intentional but hex layout has been stable;
-folding back into one file would reduce nothing semantically but shorten a
-click-through. Net minor.
-
 ### L3. Image-config help consts re-listed across image modes — largely resolved
 
 The 4-element literal block the finding targeted was extracted into three

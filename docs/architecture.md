@@ -314,12 +314,13 @@ Factory built once from CLI args. Holds the shared `ThemeManager` plus the resol
 the single dispatcher that produces the mode stack consumed by both the interactive event loop and
 the pipe path.
 
-### HexMode (`viewer/hex.rs` + `viewer/modes/hex.rs`)
+### HexMode (`viewer/modes/hex.rs`)
 
-`viewer/hex.rs` hosts the layout primitives — `bytes_per_row` (`14 + 4*bpr` columns; rounded to a
-multiple of 8), `align_down`, `max_top`, `format_row`. Layout matches `hexdump -C`.
+One file: the layout primitives — `bytes_per_row` (`14 + 4*bpr` columns; rounded to a multiple
+of 8), `align_down`, `max_top`, `format_row` (layout matches `hexdump -C`) — plus the Mode impl
+built on them.
 
-`HexMode` (`viewer/modes/hex.rs`) owns a `Box<dyn ByteSource>` plus `top_offset: u64` aligned to
+`HexMode` owns a `Box<dyn ByteSource>` plus `top_offset: u64` aligned to
 the current `bytes_per_row`. Returns `owns_scroll() = true` so `ViewerState`'s line-scroll is
 suppressed; handles ScrollUp/Down/PageUp/Down/Top/Bottom byte-wise via `scroll()`. `on_resize`
 re-aligns `top_offset` to the new column count. `render_to_pipe` streams the whole file in 4 KB
