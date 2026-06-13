@@ -689,7 +689,13 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
             if trimmed.contains("<svg") {
                 return Some((FileType::Svg, "image/svg+xml"));
             }
-            let head_lower = trimmed[..trimmed.len().min(512)].to_ascii_lowercase();
+            // Clamp to a char boundary: a multi-byte char straddling byte
+            // 512 would panic a raw slice (found by fuzzing).
+            let mut cap = trimmed.len().min(512);
+            while cap > 0 && !trimmed.is_char_boundary(cap) {
+                cap -= 1;
+            }
+            let head_lower = trimmed[..cap].to_ascii_lowercase();
             if head_lower.starts_with("<!doctype html") || head_lower.contains("<html") {
                 return Some((FileType::Html, "text/html"));
             }

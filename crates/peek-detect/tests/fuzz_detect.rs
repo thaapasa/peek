@@ -63,6 +63,19 @@ proptest! {
     }
 }
 
+/// Regression: a multi-byte char straddling byte 512 of an XML-ish head
+/// once panicked the `<html>` sniff in `sniff_text_content` (raw byte slice,
+/// found by `just fuzz`). The verdict doesn't matter here — only that it
+/// returns without panicking.
+#[test]
+fn xml_head_char_boundary_at_512() {
+    // 510 ASCII '<' bytes, then a 3-byte char crossing index 512.
+    let mut bytes = vec![b'<'; 510];
+    bytes.extend_from_slice("櫃".as_bytes());
+    bytes.extend_from_slice(b"<html>");
+    let _ = detect(&mem(&bytes, "")).expect("detect");
+}
+
 /// Magic-byte corpus round-trips: real signatures must still surface their
 /// `infer` MIME after never-panic hardening. Guards true positives from
 /// silently degrading into the text/binary fallback. Deterministic table —
