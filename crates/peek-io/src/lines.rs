@@ -96,9 +96,14 @@ impl LineSource {
 
         let mut reader = LineReader::new(self.bs.as_ref(), anchor_byte);
 
-        // Skip lines between the anchor and the window start.
+        // Skip lines between the anchor and the window start. Uses the
+        // non-decoding `skip_line` so jumping deep into a file doesn't
+        // allocate (and UTF-8-validate) up to `ANCHOR_STRIDE` throwaway
+        // strings on every window fetch. A non-UTF-8 line *outside* the
+        // requested window therefore won't surface as an error — only the
+        // returned window lines are decoded.
         for _ in anchor_line..start {
-            if reader.next_line()?.is_none() {
+            if !reader.skip_line()? {
                 return Ok(Vec::new());
             }
         }
@@ -171,14 +176,50 @@ impl<'a> LineReader<'a> {
                 return Ok(None);
             }
 
-            let buf = self.bs.read_range(self.next_offset, READ_CHUNK)?;
-            if buf.is_empty() {
-                self.eof = true;
-                continue;
+            self.refill()?;
+        }
+    }
+
+    /// Advance past one line without decoding it. Same framing as
+    /// [`Self::next_line`] (consume through the next `\n`, else the
+    /// trailing no-newline fragment) but allocates no `String` and does
+    /// not validate UTF-8. Used to walk from an anchor to a window start
+    /// cheaply. Returns `false` once EOF is reached with nothing left to
+    /// skip.
+    fn skip_line(&mut self) -> Result<bool> {
+        loop {
+            if let Some(pos) = self.carry.iter().position(|b| *b == b'\n') {
+                self.carry.drain(..pos + 1);
+                return Ok(true);
             }
+
+            if self.eof {
+                if !self.final_emitted && !self.carry.is_empty() {
+                    self.final_emitted = true;
+                    self.carry.clear();
+                    return Ok(true);
+                }
+                return Ok(false);
+            }
+
+            self.refill()?;
+        }
+    }
+
+    /// Pull one more `READ_CHUNK` from the source into `carry`, advancing
+    /// `next_offset`. Sets `eof` and leaves `carry` untouched once the
+    /// source is exhausted. The single place line framing pumps the
+    /// source, so `next_line` and `skip_line` can't drift on offset
+    /// bookkeeping or the EOF flag.
+    fn refill(&mut self) -> Result<()> {
+        let buf = self.bs.read_range(self.next_offset, READ_CHUNK)?;
+        if buf.is_empty() {
+            self.eof = true;
+        } else {
             self.next_offset += buf.len() as u64;
             self.carry.extend_from_slice(&buf);
         }
+        Ok(())
     }
 }
 
@@ -417,6 +458,21 @@ mod tests {
         let ls = LineSource::open(&s).unwrap();
         let collected: Vec<String> = ls.iter_all().collect::<Result<_>>().unwrap();
         assert_eq!(collected, vec!["a", "b", "c", "d"]);
+    }
+
+    #[test]
+    fn skipped_line_invalid_utf8_does_not_error() {
+        // Line 0 is non-UTF-8; line 1 is clean. Fetching the window that
+        // starts at line 1 skips line 0 without decoding it, so the bad
+        // bytes outside the window don't surface as an error.
+        let mut data = b"bad\x80line\n".to_vec();
+        data.extend_from_slice(b"good\n");
+        let s = InputSource::stdin(Bytes::from(data));
+        let ls = LineSource::open(&s).unwrap();
+        assert_eq!(ls.total_lines(), 2);
+        assert_eq!(ls.window(1..2).unwrap(), vec!["good"]);
+        // The in-window bad line still errors when decoded.
+        assert!(ls.window(0..1).is_err());
     }
 
     #[test]
