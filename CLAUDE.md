@@ -133,6 +133,9 @@ src/                   — the bin: the thin session layer (CLI + the three disp
                          render.rs = view cache + failure recovery + scroll math + draw) + the
                          interactive event loop
 docs/                  — Builder / agent reference (architecture.md = design + index)
+fuzz/                  — cargo-fuzz crate (workspace-excluded, nightly): coverage-guided detect
+                         targets. `just fuzz`. Stable property-test floor is in
+                         peek-detect/tests/fuzz_detect.rs; see fuzz/README.md
 manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
 .github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +
                          manual.yml (mdbook → Pages)

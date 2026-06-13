@@ -17,6 +17,10 @@ lint:
 test:
     cargo test --workspace
 
+# Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md
+fuzz target="detect_bytes" secs="60":
+    cargo +nightly fuzz run {{ target }} --fuzz-dir fuzz -- -max_total_time={{ secs }}
+
 # Install peek locally (binary + Pdfium dylib if .pdfium/lib/ has one)
 install:
     #!/usr/bin/env bash

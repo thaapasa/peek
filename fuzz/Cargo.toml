@@ -1,0 +1,24 @@
+[package]
+name = "peek-detect-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+# Excluded from the root workspace (see ../Cargo.toml `[workspace] exclude`):
+# libfuzzer-sys needs nightly, so keeping it out keeps the stable
+# `cargo test --workspace` build green.
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+peek-detect = { path = "../crates/peek-detect" }
+peek-io = { path = "../crates/peek-io" }
+
+[[bin]]
+name = "detect_bytes"
+path = "fuzz_targets/detect_bytes.rs"
+test = false
+doc = false
+bench = false

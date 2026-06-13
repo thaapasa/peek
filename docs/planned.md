@@ -23,9 +23,11 @@ mechanical.
 
 - **Large File Safeguards** — no size guard exists; opening a multi-GB file tries to
   load it. See [§ Large File Safeguards](#large-file-safeguards-).
-- **Fuzz the pure detect surface** — the whole point of the `peek-detect` split was a
-  fuzzable, reader-free, hostile-byte surface; never-panic + corpus round-trips not
-  yet done. The security story for pointing peek at untrusted files. See
+- ◐ **Fuzz the pure detect surface** — the whole point of the `peek-detect` split was a
+  fuzzable, reader-free, hostile-byte surface. Stable property-test floor shipped
+  (`crates/peek-detect/tests/fuzz_detect.rs`: never-panic + two-path parity + magic
+  round-trips, runs in CI); coverage-guided libFuzzer targets wired for manual nightly
+  runs (`fuzz/`, `just fuzz`). Remaining: a CI nightly fuzz job if demand warrants. See
   [§ Detection hardening](#detection-hardening-).
 - **Stream-leak findings** (live in [checkup-findings.md](checkup-findings.md)):
   **M17** (search streams whole file per query), **M13** (`gather_capped_text` reads
@@ -96,9 +98,11 @@ references live in that plan's "Follow-up backlog" section; summary, ordered by 
   `UTF8_SCAN_LIMIT` (8 MiB, local classification-confidence knob — not a peek-io
   memory class, since the scan holds O(1)); a file whose head is valid UTF-8 classifies
   as text without reading the rest.
-- ☐ **[0.4] Fuzz / property-test the pure surface** now that no reader crates are in
-  the way (never-panic, magic-byte corpus round-trips, two-path parity). The security
-  story for hostile bytes — the reason the crate was split out.
+- ◐ **[0.4] Fuzz / property-test the pure surface** now that no reader crates are in
+  the way. Property-test floor shipped (`tests/fuzz_detect.rs`: never-panic, magic-byte
+  corpus round-trips, two-path parity ≤ HEAD_BYTES) plus a manual cargo-fuzz target
+  (`fuzz/`, `just fuzz`). The security story for hostile bytes — the reason the crate
+  was split out. Remaining: promote to a CI nightly fuzz job if demand warrants.
 - ☐ **[1.0] Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG,
   `.csv` holding a zip) routes by name; the only correction (`detect_ignore_name`)
   fires reactively on render failure, so silent mis-routes never self-correct. Prefer

@@ -21,3 +21,8 @@ mime_guess = { workspace = true }
 # JSON content sniff (notebook / JWK) and DER cert content-verification.
 serde_json = { workspace = true }
 x509-parser = { workspace = true }
+
+[dev-dependencies]
+# Property tests: never-panic + file/memory two-path parity (tests/fuzz_detect.rs).
+proptest = { workspace = true }
+tempfile = { workspace = true }
