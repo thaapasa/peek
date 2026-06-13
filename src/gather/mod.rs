@@ -250,6 +250,9 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
         FileType::Pdf(flavor) => types::pdf::info_gather::gather_extras(source, *flavor),
         FileType::PostScript(fmt) => types::eps::info_gather::gather_extras(source, *fmt),
         FileType::Spreadsheet(fmt) => types::spreadsheet::info_gather::gather_extras(source, *fmt),
+        FileType::Presentation(fmt) => {
+            types::presentation::info_gather::gather_extras(source, *fmt)
+        }
         FileType::Image => types::image::info_gather::gather_extras(source, magic_mime),
         FileType::Archive(fmt) => types::archive::info::gather_extras(source, *fmt),
         FileType::Compressed(_) => types::binary::info::gather_extras(magic_mime),

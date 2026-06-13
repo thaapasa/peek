@@ -124,6 +124,11 @@ impl Registry {
                     source, detected, args, &ctx, &mut modes, *fmt,
                 )?;
             }
+            FileType::Presentation(fmt) => {
+                types::presentation::compose::compose(
+                    source, detected, args, &ctx, &mut modes, *fmt,
+                )?;
+            }
             FileType::Comic(ComicFormat::Cbz) => {
                 types::comic::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }

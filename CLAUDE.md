@@ -104,7 +104,9 @@ crates/
                          x509-parser, …). Types:
                          binary, text, markdown, notebook (ipynb), sql, sqlite (read-only via
                          bundled rusqlite), css, structured (JSON/YAML/TOML/XML), csv,
-                         spreadsheet (xlsx/xlsm/ods), image (+ ASCII pipeline + SVG anim), html,
+                         spreadsheet (xlsx/xlsm/ods),
+                         presentation (pptx/pptm/ppsx/odp slide text + Keynote preview),
+                         image (+ ASCII pipeline + SVG anim), html,
                          email (eml/mbox), ebook (epub), document (docx/odt/rtf), pdf, eps (eps/ps),
                          comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
                          disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /

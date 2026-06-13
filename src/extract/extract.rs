@@ -5,7 +5,9 @@
 //! feeds straight back into the rest of the peek pipeline (write to disk,
 //! stream to stdout, recursive peek).
 
-use peek_detect::{ComicFormat, Detected, DocumentFormat, EbookFormat, FileType};
+use peek_detect::{
+    ComicFormat, Detected, DocumentFormat, EbookFormat, FileType, PresentationFormat,
+};
 use peek_foundation::extract::{ExtractError, ExtractOptions, Extracted};
 use peek_io::InputSource;
 use peek_types::types;
@@ -27,9 +29,14 @@ pub fn extract(
         FileType::DiskImage(fmt) => types::disk_image::extract::extract(source, *fmt, key),
         FileType::Ebook(EbookFormat::Epub)
         | FileType::Comic(ComicFormat::Cbz)
-        | FileType::Document(DocumentFormat::Docx | DocumentFormat::Odt) => {
-            types::archive::extract::extract(source, peek_detect::ArchiveFormat::Zip, key, opts)
-        }
+        | FileType::Document(DocumentFormat::Docx | DocumentFormat::Odt)
+        | FileType::Presentation(
+            PresentationFormat::Pptx
+            | PresentationFormat::Pptm
+            | PresentationFormat::Ppsx
+            | PresentationFormat::Odp
+            | PresentationFormat::Key,
+        ) => types::archive::extract::extract(source, peek_detect::ArchiveFormat::Zip, key, opts),
         FileType::Document(DocumentFormat::Rtf) => {
             types::document::rtf::extract::extract(source, key)
         }

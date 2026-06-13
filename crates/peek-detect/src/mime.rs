@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::{
     ArchiveFormat, AudioFormat, ComicFormat, CompressionFormat, DiskImageFormat, DocumentFormat,
-    EbookFormat, EmailFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat,
-    StructuredFormat,
+    EbookFormat, EmailFormat, FileType, PdfFlavor, PostScriptFormat, PresentationFormat,
+    SpreadsheetFormat, StructuredFormat,
 };
 
 /// How official a MIME type is — drives display markers in the info view.
@@ -199,6 +199,19 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Spreadsheet(SpreadsheetFormat::Ods) => {
             "application/vnd.oasis.opendocument.spreadsheet"
         }
+        FileType::Presentation(PresentationFormat::Pptx) => {
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        }
+        FileType::Presentation(PresentationFormat::Pptm) => {
+            "application/vnd.ms-powerpoint.presentation.macroenabled.12"
+        }
+        FileType::Presentation(PresentationFormat::Ppsx) => {
+            "application/vnd.openxmlformats-officedocument.presentationml.slideshow"
+        }
+        FileType::Presentation(PresentationFormat::Odp) => {
+            "application/vnd.oasis.opendocument.presentation"
+        }
+        FileType::Presentation(PresentationFormat::Key) => "application/vnd.apple.keynote",
         FileType::DiskImage(DiskImageFormat::Iso) => "application/x-iso9660-image",
         FileType::DiskImage(DiskImageFormat::Dmg) => "application/x-apple-diskimage",
         FileType::DiskImage(DiskImageFormat::Raw) => "application/octet-stream",
@@ -323,6 +336,13 @@ fn known_extensions_for_type(file_type: &FileType) -> &'static [&'static str] {
         FileType::Spreadsheet(SpreadsheetFormat::Xlsx) => &["xlsx"],
         FileType::Spreadsheet(SpreadsheetFormat::Xlsm) => &["xlsm"],
         FileType::Spreadsheet(SpreadsheetFormat::Ods) => &["ods"],
+        // Presentations magic-detect as application/zip (Keynote too);
+        // accept the real extension so the mismatch warning stays quiet.
+        FileType::Presentation(PresentationFormat::Pptx) => &["pptx"],
+        FileType::Presentation(PresentationFormat::Pptm) => &["pptm"],
+        FileType::Presentation(PresentationFormat::Ppsx) => &["ppsx"],
+        FileType::Presentation(PresentationFormat::Odp) => &["odp"],
+        FileType::Presentation(PresentationFormat::Key) => &["key", "keynote"],
         FileType::Archive(ArchiveFormat::Zip) => &["zip", "jar", "war", "apk"],
         FileType::Archive(ArchiveFormat::Ar) => &["ar", "a", "deb"],
         FileType::Compressed(CompressionFormat::Gz) => &["gz", "tgz"],

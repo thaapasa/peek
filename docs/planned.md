@@ -43,9 +43,6 @@ mechanical.
 - **Block Collapsing / Folding** — the biggest single new capability and the natural
   1.1 headline; big lift (line-metadata layer). See
   [§ Block Collapsing / Folding](#block-collapsing--folding-).
-- **Presentations** (`.pptx` / `.ppt` / `.odp`) — the missing leg of the office trio
-  (Word + Excel equivalents ship; slides don't). See
-  [§ Presentations](#presentations-).
 - **File-type deepening** — enhancements to already-shipped types (SQL formatter, CSS
   specificity, multi-page `.ps`, PKCS#12, RAR, m4b chapters, …). None block 1.0; pick
   by demand. See [§ File Types](#file-types).
@@ -209,25 +206,19 @@ Also unblocks INI / properties section-folding — see
 
 ## File Types
 
-Mostly deepening of already-shipped types (none block 1.0; pick by demand) plus one
-new type — presentations.
+Deepening of already-shipped types (none block 1.0; pick by demand).
 
-### Presentations ☐
+### Presentations ◐
 
-The missing leg of the office trio: `document` ships Word/ODT/RTF and `spreadsheet`
-ships xlsx/ods, but there's no presentation reader. A user opening a `.pptx` today gets
-the raw zip listing.
+The `presentation` type ships (pptx/pptm/ppsx + odp slide-by-slide text, Keynote
+preview). Remaining deepening:
 
-| Format | Extensions | Notes                                              |
-|--------|------------|----------------------------------------------------|
-| OOXML  | `.pptx`    | Zip of `ppt/slides/slideN.xml` — text + media refs |
-| ODF    | `.odp`     | Zip of `content.xml` — OpenDocument presentation   |
-| Legacy | `.ppt`     | OLE/CFB compound binary — see open-ideas backlog   |
-
-First cut: slide-by-slide text extraction (title + body runs per slide) in a paged
-listing, mirroring the EPUB `n` / `p` chapter flow; embedded images surface in the
-slide's media listing. Reuses the `document` AST prose model + the paged read-mode
-infra. `.ppt` (legacy binary) is deferred with the other OLE formats.
+- **`.ppt`** (legacy OLE/CFB compound binary) — deferred with the other OLE formats.
+- **ODP run styling** — ODP slide runs render plain; bold/italic/colour need the
+  `automatic-styles` resolution the `document` ODT parser already does.
+- **Keynote slide text** — modern `.key` stores text as undocumented snappy-protobuf
+  (IWA). Today only the embedded `preview.jpg` + build metadata surface. Full IWA
+  decode is a large, version-fragile reverse-engineering effort — its own task.
 
 ### SQL ◐
 

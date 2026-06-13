@@ -3,34 +3,36 @@
 peek auto-detects the file type by extension and magic bytes. Where the detected type has a
 dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 
-| Category          | Formats                                                     |
-|-------------------|-------------------------------------------------------------|
-| Source code       | 100+ languages via syntect (Rust, Python, Go, TS, …)        |
-| Markup            | Markdown, HTML, XML, SQL                                    |
-| Email             | `.eml` messages, `.mbox` mailboxes                          |
-| Calendar/contacts | iCalendar (`.ics`), vCard (`.vcf`)                          |
-| Notebooks         | Jupyter (`.ipynb`)                                          |
-| Structured data   | JSON / JSONC / JSON5 / JSONL, YAML, TOML, XML               |
-| Tabular data      | CSV, TSV (aligned table view)                               |
-| Databases         | SQLite (schema listing + streaming row viewer)              |
-| Spreadsheets      | `.xlsx`, `.xlsm`, `.ods` (sheet listing → table per sheet)   |
-| Documents         | DOCX, ODT, RTF                                              |
-| PDF / Illustrator | `.pdf`, `.ai` (paged render + text + embeds)                |
-| EPS / PostScript  | `.eps`, `.ps` (embedded preview + Ghostscript render + DSC info) |
-| Ebooks            | EPUB                                                        |
-| Images            | PNG, JPEG, GIF, WebP, BMP, TIFF, ICO, AVIF, PNM, TGA, EXR, QOI, DDS |
-| Vector            | SVG (incl. CSS `@keyframes` animation)                      |
-| Audio             | MP3, FLAC, Ogg, Opus, WAV, MPEG-4, AAC, AIFF, CAF, MKA, WMA |
-| Archives          | ZIP, tar (+gz/bz2/xz/zst/lz4/br), 7-Zip, cpio, ar / `.deb`  |
-| Compression       | gzip, bzip2, xz, zstd, lz4, brotli (bare wrappers)          |
-| Comic archives    | CBZ                                                         |
-| Disk images       | ISO 9660, DMG (UDIF trailer)                                |
-| Filesystem        | Directories (one-level listing)                             |
-| Executables       | ELF, Mach-O, PE / COFF, WebAssembly (`.wasm`) object files  |
-| Java classfiles   | .class files — header, fields, methods                      |
-| Certificates      | PEM X.509 / CSR / CRL / keys / OpenSSH public keys          |
+| Category          | Formats                                                                              |
+|-------------------|--------------------------------------------------------------------------------------|
+| Source code       | 100+ languages via syntect (Rust, Python, Go, TS, …)                                 |
+| Markup            | Markdown, HTML, XML, SQL                                                             |
+| Email             | `.eml` messages, `.mbox` mailboxes                                                   |
+| Calendar/contacts | iCalendar (`.ics`), vCard (`.vcf`)                                                   |
+| Notebooks         | Jupyter (`.ipynb`)                                                                   |
+| Structured data   | JSON / JSONC / JSON5 / JSONL, YAML, TOML, XML                                        |
+| Tabular data      | CSV, TSV (aligned table view)                                                        |
+| Databases         | SQLite (schema listing + streaming row viewer)                                       |
+| Spreadsheets      | `.xlsx`, `.xlsm`, `.ods` (sheet listing → table per sheet)                           |
+| Presentations     | `.pptx`, `.pptm`, `.ppsx`, `.odp` (slide text); `.key` (preview)                     |
+| Documents         | DOCX, ODT, RTF                                                                       |
+| PDF / Illustrator | `.pdf`, `.ai` (paged render + text + embeds)                                         |
+| EPS / PostScript  | `.eps`, `.ps` (embedded preview + Ghostscript render + DSC info)                     |
+| Ebooks            | EPUB                                                                                 |
+| Images            | PNG, JPEG, GIF, WebP, BMP, TIFF, ICO, AVIF, PNM, TGA, EXR, QOI, DDS                  |
+| Vector            | SVG (incl. CSS `@keyframes` animation)                                               |
+| Audio             | MP3, FLAC, Ogg, Opus, WAV, MPEG-4, AAC, AIFF, CAF, MKA, WMA                          |
+| Archives          | ZIP, tar (+gz/bz2/xz/zst/lz4/br), 7-Zip, cpio, ar / `.deb`                           |
+| Compression       | gzip, bzip2, xz, zstd, lz4, brotli (bare wrappers)                                   |
+| Comic archives    | CBZ                                                                                  |
+| Disk images       | ISO 9660, DMG (UDIF trailer)                                                         |
+| Filesystem        | Directories (one-level listing)                                                      |
+| Executables       | ELF, Mach-O, PE / COFF, WebAssembly (`.wasm`) object files                           |
+| Java classfiles   | .class files — header, fields, methods                                               |
+| Certificates      | PEM X.509 / CSR / CRL / keys / OpenSSH public keys                                   |
 | Fonts             | TrueType, OpenType, TTC / OTC collections, WOFF / WOFF2 (metadata + specimen render) |
-| `.DS_Store`       | Apple Finder store — records table (icon / window / view settings) |
-| Binary / unknown  | Hex dump (`hexdump -C` style)                               |
+| `.DS_Store`       | Apple Finder store — records table (icon / window / view settings)                   |
+| Binary / unknown  | Hex dump (`hexdump -C` style)                                                        |
 
-Detection logic: [`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).
+Detection logic: [
+`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).

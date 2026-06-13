@@ -23,6 +23,7 @@ pub use crate::types::email::EmailFormat;
 pub use crate::types::eps::PostScriptFormat;
 pub use crate::types::font::FontFormat;
 pub use crate::types::pdf::PdfFlavor;
+pub use crate::types::presentation::PresentationFormat;
 pub use crate::types::spreadsheet::SpreadsheetFormat;
 pub use crate::types::sqlite::SqliteFormat;
 pub use crate::types::structured::StructuredFormat;
@@ -41,6 +42,7 @@ use crate::types::email as email_detect;
 use crate::types::eps as eps_detect;
 use crate::types::font as font_detect;
 use crate::types::objfile as objfile_detect;
+use crate::types::presentation as presentation_detect;
 use crate::types::spreadsheet as spreadsheet_detect;
 use crate::types::sqlite as sqlite_detect;
 use crate::types::structured as structured_detect;
@@ -121,6 +123,11 @@ pub enum FileType {
     /// listing whose rows drill into a streaming table view, a raw
     /// ZIP-entry listing, and a workbook Info section.
     Spreadsheet(SpreadsheetFormat),
+    /// Presentation (`.pptx` / `.pptm` / `.ppsx` / `.odp` / `.key`).
+    /// PPTX / ODP drive a slide-by-slide rendered read view + raw
+    /// ZIP-entry listing; Keynote drives the embedded preview image +
+    /// listing. All carry a presentation Info section.
+    Presentation(PresentationFormat),
     /// Container archive (zip / tar / compressed tar). Drives the
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
@@ -288,18 +295,23 @@ fn detect_stream(source: &InputSource, name: Option<&str>) -> Result<Detected> {
     let n = read_fill(&mut stream, &mut head)?;
     head.truncate(n);
 
+    let magic_mime = head_magic_mime(&head);
+
     // Name routing first — an extracted entry almost always carries one,
     // so a `.deb` / `.iso` / `.json` resolves from name + head alone.
-    if let Some(name) = name
-        && let Some(file_type) = classify_by_name(name)
-    {
-        return Ok(Detected::new(
-            upgrade_disk_image_bytes(file_type, &head),
-            head_magic_mime(&head),
-        ));
+    if let Some(name) = name {
+        // Keynote `.key` collides with PEM keys; zip magic disambiguates.
+        if let Some(file_type) = keynote_from_name(name, magic_mime.as_deref()) {
+            return Ok(Detected::new(file_type, magic_mime));
+        }
+        if let Some(file_type) = classify_by_name(name) {
+            return Ok(Detected::new(
+                upgrade_disk_image_bytes(file_type, &head),
+                magic_mime,
+            ));
+        }
     }
 
-    let magic_mime = head_magic_mime(&head);
     if let Some(ref mime) = magic_mime
         && let Some(file_type) = file_type_from_magic_mime(mime)
     {
@@ -356,14 +368,18 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
 
     // Name-based routing: extension / full-name → FileType. ISO probe
     // upgrades a `.img` Raw to Iso when the body carries the PVD.
-    if !ignore_name
-        && let Some(name) = path.file_name().and_then(|n| n.to_str())
-        && let Some(file_type) = classify_by_name(name)
-    {
-        return Ok(Detected::new(
-            upgrade_disk_image_path(file_type, path),
-            head_magic,
-        ));
+    if !ignore_name && let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+        // Keynote `.key` collides with PEM keys; zip magic disambiguates
+        // it before the extension table claims it for `Cert`.
+        if let Some(file_type) = keynote_from_name(name, head_magic.as_deref()) {
+            return Ok(Detected::new(file_type, head_magic));
+        }
+        if let Some(file_type) = classify_by_name(name) {
+            return Ok(Detected::new(
+                upgrade_disk_image_path(file_type, path),
+                head_magic,
+            ));
+        }
     }
 
     let magic_mime = head_magic;
@@ -507,6 +523,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     if let Some(fmt) = spreadsheet_detect::format_from_mime(mime) {
         return Some(FileType::Spreadsheet(fmt));
     }
+    if let Some(fmt) = presentation_detect::format_from_mime(mime) {
+        return Some(FileType::Presentation(fmt));
+    }
     if mime == "image/svg+xml" {
         return Some(FileType::Svg);
     }
@@ -559,6 +578,18 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
 /// Upgrade an `.img`/`.bin`/`.dd`-derived `DiskImage::Raw` to
 /// `DiskImage::Iso` when the byte buffer carries an ISO 9660 PVD at
 /// offset 32768. Byte form (used by Memory / FileRange sources).
+/// Keynote `.key` shares its extension with PEM private keys, so the
+/// extension table routes a bare `.key` to [`FileType::Cert`]. The iWork
+/// package is a zip, though, so a `.key` / `.keynote` name whose head
+/// carries zip magic is unambiguously Keynote. Returns `Some` only for
+/// that combination; everything else falls through to normal routing.
+/// Run ahead of [`classify_by_name`] in every detection path.
+fn keynote_from_name(name: &str, magic: Option<&str>) -> Option<FileType> {
+    let ext = mime::extension_from_name(name)?;
+    (presentation_detect::is_keynote_ext(&ext) && magic == Some("application/zip"))
+        .then_some(FileType::Presentation(PresentationFormat::Key))
+}
+
 fn upgrade_disk_image_bytes(file_type: FileType, data: &[u8]) -> FileType {
     if let FileType::DiskImage(fmt) = file_type {
         return FileType::DiskImage(disk_image_detect::upgrade_raw_to_iso_bytes(fmt, data));
@@ -901,13 +932,15 @@ fn detect_bytes(data: &[u8], name: Option<&str>) -> Detected {
 /// peek into a container (EPUB / archive / ISO) doesn't lose the entry
 /// name's classification on its way back through the pipeline.
 fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
-    if let Some(name) = name
-        && let Some(file_type) = classify_by_name(name)
-    {
-        return Detected::new(
-            upgrade_disk_image_bytes(file_type, data),
-            head_magic_mime(data),
-        );
+    if let Some(name) = name {
+        let magic = head_magic_mime(data);
+        // Keynote `.key` collides with PEM keys; zip magic disambiguates.
+        if let Some(file_type) = keynote_from_name(name, magic.as_deref()) {
+            return Detected::new(file_type, magic);
+        }
+        if let Some(file_type) = classify_by_name(name) {
+            return Detected::new(upgrade_disk_image_bytes(file_type, data), magic);
+        }
     }
     detect_bytes(data, name)
 }
@@ -973,6 +1006,9 @@ fn classify_by_name(name: &str) -> Option<FileType> {
     if let Some(fmt) = spreadsheet_detect::format_from_ext(&ext) {
         return Some(FileType::Spreadsheet(fmt));
     }
+    if let Some(fmt) = presentation_detect::format_from_ext(&ext) {
+        return Some(FileType::Presentation(fmt));
+    }
     if let Some(fmt) = document_detect::format_from_ext(&ext) {
         return Some(FileType::Document(fmt));
     }
@@ -1037,6 +1073,46 @@ mod tests {
             }
         );
         assert_eq!(mime, "text/x-shellscript");
+    }
+
+    /// A `.pptx` magic-detects as a bare zip; the extension is what
+    /// routes it to the presentation viewer (same as docx / xlsx).
+    fn mem(name: &str, bytes: &[u8]) -> InputSource {
+        InputSource::Memory {
+            bytes: bytes.to_vec().into(),
+            name: name.to_string(),
+        }
+    }
+
+    #[test]
+    fn pptx_extension_routes_to_presentation() {
+        let d = detect(&mem("deck.pptx", b"PK\x03\x04\x14\x00\x00\x00")).unwrap();
+        assert_eq!(
+            d.file_type,
+            FileType::Presentation(PresentationFormat::Pptx)
+        );
+    }
+
+    /// Keynote `.key` shares its extension with PEM private keys. A zip
+    /// head disambiguates the iWork package; a text head stays a cert.
+    #[test]
+    fn keynote_key_with_zip_magic_is_presentation() {
+        let d = detect(&mem("talk.key", b"PK\x03\x04\x14\x00\x00\x00")).unwrap();
+        assert_eq!(d.file_type, FileType::Presentation(PresentationFormat::Key));
+    }
+
+    #[test]
+    fn pem_key_without_zip_magic_stays_cert() {
+        let d = detect(&mem(
+            "server.key",
+            b"-----BEGIN PRIVATE KEY-----\nMIIB...\n-----END PRIVATE KEY-----\n",
+        ))
+        .unwrap();
+        assert!(
+            matches!(d.file_type, FileType::Cert(_)),
+            "got {:?}",
+            d.file_type
+        );
     }
 
     #[test]

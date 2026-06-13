@@ -459,6 +459,32 @@ unlike the CSV viewer's sliding window. Sheets are bounded (Excel caps at ~1M ro
 container is read into memory for calamine's random access, so this is the accepted trade; a
 truly streaming reader would need a custom parse of the sheet XML.
 
+#### Presentations ◐
+
+The third leg of the office trio. `.pptx` / `.pptm` / `.ppsx` (Office Open XML) and `.odp`
+(OpenDocument Presentation) get **slide-by-slide text**; Apple Keynote (`.key`) gets a
+**preview**.
+
+- **Read** (default, pptx/odp) — one slide at a time through the shared `document` prose
+  renderer (title placeholder → heading, bullets → body), mirroring the EPUB chapter flow:
+  `n` / `p` step slides, `/` searches the current slide, the status line shows `slide X/Y`.
+  `--print` walks every slide. Embedded images surface as `[Image: name]` references in the
+  prose (reference-only — the bitmaps stay reachable via the Files TOC / `--extract`).
+- **Preview** (default, Keynote) — the embedded `preview.jpg` deck thumbnail rendered through
+  the image pipeline (zoom / pan / fit). Modern `.key` stores slide text as undocumented
+  snappy-protobuf, so the text isn't extracted; the thumbnail + the Files TOC stand in.
+- **Files** — the raw zip entries (every presentation format is an OOXML / ODF / iWork zip
+  container), browsable and extractable through the standard archive path.
+- **Info** — slide / word / image counts plus document properties (title / author / created /
+  application) from `docProps/core.xml` + `app.xml` (OOXML) or `meta.xml` (ODP); Keynote shows
+  the creating build from `BuildVersionHistory.plist`.
+
+Parsing is a hand-walk of the slide XML with `quick-xml` (same approach as the DOCX reader),
+reusing the `document` AST + renderer. Detection is extension-routed; the magic bytes are
+`application/zip` like every OOXML / ODF container, so an extension-less deck falls through to
+the archive viewer. `.key` is the exception — it shares its extension with PEM private keys, so
+the zip magic in the head disambiguates the Keynote package from a text key.
+
 #### SQL ◐
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as syntax-highlighted source. The Info

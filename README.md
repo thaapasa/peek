@@ -16,6 +16,8 @@ Modern terminal file viewer — preview any file, any format.
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
 - **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV
   extract, workbook metadata
+- **Presentations** — `.pptx` / `.pptm` / `.ppsx` / `.odp`: slide-by-slide text (`n` / `p` to
+  step, per-slide search); Apple Keynote (`.key`) shows the embedded preview + metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT,
   RTF, EPUB, CBZ. PDF pages render as images with an optional reconstructed-text overlay (`o`)

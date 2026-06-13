@@ -30,6 +30,7 @@ pub mod markdown;
 pub mod notebook;
 pub mod objfile;
 pub mod pdf;
+pub mod presentation;
 pub mod spreadsheet;
 pub mod sql;
 pub mod sqlite;

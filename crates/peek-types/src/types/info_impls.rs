@@ -121,6 +121,11 @@ impl_info_extras!(
     crate::types::spreadsheet::info_render::json_section
 );
 impl_info_extras!(
+    crate::types::presentation::PresentationStats,
+    crate::types::presentation::info_render::render_section,
+    crate::types::presentation::info_render::json_section
+);
+impl_info_extras!(
     crate::types::audio::AudioStats,
     crate::types::audio::info_render::render_section,
     crate::types::audio::info_render::json_section

@@ -22,6 +22,7 @@
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
   - [Spreadsheets](./file-types/spreadsheets.md)
+  - [Presentations](./file-types/presentations.md)
   - [Documents](./file-types/documents.md)
   - [PDF & Illustrator](./file-types/pdf.md)
   - [EPS & PostScript](./file-types/eps.md)

@@ -18,6 +18,7 @@ pub mod eps;
 pub mod font;
 pub mod objfile;
 pub mod pdf;
+pub mod presentation;
 pub mod spreadsheet;
 pub mod sqlite;
 pub mod structured;
