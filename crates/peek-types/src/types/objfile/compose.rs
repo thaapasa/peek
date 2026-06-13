@@ -28,7 +28,7 @@ pub fn compose(
     // Parse once: the Sections table and the Symbols listing share the
     // single `object::File` view. A parse failure leaves the stack
     // Info-only; the Info section surfaces the same error.
-    if let Ok(bytes) = source.read_bytes()
+    if let Ok(bytes) = source.read_bytes_capped(super::load::PARSE_MAX_BYTES, "object file")
         && let Ok(loaded) = super::load::load(&bytes)
     {
         let sections = super::tables::build_sections(&loaded.file);

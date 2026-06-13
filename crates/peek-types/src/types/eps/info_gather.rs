@@ -12,7 +12,7 @@ use super::info::{EpsInfo, PreviewMeta};
 use super::{gs, postscript_text};
 
 pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> Extras {
-    let bytes = match source.read_bytes() {
+    let bytes = match source.read_bytes_capped(super::PARSE_MAX_BYTES, "EPS file") {
         Ok(b) => b,
         Err(_) => {
             return Box::new(EpsInfo {

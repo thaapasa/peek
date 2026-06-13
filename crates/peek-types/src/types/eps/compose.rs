@@ -38,10 +38,18 @@ pub fn compose(
         _ => PostScriptFormat::Eps,
     };
 
-    let bytes = source.read_bytes()?;
-    let header = dos_eps::parse(&bytes);
+    // Whole-file slurp for the header / preview parse, refused above the
+    // cap so a multi-GB `.ps` never loads into RAM here. Over the cap
+    // `bytes` is `None`: the byte-dependent Preview / Render views are
+    // dropped and the Source view falls back to streaming the raw file.
+    let bytes = source
+        .read_bytes_capped(super::PARSE_MAX_BYTES, "EPS file")
+        .ok();
+    let header = bytes.as_ref().and_then(|b| dos_eps::parse(b));
 
-    if !args.plain {
+    if !args.plain
+        && let Some(bytes) = &bytes
+    {
         // 1. Embedded preview. Decode it here rather than lazily so a
         // preview the image crate can't handle (WMF, or an exotic TIFF
         // sub-format like RGBPalette) never becomes a dead
@@ -82,12 +90,14 @@ pub fn compose(
     // 3. Source — the PostScript program. For a binary DOS-EPS the
     // program is a slice of the file; showing the binary container raw
     // would be noise, so source a memory view of just the PS section.
-    let source_view = match &header {
-        Some(h) => InputSource::memory(
+    // Without the bytes (over cap) or a binary header, stream the raw
+    // file directly.
+    let source_view = match (&bytes, &header) {
+        (Some(bytes), Some(h)) => InputSource::memory(
             bytes.slice(h.postscript.offset..h.postscript.offset + h.postscript.len),
             source.name().to_string(),
         ),
-        None => source.clone(),
+        _ => source.clone(),
     };
     modes.push(ctx.text_content_mode(&source_view, &FileType::PostScript(format), args, None)?);
     Ok(())

@@ -15,12 +15,13 @@ pub fn gather_extras(source: &InputSource) -> Extras {
 }
 
 fn gather(source: &InputSource) -> ObjectInfo {
-    // `object` parses over a byte slice, so the whole file is read.
-    // Object files are rarely multi-GB; streaming isn't an option here
-    // because symbol / section tables need random access.
-    let bytes = match source.read_bytes() {
+    // `object` parses over a byte slice, so the whole file is read; the
+    // cap keeps a pathological multi-GB input from slurping into RAM
+    // (streaming isn't an option — symbol / section tables need random
+    // access). Over the cap, the Info view shows the refusal message.
+    let bytes = match source.read_bytes_capped(load::PARSE_MAX_BYTES, "object file") {
         Ok(b) => b,
-        Err(e) => return ObjectInfo::err(format!("read failed: {e}")),
+        Err(e) => return ObjectInfo::err(format!("{e}")),
     };
     let loaded = match load::load(&bytes) {
         Ok(l) => l,

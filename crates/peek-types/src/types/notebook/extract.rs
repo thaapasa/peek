@@ -15,7 +15,9 @@ use crate::input::InputSource;
 use super::listing;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
-    let text = source.read_text().map_err(ExtractError::Other)?;
+    let text = source
+        .read_text_capped(super::PARSE_MAX_BYTES, "notebook")
+        .map_err(ExtractError::Other)?;
     let (name, bytes) = listing::extract_block(&text, key)
         .ok_or_else(|| ExtractError::NotFound(key.to_string()))?;
     if bytes.is_empty() {

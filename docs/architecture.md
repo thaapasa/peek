@@ -601,6 +601,11 @@ path. The 16 MB threshold mirrors the archive-extract spool (`extract.rs::SPOOL_
 
 Gate helpers — call one of these rather than hand-rolling a check:
 
+- `InputSource::read_bytes_capped(cap, what)` / `read_text_capped(cap, what)`
+  (`peek-io/source.rs`) — whole-file read refused above `cap` via a cheap `byte_len` stat, for
+  the parse paths with no streaming option (`object::File`, the EPS header, the notebook JSON).
+  Lets compose / info degrade (Info-only, streaming source view, dropped section) instead of
+  slurping a multi-GB file into RAM.
 - `ensure_under_render_cap(len, what)` / `render_cap_exceeded(len, what)`
   (`viewer/modes/rendered_text.rs`) — refuse / warn before a whole-document read.
 - `read_zip_entry` (`types/archive/reader.rs`) — gated zip-entry payload read (declared *and*

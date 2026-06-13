@@ -12,7 +12,9 @@ use super::model::Notebook;
 /// when the bytes don't parse as a notebook, so the gather falls back to
 /// the generic binary/text path.
 pub fn gather_extras(source: &InputSource) -> Option<Extras> {
-    let text = source.read_text().ok()?;
+    let text = source
+        .read_text_capped(super::PARSE_MAX_BYTES, "notebook")
+        .ok()?;
     let nb = Notebook::parse(&text)?;
     Some(Box::new(NotebookInfo::from_notebook(&nb)))
 }

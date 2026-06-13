@@ -7,6 +7,13 @@
 use anyhow::{Result, anyhow, bail};
 use object::read::macho::{FatArch, MachOFatFile32, MachOFatFile64};
 
+/// Whole-object slurp ceiling. `object` parses over the full byte slice
+/// (random access into sections / symbols), so there is no streaming
+/// option; above this the compose / info paths degrade rather than read
+/// a multi-GB file into RAM. Real objects / static libs run to hundreds
+/// of MB, so this aliases the bulk-walk class, not the tighter doc cap.
+pub const PARSE_MAX_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
+
 /// A parsed object plus, for universal containers, the fat-slice summary.
 pub struct Loaded<'data> {
     pub file: object::File<'data>,

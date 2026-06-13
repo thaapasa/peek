@@ -4,7 +4,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use bytes::Bytes;
 use tempfile::NamedTempFile;
 
@@ -177,6 +177,37 @@ impl InputSource {
                 .map(Bytes::from)
                 .with_context(|| format!("failed to read tempfile {}", file.path().display())),
         }
+    }
+
+    /// Whole-file read refused above `cap`. For the parse paths that have
+    /// no streaming option — `object::File`, the EPS binary header, the
+    /// notebook JSON tree — random access over the whole slice is
+    /// required, so a multi-GB input would otherwise slurp into RAM at
+    /// compose / info time. Checks [`byte_len`](Self::byte_len) first
+    /// (cheap stat) and errors with a `what`-named message before any
+    /// read, letting the caller degrade (Info-only, hex, a warning row)
+    /// instead of OOMing. `cap` aliases a [`crate::limits`] budget class.
+    pub fn read_bytes_capped(&self, cap: u64, what: &str) -> Result<Bytes> {
+        self.ensure_under_cap(cap, what)?;
+        self.read_bytes()
+    }
+
+    /// UTF-8 variant of [`read_bytes_capped`](Self::read_bytes_capped).
+    pub fn read_text_capped(&self, cap: u64, what: &str) -> Result<String> {
+        self.ensure_under_cap(cap, what)?;
+        self.read_text()
+    }
+
+    fn ensure_under_cap(&self, cap: u64, what: &str) -> Result<()> {
+        let len = self.byte_len()?;
+        if len > cap {
+            bail!(
+                "{what} is {} MB, over the {} MB cap",
+                len / (1024 * 1024),
+                cap / (1024 * 1024)
+            );
+        }
+        Ok(())
     }
 
     /// Total byte length without reading the content. `File` / `TempFile`
@@ -539,6 +570,18 @@ mod tests {
         let mut f = File::create(&path).unwrap();
         f.write_all(data).unwrap();
         path
+    }
+
+    #[test]
+    fn read_capped_refuses_over_cap_without_reading() {
+        let src = InputSource::memory(Bytes::from(vec![b'a'; 100]), "x");
+        // Over cap: refused (cheap byte_len check, no read).
+        assert!(src.read_bytes_capped(50, "thing").is_err());
+        assert!(src.read_text_capped(50, "thing").is_err());
+        // At / under cap: full content returned.
+        assert_eq!(src.read_bytes_capped(100, "thing").unwrap().len(), 100);
+        assert_eq!(src.read_bytes_capped(200, "thing").unwrap().len(), 100);
+        assert_eq!(src.read_text_capped(100, "thing").unwrap().len(), 100);
     }
 
     #[test]
