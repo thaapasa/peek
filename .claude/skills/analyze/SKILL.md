@@ -173,8 +173,15 @@ never opened it understands it:
   place, efficiency waste on warm paths, convention violations.
 - **Low** — surface that should be `pub(crate)`, minor cleanups, naming.
 
-Each finding: `path:line — what's wrong, why it matters now, concrete
-fix`.
+**Number every finding** with a severity-class ID so it's easy to refer
+to later — same scheme as `docs/checkup-findings.md`: `H` / `M` / `L` +
+a sequential number within that class (`H1`, `H2`, `M1`, `L1`, …).
+Number from 1 per class, in report order. These IDs are local to the
+report (not the checkup tracker's stable IDs) — they just give the user
+a handle per finding.
+
+Each finding: `**H1** `path:line` — what's wrong, why it matters now,
+concrete fix`.
 
 Rules:
 
