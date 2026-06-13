@@ -23,6 +23,26 @@ pub enum ArchiveFormat {
 }
 
 impl ArchiveFormat {
+    /// Whether listing this format's table of contents requires streaming
+    /// the whole *decompressed* archive — true for the compressed tar /
+    /// cpio variants, whose entry data can't be seeked past without
+    /// inflating it. Seekable formats (zip / 7z / plain tar / cpio / ar)
+    /// read a cheap index or skip entry bytes by seeking, so they return
+    /// false. Drives the latency gate: a small `.tar.gz` can expand to a
+    /// huge tar, making the TOC walk slow.
+    pub fn streams_compressed(self) -> bool {
+        matches!(
+            self,
+            Self::TarGz
+                | Self::TarBz2
+                | Self::TarXz
+                | Self::TarZst
+                | Self::TarLz4
+                | Self::TarBr
+                | Self::CpioGz
+        )
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Zip => "ZIP archive",

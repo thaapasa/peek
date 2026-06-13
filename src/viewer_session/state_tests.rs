@@ -75,7 +75,7 @@ fn build_deferred_state(
         mode_builder,
         args.no_tempfile,
         super::Access::Default,
-        Some(fmt),
+        Some(super::Deferred::Decompress(fmt)),
     )
     .unwrap()
 }
@@ -480,5 +480,73 @@ fn deferred_decompress_loads_on_enter() {
         "reseeded to the inner content's primary view"
     );
     assert!(state.deferred_hint().is_none(), "hint gone once loaded");
+    state.ensure_active_rendered().unwrap();
+}
+
+/// A deferred compressed-tar TOC opens on a Hex + Info placeholder — the
+/// expensive listing walk is held back — and Enter runs the real compose
+/// in place, reseeding to the Listing view and unlocking the session.
+#[test]
+fn deferred_listing_builds_toc_on_enter() {
+    let rel = "test-data/archive.tar.gz";
+    let source = fixture_source(rel);
+    let detected = peek_detect::detect(&source).unwrap();
+    assert!(
+        matches!(
+            detected.file_type,
+            peek_detect::FileType::Archive(peek_detect::ArchiveFormat::TarGz)
+        ),
+        "fixture must classify as a compressed-tar archive"
+    );
+
+    // Build the placeholder the deferral path produces (small fixture, so
+    // the size gate is forced rather than tripped).
+    let args = Args::parse_from(["peek", rel]);
+    let registry = Rc::new(Registry::new(&args.compose_opts()).unwrap());
+    let deferred = Some(super::Deferred::Listing(peek_detect::ArchiveFormat::TarGz));
+    let modes = super::compose_or_defer(deferred, &source, || {
+        registry.compose_modes(&source, &detected)
+    })
+    .unwrap();
+    let registry_for_builder = registry.clone();
+    let mode_builder: ModeBuilder = Box::new(move |s, d| registry_for_builder.compose_modes(s, d));
+    let mut state = ViewerState::new(
+        source,
+        detected,
+        args.theme,
+        args.color,
+        RenderOptions::default(),
+        modes,
+        mode_builder,
+        args.no_tempfile,
+        super::Access::Default,
+        deferred,
+    )
+    .unwrap();
+
+    // Placeholder: lands on Info, no Listing mode built yet.
+    assert_eq!(
+        active_id(&state),
+        ModeId::Info,
+        "deferred TOC opens on Info"
+    );
+    assert!(state.frame().deferred.is_some(), "frame marked deferred");
+    assert!(
+        state.frame().mode_index(ModeId::Listing).is_none(),
+        "listing not composed until confirmed"
+    );
+
+    // Enter builds the TOC in place and reseeds to the Listing view.
+    state.apply(Action::Descend).unwrap();
+    assert!(
+        state.frame().deferred.is_none(),
+        "deferred cleared after load"
+    );
+    assert_eq!(state.access, super::Access::Unlocked, "session unlocked");
+    assert_eq!(
+        active_id(&state),
+        ModeId::Listing,
+        "reseeded to the archive listing"
+    );
     state.ensure_active_rendered().unwrap();
 }

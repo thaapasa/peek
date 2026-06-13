@@ -21,7 +21,7 @@ Size alone isn't the axis. The real discriminator is
 |------------|-----------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **What**   | unbounded materialization — a whole-file slurp / parse / transform grows RAM with input size                                                        | a streaming, memory-bounded op that is *slow* because the source is non-seekable (a full decompress pass to list a `.tar.xz`, a deep seek into a compressed stream) |
 | **Guard**  | a **hard cap** (refuse / degrade) or a **spill to tempfile** (bound RAM by a threshold, disk takes the rest) — never bypassable to the point of OOM | a **confirmation prompt** before the expensive op (interactive); the user may proceed                                                                               |
-| **Status** | addressed by the budget classes + spill paths below                                                                                                 | partly open — see [planned.md → Large File Safeguards](planned.md#large-file-safeguards-)                                                                           |
+| **Status** | addressed by the budget classes + spill paths below                                                                                                 | addressed — load prompts (decompress + compressed-tar TOC) + the spill ceiling; see [planned.md → Large File Safeguards](planned.md#large-file-safeguards-)         |
 
 A seekable, uncompressed format (ISO, plain tar, zip) is neither: random
 access keeps both bounded. It needs no guard.
@@ -105,7 +105,7 @@ including non-interactive paths (pipe / `--print`) where no prompt can
 intervene. Interactively, a large extract also asks for confirmation
 before spooling at all (`EXTRACT_PROMPT_BYTES`, 256 MB), and a big
 transparent decompress defers behind a load prompt (`LATENCY_PROMPT_BYTES`,
-50 MB compressed) — see [the safeguards plan](large-file-safeguards-plan.md).
+50 MB compressed) — see [the safeguards plan](archived/large-file-safeguards-plan.md).
 
 ### 4. Soft-degrade render cap (placeholder, not error)
 

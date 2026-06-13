@@ -21,11 +21,10 @@ The "stream, don't load" / "multi-GB first-class" promises have leaks. These are
 not features — they're the marketing claim not yet holding. All small, mostly
 mechanical.
 
-- **Large File Safeguards** ◐ — the memory guards shipped (bare-codec tempfile spill;
-  compose/info whole-file caps), the budget-required reads shipped, the deferred-decompress +
-  large-extract prompts (`--yes` to pre-grant) shipped, and the 8 GiB spill disk-bomb ceiling
-  shipped; only the compressed-tar TOC latency gate remains. See
-  [§ Large File Safeguards](#large-file-safeguards-)
+- **Large File Safeguards** ✅ — memory guards, budget-required reads, the latency load prompts
+  (decompress + compressed-tar TOC, `--yes` to pre-grant), the large-extract confirm, and the 8 GiB
+  spill ceiling all shipped; memory-tier elevation declined. One optional idea (generalized
+  info-default landing) open. See [§ Large File Safeguards](#large-file-safeguards-)
   and the strategy doc [memory-streaming.md](memory-streaming.md).
 - **Promote fuzzing to a CI nightly job** — the property-test floor and manual
   cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
@@ -74,7 +73,7 @@ mechanical.
 
 ## 0.4 — Hardening
 
-### Large File Safeguards ◐
+### Large File Safeguards ✅ (one optional idea open)
 
 Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) from a single
 "default to the info screen" toggle into a **two-threat model** — see the strategy doc,
@@ -86,36 +85,32 @@ Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) fro
   (full decompress pass to list a `.tar.xz`, deep seek into a compressed stream). Guard = a
   confirmation prompt; the user may proceed.
 
+Designed as one **session access-unlock** model; the design rationale is archived at
+[archived/large-file-safeguards-plan.md](archived/large-file-safeguards-plan.md).
+
 **Shipped:**
 
-- ✅ **Bare-codec → tempfile spill.** `resolve_transparent` / `decompress_to_source` stream the
-  compressed input and spill the output past a 16 MB threshold, so a bare `bigdb.sqlite.xz` of any
-  size opens (was refused at the 256 MB batch cap) with RAM bounded. Closes the asymmetry with the
-  archive path.
-- ✅ **Compose / info whole-file caps.** `InputSource::read_bytes_capped` / `read_text_capped`;
-  objfile / EPS / notebook degrade over cap instead of OOMing at compose / info time.
+- ✅ **Bare-codec → tempfile spill** + **compose / info whole-file caps** (the original memory
+  guards): RAM bounded by the spill threshold; objfile / EPS / notebook soft-degrade over cap.
+- ✅ **Budget-required reads.** `read_bytes(Budget)` / `read_text(Budget)` over the three classes +
+  the greppable `Budget::Unbounded` escape; the ~44-site audit landed. (`Budget::cap()` stays fixed
+  at Default — `Access` lives in the bin, not threaded into the leaf caps.)
+- ✅ **Latency load prompts.** A big transparent decompress (compressed size over
+  `LATENCY_PROMPT_BYTES`, 50 MB) or a compressed-tar TOC walk in a Default viewer session lands on
+  Info with a load hint instead of running up front; Enter loads + unlocks the session. Covers the
+  top-level open and nested descend. `--yes` / non-interactive paths pre-grant.
+- ✅ **Large-extract confirm.** Extracting / descending into an entry over `EXTRACT_PROMPT_BYTES`
+  (256 MB) asks a yes/no confirm before spooling.
+- ✅ **Spill disk ceiling.** Both spill paths cap at `MAX_SPILL_BYTES` (8 GiB) and fail cleanly
+  instead of `ENOSPC` — always enforced, including pipe / `--print`.
 
-**Remaining, ordered.** The latency prompt and the info-default UX are designed together as one
-**session access-unlock** model — full design in
-[large-file-safeguards-plan.md](large-file-safeguards-plan.md):
+**Declined:** memory-tier elevation (raising the non-spillable caps on unlock) — trades a
+recoverable wait/`ENOSPC` for a real OOM; the transforms already soft-degrade. See the archived
+plan's Sequencing step 6.
 
-- ◐ **Latency confirmation prompt.** Deferred transparent decompression shipped: a big bare-codec
-  `.gz` / `.xz` / … (compressed `byte_len` over `LATENCY_PROMPT_BYTES`) in a Default interactive
-  session lands on Info with a status-line load hint instead of decompressing up front; Enter loads
-  it and unlocks the session; `--yes` (and every non-interactive path) pre-grants. Applies to both
-  the top-level open and descending into a nested compressed entry. A large **extract / descend**
-  (declared size over `EXTRACT_PROMPT_BYTES`, 256 MB) also asks a yes/no confirm before spooling.
-  **Disk-bomb ceiling shipped:** both spill paths cap at `MAX_SPILL_BYTES` (8 GiB) and fail cleanly
-  instead of `ENOSPC` — always enforced, including pipe / `--print`. **Remaining:** the same latency
-  gate for the large compressed-**tar TOC** build.
-- ✅ **Budget-required reads (type-level enforcement).** `read_bytes(Budget)` / `read_text(Budget)`
-  over the three classes + the greppable `Budget::Unbounded` escape; the ~44-site audit landed. (The
-  tier-aware `Budget::cap(access)` the unlock model once sketched is **not** built — `Access` lives
-  in the bin where the prompt logic reads it; leaf caps stay on the fixed Default until step 5.)
-- ◐ **Info-default open.** Decided and shipped for the deferred-decompress case (Info landing +
-  `SessionFrame.deferred` flag + load key). The general whole-file-load primary view (a
-  `Mode::loads_whole_file()` signal that lands any over-threshold transform view on Info) is still
-  open; fold in if a non-decompress view ever needs it.
+**Open (optional):** generalize the info-default landing beyond decompress / TOC — a
+`Mode::loads_whole_file()` signal that lands *any* over-threshold transform view on Info. Fold in
+only if a non-decompress view ever needs it.
 
 ### Detection hardening ☐
 

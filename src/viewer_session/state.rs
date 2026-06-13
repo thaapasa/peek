@@ -11,7 +11,7 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::KeyEvent;
 
-use peek_detect::{CompressionFormat, Detected};
+use peek_detect::Detected;
 use peek_foundation::info::RenderOptions;
 use peek_foundation::viewer::modes::{Handled, Mode, ModeId, Position};
 use peek_io::InputSource;
@@ -83,7 +83,7 @@ impl ViewerState {
         mode_builder: ModeBuilder,
         no_tempfile: bool,
         access: super::Access,
-        deferred: Option<CompressionFormat>,
+        deferred: Option<super::Deferred>,
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name, style_mode);
         let file_info = crate::gather::gather(&source, &detected)?;
@@ -141,20 +141,30 @@ impl ViewerState {
         f.modes[f.active].status_hints(has_return)
     }
 
-    /// Status-line prompt for a deferred-decompress frame: the codec, the
+    /// Status-line prompt for a deferred frame: what's held back, the
     /// compressed size, and the key to load. `None` when the active frame
     /// isn't deferred. Painted as a warning segment so it stands out.
     pub(crate) fn deferred_hint(&self) -> Option<String> {
         let f = self.frame();
-        let fmt = f.deferred?;
+        let deferred = f.deferred?;
         let size = match f.source.byte_len() {
             Ok(n) => format!("{} MiB", n / (1024 * 1024)),
             Err(_) => "large".to_string(),
         };
-        Some(format!(
-            "{} compressed, {size} — Enter to decompress",
-            fmt.codec_label()
-        ))
+        Some(match deferred {
+            super::Deferred::Decompress(fmt) => {
+                format!(
+                    "{} compressed, {size} — Enter to decompress",
+                    fmt.codec_label()
+                )
+            }
+            super::Deferred::Listing(fmt) => {
+                format!(
+                    "{}, {size} compressed — Enter to list contents",
+                    fmt.label()
+                )
+            }
+        })
     }
 
     pub(crate) fn has_return_target(&self) -> bool {

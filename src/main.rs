@@ -122,10 +122,14 @@ fn main() -> Result<()> {
 fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args) -> Result<()> {
     let interactive = !args.print && std::io::stdout().is_terminal();
 
-    // Access tier: `--yes` (and every non-interactive path, which can't
-    // answer a prompt) pre-grants slow ops; an interactive session starts
-    // Default and asks on the first guarded op.
-    let access = if args.yes || !interactive {
+    // The deferral / load-prompt model only applies to the interactive
+    // viewer. One-shot outputs — `--info`, `--list`, pipe, `--print` —
+    // produce final output with no session to host a prompt, so they
+    // resolve eagerly even on a TTY. (`--info` / `--list` short-circuit
+    // below before the viewer; without this they'd defer and report the
+    // outer wrapper instead of the inner content.)
+    let enters_viewer = interactive && !args.info && !args.list;
+    let access = if args.yes || !enters_viewer {
         viewer_session::Access::Unlocked
     } else {
         viewer_session::Access::Default
@@ -138,11 +142,11 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
     // decompression failure the original compressed source survives
     // and downstream falls back to Hex + Info plus a warning row.
     //
-    // Exception: a big compressed file in a Default interactive session
-    // is *deferred* — we skip the eager resolve, keep the compressed
-    // wrapper, and let the session land on Info with a load prompt so the
-    // slow decompress only runs on the user's say-so.
-    let deferred = viewer_session::deferred_decompress(source, detected, access);
+    // Exception: a big compressed file (or compressed-tar TOC) in a
+    // Default viewer session is *deferred* — we skip the eager resolve,
+    // keep the wrapper, and let the session land on Info with a load
+    // prompt so the slow work only runs on the user's say-so.
+    let deferred = viewer_session::deferred_open(source, detected, access);
     let (source_owned, detected_owned) = if deferred.is_some() {
         (source.clone(), detected.clone())
     } else {
@@ -173,9 +177,13 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
         return Ok(());
     }
 
-    let mut modes = viewers
-        .compose_modes(source, detected)
-        .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
+    // Compose the mode stack — but for a deferred compressed-tar TOC, a
+    // cheap Hex + Info placeholder stands in until the user confirms the
+    // listing walk (the real compose streams the whole decompressed tar).
+    let mut modes = viewer_session::compose_or_defer(deferred, source, || {
+        viewers.compose_modes(source, detected)
+    })
+    .with_context(|| format!("failed to compose viewer for {}", source.name()))?;
 
     // --list: render the listing-mode TOC to stdout (no viewer). Errors
     // for file types that don't expose one (plain text, single images,

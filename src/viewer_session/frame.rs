@@ -52,13 +52,13 @@ pub(crate) struct SessionFrame {
     /// table view) so the crumb shows the table name, not the db file
     /// repeated.
     pub breadcrumb_label: Option<String>,
-    /// Set when this frame holds a transparently-compressed wrapper whose
-    /// decompression was deferred (the source is big and the session is
-    /// still [`Default`](super::Access::Default)). The frame lands on Info
-    /// with a load prompt; pressing Enter runs the decompress and reseeds
-    /// the frame to the inner content. `None` once loaded (or never
-    /// deferred). Carries the codec for the prompt label.
-    pub deferred: Option<peek_detect::CompressionFormat>,
+    /// Set when this frame's expensive open was held back (the source is
+    /// big and the session is still [`Default`](super::Access::Default)) —
+    /// a transparent decompress or a compressed-tar TOC walk. The frame
+    /// lands on Info with a load prompt; pressing Enter runs the deferred
+    /// work and reseeds the frame to the real content. `None` once loaded
+    /// (or never deferred). See [`super::Deferred`].
+    pub deferred: Option<super::Deferred>,
 }
 
 impl SessionFrame {
@@ -288,12 +288,14 @@ impl ViewerState {
         self.frames.len() - 1
     }
 
-    /// Run the deferred transparent decompression on the active frame:
-    /// expand the inner content, rebuild its mode stack in place, and
-    /// unlock the session so later guarded ops proceed without re-asking.
-    /// On decompression failure the frame still reseeds (the source stays
-    /// Compressed and the Info warning row explains why) and `deferred`
-    /// clears, so Enter is not a dead key on a broken archive.
+    /// Run the deferred work on the active frame, then rebuild its mode
+    /// stack in place and unlock the session so later guarded ops proceed
+    /// without re-asking. Uniform across the deferral kinds:
+    /// `resolve_transparent` expands a deferred decompress (and is a no-op
+    /// on a deferred-listing archive), then the mode builder composes the
+    /// real stack — the inner content, or the full compressed-tar TOC walk.
+    /// On failure the frame still reseeds and `deferred` clears, so Enter
+    /// is not a dead key on a broken source.
     fn load_deferred(&mut self) -> Result<()> {
         let (source, detected) = {
             let f = self.frame();
@@ -331,14 +333,17 @@ impl ViewerState {
         // extracted `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` lands
         // straight on the inner content — unless it's big and the session
         // is still Default, in which case defer (same latency guard as the
-        // top-level open) and land on Info with a load prompt.
-        let deferred = super::deferred_decompress(&source, &detected, self.access);
+        // top-level open: a decompress or a compressed-tar TOC walk) and
+        // land on Info with a load prompt.
+        let deferred = super::deferred_open(&source, &detected, self.access);
         let (source, detected) = if deferred.is_some() {
             (source, detected)
         } else {
             peek_detect::resolve_transparent(source, detected)
         };
-        let modes = match (self.mode_builder)(&source, &detected) {
+        let modes = match super::compose_or_defer(deferred, &source, || {
+            (self.mode_builder)(&source, &detected)
+        }) {
             Ok(m) => m,
             Err(e) => {
                 self.flash = Some(format!("descend failed: {e}"));

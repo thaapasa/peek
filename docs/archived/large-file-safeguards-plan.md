@@ -1,12 +1,14 @@
 # Large File Safeguards — access-unlock design (items 1 + 3)
 
-> **Status: In-progress plan (2026-06-13).** Design for the remaining
-> Large File Safeguards work — the latency confirmation prompt and the
-> info-default / opt-in-load UX, unified into one session-unlock model.
-> The memory guards already shipped; see
-> [planned.md → Large File Safeguards](planned.md#large-file-safeguards-)
-> and the strategy doc [memory-streaming.md](memory-streaming.md). Move to
-> `archived/` (or delete) when landed.
+> **Status: Completed 2026-06-13.** Archived for reference. The
+> session-unlock model shipped — budget-required reads, the
+> deferred-decompress / compressed-tar load prompts, the large-extract
+> confirm, and the 8 GiB spill ceiling. Memory-tier elevation was
+> considered and **declined** (see Sequencing step 6). Live status lives in
+> [planned.md → Large File Safeguards](../planned.md#large-file-safeguards-)
+> and the strategy doc [memory-streaming.md](../memory-streaming.md); this
+> file is the design rationale (the unlock model, the risk asymmetry, why
+> `cap()` is not tier-threaded).
 
 ## Goal
 
@@ -188,6 +190,20 @@ tar / ISO) never trip it.
      Needs `Mode::selected_extract_size()` (listing → `ListSource::extract_size`)
      + a `Prompt::confirm` yes/no mode. A decompression bomb with no
      declared size sails past the prompt → the hard ceiling catches it.
-5. Optional memory-tier elevation. (The spill disk ceiling moved into
-   step 4; what remains here is only the *memory*-tier `Elevated` caps,
-   still recommended-against — see Open decisions.)
+5. ~~Compressed-tar TOC latency gate.~~ **Done.** `deferred_decompress`
+   generalized to `deferred_open` → `Deferred { Decompress(fmt),
+   Listing(fmt) }`. A compressed-stream archive
+   (`ArchiveFormat::streams_compressed()` — the `tar.gz` / `tar.xz` / …
+   variants whose TOC walk inflates the whole archive) over
+   `LATENCY_PROMPT_BYTES` defers: `compose_or_defer` substitutes a cheap
+   Hex + Info placeholder, the frame lands on Info, and Enter runs the real
+   compose (the walk) + reseeds to the listing. `load_deferred` is uniform
+   across both kinds (`resolve_transparent` is a no-op on an archive). The
+   deferral is gated to the actual viewer path (`enters_viewer`), so
+   `--info` / `--list` still resolve eagerly and report the inner content.
+6. **Memory-tier elevation — declined.** Resolved the Open decision: keep
+   `Access` to latency + disk only. Elevating the non-spillable memory caps
+   trades a recoverable "wait longer" / `ENOSPC` for a real OOM, and the
+   whole-doc transforms already soft-degrade to a placeholder over cap — a
+   better failure than a crash. The absolute-ceiling invariant holds for
+   free with the caps fixed. Not building it.

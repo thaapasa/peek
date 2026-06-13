@@ -35,7 +35,7 @@ pub fn run(
     mode_builder: ModeBuilder,
     no_tempfile: bool,
     access: super::Access,
-    deferred: Option<peek_detect::CompressionFormat>,
+    deferred: Option<super::Deferred>,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         event_loop(
@@ -66,7 +66,7 @@ fn event_loop(
     mode_builder: ModeBuilder,
     no_tempfile: bool,
     access: super::Access,
-    deferred: Option<peek_detect::CompressionFormat>,
+    deferred: Option<super::Deferred>,
 ) -> Result<()> {
     let name = source.name().to_string();
     let mut state = ViewerState::new(
