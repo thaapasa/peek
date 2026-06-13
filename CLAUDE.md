@@ -199,6 +199,8 @@ Keep in sync with code changes:
 - **manual/src/** — user-facing manual (mdbook). Update relevant chapter when user-visible feature
   changes
 - **docs/architecture.md** — design, data flow, key abstractions, how to extend
+- **docs/memory-streaming.md** — the size/streaming guard strategy: threat model, budget classes,
+  stream/cap/spill mechanisms, and the decision rule every whole-file read must follow
 - **CLAUDE.md file map + module `//!` doc-comments** — the per-file breakdown. When you add / move /
   remove a file, update the tree above and the moved file's `//!` header; there is no separate map doc
 - **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of manual;

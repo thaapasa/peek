@@ -580,6 +580,10 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 
 ## Memory budgets
 
+> The strategy narrative — threat model, the stream/cap/spill mechanisms, and the decision rule
+> every new read path follows — lives in [memory-streaming.md](memory-streaming.md). This section
+> is the budget-class *index*.
+
 Every size gate in the workspace draws its number from one of three budget classes in
 `peek-io::limits` (reachable as `crate::input::limits` from foundation / types / bin). The classes
 are named by consumption shape; per-site constants alias a class and keep their domain name plus

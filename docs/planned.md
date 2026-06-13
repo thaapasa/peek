@@ -21,8 +21,10 @@ The "stream, don't load" / "multi-GB first-class" promises have leaks. These are
 not features — they're the marketing claim not yet holding. All small, mostly
 mechanical.
 
-- **Large File Safeguards** — no size guard exists; opening a multi-GB file tries to
-  load it. See [§ Large File Safeguards](#large-file-safeguards-).
+- **Large File Safeguards** ◐ — the memory guards shipped (bare-codec tempfile spill;
+  compose/info whole-file caps); the latency confirmation prompt and the type-level
+  budget-required reads remain. See [§ Large File Safeguards](#large-file-safeguards-)
+  and the strategy doc [memory-streaming.md](memory-streaming.md).
 - **Promote fuzzing to a CI nightly job** — the property-test floor and manual
   cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
   demand warrants. See [§ Detection hardening](#detection-hardening-).
@@ -70,15 +72,49 @@ mechanical.
 
 ## 0.4 — Hardening
 
-### Large File Safeguards ☐
+### Large File Safeguards ◐
 
-For large files: viewer mode defaults to the file info screen instead of loading full
-contents. Display a size warning. Keyboard shortcut to opt in to loading. File info
-(size, type) obtainable without reading the whole file.
+Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) from a single
+"default to the info screen" toggle into a **two-threat model** — see the strategy doc,
+[memory-streaming.md](memory-streaming.md):
 
-Highest-visibility gap for the "multi-GB first-class" claim: today no guard exists at
-all, and several read paths still slurp (see the stream-leak findings below and
-[§ Memory / Streaming](#memory--streaming-)).
+- **Memory** — unbounded materialization (whole-file slurp / parse / transform). Guard = hard cap
+  or spill-to-tempfile; never bypassable to OOM.
+- **Latency** — a streaming, memory-bounded op that is *slow* because the source is non-seekable
+  (full decompress pass to list a `.tar.xz`, deep seek into a compressed stream). Guard = a
+  confirmation prompt; the user may proceed.
+
+**Shipped:**
+
+- ✅ **Bare-codec → tempfile spill.** `resolve_transparent` / `decompress_to_source` stream the
+  compressed input and spill the output past a 16 MB threshold, so a bare `bigdb.sqlite.xz` of any
+  size opens (was refused at the 256 MB batch cap) with RAM bounded. Closes the asymmetry with the
+  archive path.
+- ✅ **Compose / info whole-file caps.** `InputSource::read_bytes_capped` / `read_text_capped`;
+  objfile / EPS / notebook degrade over cap instead of OOMing at compose / info time.
+
+**Remaining, ordered.** The latency prompt and the info-default UX are designed together as one
+**session access-unlock** model — full design in
+[large-file-safeguards-plan.md](large-file-safeguards-plan.md):
+
+- ☐ **Latency confirmation prompt.** Before a known-expensive op (building a large compressed-tar
+  TOC, a large bare-codec decompress) prompt `proceed? [y/N]` in the interactive viewer; a
+  `--yes` / `--force` flag suppresses it (no soft-reject in pipe mode — pipe proceeds). Predicate =
+  sequential codec × compressed `byte_len` over a threshold. This is also where the spilled-path
+  **disk-bomb ceiling** lands (a pathological `.gz` currently fills the tempdir → `ENOSPC`). Reuse
+  the existing `ViewerState` modal-prompt slot.
+- ☐ **Budget-required reads (type-level enforcement).** Replace bare `read_bytes()` / `read_text()`
+  with `read_bytes(Budget)` over the three budget classes plus an explicit, greppable
+  `Budget::Unbounded` escape hatch, so a future read can't skip the guard by construction. ~44
+  production call sites + ~35 test sites; the soft-degrade renderers
+  (`render_cap_placeholder`) keep their own path. **Precede with an audit** classifying the ~44
+  production whole-file reads (classfile / font / cert / vobject / ds_store / email / audio /
+  spreadsheet / pdf / sqlite / image …) as bounded-by-construction vs genuinely-unguarded — some
+  likely need the same cap treatment objfile / EPS / notebook just got.
+- ☐ **(Decide) original info-default UX.** The pre-reframe idea — for a whole-file-load primary
+  view over a threshold, land on the Info screen with a size warning + an opt-in "load anyway" key
+  (needs a `Mode::loads_whole_file()` signal + a deferred-primary frame flag). May be subsumed by
+  the memory caps + latency prompt above; revisit once those land.
 
 ### Detection hardening ☐
 
