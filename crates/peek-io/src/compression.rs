@@ -4,8 +4,7 @@
 //! extraction has its own seekable, per-entry streaming decoder in
 //! `backends::tar::decode_compressed` and does not go through here.)
 //!
-//! Two entry points, both fed by a streaming `Read` wrapper (xz
-//! included):
+//! One entry point, fed by a streaming `Read` wrapper (xz included):
 //!
 //! - [`decompress_to_source`] is what `resolve_transparent` uses. It
 //!   streams the compressed input (never holding it whole in RAM) and
@@ -15,10 +14,6 @@
 //!   the inner file is, so a multi-hundred-MB `bigdb.sqlite.xz` opens the
 //!   same way the identical db inside a `.tar.xz` does. Disk, not RAM, is
 //!   the limit on the spilled path.
-//! - [`decompress_bytes`] is the batch helper: it collects the whole
-//!   output into one `Bytes` buffer, capped at [`MAX_DECOMPRESS_BYTES`]
-//!   so a pathological ratio can't force a runaway allocation. Kept for
-//!   callers that genuinely want the inner bytes in hand.
 //!
 //! When decompression fails (corrupt stream, truncated body, wrong
 //! codec) the error string is plumbed into `Detected.decompressed_from`
@@ -27,7 +22,7 @@
 
 use std::io::{Read, Write};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use bytes::Bytes;
 use tempfile::Builder;
 
@@ -84,69 +79,6 @@ impl CompressionFormat {
     }
 }
 
-/// Hard cap on the batch [`decompress_bytes`] helper, which collects the
-/// whole output in RAM. Same class as the in-memory archive entry cap
-/// (`extract.rs::MAX_EXTRACT_BYTES`). The streaming
-/// [`decompress_to_source`] path is *not* bound by this — it spills past
-/// [`DECOMPRESS_SPOOL_THRESHOLD`] so large inner files open.
-pub const MAX_DECOMPRESS_BYTES: u64 = crate::limits::BULK_WALK_BYTES;
-
-/// Decompress `raw` according to `fmt`. Returns the inner bytes, or an
-/// error explaining the codec failure / cap breach.
-pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Bytes> {
-    // Cap reads at one byte past the limit so we can distinguish
-    // "exactly at cap" from "exceeded cap".
-    let take_limit = MAX_DECOMPRESS_BYTES + 1;
-    let mut out: Vec<u8> = Vec::new();
-    match fmt {
-        CompressionFormat::Gz => {
-            flate2::read::GzDecoder::new(raw)
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("gzip decode failed")?;
-        }
-        CompressionFormat::Bz2 => {
-            bzip2::read::BzDecoder::new(raw)
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("bzip2 decode failed")?;
-        }
-        CompressionFormat::Xz => {
-            liblzma::read::XzDecoder::new(raw)
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("xz decode failed")?;
-        }
-        CompressionFormat::Zst => {
-            zstd::stream::read::Decoder::new(raw)
-                .context("zstd decoder init failed")?
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("zstd decode failed")?;
-        }
-        CompressionFormat::Lz4 => {
-            lz4_flex::frame::FrameDecoder::new(raw)
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("lz4 decode failed")?;
-        }
-        CompressionFormat::Br => {
-            // 4 KiB internal buffer — matches the crate's own default
-            // for the reader wrapper; the outer `.take` enforces the cap.
-            brotli_decompressor::Decompressor::new(raw, 4096)
-                .take(take_limit)
-                .read_to_end(&mut out)
-                .context("brotli decode failed")?;
-        }
-    }
-    if out.len() as u64 > MAX_DECOMPRESS_BYTES {
-        bail!(
-            "decompressed stream exceeds {MAX_DECOMPRESS_BYTES}-byte cap (got > {MAX_DECOMPRESS_BYTES} bytes)"
-        );
-    }
-    Ok(Bytes::from(out))
-}
-
 /// Output size at/above which [`decompress_to_source`] spools the
 /// decompressed stream to a tempfile instead of holding it in RAM.
 /// Mirrors the archive-extract spool threshold (`extract.rs`'s
@@ -195,10 +127,10 @@ fn decoder_for<'a>(
 /// `Memory` source. `inner_name` is the produced source's display name
 /// (typically the suffix-stripped outer name).
 ///
-/// Unlike [`decompress_bytes`], there is no [`MAX_DECOMPRESS_BYTES`]
-/// ceiling — the spill path bounds RAM by the threshold, not the output
-/// size, so an arbitrarily large inner file opens. Disk capacity is the
-/// limit on the spilled path (a decompression bomb fails on `ENOSPC`).
+/// There is no fixed output-size ceiling — the spill path bounds RAM by
+/// the threshold, not the output size, so an arbitrarily large inner file
+/// opens. Disk capacity is the limit on the spilled path (a decompression
+/// bomb fails on `ENOSPC`).
 pub fn decompress_to_source(
     source: &InputSource,
     fmt: CompressionFormat,
@@ -315,39 +247,47 @@ mod tests {
         );
     }
 
+    /// Decompress a fixture through the streaming source path and pull
+    /// the inner bytes back out — small fixtures stay an in-memory source.
+    fn decompress_fixture(name: &str, fmt: CompressionFormat) -> Bytes {
+        let src = InputSource::memory(Bytes::from(fixture(name)), name);
+        let out = decompress_to_source(&src, fmt, "inner").unwrap();
+        out.read_bytes(Budget::Unbounded("test")).unwrap()
+    }
+
     #[test]
     fn decompress_gz_round_trip() {
-        let out = decompress_bytes(&fixture("single.gz"), CompressionFormat::Gz).unwrap();
+        let out = decompress_fixture("single.gz", CompressionFormat::Gz);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
     fn decompress_bz2_round_trip() {
-        let out = decompress_bytes(&fixture("single.bz2"), CompressionFormat::Bz2).unwrap();
+        let out = decompress_fixture("single.bz2", CompressionFormat::Bz2);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
     fn decompress_xz_round_trip() {
-        let out = decompress_bytes(&fixture("single.xz"), CompressionFormat::Xz).unwrap();
+        let out = decompress_fixture("single.xz", CompressionFormat::Xz);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
     fn decompress_zst_round_trip() {
-        let out = decompress_bytes(&fixture("single.zst"), CompressionFormat::Zst).unwrap();
+        let out = decompress_fixture("single.zst", CompressionFormat::Zst);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
     fn decompress_lz4_round_trip() {
-        let out = decompress_bytes(&fixture("single.lz4"), CompressionFormat::Lz4).unwrap();
+        let out = decompress_fixture("single.lz4", CompressionFormat::Lz4);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
     #[test]
     fn decompress_br_round_trip() {
-        let out = decompress_bytes(&fixture("single.br"), CompressionFormat::Br).unwrap();
+        let out = decompress_fixture("single.br", CompressionFormat::Br);
         assert_eq!(out.as_ref(), b"hello peek single-stream test\n");
     }
 
@@ -358,7 +298,8 @@ mod tests {
         let mut bad = vec![0x1f, 0x8b, 0x08, 0x00];
         bad.extend_from_slice(&[0u8; 16]);
         bad.extend_from_slice(b"\xff\xff\xff\xff\xff\xff");
-        assert!(decompress_bytes(&bad, CompressionFormat::Gz).is_err());
+        let src = InputSource::memory(Bytes::from(bad), "bad.gz");
+        assert!(decompress_to_source(&src, CompressionFormat::Gz, "inner").is_err());
     }
 
     /// Build a gzip stream of `n` zero bytes (highly compressible, so the

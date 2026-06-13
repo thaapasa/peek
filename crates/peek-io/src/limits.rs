@@ -35,13 +35,13 @@ pub const WHOLE_DOC_BYTES: u64 = 32 * 1024 * 1024;
 /// property-list extraction.
 pub const SIDECAR_PARSE_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Single bounded walk over untrusted / unbounded data: the batch
-/// decompress helper (`decompress_bytes`; the streaming transparent path
-/// spills to a tempfile and is bounded by its spool threshold instead),
-/// per-entry archive extraction, the raw-content search
-/// scan, the static-library object-member summary (materialized whole,
-/// but held for one pass with no expansion — and real `.a` files run
-/// hundreds of MB, past the sidecar budget).
+/// Single bounded walk over untrusted / unbounded data: per-entry archive
+/// extraction, the raw-content search scan, the static-library
+/// object-member summary (materialized whole, but held for one pass with
+/// no expansion — and real `.a` files run hundreds of MB, past the
+/// sidecar budget). (Transparent decompression streams and spills to a
+/// tempfile, bounded by its spool threshold instead — see
+/// `compression::decompress_to_source`.)
 pub const BULK_WALK_BYTES: u64 = 256 * 1024 * 1024;
 
 /// The budget a whole-file read must name. Every
@@ -51,10 +51,6 @@ pub const BULK_WALK_BYTES: u64 = 256 * 1024 * 1024;
 /// greppable [`Unbounded`](Budget::Unbounded). The three capped variants
 /// alias the classes above by *consumption shape*; the carried `&str` is
 /// the `what`-name in the over-cap error message.
-///
-/// This is the carrier the later session-unlock work threads a tier
-/// through ([`cap`](Budget::cap) will resolve per `Access`); today it maps
-/// to the fixed Default class constant.
 #[derive(Debug, Clone, Copy)]
 pub enum Budget {
     /// Materialize **and transform** into a larger form (parse tree,

@@ -1,9 +1,10 @@
 //! Archive listing dispatch: maps an `ArchiveFormat` to its backend
 //! and returns a generic `Vec<Entry>` tree via `viewer::listing`. The
-//! shared `ReadSeek` helper lives here because every backend needs a
-//! seekable reader over the source, and the cap-gated `open_zip` /
-//! `read_zip_entry` pair because every zip-backed render path (DOCX,
-//! ODT, EPUB, CBZ, spreadsheet props) needs the same zip-bomb gate.
+//! `ReadSeek` helper (re-exported from `peek-io`) is re-surfaced here
+//! because every backend needs a seekable reader over the source, and the
+//! cap-gated `open_zip` / `read_zip_entry` pair because every zip-backed
+//! render path (DOCX, ODT, EPUB, CBZ, spreadsheet props) needs the same
+//! zip-bomb gate.
 
 use std::fs::File;
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
@@ -21,11 +22,12 @@ use crate::input::detect::ArchiveFormat;
 use crate::viewer::listing::{Entry, from_flat_paths};
 use crate::viewer::modes::{RENDER_MAX_BYTES, ensure_under_render_cap};
 
-/// Trait alias for the seekable readers we hand to the zip backend. tar
-/// only needs `Read`, but using one helper for both keeps the call sites
-/// uniform.
-pub(crate) trait ReadSeek: Read + Seek {}
-impl<T: Read + Seek> ReadSeek for T {}
+/// The seekable-reader trait the backends hand to the zip layer. tar only
+/// needs `Read`, but using one helper for both keeps the call sites
+/// uniform. Re-exported from `peek-io` rather than redefined — it is the
+/// same `Read + Seek` alias the csv reader uses, and one definition keeps
+/// the two call sites from drifting.
+pub(crate) use crate::input::stream::ReadSeek;
 
 /// Open a `Read + Seek` over the source. File-backed sources open the
 /// underlying path (and seek to the range start when needed); in-memory
