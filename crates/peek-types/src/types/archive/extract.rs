@@ -19,6 +19,7 @@ use crate::extract::{
     ExtractError, ExtractOptions, Extracted, forward_slash_key, sanitize_entry_path,
 };
 use crate::input::InputSource;
+use crate::input::compression::MAX_SPILL_BYTES;
 use crate::input::detect::{ArchiveFormat, CompressionFormat};
 use crate::types::archive::reader::open_seekable;
 
@@ -92,12 +93,25 @@ fn materialise<R: Read>(
     if want_spool {
         match TempBuilder::new().prefix("peek-").tempfile() {
             Ok(mut tmp) => {
-                std::io::copy(&mut reader, tmp.as_file_mut()).map_err(|e| {
+                // Bound the spool so a bomb entry (tiny header, gigantic
+                // declared size, or a lying stream) fails cleanly instead
+                // of filling the tempdir. Copy one byte past the ceiling
+                // to detect overflow.
+                let copied = std::io::copy(
+                    &mut (&mut reader).take(MAX_SPILL_BYTES + 1),
+                    tmp.as_file_mut(),
+                )
+                .map_err(|e| {
                     ExtractError::Other(
                         anyhow::Error::from(e)
                             .context(format!("tempfile spool of {raw_key:?} failed")),
                     )
                 })?;
+                if copied > MAX_SPILL_BYTES {
+                    return Err(ExtractError::Other(anyhow::anyhow!(
+                        "entry {raw_key:?} exceeds the {MAX_SPILL_BYTES}-byte spill ceiling (decompression bomb?)"
+                    )));
+                }
                 return Ok(Extracted {
                     source: InputSource::temp_file(tmp, suggested_name.clone()),
                     suggested_name,

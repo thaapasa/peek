@@ -49,6 +49,14 @@ pub(crate) enum Access {
 /// expand, and we'd rather land on Info and let the user opt in.
 pub(crate) const LATENCY_PROMPT_BYTES: u64 = 50 * 1024 * 1024;
 
+/// Declared-size threshold past which extracting / descending into an
+/// entry asks for confirmation first (Default session). Spooling a few
+/// hundred MB is quick, so the prompt stays out of the way until an
+/// extract is genuinely large; the hard
+/// [`MAX_SPILL_BYTES`](peek_io::compression::MAX_SPILL_BYTES) ceiling is
+/// the always-on backstop beneath it.
+pub(crate) const EXTRACT_PROMPT_BYTES: u64 = 256 * 1024 * 1024;
+
 /// Decide whether to defer transparent decompression of `source`. Returns
 /// the codec to defer when `access` is [`Default`](Access::Default) and
 /// the source is a [`Compressed`](FileType::Compressed) wrapper larger

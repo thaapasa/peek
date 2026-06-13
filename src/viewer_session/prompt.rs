@@ -19,6 +19,21 @@ pub(super) enum PromptKind {
     Extract(Extracted),
     /// Hand the typed query to the active mode's `set_search`.
     Search,
+    /// Confirm a large extract before spooling it. On confirm the session
+    /// unlocks and the extract runs — pushing a frame (`save = false`,
+    /// from descend) or opening the save prompt (`save = true`, from `x`).
+    ConfirmExtract { key: String, save: bool },
+}
+
+/// Compact byte-size for prompt copy: GiB once past a gigabyte, MiB below.
+fn human_bytes(n: u64) -> String {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    const MIB: u64 = 1024 * 1024;
+    if n >= GIB {
+        format!("{:.1} GiB", n as f64 / GIB as f64)
+    } else {
+        format!("{} MiB", n / MIB)
+    }
 }
 
 impl ViewerState {
@@ -50,6 +65,17 @@ impl ViewerState {
         self.prompt = Some((Prompt::new("Search", ""), PromptKind::Search));
     }
 
+    /// Open the large-extract confirmation; `y` / Enter unlocks the
+    /// session and runs the extract, `n` / Esc aborts.
+    pub(super) fn begin_confirm_extract(&mut self, key: String, size: u64, save: bool) {
+        let verb = if save { "Extract" } else { "Open" };
+        let title = format!("{verb} {} entry?", human_bytes(size));
+        self.prompt = Some((
+            Prompt::confirm(title),
+            PromptKind::ConfirmExtract { key, save },
+        ));
+    }
+
     pub(crate) fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<bool> {
         let Some((prompt, _)) = self.prompt.as_mut() else {
             return Ok(false);
@@ -59,7 +85,10 @@ impl ViewerState {
             PromptOutcome::Continue => Ok(true),
             PromptOutcome::Cancelled => {
                 let (_, kind) = self.prompt.take().expect("prompt present");
-                if matches!(kind, PromptKind::Extract(_)) {
+                if matches!(
+                    kind,
+                    PromptKind::Extract(_) | PromptKind::ConfirmExtract { .. }
+                ) {
                     self.flash = Some("extract cancelled".to_string());
                 }
                 Ok(true)
@@ -82,6 +111,17 @@ impl ViewerState {
                             Err(e) => {
                                 self.flash = Some(format!("extract failed: {e}"));
                             }
+                        }
+                    }
+                    PromptKind::ConfirmExtract { key, save } => {
+                        // User accepted the cost — unlock the session so
+                        // later large ops don't re-ask, then run the
+                        // extract that was held back.
+                        self.access = super::Access::Unlocked;
+                        if save {
+                            self.run_extract_save(key);
+                        } else {
+                            self.run_descend_extract(key)?;
                         }
                     }
                     PromptKind::Search => {

@@ -47,8 +47,11 @@
 - `--yes` / `-y` pre-grants slow operations. A big transparently-compressed file (`.gz` / `.xz` /
   `.zst` / …) opens on its Info screen with a `… — Enter to decompress` hint instead of expanding up
   front; `Enter` loads it and unlocks the session (later large files in the same session won't
-  re-ask). `--yes` skips that prompt, and every non-interactive path (pipe, `--print`, `--info`,
-  `--list`) is always pre-granted since it can't answer a prompt.
+  re-ask). Extracting or descending into a large container entry (over 256 MB) likewise asks a
+  yes/no confirm before spooling. `--yes` skips both prompts, and every non-interactive path (pipe,
+  `--print`, `--info`, `--list`) is always pre-granted since it can't answer a prompt. Independent of
+  the prompts, a hard 8 GiB ceiling on the tempfile-spill path makes a decompression bomb fail
+  cleanly instead of filling `$TMPDIR`.
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 
 ## Help screens

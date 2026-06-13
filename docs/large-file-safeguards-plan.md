@@ -175,6 +175,19 @@ tar / ISO) never trip it.
      prompt-slot route the original design sketched is unused — Enter on
      the Info-landed frame is the confirmation. Revisit if a modal reads
      better.
-4. Descend / extract prompt (the *disk*-ceiling / extract guard — distinct
-   from the decompress deferral already wired into `push_extracted`).
-5. Optional memory-tier elevation + the spill disk ceiling.
+4. ~~Descend / extract prompt + spill disk ceiling.~~ **Done.**
+   - `MAX_SPILL_BYTES` (8 GiB, in `peek_io::compression`) caps both spill
+     paths — `decompress_to_source` and the archive-entry `materialise` —
+     so a decompression bomb fails cleanly instead of `ENOSPC`. Fixed,
+     **always enforced** (incl. pipe / `--print`), *not* tier-lifted —
+     keeps `Access` out of `peek-io`. A confirmed prompt skips the nag but
+     the ceiling still holds (the plan's "absolute ceiling even unlocked").
+   - Type-agnostic extract confirm: `descend()` and `start_extract()` ask
+     before spooling when the selection's declared size > `EXTRACT_PROMPT_BYTES`
+     (256 MB) and the session is `Default`. `y` / Enter unlocks + proceeds.
+     Needs `Mode::selected_extract_size()` (listing → `ListSource::extract_size`)
+     + a `Prompt::confirm` yes/no mode. A decompression bomb with no
+     declared size sails past the prompt → the hard ceiling catches it.
+5. Optional memory-tier elevation. (The spill disk ceiling moved into
+   step 4; what remains here is only the *memory*-tier `Elevated` caps,
+   still recommended-against — see Open decisions.)

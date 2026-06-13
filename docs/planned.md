@@ -22,9 +22,10 @@ not features — they're the marketing claim not yet holding. All small, mostly
 mechanical.
 
 - **Large File Safeguards** ◐ — the memory guards shipped (bare-codec tempfile spill;
-  compose/info whole-file caps), the budget-required reads shipped, and the deferred-decompress
-  latency prompt (`--yes` to pre-grant) shipped; the compressed-tar TOC gate + disk-bomb ceiling
-  remain. See [§ Large File Safeguards](#large-file-safeguards-)
+  compose/info whole-file caps), the budget-required reads shipped, the deferred-decompress +
+  large-extract prompts (`--yes` to pre-grant) shipped, and the 8 GiB spill disk-bomb ceiling
+  shipped; only the compressed-tar TOC latency gate remains. See
+  [§ Large File Safeguards](#large-file-safeguards-)
   and the strategy doc [memory-streaming.md](memory-streaming.md).
 - **Promote fuzzing to a CI nightly job** — the property-test floor and manual
   cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
@@ -102,9 +103,11 @@ Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) fro
   `.gz` / `.xz` / … (compressed `byte_len` over `LATENCY_PROMPT_BYTES`) in a Default interactive
   session lands on Info with a status-line load hint instead of decompressing up front; Enter loads
   it and unlocks the session; `--yes` (and every non-interactive path) pre-grants. Applies to both
-  the top-level open and descending into a nested compressed entry. **Remaining:** the same gate for
-  the large compressed-**tar TOC** build, and the spilled-path **disk-bomb ceiling** (a pathological
-  `.gz` currently fills the tempdir → `ENOSPC`).
+  the top-level open and descending into a nested compressed entry. A large **extract / descend**
+  (declared size over `EXTRACT_PROMPT_BYTES`, 256 MB) also asks a yes/no confirm before spooling.
+  **Disk-bomb ceiling shipped:** both spill paths cap at `MAX_SPILL_BYTES` (8 GiB) and fail cleanly
+  instead of `ENOSPC` — always enforced, including pipe / `--print`. **Remaining:** the same latency
+  gate for the large compressed-**tar TOC** build.
 - ✅ **Budget-required reads (type-level enforcement).** `read_bytes(Budget)` / `read_text(Budget)`
   over the three classes + the greppable `Budget::Unbounded` escape; the ~44-site audit landed. (The
   tier-aware `Budget::cap(access)` the unlock model once sketched is **not** built — `Access` lives

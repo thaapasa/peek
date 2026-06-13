@@ -88,6 +88,12 @@ impl ListSource for TreeListSource {
             .map(|p| ExtractTarget::EntryPath(p.to_string()))
     }
 
+    fn extract_size(&self, idx: usize) -> Option<u64> {
+        let row = &self.rows[idx];
+        // Files only — a directory row's `size` is meaningless here.
+        row.inner_path.as_ref().map(|_| row.size)
+    }
+
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let row = &self.rows[idx];
         let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
@@ -290,5 +296,18 @@ mod tests {
                 Some("README.txt".to_string()),          // file
             ]
         );
+    }
+
+    #[test]
+    fn extract_size_reports_file_sizes_only() {
+        let src = TreeListSource {
+            format_name: "ZIP".into(),
+            rows: sample_rows(),
+            mtime_width: 0,
+        };
+        let sizes: Vec<Option<u64>> = (0..src.len()).map(|i| src.extract_size(i)).collect();
+        // Dirs → None (size meaningless); files → declared size, which the
+        // session gates the extract prompt on.
+        assert_eq!(sizes, vec![None, None, Some(4), Some(5), Some(8)]);
     }
 }

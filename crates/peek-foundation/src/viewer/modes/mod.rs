@@ -388,6 +388,14 @@ pub trait Mode {
         None
     }
 
+    /// Declared (uncompressed) size of the current selection's extractable
+    /// payload, if known. The session uses it to gate a large extract
+    /// behind a confirmation prompt before spooling. `None` (default) =
+    /// unknown / not extractable; the extract then proceeds unprompted.
+    fn selected_extract_size(&self) -> Option<u64> {
+        None
+    }
+
     /// Optional override for `Action::Descend`. Returning `Some(frame)`
     /// makes the viewer push the supplied frame directly, bypassing
     /// the extract → detect → compose pipeline. Returning `None` (the

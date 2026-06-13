@@ -46,6 +46,7 @@ pub mod input {
 
     pub mod compression {
         pub use peek_detect::resolve_transparent;
+        pub use peek_io::compression::MAX_SPILL_BYTES;
     }
 }
 

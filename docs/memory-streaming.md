@@ -97,9 +97,15 @@ bounded by the threshold regardless of output size; the produced
 - Archive entry extract: `materialise` in `archive/extract.rs`, spilling
   past `SPOOL_THRESHOLD` (16 MB).
 
-Trade-off: the spilled path has no *disk* ceiling, so a decompression bomb
-fills the tempdir (fails on `ENOSPC`) rather than refusing. Bounding that
-is the job of the latency prompt — see planned.md.
+Disk ceiling: both spill paths cap the bytes written to disk at
+`compression::MAX_SPILL_BYTES` (8 GiB) and fail cleanly past it, so a
+decompression bomb refuses instead of filling the tempdir (`ENOSPC`). The
+ceiling is generous (legitimate large files open) and *always* enforced —
+including non-interactive paths (pipe / `--print`) where no prompt can
+intervene. Interactively, a large extract also asks for confirmation
+before spooling at all (`EXTRACT_PROMPT_BYTES`, 256 MB), and a big
+transparent decompress defers behind a load prompt (`LATENCY_PROMPT_BYTES`,
+50 MB compressed) — see [the safeguards plan](large-file-safeguards-plan.md).
 
 ### 4. Soft-degrade render cap (placeholder, not error)
 

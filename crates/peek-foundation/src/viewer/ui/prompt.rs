@@ -12,6 +12,10 @@ pub struct Prompt {
     input: String,
     /// Byte offset into `input`, always at a UTF-8 char boundary.
     cursor: usize,
+    /// Yes/No confirmation rather than text entry: no input field, `y` /
+    /// Enter confirms (with an empty value), `n` / Esc cancels. Used to
+    /// gate a slow/large op behind an explicit keystroke.
+    confirm: bool,
 }
 
 pub enum PromptOutcome {
@@ -31,6 +35,18 @@ impl Prompt {
             title: title.into(),
             input,
             cursor,
+            confirm: false,
+        }
+    }
+
+    /// A yes/no confirmation prompt — no text field. `y` / Enter confirm
+    /// (value is empty), `n` / Esc cancel.
+    pub fn confirm(title: impl Into<String>) -> Self {
+        Self {
+            title: title.into(),
+            input: String::new(),
+            cursor: 0,
+            confirm: true,
         }
     }
 
@@ -41,6 +57,16 @@ impl Prompt {
 
     pub fn handle_key(&mut self, key: KeyEvent) -> PromptOutcome {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if self.confirm {
+            return match key.code {
+                KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
+                    PromptOutcome::Confirmed(String::new())
+                }
+                KeyCode::Esc | KeyCode::Char('n' | 'N') => PromptOutcome::Cancelled,
+                KeyCode::Char('c') if ctrl => PromptOutcome::Cancelled,
+                _ => PromptOutcome::Continue,
+            };
+        }
         match key.code {
             KeyCode::Esc => PromptOutcome::Cancelled,
             KeyCode::Char('c') if ctrl => PromptOutcome::Cancelled,
@@ -131,6 +157,11 @@ impl Prompt {
     /// Render as a status-line replacement. Caret is drawn inline
     /// (no real cursor move needed).
     pub fn render_status_line(&self, theme: &PeekTheme) -> String {
+        if self.confirm {
+            let painted_title = theme.paint(&self.title, theme.label);
+            let hint = theme.paint("  y:yes  n/Esc:no", theme.muted);
+            return format!("{painted_title}{hint}");
+        }
         let title = format!("{}: ", self.title);
         let painted_title = theme.paint(&title, theme.label);
         let (left, right) = self.input.split_at(self.cursor);
@@ -208,6 +239,34 @@ mod tests {
         assert!(matches!(
             p.handle_key(key(KeyCode::Esc)),
             PromptOutcome::Cancelled
+        ));
+    }
+
+    #[test]
+    fn confirm_y_and_enter_confirm_empty() {
+        for code in [KeyCode::Char('y'), KeyCode::Char('Y'), KeyCode::Enter] {
+            let mut p = Prompt::confirm("Open 2.0 GiB entry?");
+            match p.handle_key(key(code)) {
+                PromptOutcome::Confirmed(s) => assert!(s.is_empty(), "confirm carries no value"),
+                _ => panic!("expected Confirmed for {code:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn confirm_n_and_esc_cancel_and_text_is_inert() {
+        for code in [KeyCode::Char('n'), KeyCode::Char('N'), KeyCode::Esc] {
+            let mut p = Prompt::confirm("Open?");
+            assert!(
+                matches!(p.handle_key(key(code)), PromptOutcome::Cancelled),
+                "expected Cancelled for {code:?}"
+            );
+        }
+        // Stray text doesn't confirm or cancel — only y/n/Enter/Esc act.
+        let mut p = Prompt::confirm("Open?");
+        assert!(matches!(
+            p.handle_key(key(KeyCode::Char('q'))),
+            PromptOutcome::Continue
         ));
     }
 

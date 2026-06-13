@@ -156,6 +156,17 @@ pub fn decompress_bytes(raw: &[u8], fmt: CompressionFormat) -> Result<Bytes> {
 /// syscalls.
 pub const DECOMPRESS_SPOOL_THRESHOLD: u64 = 16 * 1024 * 1024;
 
+/// Absolute ceiling on bytes the spill-to-tempfile path writes to disk —
+/// the decompression-bomb backstop. Without it, a tiny `.gz` declaring a
+/// gigantic stream fills `$TMPDIR` until the OS errors `ENOSPC`; with it,
+/// the spill stops and fails cleanly. Deliberately generous (gigabytes,
+/// not megabytes) so legitimate large files open — it only fires on the
+/// pathological case. Always enforced, including on non-interactive paths
+/// (pipe / `--print`) where no confirmation prompt can intervene. Shared
+/// by `decompress_to_source` here and the archive-entry spool in
+/// `types::archive::extract`.
+pub const MAX_SPILL_BYTES: u64 = 8 * 1024 * 1024 * 1024;
+
 /// Build a streaming decoder for `fmt` over `reader`, for the streaming
 /// [`decompress_to_source`] path. Only the bytes the caller pulls get
 /// inflated.
@@ -223,7 +234,19 @@ pub fn decompress_to_source(
         .context("tempfile spill write failed")?;
     file.write_all(&probe[..extra])
         .context("tempfile spill write failed")?;
-    std::io::copy(&mut decoder, file).context("tempfile spill write failed")?;
+    // Bound the remaining spill so a decompression bomb fails cleanly
+    // instead of filling the tempdir (ENOSPC). `buf` + `probe` are already
+    // on disk; copy at most the rest of the ceiling, plus one byte to
+    // detect overflow.
+    let written = buf.len() as u64 + extra as u64;
+    let remaining = MAX_SPILL_BYTES.saturating_sub(written);
+    let copied = std::io::copy(&mut (&mut decoder).take(remaining + 1), file)
+        .context("tempfile spill write failed")?;
+    if copied > remaining {
+        anyhow::bail!(
+            "decompressed stream exceeds the {MAX_SPILL_BYTES}-byte spill ceiling (decompression bomb?)"
+        );
+    }
     Ok(InputSource::temp_file(tmp, inner_name))
 }
 

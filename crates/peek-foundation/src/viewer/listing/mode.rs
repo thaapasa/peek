@@ -386,6 +386,12 @@ impl Mode for ListingMode {
         self.selected_target()
     }
 
+    fn selected_extract_size(&self) -> Option<u64> {
+        self.viewport
+            .selected()
+            .and_then(|i| self.source.extract_size(i))
+    }
+
     fn select_jump(&self) -> Option<(ModeId, Position)> {
         self.viewport
             .selected()

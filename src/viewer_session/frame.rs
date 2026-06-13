@@ -139,13 +139,46 @@ impl ViewerState {
         })
     }
 
+    /// Declared size of the active mode's current extract selection, if
+    /// the mode reports one. Drives the large-extract confirmation.
+    fn selected_extract_size(&self) -> Option<u64> {
+        let f = self.frame();
+        f.modes[f.active].selected_extract_size()
+    }
+
+    /// Open a confirmation prompt when the selection is large and the
+    /// session is still locked, returning `true` so the caller defers the
+    /// extract until confirm. Returns `false` to proceed immediately
+    /// (small selection, unknown size, or already unlocked).
+    fn maybe_confirm_extract(&mut self, key: &str, save: bool) -> bool {
+        if self.access != super::Access::Unlocked
+            && let Some(sz) = self.selected_extract_size()
+            && sz > super::EXTRACT_PROMPT_BYTES
+        {
+            self.begin_confirm_extract(key.to_string(), sz, save);
+            return true;
+        }
+        false
+    }
+
     /// Run extract against the active mode's selection, then open the
-    /// save-to prompt. Failures flash on the status line.
+    /// save-to prompt. Failures flash on the status line. A large
+    /// selection asks for confirmation first.
     pub(super) fn start_extract(&mut self) {
         let Some(key) = self.extract_target_key() else {
             self.flash = Some("nothing selected to extract".to_string());
             return;
         };
+        if self.maybe_confirm_extract(&key, true) {
+            return;
+        }
+        self.run_extract_save(key);
+    }
+
+    /// Extract `key` and open the save-to prompt. The post-confirmation
+    /// tail of [`start_extract`], also reached straight from the confirm
+    /// prompt.
+    pub(super) fn run_extract_save(&mut self, key: String) {
         let opts = peek_foundation::extract::ExtractOptions {
             no_tempfile: self.no_tempfile,
             ..Default::default()
@@ -194,6 +227,16 @@ impl ViewerState {
             self.flash = Some("nothing to descend into".to_string());
             return Ok(());
         };
+        if self.maybe_confirm_extract(&key, false) {
+            return Ok(());
+        }
+        self.run_descend_extract(key)
+    }
+
+    /// Extract `key` and push it as a new session frame. The
+    /// post-confirmation tail of [`descend`](Self::descend), also reached
+    /// straight from the confirm prompt.
+    pub(super) fn run_descend_extract(&mut self, key: String) -> Result<()> {
         let opts = peek_foundation::extract::ExtractOptions {
             no_tempfile: self.no_tempfile,
             ..Default::default()

@@ -39,6 +39,13 @@ pub trait ListSource {
     /// Extract key for the row, if it has one (a file path, a sheet name).
     /// `None` for rows that can't be extracted (tree directories).
     fn extract_target(&self, idx: usize) -> Option<ExtractTarget>;
+    /// Declared (uncompressed) size of the row's extractable payload, if
+    /// known — used to gate the slow extract behind a confirmation prompt.
+    /// `None` (default) when the source has no size or the row isn't
+    /// extractable; the gate then lets the extract proceed unprompted.
+    fn extract_size(&self, _idx: usize) -> Option<u64> {
+        None
+    }
     /// In-frame jump for the row: switch to the named sibling mode and seek
     /// it to `Position` (e.g. a symbol → its byte offset in the Hex view).
     /// `None` (default) means the row descends / extracts instead.
