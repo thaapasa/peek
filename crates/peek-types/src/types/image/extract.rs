@@ -107,7 +107,10 @@ mod tests {
             "got {}",
             extracted.suggested_name
         );
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert!(
             bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
             "expected PNG header, got {:?}",

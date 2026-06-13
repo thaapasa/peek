@@ -60,7 +60,9 @@ fn rendered_mode(source: &InputSource) -> Box<dyn Mode> {
 /// attachments. Rows show each part's content type and extract through the
 /// standard `e` pipeline (`email::extract`).
 fn attachments_listing(source: &InputSource) -> Option<ListingMode> {
-    let bytes = source.read_bytes().ok()?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+        .ok()?;
     let email = message::parse(&bytes)?;
     if email.attachments.is_empty() {
         return None;

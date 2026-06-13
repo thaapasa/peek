@@ -455,7 +455,9 @@ fn split_digits(s: &str) -> Option<(&str, &str)> {
 /// owns the underlying buffer.
 pub fn open_doc(source: &InputSource) -> Result<Doc> {
     let pdfium = pdfium()?;
-    let bytes = source.read_bytes().context("failed to read PDF source")?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::BulkWalk("PDF"))
+        .context("failed to read PDF source")?;
     let pdf_version = read_pdf_version(&bytes);
     let document = pdfium
         .load_pdf_from_byte_vec(bytes.into(), None)

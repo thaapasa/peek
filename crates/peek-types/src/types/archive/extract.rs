@@ -458,7 +458,10 @@ mod tests {
         )
         .expect("zip extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250, "fibonacci.py is 2250 bytes");
     }
 
@@ -472,7 +475,10 @@ mod tests {
         )
         .expect("tar.gz extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -486,7 +492,10 @@ mod tests {
         )
         .expect("tar.lz4 extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -500,7 +509,10 @@ mod tests {
         )
         .expect("tar.br extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -514,7 +526,10 @@ mod tests {
         )
         .expect("cpio extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -528,7 +543,10 @@ mod tests {
         )
         .expect("cpio.gz extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -542,7 +560,10 @@ mod tests {
         )
         .expect("7z extract");
         assert_eq!(extracted.suggested_name, "fibonacci.py");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
 
@@ -579,7 +600,7 @@ mod tests {
             let got = extract(&src, ArchiveFormat::SevenZ, name, &opts())
                 .unwrap_or_else(|e| panic!("{name}: {e}"))
                 .source
-                .read_bytes()
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
                 .unwrap();
             assert_eq!(
                 got.as_ref(),
@@ -609,14 +630,14 @@ mod tests {
         )
         .expect("ar over File")
         .source
-        .read_bytes()
+        .read_bytes(crate::input::limits::Budget::Unbounded("test"))
         .unwrap();
 
         let ranged = InputSource::File(path).subrange(0, len, "hello.deb");
         let got = extract(&ranged, ArchiveFormat::Ar, "data.tar.gz", &opts())
             .expect("ar over FileRange")
             .source
-            .read_bytes()
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
             .unwrap();
 
         assert!(!got.is_empty());
@@ -636,7 +657,14 @@ mod tests {
         let src = InputSource::File(path).subrange(0, len, "archive.tar");
         let extracted =
             extract(&src, ArchiveFormat::Tar, STABLE_ENTRY, &opts()).expect("tar over FileRange");
-        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
+        assert_eq!(
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .len(),
+            2_250
+        );
     }
 
     /// Compressed-tar extraction over a `TempFile` source streams through
@@ -653,7 +681,14 @@ mod tests {
         let src = InputSource::temp_file(tmp, "archive.tar.gz");
         let extracted = extract(&src, ArchiveFormat::TarGz, STABLE_ENTRY, &opts())
             .expect("tar.gz over tempfile");
-        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
+        assert_eq!(
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .len(),
+            2_250
+        );
     }
 
     /// Long entry paths (> 100 chars) force a GNU `@LongLink` extension
@@ -688,7 +723,11 @@ mod tests {
             extracted.source
         );
         assert_eq!(
-            extracted.source.read_bytes().unwrap().as_ref(),
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
             body,
             "FileRange must slice the real data, not the @LongLink record"
         );
@@ -722,7 +761,14 @@ mod tests {
 
         let extracted =
             extract(&src, ArchiveFormat::Zip, "leaf.txt", &opts()).expect("zip over FileRange");
-        assert_eq!(extracted.source.read_bytes().unwrap().as_ref(), payload);
+        assert_eq!(
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
+            payload
+        );
     }
 
     /// Uncompressed tar over a real file: the member is a verbatim slice
@@ -742,7 +788,14 @@ mod tests {
             "uncompressed tar member should be a zero-copy FileRange, got {:?}",
             extracted.source
         );
-        assert_eq!(extracted.source.read_bytes().unwrap().len(), 2_250);
+        assert_eq!(
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .len(),
+            2_250
+        );
     }
 
     /// Stored (uncompressed) zip entry over a real file likewise extracts
@@ -774,7 +827,14 @@ mod tests {
             "stored zip entry should be a zero-copy FileRange, got {:?}",
             extracted.source
         );
-        assert_eq!(extracted.source.read_bytes().unwrap().as_ref(), payload);
+        assert_eq!(
+            extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
+            payload
+        );
     }
 
     /// Extract a forward-slash subpath through every archive backend
@@ -800,7 +860,10 @@ mod tests {
             let extracted = extract(&fixture(name), *format, SUBPATH_ENTRY, &opts())
                 .unwrap_or_else(|e| panic!("{name} subpath extract: {e}"));
             assert_eq!(extracted.suggested_name, "theme.rs", "{name}");
-            let bytes = extracted.source.read_bytes().unwrap();
+            let bytes = extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap();
             assert_eq!(bytes.len(), SUBPATH_ENTRY_SIZE, "{name}");
         }
     }
@@ -862,7 +925,10 @@ mod tests {
             "expected TempFile, got {:?}",
             res.source
         );
-        let bytes = res.source.read_bytes().unwrap();
+        let bytes = res
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.len(), payload.len());
     }
 
@@ -931,14 +997,23 @@ mod tests {
             }
             other => panic!("expected guarded FileRange, got {other:?}"),
         }
-        let bytes = second.source.read_bytes().unwrap();
+        let bytes = second
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.as_ref(), leaf.as_slice());
 
         // The guard keeps the spool alive even after the source it was
         // carved from drops.
         let leaf_view = second.source;
         drop(first.source);
-        assert_eq!(leaf_view.read_bytes().unwrap().as_ref(), leaf.as_slice());
+        assert_eq!(
+            leaf_view
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
+            leaf.as_slice()
+        );
     }
 
     /// `--no-tempfile` keeps the buffer in `Vec<u8>` even when it
@@ -963,6 +1038,12 @@ mod tests {
             "expected Memory, got {:?}",
             res.source
         );
-        assert_eq!(res.source.read_bytes().unwrap().len(), payload.len());
+        assert_eq!(
+            res.source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .len(),
+            payload.len()
+        );
     }
 }

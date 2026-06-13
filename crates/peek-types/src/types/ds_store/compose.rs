@@ -23,7 +23,7 @@ pub fn compose(
     // Records table first — the landing view, and what the print/pipe path
     // emits. A parse failure pushes nothing here, so Info (appended below)
     // becomes the landing view and surfaces the same error.
-    if let Ok(bytes) = source.read_bytes()
+    if let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Sidecar(".DS_Store"))
         && let Ok(store) = super::reader::parse(&bytes)
     {
         modes.push(Box::new(TableMode::new(

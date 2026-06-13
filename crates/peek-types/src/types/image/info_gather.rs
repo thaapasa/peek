@@ -23,7 +23,11 @@ pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> Extras {
     let anim = match source {
         InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
         _ => {
-            let buf = source.read_bytes().unwrap_or_default();
+            let buf = source
+                .read_bytes(crate::input::limits::Budget::Unbounded(
+                    "non-File source already bounded (File arm uses path)",
+                ))
+                .unwrap_or_default();
             animation_stats::animation_stats_bytes(&buf, magic_mime)
         }
     };
@@ -42,7 +46,11 @@ fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
             // sources read their bytes eagerly (small images dominate this
             // path — extracted ISO entries / archive entries pointed at an
             // image during recursive peek).
-            let buf = source.read_bytes().ok()?;
+            let buf = source
+                .read_bytes(crate::input::limits::Budget::Unbounded(
+                    "non-File source already bounded (File arm uses path)",
+                ))
+                .ok()?;
             ::image::ImageReader::new(std::io::Cursor::new(buf))
                 .with_guessed_format()
                 .ok()

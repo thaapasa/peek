@@ -105,8 +105,10 @@ entries, encoded animation frames — `Bytes::clone` is a refcount bump, not a c
 uncompressed archive entries), and `TempFile { file: Arc<NamedTempFile>, name }` (large
 extracted archive entries spooled to `$TMPDIR/peek-*` — RAII unlink on last `Arc` drop).
 
-All viewers and modes take `&InputSource` and call `read_text()` / `read_bytes()` — image,
-animation, and SVG modes decode from any variant. `read_bytes()` returns `Bytes` so the
+All viewers and modes take `&InputSource` and call `read_text(Budget)` / `read_bytes(Budget)`
+— image, animation, and SVG modes decode from any variant. The required `Budget`
+(`peek_io::limits`) names the read's consumption shape so an unguarded whole-file slurp does
+not compile; see [Memory budgets](#memory-budgets). `read_bytes` returns `Bytes` so the
 `Memory` arm is a refcount clone and accidental copies have to be spelled `.to_vec()` at the
 call site.
 
@@ -605,11 +607,13 @@ path. The 16 MB threshold mirrors the archive-extract spool (`extract.rs::SPOOL_
 
 Gate helpers — call one of these rather than hand-rolling a check:
 
-- `InputSource::read_bytes_capped(cap, what)` / `read_text_capped(cap, what)`
-  (`peek-io/source.rs`) — whole-file read refused above `cap` via a cheap `byte_len` stat, for
-  the parse paths with no streaming option (`object::File`, the EPS header, the notebook JSON).
-  Lets compose / info degrade (Info-only, streaming source view, dropped section) instead of
-  slurping a multi-GB file into RAM.
+- `InputSource::read_bytes(Budget)` / `read_text(Budget)` (`peek-io/source.rs`) — the required
+  `Budget` (`peek_io::limits`) is the gate: `Budget::WholeDoc` / `Sidecar` / `BulkWalk` refuse
+  above the matching class via a cheap `byte_len` stat before any allocation, for the parse
+  paths with no streaming option (`object::File`, the EPS header, the notebook JSON). Lets
+  compose / info degrade (Info-only, streaming source view, dropped section) instead of
+  slurping a multi-GB file into RAM. `Budget::Unbounded("why-safe")` is the only escape — for
+  sources bounded by construction; its `&str` reason is greppable.
 - `ensure_under_render_cap(len, what)` / `render_cap_exceeded(len, what)`
   (`viewer/modes/rendered_text.rs`) — refuse / warn before a whole-document read.
 - `read_zip_entry` (`types/archive/reader.rs`) — gated zip-entry payload read (declared *and*
@@ -639,10 +643,11 @@ wiring-sites checklist. Quick summary:
    already live in `peek-foundation` (`viewer/`); prefer wrapping one over a bespoke `Mode`. Add a
    `ModeId` variant if a mode must be toggleable by id. Override `render_to_pipe` if the default
    (materialize-then-write) wastes memory or violates byte-fidelity for that mode.
-   **Any whole-file or whole-payload read must be gated**: pick a budget class from
-   "Memory budgets" above and call the matching gate helper (`ensure_under_render_cap` for
-   renders, `gather_capped_text` for sidecar parses, `read_zip_entry` for container payloads)
-   before the read — never `read_bytes()` / `read_text()` bare.
+   **Any whole-file or whole-payload read must be gated**: `read_bytes`/`read_text` take a
+   required `Budget` (pick the class matching the read's shape), and the render / container
+   paths have dedicated helpers (`ensure_under_render_cap` for renders, `gather_capped_text`
+   for sidecar parses, `read_zip_entry` for container payloads). `Budget::Unbounded("why")` is
+   only for sources bounded by construction.
 3. Add `types/<x>/compose.rs` with a `compose()` that pushes the type's modes, then **one arm in the
    bin's `src/compose.rs`** (`Registry::compose_modes`) delegating to it. Hex / Info / About / Help
    are appended automatically; pipe mode picks the first non-aux mode (or first, if all are aux).

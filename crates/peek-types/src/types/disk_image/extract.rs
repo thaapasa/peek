@@ -70,7 +70,10 @@ mod tests {
         let extracted = extract(&fixture("sample.iso"), DiskImageFormat::Iso, "README.txt")
             .expect("ISO extract");
         assert_eq!(extracted.suggested_name, "README.txt");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.as_ref(), b"primary\n");
     }
 
@@ -83,7 +86,10 @@ mod tests {
         )
         .expect("nested ISO extract");
         assert_eq!(extracted.suggested_name, "deep.txt");
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(bytes.as_ref(), b"deep\n");
     }
 
@@ -119,7 +125,12 @@ mod tests {
         // Guard keeps the spool linked after the originating source drops.
         let view = extracted.source;
         drop(src);
-        assert_eq!(view.read_bytes().unwrap().as_ref(), b"primary\n");
+        assert_eq!(
+            view.read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
+            b"primary\n"
+        );
     }
 
     #[test]

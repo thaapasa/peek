@@ -64,7 +64,11 @@ impl TextRenderer for NotebookRenderer {
         if let Some(lines) = render_cap_placeholder(len, "notebook", &mut self.warning) {
             return Ok(lines);
         }
-        let text = self.source.read_text()?;
+        let text = self
+            .source
+            .read_text(crate::input::limits::Budget::Unbounded(
+                "gated by render cap above",
+            ))?;
         let md = match Notebook::parse(&text) {
             Some(nb) => to_markdown(&nb),
             // Not a parseable notebook — fall back to showing the raw

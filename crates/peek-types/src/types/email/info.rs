@@ -62,7 +62,11 @@ impl EmailInfo {
 /// text/binary.
 pub fn gather_extras(source: &InputSource, fmt: EmailFormat) -> Option<Extras> {
     let info = match fmt {
-        EmailFormat::Eml => EmailInfo::from_message(&message::parse(&source.read_bytes().ok()?)?),
+        EmailFormat::Eml => EmailInfo::from_message(&message::parse(
+            &source
+                .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+                .ok()?,
+        )?),
         EmailFormat::Mbox => EmailInfo::mbox(mbox::split(source).ok()?.len()),
     };
     Some(Box::new(info))

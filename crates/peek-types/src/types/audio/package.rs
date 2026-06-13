@@ -100,7 +100,8 @@ fn open_audio_stream(source: &InputSource) -> Result<(Box<dyn MediaSource>, u64)
             (Box::new(Cursor::new(bytes.clone())), len)
         }
         InputSource::FileRange { .. } => {
-            let bytes = source.read_bytes()?;
+            let bytes =
+                source.read_bytes(crate::input::limits::Budget::Unbounded("FileRange bounded"))?;
             let len = bytes.len() as u64;
             (Box::new(Cursor::new(bytes)), len)
         }

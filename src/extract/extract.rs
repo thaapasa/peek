@@ -98,7 +98,10 @@ mod tests {
         ));
 
         // Re-read the bytes via the recursive pipeline path.
-        let text = extracted.source.read_text().unwrap();
+        let text = extracted
+            .source
+            .read_text(peek_io::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert_eq!(text, "primary\n");
 
         // Line indexing on a FileRange-backed source.
@@ -121,7 +124,10 @@ mod tests {
         .unwrap();
         assert!(matches!(extracted.source, InputSource::Memory { .. }));
 
-        let text = extracted.source.read_text().unwrap();
+        let text = extracted
+            .source
+            .read_text(peek_io::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert!(text.contains("fibonacci"), "expected python source");
 
         let inner_detected = detect::detect(&extracted.source).unwrap();
@@ -159,7 +165,13 @@ mod tests {
             other => panic!("expected FileRange, got {other:?}"),
         }
         // It still reads correctly when treated as a fresh input.
-        assert_eq!(inner.source.read_text().unwrap(), "leaf\n");
+        assert_eq!(
+            inner
+                .source
+                .read_text(peek_io::limits::Budget::Unbounded("test"))
+                .unwrap(),
+            "leaf\n"
+        );
     }
 
     /// DOCX is treated as a ZIP container — extracting an inner part
@@ -181,7 +193,10 @@ mod tests {
             detect::FileType::Structured(detect::StructuredFormat::Xml)
                 | detect::FileType::SourceCode { .. }
         ));
-        let text = extracted.source.read_text().unwrap();
+        let text = extracted
+            .source
+            .read_text(peek_io::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert!(text.contains("<w:document"), "expected DOCX XML body");
     }
 
@@ -204,7 +219,10 @@ mod tests {
             detect::FileType::Structured(detect::StructuredFormat::Xml)
                 | detect::FileType::SourceCode { .. }
         ));
-        let text = extracted.source.read_text().unwrap();
+        let text = extracted
+            .source
+            .read_text(peek_io::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert!(
             text.contains("office:document-content"),
             "expected ODT content.xml body",

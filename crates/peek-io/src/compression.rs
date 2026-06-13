@@ -247,6 +247,7 @@ pub fn stripped_name(source_name: &str, fmt: CompressionFormat) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::limits::Budget;
 
     fn fixture(name: &str) -> Vec<u8> {
         // Fixtures live in the workspace-root `test-data/`; this crate's
@@ -357,7 +358,7 @@ mod tests {
             "small decompress should stay in memory"
         );
         assert_eq!(
-            out.read_bytes().unwrap().as_ref(),
+            out.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
             b"hello peek single-stream test\n"
         );
     }
@@ -385,6 +386,9 @@ mod tests {
             matches!(out, InputSource::Memory { .. }),
             "exactly-threshold decompress should stay in memory"
         );
-        assert_eq!(out.read_bytes().unwrap().len(), exact);
+        assert_eq!(
+            out.read_bytes(Budget::Unbounded("test")).unwrap().len(),
+            exact
+        );
     }
 }

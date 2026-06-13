@@ -32,7 +32,9 @@ impl Workbook {
         // Read it into a refcounted `Bytes` cursor (cheap to hand to
         // calamine, no per-attempt copy). The container is small; the
         // memory that matters is the materialised sheet, not this.
-        let cursor = Cursor::new(source.read_bytes()?);
+        let cursor = Cursor::new(source.read_bytes(crate::input::limits::Budget::WholeDoc(
+            "spreadsheet container",
+        ))?);
         // Dispatch to the concrete reader by detected format.
         let sheets = if fmt.is_ooxml() {
             Sheets::Xlsx(Xlsx::new(cursor).map_err(|e| anyhow!("failed to open workbook: {e:?}"))?)

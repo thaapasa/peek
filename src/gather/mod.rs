@@ -207,18 +207,23 @@ fn gather_extras(source: &InputSource, file_type: &FileType, magic_mime: Option<
             source,
             magic_mime,
         ),
-        FileType::Svg => match (gather_text_stats(source), source.read_bytes()) {
+        FileType::Svg => match (
+            gather_text_stats(source),
+            source.read_bytes(peek_io::limits::Budget::Sidecar("SVG info")),
+        ) {
             (Some(stats), Ok(bytes)) => types::svg::info_gather::gather_extras(stats, &bytes),
             _ => types::binary::info::gather_extras(magic_mime),
         },
-        FileType::Structured(fmt) => match source.read_bytes() {
-            Ok(bytes) => types::structured::info::gather_extras(*fmt, &bytes),
-            Err(_) => Box::new(types::structured::info::StructuredInfo {
-                format_name: types::structured::info::format_name(*fmt),
-                stats: None,
-            }),
-        },
-        FileType::Html => match source.read_bytes() {
+        FileType::Structured(fmt) => {
+            match source.read_bytes(peek_io::limits::Budget::Sidecar("structured info")) {
+                Ok(bytes) => types::structured::info::gather_extras(*fmt, &bytes),
+                Err(_) => Box::new(types::structured::info::StructuredInfo {
+                    format_name: types::structured::info::format_name(*fmt),
+                    stats: None,
+                }),
+            }
+        }
+        FileType::Html => match source.read_bytes(peek_io::limits::Budget::Sidecar("HTML info")) {
             Ok(bytes) => {
                 types::structured::info::gather_extras(peek_detect::StructuredFormat::Xml, &bytes)
             }

@@ -17,6 +17,7 @@ use std::rc::Rc;
 use anyhow::Result;
 
 use crate::input::InputSource;
+use crate::input::limits::Budget;
 use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::highlight_lines;
 
@@ -111,7 +112,8 @@ impl PrettyView {
             self.parsed = Some(Parsed::Failed { cap_exceeded: true });
             return;
         }
-        let raw = match source.read_text() {
+        // Whole-doc transform; the size gate above already refused over cap.
+        let raw = match source.read_text(Budget::WholeDoc("pretty-print source")) {
             Ok(s) => s,
             Err(e) => {
                 warnings.push(format!(
@@ -234,7 +236,11 @@ mod tests {
         let src = source(r#"{"b":2,"a":1}"#);
         let mut pv = pv();
         let mut warnings = Vec::new();
-        pv.ensure_parsed(&src, src.read_bytes().unwrap().len() as u64, &mut warnings);
+        pv.ensure_parsed(
+            &src,
+            src.read_bytes(Budget::Unbounded("test")).unwrap().len() as u64,
+            &mut warnings,
+        );
 
         assert!(pv.is_ready());
         assert!(warnings.is_empty());
@@ -263,7 +269,11 @@ mod tests {
         let src = source("not json at all");
         let mut pv = pv();
         let mut warnings = Vec::new();
-        pv.ensure_parsed(&src, src.read_bytes().unwrap().len() as u64, &mut warnings);
+        pv.ensure_parsed(
+            &src,
+            src.read_bytes(Budget::Unbounded("test")).unwrap().len() as u64,
+            &mut warnings,
+        );
 
         assert!(pv.failed());
         assert!(!pv.cap_exceeded());

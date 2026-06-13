@@ -154,7 +154,9 @@ pub fn try_parse(source: &InputSource) -> Result<Option<AnimatedSvg>> {
         return Ok(None);
     }
     let bytes = source
-        .read_bytes()
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by render cap above",
+        ))
         .context("failed to read SVG for animation parse")?;
     Ok(try_parse_bytes(&bytes))
 }

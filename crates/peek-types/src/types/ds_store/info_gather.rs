@@ -14,7 +14,7 @@ pub fn gather_extras(source: &InputSource) -> Extras {
 }
 
 fn gather(source: &InputSource) -> DsStoreInfo {
-    let bytes = match source.read_bytes() {
+    let bytes = match source.read_bytes(crate::input::limits::Budget::Sidecar(".DS_Store")) {
         Ok(b) => b,
         Err(e) => return DsStoreInfo::err(format!("read failed: {e}")),
     };

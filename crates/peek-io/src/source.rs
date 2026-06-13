@@ -8,6 +8,8 @@ use anyhow::{Context, Result, bail};
 use bytes::Bytes;
 use tempfile::NamedTempFile;
 
+use crate::limits::Budget;
+
 /// Source of input content.
 ///
 /// `File` reads a path on disk. `Memory` wraps already-buffered bytes
@@ -144,8 +146,10 @@ impl InputSource {
         }
     }
 
-    /// Full content as UTF-8 text.
-    pub fn read_text(&self) -> Result<String> {
+    /// Full content as UTF-8 text, gated by a [`Budget`]. See
+    /// [`read_bytes`](Self::read_bytes) for the gating contract.
+    pub fn read_text(&self, budget: Budget) -> Result<String> {
+        self.ensure_under_budget(budget)?;
         match self {
             Self::File(path) => fs::read_to_string(path)
                 .with_context(|| format!("failed to read {}", path.display())),
@@ -153,7 +157,8 @@ impl InputSource {
                 .map(|s| s.to_owned())
                 .with_context(|| format!("{name} is not valid UTF-8")),
             Self::FileRange { name, .. } | Self::TempFile { name, .. } => {
-                let raw = self.read_bytes()?;
+                // Bytes already gated above; skip the redundant inner stat.
+                let raw = self.read_bytes(Budget::Unbounded("re-gated above"))?;
                 std::str::from_utf8(&raw)
                     .map(str::to_owned)
                     .with_context(|| format!("{name} is not valid UTF-8"))
@@ -161,10 +166,20 @@ impl InputSource {
         }
     }
 
-    /// Full content as raw bytes. Returns `Bytes` so the in-memory arm is
-    /// a refcount clone (no copy) and downstream consumers can sub-slice
-    /// without allocating.
-    pub fn read_bytes(&self) -> Result<Bytes> {
+    /// Full content as raw bytes, gated by a [`Budget`]. Returns `Bytes`
+    /// so the in-memory arm is a refcount clone (no copy) and downstream
+    /// consumers can sub-slice without allocating.
+    ///
+    /// The `budget` names the read's consumption shape. A capped variant
+    /// ([`Budget::WholeDoc`] / [`Sidecar`](Budget::Sidecar) /
+    /// [`BulkWalk`](Budget::BulkWalk)) checks [`byte_len`](Self::byte_len)
+    /// first (a cheap stat) and errors with the budget's `what` label
+    /// *before* any allocation, letting the caller degrade (Info-only,
+    /// hex, a warning row) instead of OOMing on a multi-GB input.
+    /// [`Budget::Unbounded`] reads straight — use it only when the source
+    /// is bounded by construction, and name why in its `&str`.
+    pub fn read_bytes(&self, budget: Budget) -> Result<Bytes> {
+        self.ensure_under_budget(budget)?;
         match self {
             Self::File(path) => fs::read(path)
                 .map(Bytes::from)
@@ -179,23 +194,13 @@ impl InputSource {
         }
     }
 
-    /// Whole-file read refused above `cap`. For the parse paths that have
-    /// no streaming option — `object::File`, the EPS binary header, the
-    /// notebook JSON tree — random access over the whole slice is
-    /// required, so a multi-GB input would otherwise slurp into RAM at
-    /// compose / info time. Checks [`byte_len`](Self::byte_len) first
-    /// (cheap stat) and errors with a `what`-named message before any
-    /// read, letting the caller degrade (Info-only, hex, a warning row)
-    /// instead of OOMing. `cap` aliases a [`crate::limits`] budget class.
-    pub fn read_bytes_capped(&self, cap: u64, what: &str) -> Result<Bytes> {
-        self.ensure_under_cap(cap, what)?;
-        self.read_bytes()
-    }
-
-    /// UTF-8 variant of [`read_bytes_capped`](Self::read_bytes_capped).
-    pub fn read_text_capped(&self, cap: u64, what: &str) -> Result<String> {
-        self.ensure_under_cap(cap, what)?;
-        self.read_text()
+    /// Refuse a capped [`Budget`] whose source exceeds its class limit,
+    /// before any read. [`Budget::Unbounded`] is a no-op.
+    fn ensure_under_budget(&self, budget: Budget) -> Result<()> {
+        match budget.cap() {
+            Some(cap) => self.ensure_under_cap(cap, budget.label()),
+            None => Ok(()),
+        }
     }
 
     fn ensure_under_cap(&self, cap: u64, what: &str) -> Result<()> {
@@ -573,15 +578,20 @@ mod tests {
     }
 
     #[test]
-    fn read_capped_refuses_over_cap_without_reading() {
+    fn budget_refuses_over_cap_without_reading() {
         let src = InputSource::memory(Bytes::from(vec![b'a'; 100]), "x");
-        // Over cap: refused (cheap byte_len check, no read).
-        assert!(src.read_bytes_capped(50, "thing").is_err());
-        assert!(src.read_text_capped(50, "thing").is_err());
-        // At / under cap: full content returned.
-        assert_eq!(src.read_bytes_capped(100, "thing").unwrap().len(), 100);
-        assert_eq!(src.read_bytes_capped(200, "thing").unwrap().len(), 100);
-        assert_eq!(src.read_text_capped(100, "thing").unwrap().len(), 100);
+        // The cap gate refuses before any read (cheap byte_len check). Use
+        // small explicit caps here rather than the multi-MB class budgets.
+        assert!(src.ensure_under_cap(50, "thing").is_err());
+        assert!(src.ensure_under_cap(100, "thing").is_ok());
+        assert!(src.ensure_under_cap(200, "thing").is_ok());
+        // Unbounded never refuses; a capped budget on a tiny source reads whole.
+        assert!(src.ensure_under_budget(Budget::Unbounded("test")).is_ok());
+        assert_eq!(
+            src.read_bytes(Budget::WholeDoc("thing")).unwrap().len(),
+            100
+        );
+        assert_eq!(src.read_text(Budget::WholeDoc("thing")).unwrap().len(), 100);
     }
 
     #[test]
@@ -677,8 +687,11 @@ mod tests {
     fn input_source_file_range_round_trip() {
         let path = write_temp("range", b"AAAAhelloBBBB");
         let src = InputSource::File(path.clone()).subrange(4, 5, "hello");
-        assert_eq!(src.read_bytes().unwrap().as_ref(), b"hello");
-        assert_eq!(src.read_text().unwrap(), "hello");
+        assert_eq!(
+            src.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
+            b"hello"
+        );
+        assert_eq!(src.read_text(Budget::Unbounded("test")).unwrap(), "hello");
         assert_eq!(src.name(), "hello");
         assert!(src.disk_path().is_none());
         let bs = src.open_byte_source().unwrap();
@@ -692,7 +705,10 @@ mod tests {
         let src = InputSource::memory(Bytes::from_static(b"AAAAhelloBBBB"), "blob");
         let view = src.subrange(4, 5, "hello");
         assert!(matches!(view, InputSource::Memory { .. }));
-        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+        assert_eq!(
+            view.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
+            b"hello"
+        );
         assert_eq!(view.name(), "hello");
     }
 
@@ -713,7 +729,13 @@ mod tests {
             }
             other => panic!("expected collapsed FileRange, got {other:?}"),
         }
-        assert_eq!(inner.read_bytes().unwrap().as_ref(), b"hello");
+        assert_eq!(
+            inner
+                .read_bytes(Budget::Unbounded("test"))
+                .unwrap()
+                .as_ref(),
+            b"hello"
+        );
         let _ = fs::remove_file(&path);
     }
 
@@ -734,7 +756,10 @@ mod tests {
             }
             other => panic!("expected guarded FileRange, got {other:?}"),
         }
-        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+        assert_eq!(
+            view.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
+            b"hello"
+        );
     }
 
     #[test]
@@ -746,7 +771,10 @@ mod tests {
             // range inherited must keep the spooled file linked.
             view
         };
-        assert_eq!(view.read_bytes().unwrap().as_ref(), b"hello");
+        assert_eq!(
+            view.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
+            b"hello"
+        );
         let bs = view.open_byte_source().unwrap();
         assert_eq!(bs.read_range(0, 5).unwrap().as_ref(), b"hello");
     }

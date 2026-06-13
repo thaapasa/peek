@@ -106,7 +106,10 @@ fn extracts_attachment_by_key() {
     let source = InputSource::memory(EML.to_vec(), "sample.eml");
     let extracted = extract::extract(&source, "notes.txt").expect("extract");
     assert_eq!(extracted.suggested_name, "notes.txt");
-    let bytes = extracted.source.read_bytes().expect("read");
+    let bytes = extracted
+        .source
+        .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+        .expect("read");
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.contains("attached notes"));
 }
@@ -138,10 +141,26 @@ fn duplicate_attachment_filenames_stay_distinct() {
     // keys through the same helper, so each maps to its own contents.
     let source = InputSource::memory(raw.as_bytes().to_vec(), "dup.eml");
     let first = extract::extract(&source, "dup.txt").expect("extract first");
-    assert!(String::from_utf8_lossy(&first.source.read_bytes().unwrap()).contains("first"));
+    assert!(
+        String::from_utf8_lossy(
+            &first
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+        )
+        .contains("first")
+    );
     let second = extract::extract(&source, "dup-2.txt").expect("extract second");
     assert_eq!(second.suggested_name, "dup-2.txt");
-    assert!(String::from_utf8_lossy(&second.source.read_bytes().unwrap()).contains("second"));
+    assert!(
+        String::from_utf8_lossy(
+            &second
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap()
+        )
+        .contains("second")
+    );
 }
 
 #[test]

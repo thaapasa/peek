@@ -520,7 +520,10 @@ fn build_body_reader(
                     cap / (1024 * 1024)
                 );
             }
-            let raw = source.read_bytes()?;
+            // Gated by the WHOLE_DOC_BYTES byte_len check above.
+            let raw = source.read_bytes(crate::input::limits::Budget::Unbounded(
+                "gated by WHOLE_DOC_BYTES above",
+            ))?;
             let payload = &raw[body_offset..];
             let transcoded = transcode_utf16(payload, encoding)?;
             Ok(Box::new(Cursor::new(transcoded.into_bytes())))

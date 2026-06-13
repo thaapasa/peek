@@ -81,7 +81,9 @@ fn render_window_matches_whole_file_highlight() {
 
     // Reference: whole-file highlight via the same path the pre-A1
     // code used.
-    let raw = source.read_text().unwrap();
+    let raw = source
+        .read_text(crate::input::limits::Budget::Unbounded("test"))
+        .unwrap();
     let whole = crate::viewer::highlight_lines(
         &raw,
         "rs",

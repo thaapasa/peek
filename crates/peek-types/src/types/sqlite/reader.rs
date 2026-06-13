@@ -51,7 +51,8 @@ fn resolve_path(source: &InputSource) -> Result<(PathBuf, Option<Arc<NamedTempFi
         return Ok((p.to_path_buf(), None));
     }
     let bytes = source
-        .read_bytes()
+        // Whole read into RAM before spooling — a one-pass materialization.
+        .read_bytes(crate::input::limits::Budget::BulkWalk("SQLite spool"))
         .context("reading SQLite source into memory before spooling to temp file")?;
     let mut tmp = NamedTempFile::new().context("creating temp file for SQLite spool")?;
     tmp.write_all(&bytes)

@@ -36,7 +36,9 @@ pub fn gather_extras(source: &InputSource, fmt: CertFormat, magic_mime: Option<&
         return crate::types::binary::info::gather_extras(magic_mime);
     }
     if fmt == CertFormat::Der {
-        return match source.read_bytes() {
+        return match source.read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by SIDECAR_TEXT_LIMIT above",
+        )) {
             Ok(der) => Box::new(gather_der(&der)),
             Err(_) => crate::types::binary::info::gather_extras(magic_mime),
         };
@@ -44,7 +46,9 @@ pub fn gather_extras(source: &InputSource, fmt: CertFormat, magic_mime: Option<&
     let Some(text_stats) = gather_text_stats(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    let Ok(text) = source.read_text() else {
+    let Ok(text) = source.read_text(crate::input::limits::Budget::Unbounded(
+        "gated by SIDECAR_TEXT_LIMIT above",
+    )) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
     Box::new(match fmt {

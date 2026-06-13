@@ -91,7 +91,11 @@ fn load_svg(source: &InputSource) -> Result<resvg::usvg::Tree> {
     // read like the other whole-document renders. The XML source view
     // still streams the full file.
     crate::viewer::modes::ensure_under_render_cap(source.byte_len()?, "SVG")?;
-    let svg_data = source.read_bytes().context("failed to read SVG")?;
+    let svg_data = source
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by render cap above",
+        ))
+        .context("failed to read SVG")?;
     resvg::usvg::Tree::from_data(&svg_data, &usvg_options()).context("failed to parse SVG")
 }
 

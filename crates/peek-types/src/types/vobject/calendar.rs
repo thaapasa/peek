@@ -43,7 +43,9 @@ impl TextRenderer for CalendarRenderer {
         _style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let width = width.max(20);
-        let bytes = self.source.read_bytes()?;
+        let bytes = self
+            .source
+            .read_bytes(crate::input::limits::Budget::Sidecar("iCalendar"))?;
         let text = String::from_utf8_lossy(&bytes);
         let roots = parse_components(&text);
 

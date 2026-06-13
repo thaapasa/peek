@@ -54,7 +54,11 @@ impl TextRenderer for HtmlRenderer {
         if let Some(lines) = render_cap_placeholder(len, "HTML", &mut self.warning) {
             return Ok(lines);
         }
-        let bytes = self.source.read_bytes()?;
+        let bytes = self
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded(
+                "gated by render cap above",
+            ))?;
         render::render(&bytes, width.max(20), style_mode)
     }
 

@@ -40,7 +40,7 @@ pub struct Insn {
 
 /// Parse `source` with bytecode enabled and disassemble every method.
 pub fn build(source: &InputSource) -> Result<Disassembly> {
-    let bytes = source.read_bytes()?;
+    let bytes = source.read_bytes(crate::input::limits::Budget::Sidecar("class file"))?;
     let mut opts = ParseOptions::default();
     opts.parse_bytecode(true);
     let class = parse_class_with_options(&bytes, &opts)

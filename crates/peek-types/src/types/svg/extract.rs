@@ -164,7 +164,10 @@ mod tests {
         let extracted =
             extract(&fixture("loader-dots.svg"), "1", None, None).expect("svg anim extract");
         assert!(extracted.suggested_name.ends_with(".png"));
-        let bytes = extracted.source.read_bytes().unwrap();
+        let bytes = extracted
+            .source
+            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .unwrap();
         assert!(
             bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
             "expected PNG header"
@@ -181,7 +184,13 @@ mod tests {
     fn extract_honours_size_override() {
         let extracted =
             extract(&fixture("loader-dots.svg"), "1", Some(128), None).expect("override extract");
-        let img = image::load_from_memory(&extracted.source.read_bytes().unwrap()).unwrap();
+        let img = image::load_from_memory(
+            &extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(img.width(), 128);
         assert_eq!(img.height(), 128);
     }
@@ -191,7 +200,13 @@ mod tests {
         // 24×24 SVG, view_cols = 200 → raster = 200*CELL_W × same.
         let extracted =
             extract(&fixture("loader-dots.svg"), "1", None, Some(200)).expect("view_cols extract");
-        let img = image::load_from_memory(&extracted.source.read_bytes().unwrap()).unwrap();
+        let img = image::load_from_memory(
+            &extracted
+                .source
+                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .unwrap(),
+        )
+        .unwrap();
         assert_eq!(img.width(), 200 * CELL_W);
         assert_eq!(img.height(), 200 * CELL_W);
     }

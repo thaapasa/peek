@@ -43,3 +43,52 @@ pub const SIDECAR_PARSE_BYTES: u64 = 64 * 1024 * 1024;
 /// but held for one pass with no expansion — and real `.a` files run
 /// hundreds of MB, past the sidecar budget).
 pub const BULK_WALK_BYTES: u64 = 256 * 1024 * 1024;
+
+/// The budget a whole-file read must name. Every
+/// [`InputSource::read_bytes`](crate::InputSource::read_bytes) /
+/// [`read_text`](crate::InputSource::read_text) call passes one, so an
+/// unguarded slurp is not expressible — the only escape is the loud,
+/// greppable [`Unbounded`](Budget::Unbounded). The three capped variants
+/// alias the classes above by *consumption shape*; the carried `&str` is
+/// the `what`-name in the over-cap error message.
+///
+/// This is the carrier the later session-unlock work threads a tier
+/// through ([`cap`](Budget::cap) will resolve per `Access`); today it maps
+/// to the fixed Default class constant.
+#[derive(Debug, Clone, Copy)]
+pub enum Budget {
+    /// Materialize **and transform** into a larger form (parse tree,
+    /// styled lines, decoded image). Caps at [`WHOLE_DOC_BYTES`].
+    WholeDoc(&'static str),
+    /// Materialize whole, derive something small (stats, header fields).
+    /// Caps at [`SIDECAR_PARSE_BYTES`].
+    Sidecar(&'static str),
+    /// One bounded pass over untrusted / unbounded data, nothing
+    /// proportional retained. Caps at [`BULK_WALK_BYTES`].
+    BulkWalk(&'static str),
+    /// Bounded by construction — the explicit, greppable escape hatch.
+    /// The `&str` names *why* the read is safe (a small extracted entry,
+    /// an in-memory frame, a structurally tiny format): the one-line
+    /// comment the old review rule asked for, now a required argument.
+    Unbounded(&'static str),
+}
+
+impl Budget {
+    /// The byte cap to enforce before reading, or `None` for
+    /// [`Unbounded`](Budget::Unbounded) (read straight, no stat).
+    pub const fn cap(&self) -> Option<u64> {
+        match self {
+            Self::WholeDoc(_) => Some(WHOLE_DOC_BYTES),
+            Self::Sidecar(_) => Some(SIDECAR_PARSE_BYTES),
+            Self::BulkWalk(_) => Some(BULK_WALK_BYTES),
+            Self::Unbounded(_) => None,
+        }
+    }
+
+    /// The carried `what` / why-safe label.
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::WholeDoc(w) | Self::Sidecar(w) | Self::BulkWalk(w) | Self::Unbounded(w) => w,
+        }
+    }
+}

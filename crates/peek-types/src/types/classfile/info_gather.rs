@@ -14,7 +14,7 @@ pub fn gather_extras(source: &InputSource) -> Extras {
 }
 
 fn gather(source: &InputSource) -> ClassfileInfo {
-    let bytes = match source.read_bytes() {
+    let bytes = match source.read_bytes(crate::input::limits::Budget::Sidecar("class file")) {
         Ok(b) => b,
         Err(e) => return ClassfileInfo::err(format!("read failed: {e}")),
     };

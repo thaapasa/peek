@@ -39,7 +39,11 @@ pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<Extras>
     {
         return None;
     }
-    let bytes = source.read_bytes().ok()?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by SUMMARY_BYTE_LIMIT above",
+        ))
+        .ok()?;
     let text = String::from_utf8_lossy(&bytes);
     let detail = match fmt {
         VObjectFormat::ICal => Detail::Calendar(calendar::summarize(&text)?),

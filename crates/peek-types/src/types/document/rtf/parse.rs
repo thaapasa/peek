@@ -183,7 +183,11 @@ pub(crate) fn open_source(source: &InputSource) -> Result<Parsed> {
     // the rendered view is dropped and the hex view stands in.
     let len = source.byte_len().context("failed to stat RTF source")?;
     ensure_under_render_cap(len, "RTF")?;
-    let bytes = source.read_bytes().context("failed to read RTF source")?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by render cap above",
+        ))
+        .context("failed to read RTF source")?;
     let text =
         std::str::from_utf8(&bytes).map_err(|e| anyhow!("RTF body must be ASCII / UTF-8: {e}"))?;
     open_str(text)

@@ -6,6 +6,7 @@ use anyhow::{Result, bail};
 
 use crate::mime;
 use peek_io::InputSource;
+use peek_io::limits::Budget;
 
 // Per-type format enums live in `types/<x>/format.rs`. Re-export them
 // here so consumers keep importing them through `input::detect` — the
@@ -259,7 +260,9 @@ fn detect_with(source: &InputSource, ignore_name: bool) -> Result<Detected> {
             },
         )),
         InputSource::FileRange { name, .. } | InputSource::TempFile { name, .. } => {
-            let buf = source.read_bytes()?;
+            // Sniff only reads the head, but the whole range/tempfile is
+            // materialized here — a one-pass walk. (Could read a window.)
+            let buf = source.read_bytes(Budget::BulkWalk("detect sniff"))?;
             Ok(detect_bytes_named(
                 &buf,
                 if ignore_name {

@@ -42,7 +42,7 @@ pub fn compose(
 
     // Best-effort: a malformed font (or one fontdue rejects) skips the
     // specimen and falls through to the universal Info + Hex tail.
-    if let Ok(bytes) = source.read_bytes() {
+    if let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Sidecar("font")) {
         // Unwrap WOFF to its inner sfnt before fontdue sees it. Bare
         // sfnt borrows through, so clone the refcounted handle rather
         // than copying; WOFF produces an owned buffer. SpecimenMode

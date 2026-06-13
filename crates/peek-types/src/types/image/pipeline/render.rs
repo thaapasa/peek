@@ -708,7 +708,9 @@ pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
             .decode()
             .context("failed to decode image"),
         _ => {
-            let buf = source.read_bytes()?;
+            let buf = source.read_bytes(crate::input::limits::Budget::Unbounded(
+                "non-File source already bounded (File arm streams from path)",
+            ))?;
             image::load_from_memory(&buf).context("failed to decode image")
         }
     }

@@ -11,7 +11,9 @@ use crate::input::InputSource;
 use super::message;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
-    let bytes = source.read_bytes().map_err(ExtractError::Other)?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+        .map_err(ExtractError::Other)?;
     let msg = MessageParser::default()
         .parse(bytes.as_ref())
         .ok_or_else(|| ExtractError::Other(anyhow::anyhow!("could not parse email")))?;

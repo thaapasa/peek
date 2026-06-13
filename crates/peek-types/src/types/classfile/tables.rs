@@ -18,7 +18,7 @@ pub struct ClassfileTables {
 
 /// Parse `source` and build its Fields and Methods tables.
 pub fn build(source: &InputSource) -> Result<ClassfileTables> {
-    let bytes = source.read_bytes()?;
+    let bytes = source.read_bytes(crate::input::limits::Budget::Sidecar("class file"))?;
     let mut opts = ParseOptions::default();
     opts.parse_bytecode(false);
     let class = parse_class_with_options(&bytes, &opts)

@@ -45,7 +45,11 @@ fn detect_format(source: &InputSource, magic_mime: Option<&str>) -> Option<AnimF
             }
         }
         _ => {
-            let buf = source.read_bytes().ok()?;
+            let buf = source
+                .read_bytes(crate::input::limits::Budget::Unbounded(
+                    "non-File source already bounded (File arm sniffs by extension)",
+                ))
+                .ok()?;
             sniff_anim_format(&buf)
         }
     }
@@ -150,7 +154,9 @@ pub fn decode_anim_frames(
         }
         (other, AnimFormat::Gif) => {
             let buf = other
-                .read_bytes()
+                .read_bytes(crate::input::limits::Budget::Unbounded(
+                    "non-File source already bounded (File arm streams from path)",
+                ))
                 .context("failed to read animated GIF source")?;
             collect_frames(
                 image::codecs::gif::GifDecoder::new(Cursor::new(buf))
@@ -159,7 +165,9 @@ pub fn decode_anim_frames(
         }
         (other, AnimFormat::Webp) => {
             let buf = other
-                .read_bytes()
+                .read_bytes(crate::input::limits::Budget::Unbounded(
+                    "non-File source already bounded (File arm streams from path)",
+                ))
                 .context("failed to read animated WebP source")?;
             collect_frames(
                 image::codecs::webp::WebPDecoder::new(Cursor::new(buf))

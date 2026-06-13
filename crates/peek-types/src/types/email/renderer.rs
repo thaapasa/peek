@@ -45,7 +45,9 @@ impl TextRenderer for EmailRenderer {
         style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let width = width.max(20);
-        let bytes = self.source.read_bytes()?;
+        let bytes = self
+            .source
+            .read_bytes(crate::input::limits::Budget::Sidecar("email"))?;
         let Some(email) = message::parse(&bytes) else {
             return Ok(vec![theme.paint_muted("[unparseable email]")]);
         };

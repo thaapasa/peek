@@ -58,7 +58,7 @@ pub fn compose(
 
     // Blocks TOC: code cells + image outputs as an extractable / descendable
     // listing. Skipped when the notebook has none (e.g. all-markdown).
-    let entries = match source.read_text_capped(super::PARSE_MAX_BYTES, "notebook") {
+    let entries = match source.read_text(crate::input::limits::Budget::WholeDoc("notebook")) {
         Ok(text) => listing::block_entries(&text),
         Err(_) => Vec::new(),
     };

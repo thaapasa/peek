@@ -67,16 +67,20 @@ reach for a cap only when streaming is genuinely impossible.
 
 When a parse needs the whole slice in hand with random access (`object`,
 the EPS binary header, a notebook's JSON tree), there is no streaming
-option. Use the capped reads — a cheap `byte_len` stat refuses *before*
-any allocation, letting the caller degrade:
+option. Every whole-file read names a [`Budget`](../crates/peek-io/src/limits.rs)
+— a cheap `byte_len` stat refuses *before* any allocation, letting the
+caller degrade:
 
-- `InputSource::read_bytes_capped(cap, what)` / `read_text_capped(cap, what)`
-  (`peek-io/source.rs`). `cap` aliases a budget class. Over the cap the
-  caller degrades (Info-only, a streaming Source view, a dropped section).
+- `InputSource::read_bytes(Budget)` / `read_text(Budget)`
+  (`peek-io/source.rs`). The capped budgets (`Budget::WholeDoc` /
+  `Sidecar` / `BulkWalk`) alias the three classes by consumption shape and
+  carry a `what` label for the over-cap message. Over the cap the caller
+  degrades (Info-only, a streaming Source view, a dropped section).
 
-Never call bare `read_bytes()` / `read_text()` on a top-level user source
-whose size you don't already know — that is the unguarded slurp this whole
-doc exists to prevent.
+There is no bare `read_bytes()` — the `Budget` argument is required, so an
+unguarded slurp is not expressible. The one escape is
+`Budget::Unbounded("why-safe")`, used only when the source is bounded by
+construction; its `&str` names *why*, and is greppable.
 
 ### 3. Spill to tempfile (bound RAM, disk takes the rest)
 
@@ -125,24 +129,32 @@ When you have an `InputSource` to consume, in order:
    lines) → use `open_byte_source` / `open_stream` / `open_line_source`.
    Stop here. This is the answer for any view that scrolls.
 2. **Must you materialize the whole thing** because the parse needs random
-   access over the full slice? → `read_bytes_capped` / `read_text_capped`
-   with the budget class that matches the *shape* (transform → WHOLE_DOC,
-   small-derived → SIDECAR_PARSE, one-pass → BULK_WALK). Degrade over cap.
+   access over the full slice? → `read_bytes(Budget)` / `read_text(Budget)`
+   with the budget class that matches the *shape* (transform →
+   `Budget::WholeDoc`, small-derived → `Budget::Sidecar`, one-pass →
+   `Budget::BulkWalk`). Degrade over cap.
 3. **Is it a one-pass transform of unbounded data** whose output must stay
    openable? → spill to a tempfile past a 16 MB threshold.
 4. **Is it a whole-document render that can show a placeholder?** →
    `render_cap_placeholder`.
 
-Bare `read_bytes()` / `read_text()` is allowed only when the source is
-*already bounded by construction* (a small extracted entry under the spool
-threshold, an in-memory frame you built, a format that is structurally
-tiny). When you reach for it, leave a one-line comment saying which.
+`Budget::Unbounded("why")` is allowed only when the source is *already
+bounded by construction* (a small extracted entry under the spool
+threshold, an in-memory frame you built, a non-File source whose other arm
+streams, a read already gated by a `byte_len` check above). The `&str`
+names which — it *is* the one-line justification, and it is greppable.
 
-## Enforcement (planned)
+## Enforcement
 
-Today the rule is review-enforced: a bare `read_bytes()` is greppable but
-nothing fails the build. The planned hardening makes it non-skippable by
-construction — `read_bytes(Budget)` with an explicit, greppable
-`Budget::Unbounded` escape hatch — plus an audit of the existing ~44
-production whole-file reads. Tracked in
-[planned.md → Large File Safeguards](planned.md#large-file-safeguards-).
+The rule is type-enforced: `read_bytes` / `read_text` take a required
+[`Budget`](../crates/peek-io/src/limits.rs), so a bare unguarded slurp does
+not compile. The only escape is the explicit, greppable
+`Budget::Unbounded("why-safe")`. Auditing the escapes is a single grep:
+
+```sh
+grep -rn 'Budget::Unbounded' crates src
+```
+
+Every hit must read as bounded-by-construction from its `&str` reason. The
+original ~44-site audit that introduced this is done; new whole-file reads
+inherit the gate by construction.

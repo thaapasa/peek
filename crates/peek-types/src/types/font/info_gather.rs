@@ -25,7 +25,9 @@ pub fn gather_extras(source: &InputSource, fmt: FontFormat, magic_mime: Option<&
     {
         return crate::types::binary::info::gather_extras(magic_mime);
     }
-    let Ok(bytes) = source.read_bytes() else {
+    let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Unbounded(
+        "gated by FONT_BYTE_LIMIT above",
+    )) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
     let Ok(sfnt) = super::sfnt::decode(&bytes, fmt) else {

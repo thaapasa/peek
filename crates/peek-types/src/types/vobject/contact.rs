@@ -41,7 +41,9 @@ impl TextRenderer for ContactRenderer {
         _style_mode: StyleMode,
     ) -> Result<Vec<String>> {
         let width = width.max(20);
-        let bytes = self.source.read_bytes()?;
+        let bytes = self
+            .source
+            .read_bytes(crate::input::limits::Budget::Sidecar("vCard"))?;
         let text = String::from_utf8_lossy(&bytes);
         let cards: Vec<Component> = parse_components(&text)
             .into_iter()

@@ -110,7 +110,11 @@ fn static_lib_summary(
 /// `FileKind` magic read. Callers gate the read at
 /// [`STATIC_LIB_SUMMARY_CAP`].
 fn parse_static_lib(source: &InputSource) -> Option<StaticLibSummary> {
-    let bytes = source.read_bytes().ok()?;
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by STATIC_LIB_SUMMARY_CAP in caller",
+        ))
+        .ok()?;
     let archive = object::read::archive::ArchiveFile::parse(&*bytes).ok()?;
     let mut object_members = 0usize;
     let mut architecture = None;

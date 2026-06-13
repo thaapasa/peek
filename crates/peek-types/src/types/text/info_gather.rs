@@ -54,7 +54,12 @@ pub fn gather_capped_text(source: &InputSource) -> Option<(TextStats, String)> {
     if source.byte_len().ok()? > SIDECAR_TEXT_LIMIT {
         return None;
     }
-    let bytes = source.read_bytes().ok()?;
+    // Already gated by the SIDECAR_TEXT_LIMIT byte_len check above.
+    let bytes = source
+        .read_bytes(crate::input::limits::Budget::Unbounded(
+            "gated by SIDECAR_TEXT_LIMIT above",
+        ))
+        .ok()?;
     let (encoding, offset) = detect_bom(&bytes[..bytes.len().min(4)]);
     if matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be) {
         return None;

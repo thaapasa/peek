@@ -55,7 +55,11 @@ impl TextRenderer for MarkdownRenderer {
         if let Some(lines) = render_cap_placeholder(len, "markdown", &mut self.warning) {
             return Ok(lines);
         }
-        let text = self.source.read_text()?;
+        let text = self
+            .source
+            .read_text(crate::input::limits::Budget::Unbounded(
+                "gated by render cap above",
+            ))?;
         render::render(
             &text,
             width,

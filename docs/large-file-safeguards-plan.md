@@ -144,8 +144,13 @@ tar / ISO) never trip it.
 
 ## Sequencing
 
-1. **Option A first** (budget-required reads + the ~44-site audit) — lays
-   the tier-aware `Budget` plumbing this design rides on.
+1. ~~**Option A first** (budget-required reads + the ~44-site audit) — lays
+   the tier-aware `Budget` plumbing this design rides on.~~ **Done.**
+   `InputSource::read_bytes`/`read_text` now take a required
+   `peek_io::limits::Budget` (`WholeDoc` / `Sidecar` / `BulkWalk` /
+   `Unbounded("why")`); the four `*_capped` variants folded in; the audit
+   landed. `Budget::cap()` resolves to the fixed Default class constant —
+   the tier param (step 2) plugs in there.
 2. Session `Access` state + non-interactive default + CLI flag.
 3. `run_view` deferral + the Info-default open prompt.
 4. Descend / extract prompt.

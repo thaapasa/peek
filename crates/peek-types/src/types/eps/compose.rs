@@ -43,7 +43,7 @@ pub fn compose(
     // `bytes` is `None`: the byte-dependent Preview / Render views are
     // dropped and the Source view falls back to streaming the raw file.
     let bytes = source
-        .read_bytes_capped(super::PARSE_MAX_BYTES, "EPS file")
+        .read_bytes(crate::input::limits::Budget::Sidecar("EPS file"))
         .ok();
     let header = bytes.as_ref().and_then(|b| dos_eps::parse(b));
 

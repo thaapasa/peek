@@ -28,15 +28,6 @@ pub use info::EpsInfo;
 
 use dos_eps::DosEps;
 
-/// Whole-file slurp ceiling for the header / preview parse. `dos_eps`
-/// and DSC parsing need the bytes in hand, and the Ghostscript render
-/// feeds the whole PostScript program to `gs`. Above this, compose drops
-/// the byte-dependent views and falls back to the streaming Source view,
-/// and Info shows only Ghostscript availability — a multi-GB `.ps` never
-/// slurps into RAM at compose / info time. Whole read, small derived
-/// output → sidecar-parse class.
-pub const PARSE_MAX_BYTES: u64 = crate::input::limits::SIDECAR_PARSE_BYTES;
-
 /// The PostScript program text for DSC parsing / source view. For a
 /// binary DOS-EPS that's the PostScript section; otherwise the whole
 /// file. Decoded lossily — DSC headers are ASCII, and a stray non-UTF-8
