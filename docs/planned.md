@@ -10,7 +10,7 @@ the index; the detailed per-feature notes follow under the same milestone headin
 
 ## Roadmap
 
-Current: **0.3.0**. Feature *breadth* is already 1.0-level — the gap is robustness
+Current: **0.3.2**. Feature *breadth* is already 1.0-level — the gap is robustness
 against the project's own two north stars (*stream, don't load*; *multi-GB
 first-class*). The plan closes those first, then ships the last user-facing
 must-have, then deepens.
@@ -23,8 +23,6 @@ mechanical.
 
 - **Large File Safeguards** — no size guard exists; opening a multi-GB file tries to
   load it. See [§ Large File Safeguards](#large-file-safeguards-).
-- **Bound the UTF-8 text/binary scan** — `is_utf8_streaming` reads the *whole file*
-  to classify. See [§ Detection hardening](#detection-hardening-).
 - **Fuzz the pure detect surface** — the whole point of the `peek-detect` split was a
   fuzzable, reader-free, hostile-byte surface; never-panic + corpus round-trips not
   yet done. The security story for pointing peek at untrusted files. See
@@ -94,9 +92,10 @@ detection is now a small, reader-free, fuzzable surface. Full rationale + file/l
 references live in that plan's "Follow-up backlog" section; summary, ordered by value
 (milestone tag in brackets):
 
-- ☐ **[0.4] Bound the UTF-8 text/binary scan.** `is_utf8_streaming` reads the whole
-  file to decide text-vs-binary; cap at the first N MB. Direct north-star violation,
-  cheap fix.
+- ✅ **[0.4] Bound the UTF-8 text/binary scan.** `is_utf8_streaming` capped at
+  `UTF8_SCAN_LIMIT` (8 MiB, local classification-confidence knob — not a peek-io
+  memory class, since the scan holds O(1)); a file whose head is valid UTF-8 classifies
+  as text without reading the rest.
 - ☐ **[0.4] Fuzz / property-test the pure surface** now that no reader crates are in
   the way (never-panic, magic-byte corpus round-trips, two-path parity). The security
   story for hostile bytes — the reason the crate was split out.

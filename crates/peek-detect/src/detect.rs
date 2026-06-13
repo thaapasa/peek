@@ -52,6 +52,21 @@ const HEAD_BYTES: usize = 16 * 1024;
 /// Chunk size for streaming UTF-8 validation of the file body.
 const SCAN_CHUNK: usize = 64 * 1024;
 
+/// Prefix scanned to decide text-vs-binary. A file whose first
+/// `UTF8_SCAN_LIMIT` bytes are valid UTF-8 is classified as text without
+/// reading the rest, so a multi-GB log isn't read whole before routing
+/// (north star: *stream, don't load*).
+///
+/// Deliberately **not** one of peek-io's memory-budget classes: the scan
+/// retains O(1) (a partial-char tail plus one [`SCAN_CHUNK`]) regardless of
+/// this value, so the cap bounds time-to-verdict, not memory. It is a
+/// classification-confidence knob — sibling to [`HEAD_BYTES`] and CSV's
+/// `SNIFF_BYTES`, which are local for the same reason. Binaries reveal
+/// non-UTF-8 bytes in the first KB and fail fast; a file still valid here is
+/// text with near-certainty, and a late binary blob misroutes cheaply (the
+/// viewer streams past it; render failure re-detects via `detect_ignore_name`).
+const UTF8_SCAN_LIMIT: u64 = 8 * 1024 * 1024;
+
 /// Detected file type, used to dispatch to the right viewer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileType {
@@ -521,6 +536,7 @@ fn read_fill<R: Read>(reader: &mut R, buf: &mut [u8]) -> Result<usize> {
 /// across chunk boundaries so multi-byte characters that straddle a chunk
 /// boundary are validated correctly.
 fn is_utf8_streaming<R: Read>(head: Vec<u8>, reader: &mut R) -> Result<bool> {
+    let mut scanned = head.len();
     let mut buf = head;
     let mut chunk = vec![0u8; SCAN_CHUNK];
     loop {
@@ -537,11 +553,18 @@ fn is_utf8_streaming<R: Read>(head: Vec<u8>, reader: &mut R) -> Result<bool> {
                 buf.drain(..valid_up_to);
             }
         }
+        if scanned as u64 >= UTF8_SCAN_LIMIT {
+            // Cap reached: everything scanned so far is valid UTF-8 (any
+            // residual `buf` is an incomplete sequence cut by the cap, not
+            // an invalid one). Treat as text without reading the rest.
+            return Ok(true);
+        }
         let n = reader.read(&mut chunk)?;
         if n == 0 {
             // EOF — anything still buffered is an unfinished sequence.
             return Ok(buf.is_empty());
         }
+        scanned += n;
         buf.extend_from_slice(&chunk[..n]);
     }
 }
@@ -929,5 +952,35 @@ mod tests {
         let mime = head_magic_mime(head).expect("magic recognised");
         assert_eq!(mime, "application/x-apple-dsstore");
         assert_eq!(file_type_from_magic_mime(&mime), Some(FileType::DsStore));
+    }
+
+    #[test]
+    fn utf8_scan_accepts_text_rejects_binary() {
+        // Multi-byte char straddling the head/reader boundary must validate.
+        let text = "héllo wörld\n".repeat(100).into_bytes();
+        let (head, rest) = text.split_at(5);
+        assert!(is_utf8_streaming(head.to_vec(), &mut &rest[..]).unwrap());
+
+        // A genuine invalid sequence is binary.
+        let bin = vec![0xff, 0xfe, 0x00, 0x01];
+        assert!(!is_utf8_streaming(bin, &mut &[][..]).unwrap());
+    }
+
+    #[test]
+    fn utf8_scan_stops_at_cap_treats_as_text() {
+        // An endless stream of valid UTF-8: without the cap this would
+        // never return. The scan must terminate `Ok(true)` and stop within
+        // one chunk of the limit (proves it's bounded, not whole-file).
+        struct Endless(u64);
+        impl Read for Endless {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                buf.fill(b'a');
+                self.0 += buf.len() as u64;
+                Ok(buf.len())
+            }
+        }
+        let mut reader = Endless(0);
+        assert!(is_utf8_streaming(Vec::new(), &mut reader).unwrap());
+        assert!(reader.0 <= UTF8_SCAN_LIMIT + SCAN_CHUNK as u64);
     }
 }
