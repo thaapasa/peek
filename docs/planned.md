@@ -22,8 +22,9 @@ not features — they're the marketing claim not yet holding. All small, mostly
 mechanical.
 
 - **Large File Safeguards** ◐ — the memory guards shipped (bare-codec tempfile spill;
-  compose/info whole-file caps); the latency confirmation prompt and the type-level
-  budget-required reads remain. See [§ Large File Safeguards](#large-file-safeguards-)
+  compose/info whole-file caps), the budget-required reads shipped, and the deferred-decompress
+  latency prompt (`--yes` to pre-grant) shipped; the compressed-tar TOC gate + disk-bomb ceiling
+  remain. See [§ Large File Safeguards](#large-file-safeguards-)
   and the strategy doc [memory-streaming.md](memory-streaming.md).
 - **Promote fuzzing to a CI nightly job** — the property-test floor and manual
   cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
@@ -97,24 +98,21 @@ Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) fro
 **session access-unlock** model — full design in
 [large-file-safeguards-plan.md](large-file-safeguards-plan.md):
 
-- ☐ **Latency confirmation prompt.** Before a known-expensive op (building a large compressed-tar
-  TOC, a large bare-codec decompress) prompt `proceed? [y/N]` in the interactive viewer; a
-  `--yes` / `--force` flag suppresses it (no soft-reject in pipe mode — pipe proceeds). Predicate =
-  sequential codec × compressed `byte_len` over a threshold. This is also where the spilled-path
-  **disk-bomb ceiling** lands (a pathological `.gz` currently fills the tempdir → `ENOSPC`). Reuse
-  the existing `ViewerState` modal-prompt slot.
-- ☐ **Budget-required reads (type-level enforcement).** Replace bare `read_bytes()` / `read_text()`
-  with `read_bytes(Budget)` over the three budget classes plus an explicit, greppable
-  `Budget::Unbounded` escape hatch, so a future read can't skip the guard by construction. ~44
-  production call sites + ~35 test sites; the soft-degrade renderers
-  (`render_cap_placeholder`) keep their own path. **Precede with an audit** classifying the ~44
-  production whole-file reads (classfile / font / cert / vobject / ds_store / email / audio /
-  spreadsheet / pdf / sqlite / image …) as bounded-by-construction vs genuinely-unguarded — some
-  likely need the same cap treatment objfile / EPS / notebook just got.
-- ☐ **(Decide) original info-default UX.** The pre-reframe idea — for a whole-file-load primary
-  view over a threshold, land on the Info screen with a size warning + an opt-in "load anyway" key
-  (needs a `Mode::loads_whole_file()` signal + a deferred-primary frame flag). May be subsumed by
-  the memory caps + latency prompt above; revisit once those land.
+- ◐ **Latency confirmation prompt.** Deferred transparent decompression shipped: a big bare-codec
+  `.gz` / `.xz` / … (compressed `byte_len` over `LATENCY_PROMPT_BYTES`) in a Default interactive
+  session lands on Info with a status-line load hint instead of decompressing up front; Enter loads
+  it and unlocks the session; `--yes` (and every non-interactive path) pre-grants. Applies to both
+  the top-level open and descending into a nested compressed entry. **Remaining:** the same gate for
+  the large compressed-**tar TOC** build, and the spilled-path **disk-bomb ceiling** (a pathological
+  `.gz` currently fills the tempdir → `ENOSPC`).
+- ✅ **Budget-required reads (type-level enforcement).** `read_bytes(Budget)` / `read_text(Budget)`
+  over the three classes + the greppable `Budget::Unbounded` escape; the ~44-site audit landed. (The
+  tier-aware `Budget::cap(access)` the unlock model once sketched is **not** built — `Access` lives
+  in the bin where the prompt logic reads it; leaf caps stay on the fixed Default until step 5.)
+- ◐ **Info-default open.** Decided and shipped for the deferred-decompress case (Info landing +
+  `SessionFrame.deferred` flag + load key). The general whole-file-load primary view (a
+  `Mode::loads_whole_file()` signal that lands any over-threshold transform view on Info) is still
+  open; fold in if a non-decompress view ever needs it.
 
 ### Detection hardening ☐
 

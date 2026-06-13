@@ -149,9 +149,32 @@ tar / ISO) never trip it.
    `InputSource::read_bytes`/`read_text` now take a required
    `peek_io::limits::Budget` (`WholeDoc` / `Sidecar` / `BulkWalk` /
    `Unbounded("why")`); the four `*_capped` variants folded in; the audit
-   landed. `Budget::cap()` resolves to the fixed Default class constant —
-   the tier param (step 2) plugs in there.
-2. Session `Access` state + non-interactive default + CLI flag.
-3. `run_view` deferral + the Info-default open prompt.
-4. Descend / extract prompt.
+   landed. `Budget::cap()` resolves to the fixed Default class constant.
+2. ~~Session `Access` state + non-interactive default + CLI flag.~~ +
+   ~~3. `run_view` deferral + the Info-default open prompt.~~ **Done
+   together** (they share a consumer — `Access` is inert without the
+   deferral that reads it). Landed:
+   - `viewer_session::Access { Default, Unlocked }` (in the bin, not
+     `peek-io` — see the cap() note below) + `--yes` flag + the
+     non-interactive-starts-Unlocked default, stored on `ViewerState`.
+   - `deferred_decompress()` (compressed-size > `LATENCY_PROMPT_BYTES`,
+     Default session) gates both the top-level open (`run_view`) and the
+     descend path (`push_extracted`): skip the eager `resolve_transparent`,
+     keep the compressed wrapper, mark `SessionFrame.deferred`, land on
+     Info with a status-line load hint.
+   - Enter on a deferred frame (`load_deferred`) runs the decompress,
+     reseeds the frame to the inner content, and flips the session to
+     `Unlocked` so later guarded ops don't re-ask.
+   - **Not** the `cap()` threading the old note here promised: `cap()` has
+     one call site but tier-awareness would need `Access` at every
+     `read_bytes` caller (~44 sites), and both tiers resolve to the same
+     Default today (no Elevated values; step 5 is recommended-against). So
+     `Access` lives in the bin where the prompt logic consumes it; the
+     leaf caps stay untouched until/unless step 5 elevates memory tiers.
+   - **Open** (this step uses a status-line hint, not a modal): the modal
+     prompt-slot route the original design sketched is unused — Enter on
+     the Info-landed frame is the confirmation. Revisit if a modal reads
+     better.
+4. Descend / extract prompt (the *disk*-ceiling / extract guard — distinct
+   from the decompress deferral already wired into `push_extracted`).
 5. Optional memory-tier elevation + the spill disk ceiling.

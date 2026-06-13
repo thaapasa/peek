@@ -166,13 +166,14 @@ impl Registry {
                 types::directory::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
             FileType::Compressed(_) => {
-                // Bare-codec streams resolve to their inner content
-                // upstream via `compression::resolve_transparent`,
-                // so reaching this arm means decompression failed.
-                // Push nothing file-type-specific — the universal
-                // Hex + Info tail below renders the raw compressed
-                // bytes, and the FileInfo warning row surfaces the
-                // decompression error.
+                // Bare-codec streams normally resolve to their inner
+                // content upstream via `resolve_transparent`, so reaching
+                // this arm means decompression either failed or was
+                // *deferred* (a big file in a Default session, awaiting
+                // the load prompt). Push nothing file-type-specific — the
+                // universal Hex + Info tail below renders the raw
+                // compressed bytes, and on failure the FileInfo warning
+                // row surfaces the error.
             }
             FileType::Binary => {
                 // Default view for binary IS hex; HexMode is appended

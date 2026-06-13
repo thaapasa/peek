@@ -157,6 +157,13 @@ pub struct Args {
     /// detection is wrong.
     #[arg(long = "cell-aspect", value_name = "RATIO", hide_short_help = true)]
     pub cell_aspect: Option<f64>,
+
+    /// Pre-grant slow / large operations: skip the load confirmation that
+    /// a big transparently-compressed file (`.xz` / `.gz` / …) would
+    /// otherwise show before decompressing. Non-interactive output (pipe /
+    /// `--print` / `--info`) is always pre-granted.
+    #[arg(short = 'y', long = "yes", hide_short_help = true)]
+    pub yes: bool,
 }
 
 /// Parse CLI args, reporting whether the theme was set explicitly (via

@@ -34,6 +34,8 @@ pub fn run(
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
     no_tempfile: bool,
+    access: super::Access,
+    deferred: Option<peek_detect::CompressionFormat>,
 ) -> Result<()> {
     with_alternate_screen(|stdout| {
         event_loop(
@@ -46,6 +48,8 @@ pub fn run(
             modes,
             mode_builder,
             no_tempfile,
+            access,
+            deferred,
         )
     })
 }
@@ -61,6 +65,8 @@ fn event_loop(
     modes: Vec<Box<dyn Mode>>,
     mode_builder: ModeBuilder,
     no_tempfile: bool,
+    access: super::Access,
+    deferred: Option<peek_detect::CompressionFormat>,
 ) -> Result<()> {
     let name = source.name().to_string();
     let mut state = ViewerState::new(
@@ -72,6 +78,8 @@ fn event_loop(
         modes,
         mode_builder,
         no_tempfile,
+        access,
+        deferred,
     )?;
 
     redraw(stdout, &mut state, &name)?;
@@ -200,6 +208,7 @@ fn render_status_line(state: &mut ViewerState) -> String {
     // " > " so the user can see how deep they've drilled.
     let breadcrumb = state.breadcrumb().join(" > ");
     let has_warnings = !state.frame().file_info.warnings.is_empty();
+    let deferred_hint = state.deferred_hint();
     let theme = &state.peek_theme;
 
     // Prefix breadcrumb with a yellow `!` when the active frame's
@@ -227,6 +236,11 @@ fn render_status_line(state: &mut ViewerState) -> String {
         segs.push((s.as_str(), *c));
     }
     if let Some(msg) = flash.as_deref() {
+        segs.push((msg, theme.warning));
+    }
+    // Deferred-decompress prompt: surface the load hint where flash sits,
+    // so a freshly-opened big `.xz` shows "Enter to decompress" up front.
+    if let Some(msg) = deferred_hint.as_deref() {
         segs.push((msg, theme.warning));
     }
     segs.push((theme_name, theme.muted));

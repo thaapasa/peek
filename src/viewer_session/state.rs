@@ -11,7 +11,7 @@ use std::time::Duration;
 use anyhow::Result;
 use crossterm::event::KeyEvent;
 
-use peek_detect::Detected;
+use peek_detect::{CompressionFormat, Detected};
 use peek_foundation::info::RenderOptions;
 use peek_foundation::viewer::modes::{Handled, Mode, ModeId, Position};
 use peek_io::InputSource;
@@ -61,6 +61,14 @@ pub(crate) struct ViewerState {
     /// `ExtractOptions` the interactive viewer builds so user choice
     /// persists across descend / extract presses.
     pub(super) no_tempfile: bool,
+
+    /// Session-wide access tier. Starts [`Default`](super::Access::Default)
+    /// unless `--yes` pre-granted it; flips to
+    /// [`Unlocked`](super::Access::Unlocked) the first time the user
+    /// confirms a deferred decompress, after which later guarded ops
+    /// (e.g. descending into another big compressed entry) proceed without
+    /// re-asking.
+    pub(super) access: super::Access,
 }
 
 impl ViewerState {
@@ -74,10 +82,18 @@ impl ViewerState {
         modes: Vec<Box<dyn Mode>>,
         mode_builder: ModeBuilder,
         no_tempfile: bool,
+        access: super::Access,
+        deferred: Option<CompressionFormat>,
     ) -> Result<Self> {
         let peek_theme = make_peek_theme(theme_name, style_mode);
         let file_info = crate::gather::gather(&source, &detected)?;
-        let frame = SessionFrame::new(source, detected, file_info, modes);
+        let mut frame = SessionFrame::new(source, detected, file_info, modes);
+        // A deferred top-level open lands on Info (codec + size + load
+        // prompt), not the raw-byte Hex view it would default to.
+        frame.deferred = deferred;
+        if deferred.is_some() {
+            frame.focus_info();
+        }
         Ok(Self {
             frames: vec![frame],
             mode_builder,
@@ -88,6 +104,7 @@ impl ViewerState {
             prompt: None,
             flash: None,
             no_tempfile,
+            access,
         })
     }
 
@@ -122,6 +139,22 @@ impl ViewerState {
         let has_return = self.has_return_target();
         let f = self.frame();
         f.modes[f.active].status_hints(has_return)
+    }
+
+    /// Status-line prompt for a deferred-decompress frame: the codec, the
+    /// compressed size, and the key to load. `None` when the active frame
+    /// isn't deferred. Painted as a warning segment so it stands out.
+    pub(crate) fn deferred_hint(&self) -> Option<String> {
+        let f = self.frame();
+        let fmt = f.deferred?;
+        let size = match f.source.byte_len() {
+            Ok(n) => format!("{} MiB", n / (1024 * 1024)),
+            Err(_) => "large".to_string(),
+        };
+        Some(format!(
+            "{} compressed, {size} — Enter to decompress",
+            fmt.codec_label()
+        ))
     }
 
     pub(crate) fn has_return_target(&self) -> bool {

@@ -120,18 +120,36 @@ fn main() -> Result<()> {
 /// re-detected `Detected` when the first attempt fails on a misnamed
 /// file.
 fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args) -> Result<()> {
+    let interactive = !args.print && std::io::stdout().is_terminal();
+
+    // Access tier: `--yes` (and every non-interactive path, which can't
+    // answer a prompt) pre-grants slow ops; an interactive session starts
+    // Default and asks on the first guarded op.
+    let access = if args.yes || !interactive {
+        viewer_session::Access::Unlocked
+    } else {
+        viewer_session::Access::Default
+    };
+
     // Transparent single-stream decompression: bare `.gz` / `.bz2` /
     // `.xz` / `.zst` / `.lz4` resolve to their inner content at this
     // boundary so every downstream path (info, list, interactive,
     // pipe, extract) operates on the decompressed bytes. On
     // decompression failure the original compressed source survives
     // and downstream falls back to Hex + Info plus a warning row.
-    let (source_owned, detected_owned) =
-        peek_detect::resolve_transparent(source.clone(), detected.clone());
+    //
+    // Exception: a big compressed file in a Default interactive session
+    // is *deferred* — we skip the eager resolve, keep the compressed
+    // wrapper, and let the session land on Info with a load prompt so the
+    // slow decompress only runs on the user's say-so.
+    let deferred = viewer_session::deferred_decompress(source, detected, access);
+    let (source_owned, detected_owned) = if deferred.is_some() {
+        (source.clone(), detected.clone())
+    } else {
+        peek_detect::resolve_transparent(source.clone(), detected.clone())
+    };
     let source = &source_owned;
     let detected = &detected_owned;
-
-    let interactive = !args.print && std::io::stdout().is_terminal();
 
     let viewers = compose::Registry::new(&args.compose_opts())?;
     let render_opts = info::RenderOptions { utc: args.utc };
@@ -211,6 +229,8 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
             modes,
             mode_builder,
             args.no_tempfile,
+            access,
+            deferred,
         )
         .with_context(|| format!("failed to render {source_name}"))?;
     } else {

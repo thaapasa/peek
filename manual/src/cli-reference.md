@@ -26,6 +26,7 @@
 | `-o` / `--output`|       | Output path for `--extract` (or `-` for stdout)               |
 | `--extract-size` |       | Output pixel size for animation / SVG frame extract           |
 | `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  |
+| `--yes`          | `-y`  | Pre-grant slow ops: skip the load prompt for big compressed files |
 | `--update`       |       | Check for newer release and re-run `install.sh`               |
 
 ## Notes
@@ -43,6 +44,11 @@
   `peek file.pdf --info --json | jq .size_bytes`. Core metadata is typed (numbers stay numbers,
   timestamps are ISO-8601 UTC); per-type stats are nested under a key named for the file type
   (`peek book.pdf --info --json | jq .pdf.page_count`).
+- `--yes` / `-y` pre-grants slow operations. A big transparently-compressed file (`.gz` / `.xz` /
+  `.zst` / …) opens on its Info screen with a `… — Enter to decompress` hint instead of expanding up
+  front; `Enter` loads it and unlocks the session (later large files in the same session won't
+  re-ask). `--yes` skips that prompt, and every non-interactive path (pipe, `--print`, `--info`,
+  `--list`) is always pre-granted since it can't answer a prompt.
 - `--help --theme <name>` doubles as a theme preview — the help screen is themed.
 
 ## Help screens

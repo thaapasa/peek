@@ -43,6 +43,39 @@ fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> V
         modes,
         mode_builder,
         args.no_tempfile,
+        super::Access::Default,
+        None,
+    )
+    .unwrap()
+}
+
+/// Build a session over a compressed source whose decompression is
+/// deferred — the state the latency guard produces for a big `.gz` / `.xz`
+/// in a Default interactive session, but forced on a small fixture so the
+/// size gate is bypassed. `detected` must still be `Compressed` (the
+/// un-resolved wrapper).
+fn build_deferred_state(
+    rel: &str,
+    source: InputSource,
+    detected: Detected,
+    fmt: peek_detect::CompressionFormat,
+) -> ViewerState {
+    let args = Args::parse_from(["peek", rel]);
+    let registry = Rc::new(Registry::new(&args.compose_opts()).unwrap());
+    let modes = registry.compose_modes(&source, &detected).unwrap();
+    let registry_for_builder = registry.clone();
+    let mode_builder: ModeBuilder = Box::new(move |s, d| registry_for_builder.compose_modes(s, d));
+    ViewerState::new(
+        source,
+        detected,
+        args.theme,
+        args.color,
+        RenderOptions::default(),
+        modes,
+        mode_builder,
+        args.no_tempfile,
+        super::Access::Default,
+        Some(fmt),
     )
     .unwrap()
 }
@@ -402,4 +435,50 @@ fn tab_round_trips_hex_and_info_on_binary() {
         ModeId::Hex,
         "Tab returns Info → Hex on binary (Hex is the only data view)"
     );
+}
+
+/// A deferred-decompress frame opens on Info with a load hint, and Enter
+/// runs the decompression in place: the frame reseeds to the inner
+/// content, the deferred marker clears, and the session unlocks so later
+/// guarded ops won't re-prompt.
+#[test]
+fn deferred_decompress_loads_on_enter() {
+    let source = fixture_source("test-data/single.gz");
+    let detected = peek_detect::detect(&source).unwrap();
+    assert!(
+        matches!(detected.file_type, peek_detect::FileType::Compressed(_)),
+        "fixture must classify as Compressed before resolve"
+    );
+
+    let mut state = build_deferred_state(
+        "test-data/single.gz",
+        source,
+        detected,
+        peek_detect::CompressionFormat::Gz,
+    );
+
+    // Lands on Info (not the raw Hex view) with the load hint visible.
+    assert_eq!(
+        active_id(&state),
+        ModeId::Info,
+        "deferred frame opens on Info"
+    );
+    assert!(state.frame().deferred.is_some(), "frame marked deferred");
+    assert!(state.deferred_hint().is_some(), "load hint present");
+    assert_eq!(state.access, super::Access::Default, "session still locked");
+
+    // Enter decompresses in place: inner is plain text → a Content view.
+    state.apply(Action::Descend).unwrap();
+    assert!(
+        state.frame().deferred.is_none(),
+        "deferred cleared after load"
+    );
+    assert_eq!(state.access, super::Access::Unlocked, "session unlocked");
+    assert_eq!(
+        active_id(&state),
+        ModeId::Content,
+        "reseeded to the inner content's primary view"
+    );
+    assert!(state.deferred_hint().is_none(), "hint gone once loaded");
+    state.ensure_active_rendered().unwrap();
 }

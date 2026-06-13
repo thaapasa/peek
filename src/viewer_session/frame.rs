@@ -52,6 +52,13 @@ pub(crate) struct SessionFrame {
     /// table view) so the crumb shows the table name, not the db file
     /// repeated.
     pub breadcrumb_label: Option<String>,
+    /// Set when this frame holds a transparently-compressed wrapper whose
+    /// decompression was deferred (the source is big and the session is
+    /// still [`Default`](super::Access::Default)). The frame lands on Info
+    /// with a load prompt; pressing Enter runs the decompress and reseeds
+    /// the frame to the inner content. `None` once loaded (or never
+    /// deferred). Carries the codec for the prompt label.
+    pub deferred: Option<peek_detect::CompressionFormat>,
 }
 
 impl SessionFrame {
@@ -76,6 +83,16 @@ impl SessionFrame {
             position: Position::Unknown,
             retry_attempted: false,
             breadcrumb_label: None,
+            deferred: None,
+        }
+    }
+
+    /// Switch the active mode to the Info view, if present. Used when a
+    /// frame opens deferred so the user lands on the codec / size summary
+    /// (with the load prompt) rather than the raw-byte Hex dump.
+    pub(super) fn focus_info(&mut self) {
+        if let Some(idx) = self.mode_index(ModeId::Info) {
+            self.active = idx;
         }
     }
 
@@ -145,6 +162,11 @@ impl ViewerState {
     /// unsupported, broken entry, stack full) flash and leave the
     /// current frame active.
     pub(super) fn descend(&mut self) -> Result<()> {
+        // A deferred-decompress frame has no entry to descend into — Enter
+        // means "load the inner content" instead.
+        if self.frame().deferred.is_some() {
+            return self.load_deferred();
+        }
         if self.frames.len() >= MAX_STACK_DEPTH {
             self.flash = Some(format!("peek stack at max depth ({MAX_STACK_DEPTH})"));
             return Ok(());
@@ -223,6 +245,36 @@ impl ViewerState {
         self.frames.len() - 1
     }
 
+    /// Run the deferred transparent decompression on the active frame:
+    /// expand the inner content, rebuild its mode stack in place, and
+    /// unlock the session so later guarded ops proceed without re-asking.
+    /// On decompression failure the frame still reseeds (the source stays
+    /// Compressed and the Info warning row explains why) and `deferred`
+    /// clears, so Enter is not a dead key on a broken archive.
+    fn load_deferred(&mut self) -> Result<()> {
+        let (source, detected) = {
+            let f = self.frame();
+            peek_detect::resolve_transparent(f.source.clone(), f.detected.clone())
+        };
+        let modes = match (self.mode_builder)(&source, &detected) {
+            Ok(m) => m,
+            Err(e) => {
+                self.flash = Some(format!("load failed: {e}"));
+                return Ok(());
+            }
+        };
+        let file_info = crate::gather::gather(&source, &detected)?;
+        let f = self.frame_mut();
+        f.source = source;
+        f.detected = detected;
+        f.file_info = file_info;
+        f.deferred = None;
+        f.reseed_from_modes(modes);
+        self.access = super::Access::Unlocked;
+        self.screen.invalidate();
+        Ok(())
+    }
+
     fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {
         let source = extracted.source;
         let detected = match peek_detect::detect(&source) {
@@ -234,8 +286,15 @@ impl ViewerState {
         };
         // Apply transparent decompression so descending into an
         // extracted `.gz` / `.bz2` / `.xz` / `.zst` / `.lz4` lands
-        // straight on the inner content.
-        let (source, detected) = peek_detect::resolve_transparent(source, detected);
+        // straight on the inner content — unless it's big and the session
+        // is still Default, in which case defer (same latency guard as the
+        // top-level open) and land on Info with a load prompt.
+        let deferred = super::deferred_decompress(&source, &detected, self.access);
+        let (source, detected) = if deferred.is_some() {
+            (source, detected)
+        } else {
+            peek_detect::resolve_transparent(source, detected)
+        };
         let modes = match (self.mode_builder)(&source, &detected) {
             Ok(m) => m,
             Err(e) => {
@@ -244,7 +303,11 @@ impl ViewerState {
             }
         };
         let file_info = crate::gather::gather(&source, &detected)?;
-        let frame = SessionFrame::new(source, detected, file_info, modes);
+        let mut frame = SessionFrame::new(source, detected, file_info, modes);
+        frame.deferred = deferred;
+        if deferred.is_some() {
+            frame.focus_info();
+        }
         // Dir → Dir descent re-targets the current frame instead of
         // pushing, so navigating between sibling subdirectories doesn't
         // accumulate a stack the user has to back out of. Esc on the
