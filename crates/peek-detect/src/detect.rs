@@ -6,7 +6,6 @@ use anyhow::{Result, bail};
 
 use crate::mime;
 use peek_io::InputSource;
-use peek_io::limits::Budget;
 
 // Per-type format enums live in `types/<x>/format.rs`. Re-export them
 // here so consumers keep importing them through `input::detect` — the
@@ -260,19 +259,74 @@ fn detect_with(source: &InputSource, ignore_name: bool) -> Result<Detected> {
             },
         )),
         InputSource::FileRange { name, .. } | InputSource::TempFile { name, .. } => {
-            // Sniff only reads the head, but the whole range/tempfile is
-            // materialized here — a one-pass walk. (Could read a window.)
-            let buf = source.read_bytes(Budget::BulkWalk("detect sniff"))?;
-            Ok(detect_bytes_named(
-                &buf,
-                if ignore_name {
-                    None
-                } else {
-                    Some(name.as_str())
-                },
-            ))
+            let name = if ignore_name {
+                None
+            } else {
+                Some(name.as_str())
+            };
+            detect_stream(source, name)
         }
     }
+}
+
+/// Detect a non-`File` source (`TempFile` / `FileRange`) without
+/// materializing it whole. Mirrors [`detect_file`] over a sequential
+/// stream: read a bounded head, classify by name + magic from it, then
+/// stream the body for the UTF-8 / binary check — never holding more than
+/// the head plus one chunk in RAM. Replaces the old whole-buffer read,
+/// which refused any entry over the 256 MB bulk-walk cap (e.g. descending
+/// into a 289 MB `.deb` inside an ISO).
+fn detect_stream(source: &InputSource, name: Option<&str>) -> Result<Detected> {
+    // Large enough to cover the ISO 9660 PVD at offset 32768 so an
+    // extracted `.img` still upgrades Raw → Iso — `detect_file` re-reads
+    // the path at that offset, but a sequential stream can't seek back.
+    const STREAM_HEAD_BYTES: usize = 64 * 1024;
+
+    let mut stream = source.open_stream()?;
+    let mut head = vec![0u8; STREAM_HEAD_BYTES];
+    let n = read_fill(&mut stream, &mut head)?;
+    head.truncate(n);
+
+    // Name routing first — an extracted entry almost always carries one,
+    // so a `.deb` / `.iso` / `.json` resolves from name + head alone.
+    if let Some(name) = name
+        && let Some(file_type) = classify_by_name(name)
+    {
+        return Ok(Detected::new(
+            upgrade_disk_image_bytes(file_type, &head),
+            head_magic_mime(&head),
+        ));
+    }
+
+    let magic_mime = head_magic_mime(&head);
+    if let Some(ref mime) = magic_mime
+        && let Some(file_type) = file_type_from_magic_mime(mime)
+    {
+        return Ok(Detected::new(file_type, magic_mime));
+    }
+
+    // Content sniff is bounded to the head — unlike the `Memory` path,
+    // which sniffs the whole buffer. Magic and name detection (above)
+    // cover the vast majority; this only matters for a *nameless*,
+    // no-extension source whose type needs a full-document parse (a large
+    // JSON / `.ipynb` whose `serde_json::from_str` validates the whole
+    // string). Such a source lands on plain `SourceCode` rather than its
+    // structured type — deliberate: parsing a multi-GB value would itself
+    // OOM, the structured view caps pretty-print at that size anyway, and
+    // reading the whole stream just to label it would reinstate the read
+    // bomb this function exists to avoid.
+    let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
+    if !is_utf8_streaming(head, &mut stream)? {
+        return Ok(Detected::new(FileType::Binary, magic_mime));
+    }
+    if let Some((file_type, content_mime)) = sniffed {
+        return Ok(Detected::new(
+            file_type,
+            magic_mime.or_else(|| Some(content_mime.to_string())),
+        ));
+    }
+    let syntax = name.and_then(mime::extension_from_name);
+    Ok(Detected::new(FileType::SourceCode { syntax }, magic_mime))
 }
 
 fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
@@ -921,6 +975,28 @@ fn classify_by_name(name: &str) -> Option<FileType> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A spooled archive entry far larger than the 256 MB bulk-walk cap
+    /// must still detect — `detect_stream` reads only the head, so the
+    /// size is irrelevant. (Regression: the old whole-buffer read refused
+    /// a 289 MB `.deb` extracted from an ISO with "over the 256 MB cap".)
+    /// The file is sparse (`set_len`), so this allocates no real disk.
+    #[test]
+    fn large_tempfile_entry_detects_from_head() {
+        use std::io::Write;
+
+        let mut tmp = tempfile::NamedTempFile::new().unwrap();
+        tmp.write_all(AR_MAGIC).unwrap();
+        tmp.as_file().set_len(300 * 1024 * 1024).unwrap();
+        let src = InputSource::temp_file(tmp, "burpsuite_2026.2.3-0kali1_amd64.deb");
+
+        let detected = detect(&src).expect("large tempfile must not blow the read cap");
+        assert!(
+            matches!(detected.file_type, FileType::Archive(ArchiveFormat::Ar)),
+            "expected .deb → ar archive, got {:?}",
+            detected.file_type
+        );
+    }
 
     #[test]
     fn shebang_maps_interpreter_to_syntax() {
