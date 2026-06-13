@@ -6,6 +6,7 @@ use anyhow::{Result, bail};
 
 use crate::mime;
 use peek_io::InputSource;
+use peek_io::limits::WHOLE_DOC_BYTES;
 
 // Per-type format enums live in `types/<x>/format.rs`. Re-export them
 // here so consumers keep importing them through `input::detect` — the
@@ -305,16 +306,17 @@ fn detect_stream(source: &InputSource, name: Option<&str>) -> Result<Detected> {
         return Ok(Detected::new(file_type, magic_mime));
     }
 
-    // Content sniff is bounded to the head — unlike the `Memory` path,
-    // which sniffs the whole buffer. Magic and name detection (above)
-    // cover the vast majority; this only matters for a *nameless*,
-    // no-extension source whose type needs a full-document parse (a large
-    // JSON / `.ipynb` whose `serde_json::from_str` validates the whole
-    // string). Such a source lands on plain `SourceCode` rather than its
-    // structured type — deliberate: parsing a multi-GB value would itself
-    // OOM, the structured view caps pretty-print at that size anyway, and
-    // reading the whole stream just to label it would reinstate the read
-    // bomb this function exists to avoid.
+    // Content sniff is bounded to the head — tighter than the `Memory`
+    // path, which sniffs up to the pretty-print cap (its bytes are already
+    // resident, so a larger slice is free; a stream's are not). Magic and
+    // name detection (above) cover the vast majority; this only matters for
+    // a *nameless*, no-extension source whose type needs a full-document
+    // parse (a large JSON / `.ipynb` whose `serde_json::from_str` validates
+    // the whole string). Such a source lands on plain `SourceCode` rather
+    // than its structured type — deliberate: parsing a multi-GB value would
+    // itself OOM, the structured view caps pretty-print at that size
+    // anyway, and reading the whole stream just to label it would reinstate
+    // the read bomb this function exists to avoid.
     let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
     if !is_utf8_streaming(head, &mut stream)? {
         return Ok(Detected::new(FileType::Binary, magic_mime));
@@ -844,7 +846,9 @@ fn shebang_syntax(text: &str) -> Option<&'static str> {
 
 /// Detect the file type from an in-memory byte buffer (for stdin).
 /// Uses magic bytes for binary formats, then content sniffing for text.
-fn detect_bytes(data: &[u8]) -> Detected {
+/// `name` (when present) only feeds the final syntax hint — name-based
+/// *type* routing is the caller's job ([`detect_bytes_named`]).
+fn detect_bytes(data: &[u8], name: Option<&str>) -> Detected {
     let magic_mime = head_magic_mime(data);
     if let Some(ref mime) = magic_mime
         && let Some(file_type) = file_type_from_magic_mime(mime)
@@ -852,20 +856,39 @@ fn detect_bytes(data: &[u8]) -> Detected {
         return Detected::new(file_type, magic_mime);
     }
 
-    // Non-UTF-8 → binary
+    // Non-UTF-8 → binary. The whole buffer is validated (it's already
+    // resident — no extra read), matching the file path's full-body scan.
     let Ok(text) = std::str::from_utf8(data) else {
         return Detected::new(FileType::Binary, magic_mime);
     };
 
-    if let Some((file_type, content_mime)) = sniff_text_content(text) {
+    // Bound content-sniff to the pretty-print cap rather than the whole
+    // buffer. A multi-GB JSON would otherwise get a full
+    // `serde_json::from_str::<Value>` (a second full-size tree) purely to
+    // label it. `WHOLE_DOC_BYTES` is exactly where the structured viewer
+    // stops pretty-printing, so beyond it the structured label buys
+    // nothing — the source falls to plain `SourceCode`, same as an
+    // over-cap file. Below it the resident slice sniffs for free, so
+    // stdin-piped JSON still routes to the structured view. (The stream
+    // path stays head-bounded: its bytes are *not* resident, so a 32 MB
+    // sniff would reinstate the read bomb this layer avoids.)
+    // Clamp to a char boundary: a multi-byte char straddling the cap
+    // would panic a raw slice.
+    let mut cap = text.len().min(WHOLE_DOC_BYTES as usize);
+    while cap > 0 && !text.is_char_boundary(cap) {
+        cap -= 1;
+    }
+    if let Some((file_type, content_mime)) = sniff_text_content(&text[..cap]) {
         return Detected::new(
             file_type,
             magic_mime.or_else(|| Some(content_mime.to_string())),
         );
     }
 
-    // Plain text — `--language` can still pin a syntax for highlighting.
-    Detected::new(FileType::SourceCode { syntax: None }, magic_mime)
+    // Plain text — fall back to the name's extension for a syntax hint
+    // (matching the file / stream paths), else `--language` can pin one.
+    let syntax = name.and_then(mime::extension_from_name);
+    Detected::new(FileType::SourceCode { syntax }, magic_mime)
 }
 
 /// Detect from a byte buffer with an optional source name. The name is
@@ -886,13 +909,7 @@ fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
             head_magic_mime(data),
         );
     }
-    let mut detected = detect_bytes(data);
-    if let FileType::SourceCode { syntax: None } = &detected.file_type
-        && let Some(ext) = name.and_then(mime::extension_from_name)
-    {
-        detected.file_type = FileType::SourceCode { syntax: Some(ext) };
-    }
-    detected
+    detect_bytes(data, name)
 }
 
 /// Single source of truth for name-based detection. Used by both the
