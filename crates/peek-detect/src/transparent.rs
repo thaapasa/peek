@@ -9,7 +9,7 @@
 //! `detect`.
 
 use peek_io::InputSource;
-use peek_io::compression::{CompressionFormat, decompress_bytes, stripped_name};
+use peek_io::compression::{CompressionFormat, decompress_to_source, stripped_name};
 
 use crate::detect::{DecompressionContext, Detected, FileType, detect as redetect};
 
@@ -17,11 +17,13 @@ use crate::detect::{DecompressionContext, Detected, FileType, detect as redetect
 /// where a fresh `(source, Detected)` pair is about to drive view
 /// composition — `main::run_view`, `ViewerState::push_extracted`, and
 /// the retry path. For a bare single-stream wrapper this swaps both
-/// values for the inner content (in-memory `InputSource` carrying the
-/// decompressed bytes + a fresh `Detected` produced by re-running
-/// magic / name detection on those bytes). The new `Detected` carries
-/// the codec metadata in `decompressed_from` so the info view can
-/// render a Compression row.
+/// values for the inner content (a fresh `InputSource` carrying the
+/// decompressed bytes — in-memory when small, spilled to a tempfile
+/// past [`peek_io::compression::DECOMPRESS_SPOOL_THRESHOLD`] so RAM stays
+/// bounded — plus a fresh `Detected` produced by re-running magic / name
+/// detection on those bytes). The new `Detected` carries the codec
+/// metadata in `decompressed_from` so the info view can render a
+/// Compression row.
 ///
 /// Non-Compressed sources pass through unchanged.
 ///
@@ -36,19 +38,17 @@ pub fn resolve_transparent(source: InputSource, detected: Detected) -> (InputSou
     };
 
     let outer_name = source.name().to_string();
-    let raw = match source.read_bytes() {
-        Ok(buf) => buf,
+    let compressed_size = match source.byte_len() {
+        Ok(n) => n,
         Err(e) => {
             let detected = with_error(detected, fmt, 0, outer_name, format!("read failed: {e:#}"));
             return (source, detected);
         }
     };
-    let compressed_size = raw.len() as u64;
 
-    match decompress_bytes(&raw, fmt) {
-        Ok(decoded) => {
-            let inner_name = stripped_name(&outer_name, fmt);
-            let inner = InputSource::memory(decoded, inner_name);
+    let inner_name = stripped_name(&outer_name, fmt);
+    match decompress_to_source(&source, fmt, inner_name) {
+        Ok(inner) => {
             let mut inner_detected = redetect(&inner)
                 .unwrap_or_else(|_| Detected::new(FileType::Binary, detected.magic_mime.clone()));
             inner_detected.decompressed_from = Some(DecompressionContext {

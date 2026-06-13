@@ -35,8 +35,10 @@ pub const WHOLE_DOC_BYTES: u64 = 32 * 1024 * 1024;
 /// property-list extraction.
 pub const SIDECAR_PARSE_BYTES: u64 = 64 * 1024 * 1024;
 
-/// Single bounded walk over untrusted / unbounded data: transparent
-/// decompression, per-entry archive extraction, the raw-content search
+/// Single bounded walk over untrusted / unbounded data: the batch
+/// decompress helper (`decompress_bytes`; the streaming transparent path
+/// spills to a tempfile and is bounded by its spool threshold instead),
+/// per-entry archive extraction, the raw-content search
 /// scan, the static-library object-member summary (materialized whole,
 /// but held for one pass with no expansion — and real `.a` files run
 /// hundreds of MB, past the sidecar budget).

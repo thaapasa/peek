@@ -590,7 +590,14 @@ shape (per-record caps, pixel ceilings, count caps) stays local to its site.
 |---|---|---|---|
 | `WHOLE_DOC_BYTES` | 32 MB | materialize **and transform** (5–20× expansion, blocks the UI during parse+highlight) | `RENDER_MAX_BYTES` (rendered views + `read_zip_entry` payloads), `PRETTY_MAX_BYTES` (structured pretty-print), the UTF-16 CSV transcode (`csv/parse.rs`) |
 | `SIDECAR_PARSE_BYTES` | 64 MB | whole-text read, small derived output | `SIDECAR_TEXT_LIMIT` (markdown / SQL / CSS info), the UTF-16 text-stats decode (`text/info_gather.rs`), `DMG_PLIST_MAX_BYTES` |
-| `BULK_WALK_BYTES` | 256 MB | one bounded pass over untrusted / unbounded data, nothing proportional retained | `MAX_DECOMPRESS_BYTES` (transparent decompress), `MAX_EXTRACT_BYTES` (per archive entry), `SEARCH_SCAN_MAX_BYTES` (raw-content + table-cell search), `STATIC_LIB_SUMMARY_CAP` (`ar` object-member summary — materialized whole but held for one pass; real `.a` files exceed the sidecar budget) |
+| `BULK_WALK_BYTES` | 256 MB | one bounded pass over untrusted / unbounded data, nothing proportional retained | `MAX_DECOMPRESS_BYTES` (the batch `decompress_bytes` helper), `MAX_EXTRACT_BYTES` (per archive entry), `SEARCH_SCAN_MAX_BYTES` (raw-content + table-cell search), `STATIC_LIB_SUMMARY_CAP` (`ar` object-member summary — materialized whole but held for one pass; real `.a` files exceed the sidecar budget) |
+
+The transparent-decompression path (`resolve_transparent` → `decompress_to_source`) does *not*
+alias a budget class: it streams the compressed input and spills the decompressed output to a
+tempfile past `DECOMPRESS_SPOOL_THRESHOLD` (16 MB), so RAM stays bounded by the spill threshold
+regardless of inner size and an arbitrarily large bare-codec file (`bigdb.sqlite.xz`) opens the
+same way the identical entry inside a `.tar.xz` does. Disk capacity is the limit on the spilled
+path. The 16 MB threshold mirrors the archive-extract spool (`extract.rs::SPOOL_THRESHOLD`).
 
 Gate helpers — call one of these rather than hand-rolling a check:
 
