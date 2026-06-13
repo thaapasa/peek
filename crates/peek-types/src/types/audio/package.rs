@@ -54,6 +54,14 @@ pub struct Probed {
     pub lyrics: Option<String>,
 }
 
+/// Upper bound on a single embedded picture we retain. Legitimate cover
+/// art is at most a few MB; a tag claiming hundreds of MB is malformed
+/// or hostile. Over this we drop the visual rather than copy it into a
+/// `Bytes` buffer and feed it to the image pipeline — `convert_visual`
+/// rejects early so peek's retained footprint stays bounded by the cap,
+/// not by whatever size a crafted `APIC` frame declares.
+const MAX_EMBED_VISUAL_BYTES: usize = 64 * 1024 * 1024;
+
 /// One picture embedded in the container (ID3v2 `APIC`, FLAC PICTURE
 /// block, Vorbis `METADATA_BLOCK_PICTURE`, MP4 `covr` atom, APE binary
 /// tag). `usage_root` is the canonical filename root the listing path
@@ -282,16 +290,24 @@ fn ingest_revision(rev: &MetadataRevision, out: &mut Probed) {
         ingest_tag(tag, out);
     }
     for visual in rev.visuals() {
-        out.visuals.push(convert_visual(visual));
+        if let Some(converted) = convert_visual(visual) {
+            out.visuals.push(converted);
+        }
     }
 }
 
-fn convert_visual(v: &SymVisual) -> EmbedVisual {
-    EmbedVisual {
+/// Convert one symphonia visual, dropping anything over
+/// [`MAX_EMBED_VISUAL_BYTES`] so a malformed / hostile oversized picture
+/// frame never gets copied or rendered.
+fn convert_visual(v: &SymVisual) -> Option<EmbedVisual> {
+    if v.data.len() > MAX_EMBED_VISUAL_BYTES {
+        return None;
+    }
+    Some(EmbedVisual {
         media_type: v.media_type.clone(),
         usage_root: v.usage.map(visual_usage_root).unwrap_or("picture"),
         data: Bytes::copy_from_slice(&v.data),
-    }
+    })
 }
 
 /// Canonical filename root per documented `StandardVisualKey` value.

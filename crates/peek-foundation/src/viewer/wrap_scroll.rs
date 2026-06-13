@@ -29,13 +29,50 @@ use crate::viewer::ui::count_wrap_segments;
 /// code, big enough that panning a wide log line isn't 20 keypresses.
 pub const H_SCROLL_STEP: usize = 8;
 
+/// The pretty-print lines a [`LineView::Pretty`] positions over. Two
+/// shapes, picked by whether the view is syntax-highlighted:
+///
+/// * [`Highlighted`](PrettyLines::Highlighted) — ANSI-styled lines, a
+///   second owned buffer distinct from the raw pretty text (different
+///   bytes, both genuinely needed).
+/// * [`Plain`](PrettyLines::Plain) — borrowed byte spans into the single
+///   parsed document buffer, so the un-highlighted view costs no second
+///   copy of the text.
+pub enum PrettyLines<'a> {
+    Highlighted(&'a [String]),
+    Plain {
+        text: &'a str,
+        spans: &'a [std::ops::Range<usize>],
+    },
+}
+
+impl PrettyLines<'_> {
+    pub fn len(&self) -> usize {
+        match self {
+            PrettyLines::Highlighted(lines) => lines.len(),
+            PrettyLines::Plain { spans, .. } => spans.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub fn get(&self, idx: usize) -> Option<&str> {
+        match self {
+            PrettyLines::Highlighted(lines) => lines.get(idx).map(String::as_str),
+            PrettyLines::Plain { text, spans } => spans.get(idx).map(|s| &text[s.clone()]),
+        }
+    }
+}
+
 /// The logical-line view a [`WrapScroll`] positions over. Two shapes:
 /// the streaming raw `LineSource` or a materialised pretty-print
 /// cache. The geometry only ever needs the total count and a line's
 /// text (to count its wrap segments).
 pub enum LineView<'a> {
     Raw(&'a LineSource),
-    Pretty(&'a [String]),
+    Pretty(PrettyLines<'a>),
 }
 
 impl LineView<'_> {
@@ -53,7 +90,7 @@ impl LineView<'_> {
                 .ok()
                 .and_then(|mut v| v.drain(..).next())
                 .map(Cow::Owned),
-            LineView::Pretty(lines) => lines.get(idx).map(|s| Cow::Borrowed(s.as_str())),
+            LineView::Pretty(lines) => lines.get(idx).map(Cow::Borrowed),
         }
     }
 }
@@ -281,7 +318,7 @@ mod tests {
     fn step_down_walks_segments_then_rolls_to_next_line() {
         // Line 0 is 20 cols wide → 2 segments at usable width 10.
         let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
-        let view = LineView::Pretty(&buf);
+        let view = LineView::Pretty(PrettyLines::Highlighted(&buf));
         let mut w = WrapScroll::new(true);
 
         w.step_down(&view, 10);
@@ -293,7 +330,7 @@ mod tests {
     #[test]
     fn step_up_lands_on_last_segment_of_previous_line() {
         let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
-        let view = LineView::Pretty(&buf);
+        let view = LineView::Pretty(PrettyLines::Highlighted(&buf));
         let mut w = WrapScroll::for_test(true, 1, 0, 0);
 
         w.step_up(&view, 10);
@@ -304,7 +341,7 @@ mod tests {
     #[test]
     fn clamp_pins_overshoot_to_bottom() {
         let buf = lines(&["AAAAAAAAAAAAAAAAAAAA", "BBBB"]);
-        let view = LineView::Pretty(&buf);
+        let view = LineView::Pretty(PrettyLines::Highlighted(&buf));
         // Viewport of 1 visual row: bottom is line 1, segment 0.
         let mut w = WrapScroll::for_test(true, 9, 0, 0);
         w.clamp(&view, 10, 1);

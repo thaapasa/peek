@@ -14,7 +14,7 @@ use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::LineStreamHighlighter;
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
-use crate::viewer::wrap_scroll::{LineView, WrapScroll};
+use crate::viewer::wrap_scroll::{LineView, PrettyLines, WrapScroll};
 
 #[cfg(test)]
 #[path = "content_tests.rs"]
@@ -151,7 +151,11 @@ fn active_view<'a>(rendering: &'a RenderingMode, line_source: &'a LineSource) ->
         RenderingMode::Either {
             showing: Showing::Pretty,
             pretty,
-        } => LineView::Pretty(pretty.rendered_lines().unwrap_or(&[])),
+        } => LineView::Pretty(
+            pretty
+                .rendered_lines()
+                .unwrap_or(PrettyLines::Highlighted(&[])),
+        ),
         _ => LineView::Raw(line_source),
     }
 }

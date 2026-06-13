@@ -26,10 +26,9 @@ mechanical.
   spill ceiling all shipped; memory-tier elevation declined. One optional idea (generalized
   info-default landing) open. See [§ Large File Safeguards](#large-file-safeguards-)
   and the strategy doc [memory-streaming.md](memory-streaming.md).
-- **Promote fuzzing to a CI nightly job** — the property-test floor and manual
-  cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
-  demand warrants. See [§ Detection hardening](#detection-hardening-).
-- **Memory / Streaming audit** caps — see [§ Memory / Streaming](#memory--streaming-).
+- **Memory / Streaming audit** ◐ — the scroll-cache / oversized-embed / pretty double-buffer
+  leaks are capped; only the stdin slurp remains (documented, spill deferred). See
+  [§ Memory / Streaming](#memory--streaming-).
 
 ### 1.0 — 0.4 plus the last user-facing must-have ☐
 
@@ -120,10 +119,6 @@ detection is now a small, reader-free, fuzzable surface. Full rationale + file/l
 references live in that plan's "Follow-up backlog" section; summary, ordered by value
 (milestone tag in brackets):
 
-- ☐ **[0.4] Promote fuzzing to a CI nightly job.** The property-test floor
-  (`tests/fuzz_detect.rs`: never-panic, magic-byte corpus round-trips, two-path parity ≤
-  HEAD_BYTES) and a manual cargo-fuzz target (`fuzz/`, `just fuzz`) ship; only the
-  automated nightly run remains, if demand warrants.
 - ☐ **[1.0] Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG,
   `.csv` holding a zip) routes by name; the only correction (`detect_ignore_name`)
   fires reactively on render failure, so silent mis-routes never self-correct. Prefer
@@ -137,7 +132,7 @@ references live in that plan's "Follow-up backlog" section; summary, ordered by 
 - ☐ **[1.x] Tighten loose heuristics.** YAML `---` prefix over-matches; extension-
   routed binary types and `.br` aren't magic-verified.
 
-### Memory / Streaming ☐
+### Memory / Streaming ◐
 
 North star #2 from CLAUDE.md: *stream, don't load*. Sites where view-mode caches grow
 unboundedly with scroll, or whole-file slurps lack a cap. Audit snapshot (2026-05-17)
@@ -145,12 +140,26 @@ in [archived/memory-audit-2026-05.md](archived/memory-audit-2026-05.md) — file
 in that snapshot have drifted; treat its categorization as the source-of-truth shape,
 the specific file:line citations as starting points to re-find.
 
-| Priority | Site                         | Fix                                                                                                      |
-|----------|------------------------------|----------------------------------------------------------------------------------------------------------|
-| Medium   | EPUB + PDF + CBZ paged cache | LRU cap (last N renders) keyed by viewport.                                                              |
-| Medium   | Audio visuals                | Per-visual byte cap; reject oversized cover art early.                                                   |
-| Low      | Pretty-print double-buffer   | Share raw vec between pretty and highlighter to halve footprint.                                         |
-| Low      | Stdin slurp                  | Document the limit; consider spill-to-tempfile for huge stdin streams (mirror the archive extract path). |
+The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
+
+- ✅ **CBZ decoded-page cache** — was an unbounded `HashMap`; now a small MRU ring
+  (`MAX_CACHED_PAGES`, `cbz/page_renderer.rs`). PDF (single-slot) + EPUB (per-chapter,
+  bounded by doc) were already bounded.
+- ✅ **Audio embedded visuals** — `convert_visual` (`audio/package.rs`) now drops any
+  picture over `MAX_EMBED_VISUAL_BYTES` (64 MiB) before copying / rendering, so a crafted
+  oversized `APIC` frame can't balloon peek's footprint.
+- ✅ **Pretty-print plain view** — the un-highlighted (no-colour) view now borrows line
+  spans into the single parsed buffer (`PrettyLines::Plain`) instead of copying every
+  line. The highlighted view still carries its ANSI buffer, but that's distinct content,
+  not a duplicate of the raw text.
+
+**Open:**
+
+- ◐ **Stdin slurp** — documented (`stdin.rs` module doc) as an inherent unbounded read:
+  a pipe is non-seekable, so the whole stream materialises before viewing. Spill-to-
+  tempfile past a threshold (mirroring the archive-extract / decompress spill paths)
+  stays a future option if huge-stdin pressure ever shows up; for now, route huge inputs
+  through a file path.
 
 ---
 
@@ -212,8 +221,8 @@ the raw zip listing.
 | Format | Extensions | Notes                                              |
 |--------|------------|----------------------------------------------------|
 | OOXML  | `.pptx`    | Zip of `ppt/slides/slideN.xml` — text + media refs |
-| ODF    | `.odp`     | Zip of `content.xml` — OpenDocument presentation    |
-| Legacy | `.ppt`     | OLE/CFB compound binary — see open-ideas backlog    |
+| ODF    | `.odp`     | Zip of `content.xml` — OpenDocument presentation   |
+| Legacy | `.ppt`     | OLE/CFB compound binary — see open-ideas backlog   |
 
 First cut: slide-by-slide text extraction (title + body runs per slide) in a paged
 listing, mirroring the EPUB `n` / `p` chapter flow; embedded images surface in the

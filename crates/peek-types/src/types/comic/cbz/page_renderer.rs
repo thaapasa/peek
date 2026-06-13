@@ -5,10 +5,11 @@
 //! decoded bitmap is cached per page; each render crops only the
 //! viewport's pixel ROI from it (matching the raster-image happy
 //! path), so memory stays bounded by viewport rather than effective
-//! grid at high zoom.
+//! grid at high zoom. The decoded-page cache is a small most-recently-
+//! used ring ([`MAX_CACHED_PAGES`]) so scrolling a long comic doesn't
+//! accumulate every full-resolution page in memory.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -21,16 +22,24 @@ use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placehol
 
 use super::package::{self, Page};
 
+/// How many decoded full-resolution pages to retain. A comic page is the
+/// only thing the cache holds, and the access pattern is sequential with
+/// occasional back-flips, so a handful of MRU slots keeps adjacent
+/// navigation re-decode-free while bounding memory regardless of comic
+/// length. Each slot is one decoded bitmap; pan / zoom on the current
+/// page is always a hit.
+const MAX_CACHED_PAGES: usize = 4;
+
 pub(crate) struct CbzPageRenderer {
     source: InputSource,
     pages: Vec<Page>,
-    /// Native-resolution decoded source bitmaps keyed by page index.
-    /// Populated lazily on first render of each page and held for the
-    /// lifetime of the renderer — re-decoding on every pan / zoom
-    /// would be wasted I/O + Lanczos cost. `Arc<DynamicImage>` keeps
-    /// the cache cheap to clone out for the prep pipeline without a
-    /// pixel copy.
-    decoded: RefCell<HashMap<usize, Arc<DynamicImage>>>,
+    /// Native-resolution decoded source bitmaps, most-recently-used last.
+    /// Populated lazily on first render of each page; re-decoding on
+    /// every pan / zoom would be wasted I/O + Lanczos cost. Capped at
+    /// [`MAX_CACHED_PAGES`] — the least-recently-used page is evicted
+    /// once the ring is full. `Arc<DynamicImage>` keeps the cache cheap
+    /// to clone out for the prep pipeline without a pixel copy.
+    decoded: RefCell<Vec<(usize, Arc<DynamicImage>)>>,
 }
 
 impl CbzPageRenderer {
@@ -38,7 +47,7 @@ impl CbzPageRenderer {
         Self {
             source,
             pages,
-            decoded: RefCell::new(HashMap::new()),
+            decoded: RefCell::new(Vec::new()),
         }
     }
 
@@ -47,15 +56,23 @@ impl CbzPageRenderer {
     /// `Result<Arc<_>>` so the caller can render a placeholder line
     /// on failure without poisoning the cache.
     fn decoded_source(&self, idx: usize) -> Result<Arc<DynamicImage>> {
-        if let Some(img) = self.decoded.borrow().get(&idx) {
-            return Ok(Arc::clone(img));
+        // Hit: promote to most-recently-used and clone out.
+        if let Some(pos) = self.decoded.borrow().iter().position(|(i, _)| *i == idx) {
+            let mut cache = self.decoded.borrow_mut();
+            let entry = cache.remove(pos);
+            let img = Arc::clone(&entry.1);
+            cache.push(entry);
+            return Ok(img);
         }
         let page = &self.pages[idx];
         let mut zip = package::open_zip(&self.source)?;
         let bytes = package::read_page(&mut zip, &page.full_path)?;
-        let img = image::load_from_memory(&bytes)?;
-        let img = Arc::new(img);
-        self.decoded.borrow_mut().insert(idx, Arc::clone(&img));
+        let img = Arc::new(image::load_from_memory(&bytes)?);
+        let mut cache = self.decoded.borrow_mut();
+        if cache.len() >= MAX_CACHED_PAGES {
+            cache.remove(0);
+        }
+        cache.push((idx, Arc::clone(&img)));
         Ok(img)
     }
 }

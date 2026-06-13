@@ -26,7 +26,7 @@ use crate::theme::{PeekTheme, ThemeManager};
 use crate::viewer::LineStreamHighlighter;
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{slice_styled_h, wrap_styled};
-use crate::viewer::wrap_scroll::WrapScroll;
+use crate::viewer::wrap_scroll::{PrettyLines, WrapScroll};
 
 /// Visible columns left for content after the line-number gutter. The
 /// wrap geometry and h-scroll slicing all work in this width. A free
@@ -80,15 +80,15 @@ impl WindowRenderer<'_> {
             if let Some(pv) = self.rendering.active_pretty_mut() {
                 pv.ensure_rendered(ctx.theme_name, ctx.peek_theme.style_mode, syntax)?;
             }
-            let lines: &[String] = self
+            let lines = self
                 .rendering
                 .active_pretty()
-                .and_then(PrettyView::rendered_lines)
-                .unwrap_or(&[]);
-            let total = lines.len();
+                .and_then(PrettyView::rendered_lines);
+            let total = lines.as_ref().map_or(0, PrettyLines::len);
             if total == 0 || rows == 0 {
                 return Ok((Vec::new(), 0, total));
             }
+            let lines = lines.expect("non-zero total implies Some");
             let top_logical = self.wrap.top_logical().min(total - 1);
             let lookahead = if self.wrap.soft_wrap() {
                 rows.saturating_add(8)
@@ -96,7 +96,10 @@ impl WindowRenderer<'_> {
                 rows
             };
             let end = top_logical.saturating_add(lookahead).min(total);
-            return Ok((lines[top_logical..end].to_vec(), top_logical, total));
+            let window: Vec<String> = (top_logical..end)
+                .filter_map(|i| lines.get(i).map(str::to_owned))
+                .collect();
+            return Ok((window, top_logical, total));
         }
 
         let total = self.line_source.total_lines();

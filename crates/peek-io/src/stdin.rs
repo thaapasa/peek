@@ -11,6 +11,15 @@ use crate::InputSource;
 ///
 /// The CLI-level decision of *whether* to read stdin (vs. open a file
 /// path) lives in the binary — this only performs the read + tty handoff.
+///
+/// **Memory note:** this is an unbounded slurp — a pipe is non-seekable,
+/// so the whole stream is materialised before detection/viewing can run.
+/// RAM scales with the piped size. This is the one input path with no
+/// size cap (file sources stream + seek; the spill-to-tempfile paths used
+/// for archive extract / transparent decompress could be mirrored here
+/// past a threshold if huge-stdin pressure ever shows up — see
+/// `docs/planned.md` Memory / Streaming). For now, pipe huge inputs via a
+/// file path instead of stdin.
 pub fn read_stdin() -> Result<InputSource> {
     let mut buf = Vec::new();
     std::io::stdin()

@@ -12,6 +12,7 @@
 //! `ContentMode` keeps the *view state* — whether the user is looking
 //! at pretty vs raw right now — and does the windowing.
 
+use std::ops::Range;
 use std::rc::Rc;
 
 use anyhow::Result;
@@ -20,6 +21,7 @@ use crate::input::InputSource;
 use crate::input::limits::Budget;
 use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::highlight_lines;
+use crate::viewer::wrap_scroll::PrettyLines;
 
 /// Pretty-printing holds the whole document in memory — no streaming
 /// pretty-printer exists. Above this size the branch refuses and the
@@ -48,6 +50,47 @@ pub struct SyntaxRef<'a> {
     pub theme_manager: &'a Rc<ThemeManager>,
 }
 
+/// The rendered-line cache. Highlighting produces ANSI-styled lines (a
+/// second buffer, unavoidably distinct from the raw pretty text); the
+/// un-highlighted view instead keeps byte spans into the single parsed
+/// document, so it costs no second copy of the text.
+enum Rendered {
+    /// `(theme, style, lines)` — keyed so a theme / colour change
+    /// rebuilds. Only the highlighted variant goes stale on theme.
+    Highlighted(PeekThemeName, StyleMode, Vec<String>),
+    /// Line spans into the parsed text (theme-independent).
+    Plain(Vec<Range<usize>>),
+}
+
+/// Byte spans of each logical line in `text`, mirroring `str::lines`
+/// (split on `\n`, drop a trailing `\r`). Spans index into `text`, so no
+/// line content is copied.
+fn line_spans(text: &str) -> Vec<Range<usize>> {
+    let bytes = text.as_bytes();
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        if b == b'\n' {
+            let end = if i > start && bytes[i - 1] == b'\r' {
+                i - 1
+            } else {
+                i
+            };
+            spans.push(start..end);
+            start = i + 1;
+        }
+    }
+    if start < bytes.len() {
+        let end = if bytes[bytes.len() - 1] == b'\r' && bytes.len() - 1 > start {
+            bytes.len() - 1
+        } else {
+            bytes.len()
+        };
+        spans.push(start..end);
+    }
+    spans
+}
+
 /// The lazily-built pretty-print branch. See the module docs.
 pub struct PrettyView {
     /// Whole-document pretty-printer, injected by the caller so this
@@ -65,10 +108,9 @@ pub struct PrettyView {
     starts_default: bool,
     /// `None` until the first parse attempt.
     parsed: Option<Parsed>,
-    /// Rendered lines + the `(theme, colour)` they were produced for.
-    /// Highlighted when a `SyntaxRef` is supplied; a plain split (which
-    /// is theme-independent) otherwise — the key is then inert.
-    rendered: Option<(PeekThemeName, StyleMode, Vec<String>)>,
+    /// Rendered-line cache: highlighted lines (theme-keyed) when a
+    /// `SyntaxRef` is supplied, borrowed plain spans otherwise.
+    rendered: Option<Rendered>,
 }
 
 impl PrettyView {
@@ -175,9 +217,10 @@ impl PrettyView {
     ) -> Result<()> {
         // The plain split is theme-independent — only a highlighted
         // cache goes stale on a theme / colour change.
-        let stale = match &self.rendered {
-            None => true,
-            Some((t, s, _)) => syntax.is_some() && (*t != theme || *s != style),
+        let stale = match (&self.rendered, &syntax) {
+            (Some(Rendered::Plain(_)), None) => false,
+            (Some(Rendered::Highlighted(t, s, _)), Some(_)) => *t != theme || *s != style,
+            _ => true,
         };
         if !stale {
             return Ok(());
@@ -185,18 +228,28 @@ impl PrettyView {
         let text = self
             .text()
             .expect("ensure_rendered called on an unready PrettyView");
-        let lines = match syntax {
-            Some(s) => highlight_lines(text, s.token, s.theme_manager, theme, style)?,
-            None => text.lines().map(String::from).collect(),
-        };
-        self.rendered = Some((theme, style, lines));
+        self.rendered = Some(match syntax {
+            Some(s) => Rendered::Highlighted(
+                theme,
+                style,
+                highlight_lines(text, s.token, s.theme_manager, theme, style)?,
+            ),
+            None => Rendered::Plain(line_spans(text)),
+        });
         Ok(())
     }
 
-    /// The rendered lines, or `None` if [`ensure_rendered`](Self::ensure_rendered)
-    /// hasn't run yet.
-    pub fn rendered_lines(&self) -> Option<&[String]> {
-        self.rendered.as_ref().map(|(_, _, lines)| lines.as_slice())
+    /// The rendered lines as a [`PrettyLines`] borrow, or `None` if
+    /// [`ensure_rendered`](Self::ensure_rendered) hasn't run yet.
+    pub fn rendered_lines(&self) -> Option<PrettyLines<'_>> {
+        match &self.rendered {
+            Some(Rendered::Highlighted(_, _, lines)) => Some(PrettyLines::Highlighted(lines)),
+            Some(Rendered::Plain(spans)) => Some(PrettyLines::Plain {
+                text: self.text()?,
+                spans,
+            }),
+            None => None,
+        }
     }
 
     /// Drop the rendered-line cache (keeps the parse). Called on the
@@ -229,6 +282,32 @@ mod tests {
             "JSON",
             true,
         )
+    }
+
+    #[test]
+    fn line_spans_match_str_lines() {
+        // The plain view borrows these spans instead of copying lines, so
+        // they must split identically to `str::lines` — including CRLF and
+        // trailing-newline edges.
+        for input in [
+            "",
+            "a",
+            "a\n",
+            "a\nb",
+            "a\nb\n",
+            "\n",
+            "a\r\nb",
+            "a\r\nb\r\n",
+            "x\ry",
+            "\r\n",
+        ] {
+            let got: Vec<&str> = line_spans(input)
+                .iter()
+                .map(|s| &input[s.clone()])
+                .collect();
+            let want: Vec<&str> = input.lines().collect();
+            assert_eq!(got, want, "input {input:?}");
+        }
     }
 
     #[test]
