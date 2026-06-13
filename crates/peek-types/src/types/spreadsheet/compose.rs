@@ -57,7 +57,7 @@ pub fn compose(
     // Secondary view: the workbook's raw zip entries. Browse / extract
     // through the standard archive path (extract delegates non-sheet
     // keys to the zip extractor).
-    if let Ok(zip_entries) = archive::reader::list_entries(source, ArchiveFormat::Zip)
+    if let Ok((zip_entries, _)) = archive::reader::list_entries(source, ArchiveFormat::Zip)
         && !zip_entries.is_empty()
     {
         modes.push(Box::new(ListingMode::new(

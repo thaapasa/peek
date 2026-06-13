@@ -27,6 +27,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, anyhow, bail};
 
+use super::CappedList;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
@@ -39,19 +40,20 @@ const S_IFDIR: u32 = 0o040000;
 /// and bogus headers would otherwise allocate gigabytes.
 const MAX_NAMESIZE: usize = 4096;
 
-pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(reader)
 }
 
-pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(flate2::read::GzDecoder::new(reader))
 }
 
-fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
+fn list_from_read<R: Read>(reader: R) -> Result<CappedList> {
     let mut cpio = CpioReader::new(reader);
-    let mut out = Vec::new();
+    let mut out = CappedList::default();
     while let Some(hdr) = cpio.next_header()? {
-        out.push(FlatEntry {
+        // break also stops pulling from the decompressor (finding L14).
+        if !out.push(FlatEntry {
             path: hdr.path,
             size: hdr.size,
             mtime: hdr
@@ -60,7 +62,9 @@ fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
                 .map(EntryMtime::Utc),
             mode: Some(hdr.mode & 0o7777),
             is_dir: hdr.is_dir,
-        });
+        }) {
+            break;
+        }
     }
     Ok(out)
 }

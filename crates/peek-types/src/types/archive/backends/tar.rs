@@ -11,6 +11,7 @@ use std::io::Read;
 use anyhow::{Context, Result};
 use tar::EntryType;
 
+use super::CappedList;
 use crate::input::detect::CompressionFormat;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
@@ -34,37 +35,37 @@ pub(crate) fn decode_compressed(
     })
 }
 
-pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_plain(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(reader)
 }
 
-pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_gz(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Gz)?)
 }
 
-pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_bz2(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Bz2)?)
 }
 
-pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_zst(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Zst)?)
 }
 
-pub(crate) fn list_lz4(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_lz4(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Lz4)?)
 }
 
-pub(crate) fn list_xz(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_xz(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Xz)?)
 }
 
-pub(crate) fn list_br(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list_br(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     list_from_read(decode_compressed(reader, CompressionFormat::Br)?)
 }
 
-fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
+fn list_from_read<R: Read>(reader: R) -> Result<CappedList> {
     let mut archive = tar::Archive::new(reader);
-    let mut out = Vec::new();
+    let mut out = CappedList::default();
     for entry in archive.entries().context("failed to read tar archive")? {
         let entry = entry.context("failed to read tar entry")?;
         let header = entry.header();
@@ -82,13 +83,16 @@ fn list_from_read<R: Read>(reader: R) -> Result<Vec<FlatEntry>> {
             .and_then(time_from_epoch_secs)
             .map(EntryMtime::Utc);
         let mode = header.mode().ok();
-        out.push(FlatEntry {
+        // break also stops pulling from the decompressor (finding L14).
+        if !out.push(FlatEntry {
             path: path_cow,
             size,
             mtime,
             mode,
             is_dir,
-        });
+        }) {
+            break;
+        }
     }
     Ok(out)
 }

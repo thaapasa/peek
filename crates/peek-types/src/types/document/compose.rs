@@ -54,7 +54,7 @@ fn compose_zip(
     }
     let (entries, mut listing_warnings) =
         match archive::reader::list_entries(source, ArchiveFormat::Zip) {
-            Ok(e) => (e, Vec::new()),
+            Ok((e, _)) => (e, Vec::new()),
             Err(e) => (Vec::new(), vec![format!("Failed to list {label}: {e:#}")]),
         };
     warnings.append(&mut listing_warnings);

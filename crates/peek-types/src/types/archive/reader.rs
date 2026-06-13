@@ -15,9 +15,10 @@ use bytes::Bytes;
 use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
+use super::backends::CappedList;
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
-use crate::viewer::listing::{Entry, FlatEntry, from_flat_paths};
+use crate::viewer::listing::{Entry, from_flat_paths};
 use crate::viewer::modes::{RENDER_MAX_BYTES, ensure_under_render_cap};
 
 /// Trait alias for the seekable readers we hand to the zip backend. tar
@@ -173,12 +174,15 @@ impl Seek for RangeReadSeek {
 }
 
 /// Enumerate the archive's table of contents as a built listing tree.
-pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<Vec<Entry>> {
-    let flat = list_flat(source, format)?;
-    Ok(from_flat_paths(flat))
+/// The bool is `true` when the listing hit
+/// [`MAX_ENTRIES`](super::backends::MAX_ENTRIES) and was truncated, so
+/// callers can surface a note rather than under-report silently.
+pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<(Vec<Entry>, bool)> {
+    let capped = list_flat(source, format)?;
+    Ok((from_flat_paths(capped.entries), capped.truncated))
 }
 
-fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<Vec<FlatEntry>> {
+fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<CappedList> {
     use super::backends::{ar, cpio, sevenz, tar, zip};
     let reader = open_seekable(source)?;
     match format {
@@ -252,7 +256,7 @@ mod tests {
     /// include it as `./`). Total uncompressed size is consistent.
     #[test]
     fn list_zip_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.zip"), ArchiveFormat::Zip).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.zip"), ArchiveFormat::Zip).unwrap();
         let stats = Stats::from_root(ArchiveFormat::Zip.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -261,7 +265,7 @@ mod tests {
 
     #[test]
     fn list_tar_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar"), ArchiveFormat::Tar).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.tar"), ArchiveFormat::Tar).unwrap();
         let stats = Stats::from_root(ArchiveFormat::Tar.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -270,7 +274,7 @@ mod tests {
 
     #[test]
     fn list_tar_gz_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.gz"), ArchiveFormat::TarGz).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.tar.gz"), ArchiveFormat::TarGz).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarGz.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -279,7 +283,8 @@ mod tests {
 
     #[test]
     fn list_tar_bz2_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.bz2"), ArchiveFormat::TarBz2).unwrap();
+        let (entries, _) =
+            list_entries(&fixture("archive.tar.bz2"), ArchiveFormat::TarBz2).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarBz2.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -288,7 +293,7 @@ mod tests {
 
     #[test]
     fn list_tar_xz_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.xz"), ArchiveFormat::TarXz).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.tar.xz"), ArchiveFormat::TarXz).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarXz.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -297,7 +302,8 @@ mod tests {
 
     #[test]
     fn list_tar_zst_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.zst"), ArchiveFormat::TarZst).unwrap();
+        let (entries, _) =
+            list_entries(&fixture("archive.tar.zst"), ArchiveFormat::TarZst).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarZst.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -306,7 +312,8 @@ mod tests {
 
     #[test]
     fn list_tar_lz4_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.lz4"), ArchiveFormat::TarLz4).unwrap();
+        let (entries, _) =
+            list_entries(&fixture("archive.tar.lz4"), ArchiveFormat::TarLz4).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarLz4.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -315,7 +322,7 @@ mod tests {
 
     #[test]
     fn list_tar_br_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.tar.br"), ArchiveFormat::TarBr).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.tar.br"), ArchiveFormat::TarBr).unwrap();
         let stats = Stats::from_root(ArchiveFormat::TarBr.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -324,7 +331,7 @@ mod tests {
 
     #[test]
     fn list_cpio_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.cpio"), ArchiveFormat::Cpio).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.cpio"), ArchiveFormat::Cpio).unwrap();
         let stats = Stats::from_root(ArchiveFormat::Cpio.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -333,7 +340,8 @@ mod tests {
 
     #[test]
     fn list_cpio_gz_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.cpio.gz"), ArchiveFormat::CpioGz).unwrap();
+        let (entries, _) =
+            list_entries(&fixture("archive.cpio.gz"), ArchiveFormat::CpioGz).unwrap();
         let stats = Stats::from_root(ArchiveFormat::CpioGz.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -344,7 +352,7 @@ mod tests {
     fn list_ar_finds_deb_members() {
         // hello.deb is a 3-member ar archive: debian-binary,
         // control.tar.gz, data.tar.gz.
-        let entries = list_entries(&fixture("hello.deb"), ArchiveFormat::Ar).unwrap();
+        let (entries, _) = list_entries(&fixture("hello.deb"), ArchiveFormat::Ar).unwrap();
         let stats = Stats::from_root(ArchiveFormat::Ar.label(), &entries);
         assert_eq!(stats.file_count, 3);
         assert_eq!(stats.dir_count, 0);
@@ -356,7 +364,7 @@ mod tests {
 
     #[test]
     fn list_7z_finds_expected_entries() {
-        let entries = list_entries(&fixture("archive.7z"), ArchiveFormat::SevenZ).unwrap();
+        let (entries, _) = list_entries(&fixture("archive.7z"), ArchiveFormat::SevenZ).unwrap();
         let stats = Stats::from_root(ArchiveFormat::SevenZ.label(), &entries);
         assert_eq!(stats.file_count, 14);
         assert_eq!(stats.dir_count, 2);
@@ -370,7 +378,7 @@ mod tests {
     #[test]
     fn empty_tar_lists_as_empty_toc() {
         let src = InputSource::memory(bytes::Bytes::new(), "empty.tar");
-        let entries = list_entries(&src, ArchiveFormat::Tar).unwrap();
+        let (entries, _) = list_entries(&src, ArchiveFormat::Tar).unwrap();
         assert!(entries.is_empty());
     }
 

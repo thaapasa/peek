@@ -30,6 +30,10 @@ pub struct ArchiveStats {
     /// the object-member probe was skipped — the summary may exist but
     /// wasn't read. Surfaced as a note row so the absence isn't silent.
     pub static_lib_skipped: bool,
+    /// True when the TOC hit the entry cap and the counts below cover only
+    /// the first [`MAX_ENTRIES`](super::backends::MAX_ENTRIES) — surfaced as
+    /// a note so the stats don't read as complete.
+    pub truncated: bool,
 }
 
 /// Summary of a static library (`.a` / `.lib`): how many members are
@@ -42,7 +46,7 @@ pub struct StaticLibSummary {
 
 pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
     match list_entries(source, format) {
-        Ok(entries) => {
+        Ok((entries, truncated)) => {
             let stats = Stats::from_root(format.label(), &entries);
             let (static_lib, static_lib_skipped) = static_lib_summary(source, format);
             Box::new(ArchiveStats {
@@ -54,6 +58,7 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
                 error: None,
                 static_lib,
                 static_lib_skipped,
+                truncated,
             })
         }
         Err(e) => Box::new(ArchiveStats {
@@ -65,6 +70,7 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
             error: Some(format!("{e:#}")),
             static_lib: None,
             static_lib_skipped: false,
+            truncated: false,
         }),
     }
 }
@@ -208,6 +214,10 @@ struct ArchiveMain {
     #[info(label = "Static library", skip_if = "Option::is_none")]
     #[serde(rename = "static_lib_skipped", skip_serializing_if = "Option::is_none")]
     static_lib_note: Option<Value>,
+    // Present only when the TOC was capped — the counts above are partial.
+    #[info(label = "Listing", skip_if = "Option::is_none")]
+    #[serde(rename = "entries_truncated", skip_serializing_if = "Option::is_none")]
+    truncated_note: Option<Value>,
 }
 
 impl From<&ArchiveStats> for ArchiveView {
@@ -234,6 +244,16 @@ impl From<&ArchiveStats> for ArchiveView {
                             STATIC_LIB_SUMMARY_CAP / (1024 * 1024)
                         ),
                         Role::Muted,
+                        json!(true),
+                    )
+                }),
+                truncated_note: s.truncated.then(|| {
+                    Value::split(
+                        format!(
+                            "truncated to first {} entries",
+                            thousands_sep(super::backends::MAX_ENTRIES as u64)
+                        ),
+                        Role::Warn,
                         json!(true),
                     )
                 }),
@@ -339,6 +359,7 @@ mod tests {
             error: None,
             static_lib: None,
             static_lib_skipped: true,
+            truncated: false,
         };
         let (_, json) = json_section(&stats);
         assert_eq!(json["static_lib_skipped"], serde_json::json!(true));

@@ -20,7 +20,17 @@ pub fn compose(
     fmt: ArchiveFormat,
 ) -> Result<()> {
     let (entries, warnings) = match archive::reader::list_entries(source, fmt) {
-        Ok(e) => (e, Vec::new()),
+        Ok((e, truncated)) => {
+            let warnings = if truncated {
+                vec![format!(
+                    "Listing truncated to the first {} entries",
+                    super::backends::MAX_ENTRIES
+                )]
+            } else {
+                Vec::new()
+            };
+            (e, warnings)
+        }
         Err(e) => (Vec::new(), vec![format!("Failed to list archive: {e:#}")]),
     };
     modes.push(Box::new(ListingMode::new(

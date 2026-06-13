@@ -3,12 +3,13 @@
 
 use anyhow::{Context, Result};
 
+use super::CappedList;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry};
 
-pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     let mut archive = zip::ZipArchive::new(reader).context("failed to read zip archive")?;
-    let mut out = Vec::with_capacity(archive.len());
+    let mut out = CappedList::with_hint(archive.len());
     for i in 0..archive.len() {
         let file = archive
             .by_index(i)
@@ -24,13 +25,15 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
             hour: dt.hour(),
             minute: dt.minute(),
         });
-        out.push(FlatEntry {
+        if !out.push(FlatEntry {
             path: file.name().to_string(),
             size: file.size(),
             mtime,
             mode: file.unix_mode(),
             is_dir: file.is_dir(),
-        });
+        }) {
+            break;
+        }
     }
     Ok(out)
 }

@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use sevenz_rust2::{ArchiveReader, Password};
 
+use super::CappedList;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry};
 
@@ -11,11 +12,11 @@ use crate::viewer::listing::{EntryMtime, FlatEntry};
 /// 7z native attribute set into a meaningful Unix permission preview.
 const FILE_ATTRIBUTE_READONLY: u32 = 0x0000_0001;
 
-pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     let archive_reader =
         ArchiveReader::new(reader, Password::empty()).context("failed to read 7z archive")?;
     let archive = archive_reader.archive();
-    let mut out = Vec::with_capacity(archive.files.len());
+    let mut out = CappedList::with_hint(archive.files.len());
     for entry in &archive.files {
         let path = normalize(entry.name());
         let is_dir = entry.is_directory();
@@ -35,13 +36,15 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
         } else {
             0o644
         });
-        out.push(FlatEntry {
+        if !out.push(FlatEntry {
             path,
             size: entry.size(),
             mtime,
             mode,
             is_dir,
-        });
+        }) {
+            break;
+        }
     }
     Ok(out)
 }

@@ -31,6 +31,7 @@ use std::io::{self, Read};
 
 use anyhow::{Context, Result, bail};
 
+use super::CappedList;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
 
@@ -159,9 +160,9 @@ impl<R: Read> ArReader<R> {
     }
 }
 
-pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
+pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
     let mut ar = ArReader::new(reader)?;
-    let mut out = Vec::new();
+    let mut out = CappedList::default();
     while let Some(entry) = ar.next_entry()? {
         // Synthetic GNU members (long-name table, symbol index) aren't
         // real files — hide them from the TOC.
@@ -172,7 +173,7 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
         if hidden {
             continue;
         }
-        out.push(FlatEntry {
+        if !out.push(FlatEntry {
             path: entry.name,
             size: entry.size,
             mtime: entry
@@ -181,7 +182,9 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<Vec<FlatEntry>> {
                 .map(EntryMtime::Utc),
             mode: entry.mode.map(|m| m as u32),
             is_dir: false,
-        });
+        }) {
+            break;
+        }
     }
     Ok(out)
 }
@@ -243,7 +246,7 @@ mod tests {
     fn lists_single_entry() {
         let bytes = synth_ar("debian-binary", b"2.0\n");
         let reader: Box<dyn ReadSeek> = Box::new(Cursor::new(bytes));
-        let entries = list(reader).unwrap();
+        let entries = list(reader).unwrap().entries;
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].path, "debian-binary");
         assert_eq!(entries[0].size, 4);
@@ -263,7 +266,7 @@ mod tests {
         let mut bytes = synth_ar("first", b"odd"); // 3 bytes → 1 pad
         bytes.extend_from_slice(&synth_ar_no_magic("second", b"two\n"));
         let reader: Box<dyn ReadSeek> = Box::new(Cursor::new(bytes));
-        let entries = list(reader).unwrap();
+        let entries = list(reader).unwrap().entries;
         let names: Vec<&str> = entries.iter().map(|e| e.path.as_str()).collect();
         assert_eq!(names, vec!["first", "second"]);
         assert_eq!(entries[0].size, 3);

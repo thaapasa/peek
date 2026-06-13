@@ -23,15 +23,9 @@ mechanical.
 
 - **Large File Safeguards** — no size guard exists; opening a multi-GB file tries to
   load it. See [§ Large File Safeguards](#large-file-safeguards-).
-- ◐ **Fuzz the pure detect surface** — the whole point of the `peek-detect` split was a
-  fuzzable, reader-free, hostile-byte surface. Stable property-test floor shipped
-  (`crates/peek-detect/tests/fuzz_detect.rs`: never-panic + two-path parity + magic
-  round-trips, runs in CI); coverage-guided libFuzzer targets wired for manual nightly
-  runs (`fuzz/`, `just fuzz`). Remaining: a CI nightly fuzz job if demand warrants. See
-  [§ Detection hardening](#detection-hardening-).
-- **Stream-leak findings** (live in [checkup-findings.md](checkup-findings.md)):
-  **M17** (search streams whole file per query), **M13** (`gather_capped_text` reads
-  the file twice), **M15** (`InfoMode` re-themes every line per render).
+- **Promote fuzzing to a CI nightly job** — the property-test floor and manual
+  cargo-fuzz targets ship (`just fuzz`); only an automated nightly fuzz run remains, if
+  demand warrants. See [§ Detection hardening](#detection-hardening-).
 - **Memory / Streaming audit** caps — see [§ Memory / Streaming](#memory--streaming-).
 
 ### 1.0 — 0.4 plus the last user-facing must-have ☐
@@ -94,15 +88,10 @@ detection is now a small, reader-free, fuzzable surface. Full rationale + file/l
 references live in that plan's "Follow-up backlog" section; summary, ordered by value
 (milestone tag in brackets):
 
-- ✅ **[0.4] Bound the UTF-8 text/binary scan.** `is_utf8_streaming` capped at
-  `UTF8_SCAN_LIMIT` (8 MiB, local classification-confidence knob — not a peek-io
-  memory class, since the scan holds O(1)); a file whose head is valid UTF-8 classifies
-  as text without reading the rest.
-- ◐ **[0.4] Fuzz / property-test the pure surface** now that no reader crates are in
-  the way. Property-test floor shipped (`tests/fuzz_detect.rs`: never-panic, magic-byte
-  corpus round-trips, two-path parity ≤ HEAD_BYTES) plus a manual cargo-fuzz target
-  (`fuzz/`, `just fuzz`). The security story for hostile bytes — the reason the crate
-  was split out. Remaining: promote to a CI nightly fuzz job if demand warrants.
+- ☐ **[0.4] Promote fuzzing to a CI nightly job.** The property-test floor
+  (`tests/fuzz_detect.rs`: never-panic, magic-byte corpus round-trips, two-path parity ≤
+  HEAD_BYTES) and a manual cargo-fuzz target (`fuzz/`, `just fuzz`) ship; only the
+  automated nightly run remains, if demand warrants.
 - ☐ **[1.0] Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG,
   `.csv` holding a zip) routes by name; the only correction (`detect_ignore_name`)
   fires reactively on render failure, so silent mis-routes never self-correct. Prefer
@@ -144,8 +133,8 @@ the specific file:line citations as starting points to re-find.
 - **Wider reach** — file-info view and the hex dump. Those don't participate yet.
 - **Lazy / bounded scan** — the current scan is one full pass over the active view,
   capped at 100,000 matches; a multi-GB file pays that pass up front. A lazy "search
-  from here" would scale better. (See also finding **M17** — the per-query whole-file
-  walk; the 0.4 byte-cap is the cheap floor, this is the proper fix.)
+  from here" would scale better. (The per-query whole-file walk that was finding M17 has
+  its byte-cap floor; this lazy scan is the proper fix.)
 
 Detection correctness items for the 1.0 bar live under
 [§ Detection hardening](#detection-hardening-) (the `[1.0]`-tagged bullets).
