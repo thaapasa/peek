@@ -17,9 +17,10 @@ lint:
 test:
     cargo test --workspace
 
-# Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md
-fuzz target="detect_bytes" secs="60":
-    cargo +nightly fuzz run {{ target }} --fuzz-dir fuzz -- -max_total_time={{ secs }}
+# Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
+# verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.
+fuzz target="detect_bytes" secs="60" verbosity="0":
+    cargo +nightly fuzz run {{ target }} --fuzz-dir fuzz -- -max_total_time={{ secs }} -verbosity={{ verbosity }} -print_final_stats=1
 
 # Install peek locally (binary + Pdfium dylib if .pdfium/lib/ has one)
 install:
