@@ -88,6 +88,17 @@ Where the target sits in the layering and whether it stays in its lane.
   unrelated helpers into a grab-bag?
 - Does its existence still earn its place — does it reduce surface area /
   ease extension, or is it indirection that only forwards?
+- **Duplication — both directions.** Does the target hand-roll non-trivial
+  logic that a shared helper already provides (base64, the path
+  sanitiser, the char-boundary clamp, SGR handling, budget gates, the
+  InfoView derive, …)? And is logic *in* the target reimplemented in other
+  crates/modules that should collapse to one shared helper? Grep the
+  workspace for the distinctive shape (a constant, a magic byte sequence,
+  a loop idiom) before concluding it's unique. A near-copy that has
+  already drifted (one site fixed a bug the other didn't) is the strongest
+  case for unifying; flag it with both call sites. Don't propose merging
+  superficially-similar code whose two callers will diverge — same-shape
+  ≠ same-concern.
 
 ### 2c. API
 
@@ -170,7 +181,8 @@ never opened it understands it:
   (reaching across a layer the layering bars), whole-file loads on large
   inputs.
 - **Medium** — API footguns, abstractions that no longer earn their
-  place, efficiency waste on warm paths, convention violations.
+  place, efficiency waste on warm paths, convention violations,
+  duplicated/hand-rolled logic that should unify to a shared helper.
 - **Low** — surface that should be `pub(crate)`, minor cleanups, naming.
 
 **Number every finding** with a severity-class ID so it's easy to refer
