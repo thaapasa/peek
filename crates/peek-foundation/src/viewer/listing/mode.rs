@@ -162,8 +162,11 @@ impl ListingMode {
     }
 
     /// Compose one row's bare line (no marker): source-painted columns,
-    /// then the engine-painted name with search + selection overlays. The
-    /// 2-space column gutter matches [`row::compose_row`].
+    /// then the engine-painted name with search + selection overlays. Lays
+    /// out a variable left-column count, so it can't route through
+    /// [`row::compose_row`] (fixed perms/size/mtime/name); the shared
+    /// [`row::ROW_GUTTER`] constant keeps the column gutter width aligned
+    /// with it.
     fn compose_line(&self, idx: usize, ctx: &RenderCtx, selected: bool) -> String {
         let theme = ctx.peek_theme;
         let cells = self.source.row_cells(idx, ctx);
@@ -173,12 +176,12 @@ impl ListingMode {
         let mut line = String::new();
         for (i, cell) in cells.left.iter().enumerate() {
             if i > 0 {
-                line.push_str("  ");
+                line.push_str(row::ROW_GUTTER);
             }
             line.push_str(cell);
         }
         if !cells.left.is_empty() {
-            line.push_str("  ");
+            line.push_str(row::ROW_GUTTER);
         }
         line.push_str(&prefix);
         line.push_str(&name);

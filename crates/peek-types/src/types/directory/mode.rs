@@ -11,8 +11,6 @@
 //! the same `row::` primitives the tree source uses, so the two stay
 //! aligned by construction.
 
-use std::time::SystemTime;
-
 use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, SizeCell};
 use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
@@ -42,7 +40,10 @@ impl DirListSource {
             all.push(parent_link_entry());
         }
         all.extend(entries);
-        let mtime_width = row::mtime_column_width(all.iter().map(|e| format_mtime(e.mtime, false)));
+        let mtime_width = row::mtime_column_width(
+            all.iter()
+                .map(|e| row::format_mtime_systime(e.mtime, false)),
+        );
         Self {
             entries: all,
             mtime_width,
@@ -115,7 +116,7 @@ impl ListSource for DirListSource {
             self.mtime_width,
             ctx.term_cols,
             ctx.peek_theme,
-            || format_mtime(entry.mtime, ctx.render_opts.utc),
+            || row::format_mtime_systime(entry.mtime, ctx.render_opts.utc),
         );
         RowCells {
             prefix: String::new(),
@@ -176,16 +177,6 @@ fn parent_link_entry() -> DirEntry {
         mode: None,
         is_symlink: false,
         stat_error: false,
-    }
-}
-
-fn format_mtime(mtime: Option<SystemTime>, utc: bool) -> String {
-    let Some(t) = mtime else {
-        return "-".to_string();
-    };
-    match t.duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
-        Err(_) => "-".to_string(),
     }
 }
 

@@ -4,6 +4,8 @@
 //! (perms, size, mtime, name), so column widths, palette, and formatters
 //! live here and stay in sync by construction.
 
+use std::time::SystemTime;
+
 use syntect::highlighting::Color;
 
 use crate::info::{format_archive_mtime_zoned, format_size_human, thousands_sep};
@@ -119,6 +121,20 @@ pub fn format_mtime_epoch(secs: u64, utc: bool) -> String {
     format_archive_mtime_zoned(secs, utc)
 }
 
+/// Format an mtime cell from a [`SystemTime`] — "-" when absent or before
+/// the Unix epoch, otherwise the epoch-second form via
+/// [`format_mtime_epoch`]. Shared by the on-disk directory listing and
+/// the tree source's `Utc` arm, whose mtimes both arrive as `SystemTime`.
+pub fn format_mtime_systime(mtime: Option<SystemTime>, utc: bool) -> String {
+    let Some(t) = mtime else {
+        return "-".to_string();
+    };
+    match t.duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(d) => format_mtime_epoch(d.as_secs(), utc),
+        Err(_) => "-".to_string(),
+    }
+}
+
 /// Two-cell caret prefix marking the selected row — paired with a
 /// 2-space gutter on non-selected rows ([`ROW_GUTTER`]) so columns
 /// stay aligned across the viewport.
@@ -136,8 +152,10 @@ pub const ROW_GUTTER: &str = "  ";
 /// `mtime` carries `(left-padded-text, _column_width_hint)`; when
 /// `None`, the mtime column is omitted entirely (narrow terminals).
 ///
-/// The 2-space column gutter is the single source of truth — keeps
-/// ListingMode and DirectoryMode visually aligned by construction.
+/// The gutter constant [`ROW_GUTTER`] is shared with the interactive
+/// `ListingMode::compose_line` path (which lays out a variable column
+/// count and so can't route through this fixed-column helper), keeping
+/// the gutter width aligned across both.
 pub fn compose_row(
     painted_perms: &str,
     painted_size: &str,

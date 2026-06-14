@@ -223,15 +223,11 @@ fn walk(
 }
 
 fn format_mtime(mtime: Option<&EntryMtime>, utc: bool) -> String {
-    use std::time::SystemTime;
     let Some(mtime) = mtime else {
         return "-".to_string();
     };
     match mtime {
-        EntryMtime::Utc(t) => match t.duration_since(SystemTime::UNIX_EPOCH) {
-            Ok(d) => row::format_mtime_epoch(d.as_secs(), utc),
-            Err(_) => "-".to_string(),
-        },
+        EntryMtime::Utc(t) => row::format_mtime_systime(Some(*t), utc),
         EntryMtime::LocalNaive {
             year,
             month,
