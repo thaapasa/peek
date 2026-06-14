@@ -5,8 +5,9 @@
 //! `spreadsheet` type ships Excel; this ships slides. PPTX and ODP parse
 //! into a per-slide [`crate::types::document::ast::Doc`] and reuse the
 //! shared document prose renderer, presented one slide at a time through
-//! [`read_mode::PresentationReadMode`] (mirrors the EPUB `n` / `p`
-//! chapter flow) plus the raw ZIP-entry TOC listing.
+//! the shared [`crate::viewer::paged::PagedTextReadMode`] shell (a
+//! [`read_mode::PresentationReader`] — same shell the EPUB `n` / `p`
+//! chapter flow uses) plus the raw ZIP-entry TOC listing.
 //!
 //! Keynote is the exception. Modern `.key` stores slide text as
 //! undocumented snappy-protobuf (IWA), which there's no usable Rust

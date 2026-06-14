@@ -9,7 +9,7 @@ use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::archive;
 use crate::types::presentation::keynote::preview::PreviewRenderer;
-use crate::types::presentation::read_mode::PresentationReadMode;
+use crate::types::presentation::read_mode::PresentationReader;
 use crate::types::presentation::{self, Deck, PresentationFormat};
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
@@ -54,7 +54,7 @@ fn compose_deck(
     let mut warnings = Vec::new();
     match parsed {
         Ok(deck) if !deck.slides.is_empty() => {
-            modes.push(Box::new(PresentationReadMode::new(deck.slides)))
+            modes.push(Box::new(PresentationReader::into_mode(deck.slides)))
         }
         Ok(_) => warnings.push(format!("{label} has no readable slides")),
         Err(e) => warnings.push(format!("{label} unreadable: {e:#}")),

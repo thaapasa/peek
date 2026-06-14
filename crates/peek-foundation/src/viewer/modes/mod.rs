@@ -53,7 +53,7 @@ pub use rendered_text::{
 /// the generic `TableMode`, and `RowsTableMode`; `Listing` by the single
 /// `ListingMode` engine over any `ListSource` (tree TOC or directory);
 /// `Rendered` by `RenderedTextMode`,
-/// `PagedImageMode`, and `EpubReadMode`. The invariant `compose_modes`
+/// `PagedImageMode`, and `PagedTextReadMode`. The invariant `compose_modes`
 /// upholds is that each file type's stack has at most one mode per id —
 /// nothing else keys on a single concrete impl per variant.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]

@@ -5,7 +5,7 @@ use anyhow::Result;
 use crate::input::InputSource;
 use crate::input::detect::Detected;
 use crate::types::archive;
-use crate::types::ebook::epub::{self, EpubReadMode};
+use crate::types::ebook::epub::{self, EpubReader};
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
@@ -19,7 +19,7 @@ pub fn compose(
 ) -> Result<()> {
     let mut warnings = Vec::new();
     match epub::package::open(source) {
-        Ok(pkg) => modes.push(Box::new(EpubReadMode::new(
+        Ok(pkg) => modes.push(Box::new(EpubReader::into_mode(
             source.clone(),
             image_config(args),
             pkg,

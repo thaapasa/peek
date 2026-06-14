@@ -2,8 +2,10 @@
 //!
 //! Three views compose for an `.epub`:
 //!
-//! - [`read_mode::EpubReadMode`] (default) — one chapter at a time
-//!   rendered via `html2text`, `n` / `N` step through the spine.
+//! - [`read_mode::EpubReader`] (default) — one chapter at a time rendered
+//!   via `html2text`, presented through the shared
+//!   [`crate::viewer::paged::PagedTextReadMode`] shell; `n` / `p` step
+//!   through the spine.
 //! - [`crate::viewer::listing::ListingMode`] — TOC view: the raw ZIP
 //!   container's file tree (reuses the archive listing pipeline).
 //! - [`crate::viewer::modes::InfoMode`] — metadata: title / creator /
@@ -17,4 +19,4 @@ pub mod info_render;
 pub mod package;
 pub mod read_mode;
 
-pub(crate) use read_mode::EpubReadMode;
+pub(crate) use read_mode::EpubReader;

@@ -233,7 +233,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 |-----------------------|------------------------------------------------------------------------------------|-------------------------------|-------------------|
 | `ContentMode`         | text, source, structured, SVG XML                                                  | **yes**                       | **yes**           |
 | `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text / vCard / iCalendar) | no                            | **yes**           |
-| `EpubReadMode`        | EPUB chapter-by-chapter read (cover render + chapter search)                       | no                            | **yes**           |
+| `PagedTextReadMode<R>`| paged-text read views over a `PagedText` reader: presentation slides + EPUB chapters (per-page search; EPUB adds cover render) | no | **yes**           |
 | `ListingMode`         | generic listing engine over a `ListSource`: container TOCs (archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic / sqlite / spreadsheet) + filesystem directory listings | **yes**                       | **yes**           |
 | `HexMode`             | binary; reachable from any view via `x`                                            | **yes** (byte-aligned)        | **yes**           |
 | `ImageRenderMode`     | raster + rasterized SVG                                                            | **yes** (FitWidth/Height pan) | **yes**           |

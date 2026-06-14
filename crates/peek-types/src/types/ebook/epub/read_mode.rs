@@ -1,11 +1,12 @@
-//! EPUB read mode: one chapter at a time.
+//! EPUB read reader: one chapter at a time.
 //!
-//! Renders the spine entry at `current` through the shared HTML
-//! pipeline (`types::html::render`). `n` / `N` step forward / back
-//! through the spine, resetting the scroll offset for the new
-//! chapter. The render cache is keyed by `(chapter, width)` so a
-//! resize re-renders only the visible chapter and a chapter step
-//! reuses prior renders when stepping back.
+//! Supplies per-chapter rendering to the shared
+//! [`PagedTextReadMode`](crate::viewer::paged::PagedTextReadMode) shell —
+//! `n` / `p` stepping, per-chapter search, the render cache, and the
+//! whole `Mode` impl live there. Each chapter renders through the shared
+//! HTML pipeline (`types::html::render`). The cache key is a
+//! [`PageCacheKey`] so a resize or image-config cycle re-renders only the
+//! visible chapter.
 //!
 //! Two image conveniences sit on top of the text path:
 //!
@@ -18,32 +19,23 @@
 //!   ASCII art inline. The TOC view still exposes every container
 //!   entry for general image inspection via recursive peek.
 //!
-//! **Not a `PagedImageMode<EpubChapterRenderer>` despite the surface
-//! similarity to PDF / CBZ.** Chapter search and cover-image rendering
-//! would have to be generalised onto `PagedImageMode<R>` first, but
-//! neither concept belongs in the paged-image trait (PDFs don't search
-//! per page; comics never cover-render text). Prior `/checkup` rounds
-//! decided lifting those two features into a shared shell for one
-//! consumer would cost more than the duplicated step / cache / status
-//! plumbing — and that plumbing already reuses `paged::render_cached`,
-//! `paged::step_paged`, `paged::cycle_image_config`, and
-//! `paged::PageCacheKey`.
+//! These two are why the reader plugs into the *text* shell, not the
+//! paged-*image* `PagedImageMode<R>`: chapter search and cover-image
+//! rendering don't belong on the image trait (PDFs don't search per page;
+//! comics never cover-render text). The image-config cycle keys are wired
+//! through [`PagedText::pre_handle`].
 
 use anyhow::Result;
-use syntect::highlighting::Color;
 
 use crate::input::InputSource;
-use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, StyleMode};
+use crate::theme::StyleMode;
 use crate::types::image::pipeline::ImageConfig;
 use crate::types::image::pipeline::render::{self as image_render, GridWindow, prepare_decoded};
 use crate::viewer::cell_size;
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
+use crate::viewer::modes::{Handled, RenderCtx};
 use crate::viewer::paged::{
-    self, CYCLE_FIT_HELP, CachedRender, PageCacheKey, cycle_image_config, pipe_walk_pages,
-    render_cached, step_paged,
+    self, CYCLE_FIT_HELP, PageCacheKey, PagedText, PagedTextReadMode, cycle_image_config,
 };
-use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 
 use super::package::{self, Chapter, Package};
@@ -74,73 +66,96 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[
 /// source also has an `<img>`, the first image is rendered inline.
 const COVER_LIKE_LINE_THRESHOLD: usize = 3;
 
-pub(crate) struct EpubReadMode {
+pub(crate) struct EpubReader {
     source: InputSource,
     /// Image config snapshot — only the cover-image render path uses
     /// it. `style_mode` is read live from the render context so a `c`
     /// cycle re-renders without going through this struct.
     image_config: ImageConfig,
     chapters: Vec<Chapter>,
-    current: usize,
-    /// Per-chapter rendered cache. Cache key embeds every input that
-    /// can change the rendered output (width, rows, style mode, image
-    /// config), so any of them shifting forces a re-render on next
-    /// access without an explicit invalidation.
-    cache: Vec<Option<CachedRender>>,
     warnings: Vec<String>,
-    /// Active text search over the current chapter's rendered lines.
-    /// Cleared on a chapter step or resize — both change the line set
-    /// the match indices point into.
-    search: Option<SearchState>,
 }
 
-impl EpubReadMode {
-    pub(crate) fn new(source: InputSource, image_config: ImageConfig, package: Package) -> Self {
-        let n = package.chapters.len();
-        let mut cache = Vec::with_capacity(n);
-        cache.resize_with(n, || None);
-        Self {
+impl EpubReader {
+    pub(crate) fn into_mode(
+        source: InputSource,
+        image_config: ImageConfig,
+        package: Package,
+    ) -> PagedTextReadMode<Self> {
+        PagedTextReadMode::new(Self {
             source,
             image_config,
             chapters: package.chapters,
-            current: 0,
-            cache,
             warnings: Vec::new(),
-            search: None,
-        }
-    }
-
-    fn ensure_rendered(
-        &mut self,
-        width: usize,
-        rows: usize,
-        style_mode: StyleMode,
-    ) -> Result<&[String]> {
-        if self.chapters.is_empty() {
-            return Ok(&[]);
-        }
-        let idx = self.current;
-        let key = PageCacheKey::build(&self.image_config, width, rows, style_mode);
-        // Disjoint-borrow split: render closure captures `&self.source`,
-        // `&self.chapters`, `self.image_config` (Copy), and
-        // `&mut self.warnings` while `render_cached` holds
-        // `&mut self.cache`.
-        let source = &self.source;
-        let chapters = &self.chapters;
-        let image_config = self.image_config;
-        let warnings = &mut self.warnings;
-        render_cached(&mut self.cache, idx, key, |k| {
-            render_chapter(source, chapters, image_config, idx, k, warnings)
         })
     }
 }
 
+impl PagedText for EpubReader {
+    type Key = PageCacheKey;
+
+    fn pages_len(&self) -> usize {
+        self.chapters.len()
+    }
+
+    fn page_label(&self) -> &'static str {
+        "ch"
+    }
+
+    fn nav_hint(&self) -> &'static str {
+        "n/p:chapter"
+    }
+
+    fn extra_actions(&self) -> &'static [HelpEntry] {
+        EXTRA_ACTIONS
+    }
+
+    fn cache_key(&self, ctx: &RenderCtx) -> PageCacheKey {
+        PageCacheKey::build(
+            &self.image_config,
+            ctx.term_cols,
+            ctx.term_rows,
+            ctx.peek_theme.style_mode,
+        )
+    }
+
+    fn render_page(&mut self, idx: usize, ctx: &RenderCtx) -> Result<Vec<String>> {
+        // Disjoint field borrows: the render reads `source` / `chapters` /
+        // `image_config` (Copy) and pushes into `warnings`.
+        render_chapter(
+            &self.source,
+            &self.chapters,
+            self.image_config,
+            idx,
+            ctx.term_cols,
+            ctx.term_rows,
+            ctx.peek_theme.style_mode,
+            &mut self.warnings,
+        )
+    }
+
+    fn pre_handle(&mut self, action: Action) -> Option<Handled> {
+        // Image controls — mutate the stored config; the cache-key change
+        // auto-invalidates any cover-rendered chapter on next access.
+        // Text-only chapters are unaffected but still re-render (cheap),
+        // which keeps the implementation uniform.
+        cycle_image_config(action, &mut self.image_config)
+    }
+
+    fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.warnings)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn render_chapter(
     source: &InputSource,
     chapters: &[Chapter],
     image_config: ImageConfig,
     idx: usize,
-    key: &PageCacheKey,
+    width: usize,
+    rows: usize,
+    style_mode: StyleMode,
     warnings: &mut Vec<String>,
 ) -> Result<Vec<String>> {
     let chapter = chapters[idx].clone();
@@ -161,7 +176,7 @@ fn render_chapter(
     let raw_html = std::str::from_utf8(&raw_bytes).unwrap_or("");
     let labeled = label_images(raw_html);
     let text_lines =
-        crate::types::html::render::render(labeled.as_bytes(), key.width.max(20), key.style_mode)?;
+        crate::types::html::render::render(labeled.as_bytes(), width.max(20), style_mode)?;
 
     let non_empty = text_lines.iter().filter(|l| !l.trim().is_empty()).count();
     if non_empty > COVER_LIKE_LINE_THRESHOLD {
@@ -176,160 +191,15 @@ fn render_chapter(
         &mut zip,
         &img_path,
         image_config,
-        key.style_mode,
-        key.width as u32,
-        key.rows,
+        style_mode,
+        width as u32,
+        rows,
     ) {
         Ok(img_lines) => Ok(img_lines),
         Err(e) => {
             warnings.push(format!("chapter {} image {img_path}: {e:#}", idx + 1));
             Ok(text_lines)
         }
-    }
-}
-
-impl Mode for EpubReadMode {
-    fn id(&self) -> ModeId {
-        ModeId::Rendered
-    }
-
-    fn label(&self) -> &str {
-        "Read"
-    }
-
-    fn rerender_on_resize(&self) -> bool {
-        true
-    }
-
-    fn render_window(&mut self, ctx: &RenderCtx, scroll: usize, rows: usize) -> Result<Window> {
-        let lines =
-            self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
-        let total = lines.len();
-        let mut win = slice_window(lines, scroll, rows);
-        search::overlay_window(&mut win, scroll, self.search.as_ref(), ctx.peek_theme);
-        Ok(Window { lines: win, total })
-    }
-
-    fn total_lines(&self) -> Option<usize> {
-        self.cache
-            .get(self.current)
-            .and_then(|c| c.as_ref())
-            .map(|c| c.lines.len())
-    }
-
-    /// Print mode walks every chapter in spine order, separating
-    /// each with a blank line. Honors the cache so chapters already
-    /// rendered (after Tab + scrolling in interactive mode) reuse
-    /// their output. The interactive view stays single-chapter; only
-    /// the pipe path materializes the whole book.
-    fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
-        let total = self.chapters.len();
-        let saved = self.current;
-        let res = pipe_walk_pages(out, total, |i, out| {
-            self.current = i;
-            let lines =
-                self.ensure_rendered(ctx.term_cols, ctx.term_rows, ctx.peek_theme.style_mode)?;
-            for line in lines {
-                out.write_line(line)?;
-            }
-            Ok(())
-        });
-        self.current = saved;
-        res
-    }
-
-    fn extra_actions(&self) -> &'static [HelpEntry] {
-        EXTRA_ACTIONS
-    }
-
-    fn handle(&mut self, action: Action) -> Handled {
-        // Esc clears an active search before falling through to the
-        // global back / quit.
-        if action == Action::Back && self.search.is_some() {
-            self.search = None;
-            return Handled::Yes;
-        }
-        // Image controls — mutate the stored config; cache key change
-        // auto-invalidates any cover-rendered chapter on next access.
-        // Text-only chapters are unaffected but still re-render (cheap),
-        // which keeps the implementation uniform.
-        if let Some(h) = cycle_image_config(action, &mut self.image_config) {
-            return h;
-        }
-        match action {
-            // `n` / `p` step chapters — but while a search is active
-            // they navigate matches instead (Esc clears the search to
-            // get chapter stepping back).
-            Action::Next => {
-                if self.search.is_some() {
-                    step_search(&mut self.search, 1)
-                } else {
-                    step_paged(&mut self.current, self.chapters.len(), 1)
-                }
-            }
-            Action::Prev => {
-                if self.search.is_some() {
-                    step_search(&mut self.search, -1)
-                } else {
-                    step_paged(&mut self.current, self.chapters.len(), -1)
-                }
-            }
-            _ => Handled::No,
-        }
-    }
-
-    fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {
-        if self.chapters.is_empty() {
-            return Vec::new();
-        }
-        let mut segs = vec![(
-            format!("ch {}/{}", self.current + 1, self.chapters.len()),
-            theme.muted,
-        )];
-        if let Some(search) = &self.search {
-            segs.push(search.status_segment(theme));
-        }
-        segs
-    }
-
-    fn status_hints(&self, _has_return_target: bool) -> Vec<&'static str> {
-        if self.chapters.len() <= 1 {
-            return Vec::new();
-        }
-        vec!["n/p:chapter"]
-    }
-
-    fn on_resize(&mut self, _term_cols: usize, _term_rows: usize) {
-        // A width change re-wraps every chapter — match line indices no
-        // longer line up, so drop the search.
-        self.search = None;
-    }
-
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
-        match query {
-            Some(q) if !q.is_empty() => {
-                // Scan the current chapter's rendered lines. The prompt
-                // only opens while viewing, so the cache is populated.
-                let lines = self
-                    .cache
-                    .get(self.current)
-                    .and_then(|c| c.as_ref())
-                    .map(|c| c.lines.as_slice())
-                    .unwrap_or(&[]);
-                let state = SearchState::scan(lines.iter(), q);
-                let first = state.first_line();
-                self.search = Some(state);
-                first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
-            }
-            _ => {
-                self.search = None;
-                SearchTarget::Owned
-            }
-        }
-    }
-
-    fn take_warnings(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.warnings)
     }
 }
 

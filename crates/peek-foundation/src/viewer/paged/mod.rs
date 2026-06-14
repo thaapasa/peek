@@ -14,15 +14,16 @@
 //! source bitmap for CBZ, rasterized effective grid for PDF) and
 //! returns the viewport-sized ASCII for the current zoom/scroll state;
 //! [`PagedImageMode<R>`] handles navigation, zoom, pan, and the `Mode`
-//! impl itself but no longer caches rendered output of its own. EPUB
-//! stays separate by design: chapter search and cover-style inline
-//! image rendering would have to be lifted into [`PagedImageMode<R>`]
-//! as generic concerns first — neither belongs in PDF / CBZ. Prior
-//! `/checkup` rounds decided that's not worth doing for one consumer,
-//! so the EPUB read mode (in `peek-types`) keeps its own `Mode` impl
-//! reusing the navigation / config-cycle building blocks here
-//! ([`render_cached`], [`step_paged`], [`cycle_image_config`],
-//! [`PageCacheKey`]).
+//! impl itself but no longer caches rendered output of its own.
+//!
+//! Paged *text* documents (presentation slides, EPUB chapters) get their
+//! own shared `Mode` impl: [`PagedTextReadMode<R>`] (in [`text_mode`])
+//! over the [`PagedText`] seam. They want per-page search and a text
+//! render cache — concerns that don't belong on the image shell (PDFs
+//! don't search per page; comics never render text) — so the two shells
+//! stay distinct, each over the navigation building blocks here
+//! ([`step_paged`], [`pipe_walk_pages`], and for the image readers
+//! [`render_cached`] / [`cycle_image_config`] / [`PageCacheKey`]).
 
 use anyhow::Result;
 
@@ -36,8 +37,10 @@ use crate::viewer::modes::Handled;
 use crate::viewer::ui::{Action, HelpEntry};
 
 mod mode;
+mod text_mode;
 
 pub use mode::PagedImageMode;
+pub use text_mode::{PagedText, PagedTextReadMode};
 
 /// Inputs that affect a single page's rendered output. Stored
 /// alongside the cached lines so the cache invalidates automatically
