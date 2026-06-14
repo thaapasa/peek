@@ -13,7 +13,7 @@ Overrides:
 
 | Variable            | Effect                                |
 |---------------------|---------------------------------------|
-| `PEEK_VERSION`      | Pin a release tag, e.g. `v0.1.10`     |
+| `PEEK_VERSION`      | Pin a release tag, e.g. `v0.3.2`      |
 | `PEEK_INSTALL_DIR`  | Install to a custom directory         |
 
 `curl` doesn't tag downloads with `com.apple.quarantine`, so macOS runs the binary directly — no

@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
 #
 # Environment variables:
-#   PEEK_VERSION        Install a specific version (e.g. v0.2.0). Defaults to latest.
+#   PEEK_VERSION        Install a specific version (e.g. v0.3.2). Defaults to latest.
 #   PEEK_INSTALL_DIR    Destination directory. Defaults to $HOME/.local/bin.
 
 set -eu

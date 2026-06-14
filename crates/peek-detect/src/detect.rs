@@ -147,7 +147,7 @@ pub enum FileType {
     /// listing-only TOC viewer — no payload decompression.
     Archive(ArchiveFormat),
     /// Bare single-stream compressed file (`.gz` / `.bz2` / `.xz` /
-    /// `.zst` / `.lz4`). Transparently decompressed by `compose_modes`
+    /// `.zst` / `.lz4` / `.br`). Transparently decompressed by `compose_modes`
     /// — the user sees the inner content rendered as its real type,
     /// and the info section surfaces a Compression row.
     Compressed(CompressionFormat),

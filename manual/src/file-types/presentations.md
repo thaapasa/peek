@@ -13,8 +13,8 @@ Cycled with Tab:
   text below it, the same styled prose view documents use.
 - **Files** — the deck's raw internal entries (a `.pptx` / `.odp` is a zip archive), browsable
   and extractable like any archive.
-- **Info** — slide / word / image counts, plus document properties (title, author, dates,
-  creating application) when the file records them.
+- **Info** — slide / word / image counts, plus document properties (title, author, subject,
+  keywords, dates, creating application) when the file records them.
 
 ### Navigating slides
 

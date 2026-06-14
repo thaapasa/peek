@@ -1,33 +1,33 @@
 # CLI options
 
-| Option           | Short | Description                                                   |
-|------------------|-------|---------------------------------------------------------------|
-| `--help`         | `-h`  | Show help (short form; `--help` prints the long form)         |
-| `--version`      | `-V`  | Show version info and exit                                    |
-| `--print`        | `-p`  | Force print mode (direct stdout)                              |
-| `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors   |
-| `--raw`          | `-r`  | Output verbatim source (no pretty-print)                      |
-| `--theme`        | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)  |
-| `--color`        | `-C`  | Output color encoding — see [Color modes](./viewer/colors.md) |
-| `--language`     | `-L`  | Force syntax language                                         |
-| `--width`        | `-w`  | Image rendering width in characters (capped at 2048)          |
-| `--image-mode`   | `-m`  | Image render mode (full / block / geo / ascii / contour)      |
-| `--background`   |       | Image transparency background (auto / black / white / checkerboard) |
-| `--margin`       |       | Image margin in transparent pixels                            |
-| `--cell-aspect`  |       | Override terminal cell aspect ratio (height ÷ width)          |
-| `--edge-density` |       | Tune contour line count (image-mode contour)                  |
-| `--no-svg-anim` |       | Force static render for animated SVG                          |
-| `--info`         | `-i`  | Print file info and exit                                      |
-| `--json`         |       | Emit `--info` as JSON for pipelines (requires `--info`)       |
-| `--list`         | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) |
-| `--utc`          |       | Show timestamps in UTC (default: local + offset)              |
-| `--line-numbers` | `-n`  | Enable line numbers (toggle with `l` in the viewer)           |
-| `--extract`      | `-x`  | Extract a single inner item — see [Extraction](./viewer/extraction.md) |
-| `-o` / `--output`|       | Output path for `--extract` (or `-` for stdout)               |
-| `--extract-size` |       | Output pixel size for animation / SVG frame extract           |
-| `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)  |
-| `--yes`          | `-y`  | Pre-grant slow ops: skip the load prompt for big compressed files |
-| `--update`       |       | Check for newer release and re-run `install.sh`               |
+| Option            | Short | Description                                                                                                                 |
+|-------------------|-------|-----------------------------------------------------------------------------------------------------------------------------|
+| `--help`          | `-h`  | Show help (short form; `--help` prints the long form)                                                                       |
+| `--version`       | `-V`  | Show version info and exit                                                                                                  |
+| `--print`         | `-p`  | Force print mode (direct stdout)                                                                                            |
+| `--plain`         | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                                 |
+| `--raw`           | `-r`  | Output verbatim source (no pretty-print)                                                                                    |
+| `--theme`         | `-t`  | Syntax highlighting theme — see [Themes](./viewer/themes.md)                                                                |
+| `--color`         | `-C`  | Output color encoding (truecolor / 256 / 16 / grayscale / plain; default truecolor) — see [Color modes](./viewer/colors.md) |
+| `--language`      | `-L`  | Force syntax language                                                                                                       |
+| `--width`         | `-w`  | Image rendering width in characters (0 = auto-fit, capped at 2048; default 0)                                               |
+| `--image-mode`    | `-m`  | Image render mode (full / block / geo / ascii / contour; default full)                                                      |
+| `--background`    |       | Image transparency background (auto / black / white / checkerboard, alias checker; default auto)                            |
+| `--margin`        |       | Image margin in transparent pixels (default 0)                                                                              |
+| `--cell-aspect`   |       | Override terminal cell aspect ratio (height ÷ width)                                                                        |
+| `--edge-density`  |       | Tune contour line count (image-mode contour; default 0.1)                                                                   |
+| `--no-svg-anim`   |       | Force static render for animated SVG                                                                                        |
+| `--info`          | `-i`  | Print file info and exit                                                                                                    |
+| `--json`          |       | Emit `--info` as JSON for pipelines (requires `--info`)                                                                     |
+| `--list`          | `-l`  | Print container TOC to stdout (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds)           |
+| `--utc`           |       | Show timestamps in UTC (default: local + offset)                                                                            |
+| `--line-numbers`  | `-n`  | Enable line numbers (toggle with `l` in the viewer)                                                                         |
+| `--extract`       | `-x`  | Extract a single inner item — see [Extraction](./viewer/extraction.md)                                                      |
+| `-o` / `--output` |       | Output path for `--extract` (or `-` for stdout)                                                                             |
+| `--extract-size`  |       | Output pixel size for animation / SVG frame extract                                                                         |
+| `--no-tempfile`   |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                                |
+| `--yes`           | `-y`  | Pre-grant slow ops: skip the load prompt for big compressed files                                                           |
+| `--update`        |       | Check for newer release and re-run `install.sh`                                                                             |
 
 ## Notes
 

@@ -1,6 +1,7 @@
 # Operating modes
 
-peek runs in one of three output modes:
+peek runs in one of four output modes (plus `--extract` / `-x`, which writes a single inner
+item to disk or stdout):
 
 | Mode      | Trigger                          | Behavior                                  |
 |-----------|----------------------------------|-------------------------------------------|
