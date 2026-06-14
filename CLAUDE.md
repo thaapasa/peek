@@ -1,196 +1,137 @@
 # peek
 
-Modern terminal file viewer. Syntax highlighting, structured-data pretty-print, image rendering.
+Modern terminal file viewer. Syntax highlight, structured-data pretty-print, image render.
 
-**Single-file viewer.** One path (or stdin) at time. No batch mode, no file list, no `cat`-style
-concatenation — those belong to other tools.
+**Single-file viewer.** One path (or stdin) at a time. No batch, no file list, no `cat`-style
+concat — those belong to other tools.
 
 ## Build & Run
 
 ```sh
-cargo build --workspace      # debug build (all crates)
-cargo build --release        # release build
-cargo run -- [args]          # run with arguments
-cargo test --workspace       # run ALL tests — bare `cargo test` runs only the bin's
-cargo clippy --workspace     # lint ALL crates — bare `cargo clippy` skips the member crates
+cargo build --workspace      # debug, all crates
+cargo build --release        # release
+cargo run -- [args]
+cargo test --workspace       # ALL tests — bare `cargo test` runs only the bin's
+cargo clippy --workspace     # ALL crates — bare skips member crates
 ```
 
-**Always pass `--workspace`** for test / clippy. The reader/viewer/parser layers are member
-crates (`peek-foundation`, `peek-types`, …); without `--workspace` cargo touches only the root
-`peek` bin, silently skipping the ~670 library-crate tests.
+**Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and
+skips library-crates.
 
-No external runtime deps. Image rendering built in. PDF support use Pdfium — ships beside binary in
-release tarball, loaded dynamically at startup. Ghostscript available if found on path,
+No external runtime deps. Image render built in. PDF via Pdfium (ships beside binary, loaded
+dynamically at startup). Ghostscript used if on path.
 
 ## Architecture map
 
-Top-level only. The tree below is the file map. Per-file detail (what a module does and *why*)
-lives in each file's `//!` module doc-comment — read the file's header when unsure where logic
-lives or how a piece works. No separate map doc to keep in sync.
+Top-level only. Per-file detail (what + *why*) lives in each file's `//!` header — read it when
+unsure where logic lives. No separate map doc.
 
-Cargo workspace, five library crates under the thin `peek` binary. The layering is
-Cargo-enforced: detection and the parser layer are barred from naming the binary's session layer
-(the compose / gather / extract dispatch hubs + the interactive event loop), so a bug parsing
-hostile bytes can't reach process / terminal control.
+Cargo workspace: 5 library crates under thin `peek` bin. **Layering Cargo-enforced**: detect +
+parser layer barred from naming the bin's session layer (compose/gather/extract dispatch hubs +
+event loop), so a bug parsing hostile bytes can't reach process/terminal control.
 
 ```
 crates/
-  peek-io/             — input foundation: InputSource (File / Memory / FileRange / TempFile) +
-                         ByteSource + LineSource (streaming, anchor-indexed) + ByteStream; the
-                         bare single-stream codecs (gz/bz2/xz/zst/lz4/br) + CompressionFormat;
-                         stdin read + /dev/tty reopen; limits (the memory-budget classes every
-                         size gate aliases). Depends on nothing in-tree.
-  peek-detect/         — file-type detection: FileType + every per-type format enum +
-                         magic-byte / extension / content-sniff classification (detect/) + mime
-                         (RFC 6838) + transparent decompress-then-redetect (resolve_transparent).
-                         types/<type>.rs = one module per file type (format enum + pure sniff
-                         helpers). Depends on peek-io only — NOT the readers.
-  peek-theme/          — theming leaf: PeekTheme semantic roles + paint helpers; PeekThemeName +
-                         embedded .tmTheme data (themes/); StyleMode + SGR encoders/tokenizer +
-                         ActiveStyle; ThemeManager. Depends on nothing in-tree (parallel to
-                         peek-io). Named directly as `peek_theme` everywhere.
-  peek-foundation/     — reader/viewer toolkit + info base. Sits above theme/io/detect, below
-                         peek-types; barred from the bin. Names the lower crates directly
-                         (`peek_io` / `peek_detect` / `peek_theme`) — no in-crate re-export façade.
-                         lib.rs keeps one `pub use peek_theme as theme` solely so the
-                         `#[derive(InfoView)]` expansion's `::peek_foundation::theme::PeekTheme`
-                         path resolves; not for hand-written use. A `testing` feature exposes a few
-                         test helpers to the other crates' test builds (off in release).
-    viewer/            — Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes
-                         (content / pretty_view / gutter / hex / info / about / rendered_text<R>);
-                         listing/ (generic listing engine: ListingMode navigates +
-                         paints the selectable name column over a ListSource that owns
-                         rows/columns/extract-key — TreeListSource for container TOCs,
-                         the directory listing for on-disk browse);
-                         table/ (TableMode + RowsTableMode via RowSource);
-                         ui/ primitives (Action keys / ScreenBuffer / Prompt / styled = the
-                         SGR-aware string family / status line / term = alt-screen + size);
-                         image_render vocab (ImageConfig / ImageMode / zoom / scroll /
-                         ZoomPanState); paged (PagedImageMode<R> + PageRenderer); search
-                         primitives; wrap_scroll; cell_size; highlight; logo_anim (animated
-                         About logo: sliding gradient + outline flash). NB: compose_modes /
-                         ViewerState / the event loop are NOT here — they're the bin's session layer.
-    info/              — FileInfo + InfoExtras trait (render_section + json_section) + Extras
-                         (Box<dyn InfoExtras>); render/ (dynamic trait dispatch, themed sections) +
-                         json (typed --info --json encoder) + time fmt; section (the info model:
-                         InfoNode tree [Row | Line | Block] + InfoView trait + render_info walker +
-                         InfoValue per-field paint + Value [Size/Count/Timestamp/Text/Split/…] +
-                         Role + Muted/Accent/Warn value types + MaybeZero); rows (InfoRow runtime
-                         model — optional print-label + optional json-key + Value cell; push_rows /
-                         rows_to_json). Three section-build modes: **derive** (regular —
-                         `#[derive(Serialize, InfoView)]`, one struct → both outputs; `Value::split`
-                         for a print≠json leaf), **InfoRow** (irregular row-shaped — enum-variant
-                         dispatch / one print row → several json keys; cert, font), **bespoke**
-                         (hand InfoView + Serialize). A display Block ≡ a JSON sub-object.
-                         (gather hub → bin.)
-    output/print       — PrintOutput (write-once stdout for --print / pipes / --info) + the
-                         theme-gradient logo painter (shared with the bin's help screen).
-    extract            — extract vocabulary: Extracted / ExtractOptions / ExtractError + the path
-                         sanitiser / forward-slash-key helpers. (The dispatch hub → bin.)
-    base64, xml        — shared standard-alphabet base64 + XML attribute-unescape helpers.
-    derive/            — `peek-foundation-derive`: proc-macro sub-crate (own Cargo manifest,
-                         workspace member) for `#[derive(InfoView)]`. Walks a serde view struct's
-                         fields into an InfoNode tree: `#[info(label)]` → Row, `#[info(nest)]` →
-                         splice a sub-view (titled → Block, untitled → inline), `#[info(skip)]` →
-                         JSON-only. Title via `#[info(title)]` / `#[info(title_from = "method")]`
-                         / none (container). Skips mirror serde's `skip_serializing_if` (+ print-
-                         only `skip_if_zero` / `skip_if` / `no_skip`). Generated paths resolve only
-                         through `::peek_foundation`. syn/quote, build-time only. Re-exported as
-                         `info::InfoView`.
-  peek-types/          — per-file-type readers, one module per type (reader + info + view-mode;
-                         the format enum + sniff helpers live in peek-detect, re-exported at each
-                         module root). Depends on foundation/detect/io/theme — Cargo bars it from
-                         naming the bin's session layer. Names the leaf crates directly
-                         (`peek_io` / `peek_detect` / `peek_theme`); the foundation toolkit is
-                         re-exported as `crate::{base64, extract, info, output, viewer, xml}`.
-                         lib.rs is that re-export + `pub mod types`. Owns the parser dependency set
-                         (object, cafebabe,
-                         rusqlite, pdfium, calamine, symphonia, ttf-parser, fontdue, mail-parser,
-                         x509-parser, …). Types:
-                         binary, text, markdown, notebook (ipynb), sql, sqlite (read-only via
-                         bundled rusqlite), css, structured (JSON/YAML/TOML/XML), csv,
-                         spreadsheet (xlsx/xlsm/ods),
-                         presentation (pptx/pptm/ppsx/odp slide text + Keynote preview),
-                         image (+ ASCII pipeline + SVG anim), html,
-                         email (eml/mbox), ebook (epub), document (docx/odt/rtf), pdf, eps (eps/ps),
-                         comic (cbz), svg, audio, archive (zip/tar/7z/cpio/ar), directory,
-                         disk_image (iso/dmg), objfile, classfile, cert (PEM X.509 / CSR / CRL /
-                         keys / SSH pubkey), font (TTF/OTF/TTC — fontdue-rasterised specimen),
-                         vobject (vcf/ics — vCard / iCalendar),
-                         ds_store (Apple .DS_Store — Bud1 Buddy-allocator records table)
-  peek-theme/themes/   — Embedded .tmTheme files (idea-dark default + idea-light / solarized-light
-                         / github-light + vscode variants + originals: graveyard / candy-floss /
-                         victorian)
-src/                   — the bin: the thin session layer (CLI + the three dispatch hubs + the
-                         interactive event loop). Names member crates directly — `peek_io`,
-                         `peek_detect`, `peek_theme`, `peek_foundation::{viewer,info,extract,…}`,
-                         `peek_types::types`; no re-export shims.
-  main.rs              — CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe)
-  cli.rs               — Args (clap derive) + `compose_opts()` projection (keeps clap out of the readers)
-  update.rs            — `--update` flow: GitHub Releases check + pipe install.sh into sh
-  input.rs             — CLI-level stdin/source dispatch (build_source, needs Args). The input
-                         foundation itself is peek-io / peek-detect, named directly.
-  output.rs            — CLI help + version screens (PrintOutput / logo come from peek-foundation)
-  compose.rs           — Registry + the FileType→types::<x>::compose dispatch hub (holds ComposeOpts)
-  gather/              — the FileType→types::<x> info-gather dispatch hub
-  extract/             — the FileType→types::<x> extract dispatch hub + write (Extracted → disk/stdout)
-  viewer_session/      — ViewerState (one type, split by concern: state.rs = struct + key
-                         dispatch + apply + mode switching; frame.rs = SessionFrame + the
-                         recursive-peek stack / descend / extract; prompt.rs = modal-prompt slot;
-                         render.rs = view cache + failure recovery + scroll math + draw) + the
-                         interactive event loop
-docs/                  — Builder / agent reference (architecture.md = design + index)
-fuzz/                  — cargo-fuzz crate (workspace-excluded, nightly): coverage-guided detect
-                         targets. `just fuzz`. Stable property-test floor is in
-                         peek-detect/tests/fuzz_detect.rs; see fuzz/README.md
-manual/                — User-facing manual (mdbook). `mdbook serve manual` to browse
-.github/workflows/     — ci.yml (build + test on push/PR) + release.yml (5-target build matrix) +
-                         manual.yml (mdbook → Pages)
-install.sh             — POSIX installer for curl | sh on macOS/Linux
+  peek-io/          input foundation. InputSource (File/Memory/FileRange/TempFile) + ByteSource +
+                    LineSource (streaming, anchor-indexed) + ByteStream; single-stream codecs
+                    (gz/bz2/xz/zst/lz4/br); stdin + /dev/tty reopen; limits (memory budget
+                    classes). Depends on nothing in-tree.
+  peek-detect/      file-type detection. FileType + per-type format enums + magic/extension/
+                    content-sniff (detect/) + mime + transparent decompress-redetect. One
+                    types/<type>.rs per type. Depends on peek-io only — NOT readers.
+  peek-theme/       theming leaf. PeekTheme roles + paint; PeekThemeName + embedded .tmTheme
+                    (themes/); StyleMode + SGR encode/tokenize + ActiveStyle; ThemeManager.
+                    Depends on nothing in-tree. Named `peek_theme` everywhere.
+  peek-foundation/  reader/viewer toolkit + info base. Above theme/io/detect, below peek-types;
+                    barred from bin. Names lower crates directly. One `pub use peek_theme as theme`
+                    only so `#[derive(InfoView)]` paths resolve. `testing` feature exposes test
+                    helpers (off in release).
+    viewer/         Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes (content/
+                    pretty_view/gutter/hex/info/about/rendered_text<R>); listing/ (ListingMode over
+                    ListSource — TreeListSource for TOCs, directory listing); table/ (TableMode +
+                    RowsTableMode via RowSource); ui/ (Action/ScreenBuffer/Prompt/styled/status/
+                    term); image_render (ImageConfig/ImageMode/zoom/scroll/ZoomPanState); paged
+                    (PagedImageMode<R>); search; wrap_scroll; cell_size; highlight; logo_anim.
+                    NB: compose_modes/ViewerState/event loop are NOT here — bin's session layer.
+    info/           FileInfo + InfoExtras trait + Extras; render/ (trait dispatch, themed) + json
+                    (--info --json) + time fmt; section (InfoNode tree [Row|Line|Block] + InfoView
+                    + render_info + Value [Size/Count/Timestamp/Text/Split/…] + Role); rows (InfoRow
+                    runtime model). 3 build modes: **derive** (`#[derive(Serialize,InfoView)]`, one
+                    struct → both outputs), **InfoRow** (irregular row-shaped: cert, font),
+                    **bespoke** (hand InfoView + Serialize). Display Block ≡ JSON sub-object.
+    output/print    PrintOutput (write-once stdout for --print/pipes/--info) + logo painter.
+    extract         Extracted / ExtractOptions / ExtractError + path sanitiser + key helpers.
+    base64, xml     shared base64 + XML attr-unescape.
+    derive/         `peek-foundation-derive` proc-macro for `#[derive(InfoView)]`. Walks view
+                    struct → InfoNode tree: `#[info(label)]`→Row, `#[info(nest)]`→sub-view,
+                    `#[info(skip)]`→JSON-only; title via `#[info(title|title_from)]`. Skips mirror
+                    serde. Paths resolve only via `::peek_foundation`. Build-time only.
+  peek-types/       per-file-type readers, one module per type (reader + info + view-mode; format
+                    enum + sniff live in peek-detect, re-exported). Depends on foundation/detect/
+                    io/theme — barred from bin. Foundation re-exported as crate::{base64,extract,
+                    info,output,viewer,xml}. Owns parser deps (object, cafebabe, rusqlite, pdfium,
+                    calamine, symphonia, ttf-parser, fontdue, mail-parser, x509-parser, …).
+                    Types: binary, text, markdown, notebook, sql, sqlite, css, structured (JSON/
+                    YAML/TOML/XML), csv, spreadsheet, presentation, image, html, email, ebook,
+                    document, pdf, eps, comic, svg, audio, archive, directory, disk_image, objfile,
+                    classfile, cert, font, vobject, ds_store.
+  peek-theme/themes/  embedded .tmTheme (idea-dark default + light/solarized/github + vscode +
+                    graveyard/candy-floss/victorian).
+src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop). Names member
+                    crates directly.
+  main.rs           CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe).
+  cli.rs            Args (clap) + compose_opts() projection (keeps clap out of readers).
+  update.rs         --update: GitHub Releases check + pipe install.sh into sh.
+  input.rs          CLI stdin/source dispatch (build_source).
+  output.rs         CLI help + version screens.
+  compose.rs        Registry + FileType→types::<x>::compose hub (holds ComposeOpts).
+  gather/           FileType→types::<x> info-gather hub.
+  extract/          FileType→types::<x> extract hub + write (Extracted → disk/stdout).
+  viewer_session/   ViewerState (state.rs = struct + key dispatch + mode switch; frame.rs =
+                    SessionFrame + recursive-peek stack/descend/extract; prompt.rs = modal prompt;
+                    render.rs = view cache + recovery + scroll + draw) + event loop.
+docs/               builder/agent reference (architecture.md = design + index).
+fuzz/               cargo-fuzz crate (excluded, nightly). `just fuzz`. Stable floor in
+                    peek-detect/tests/fuzz_detect.rs.
+manual/             user manual (mdbook). `mdbook serve manual`.
+.github/workflows/  ci.yml + release.yml (5-target matrix) + manual.yml.
+install.sh          POSIX installer for curl | sh.
 ```
 
 ## Workflow
 
-- **Don't commit unless asked.** User decides what and when.
-- **Commit subject style: sentence case, plain prose.** No Conventional Commits prefixes
-  (`feat:` / `fix:` / `docs:` …). Write `Derive binary + directory info sections`, not
-  `feat: derive binary + directory info sections`. Read by intent; capitalise first word.
-- **Don't push, open PRs, or trigger GitHub Actions on own initiative.** Local commits only. User
-  pushes / opens PRs / merges themselves so they can amend locally first. Open PR only when user
-  explicitly asks.
-- **Run `cargo fmt` after editing Rust code** so formatting drift no pile up across unrelated files.
-  Cheap; keeps diffs focused on real changes.
-- **Keep checkup-finding IDs (H4, M2, L1, …) out of commit subjects.** Findings doc temporary — once
-  item ships and entry deleted, ID stops resolving and subject becomes dangling reference. Body may
-  mention ID when commit itself touches findings doc (so diff explains ID's last appearance), but
-  subject reads by intent, not by tracker ID.
+- **Don't commit unless asked.** User decides what + when.
+- **Commit subject: sentence case, plain prose.** No Conventional Commits prefix. Write
+  `Derive binary + directory info sections`, not `feat: …`. Capitalise first word.
+- **Don't push, open PRs, or trigger CI on own initiative.** Local commits only. User pushes/opens/
+  merges so they can amend first. Open PR only on explicit ask.
+- **Run `cargo fmt` after editing Rust.** Keeps diffs focused.
+- **Keep checkup-finding IDs (H4, M2, …) out of commit subjects.** Findings doc temporary — ID
+  dangles once entry deleted. Body may cite ID when commit touches findings doc; subject reads by
+  intent.
 
 ## Collaboration
 
 Three north stars:
 
-1. **Clean, robust, maintainable architecture.** New abstractions earn place by reducing total
-   surface area or making extension easier. Modules have narrow responsibilities. `main.rs` stays
-   short — file-type-specific logic lives in `compose_modes` and the modes themselves.
-2. **Stream, don't load.** Multi-GB files first-class. Prefer `InputSource::open_byte_source()` (
-   random access) or chunked iteration over `read_bytes()` / `read_text()` (whole-file). Whole-file
-   reads only when feature truly needs it (full-file pretty-print of structured data, image
-   decode) — never as casual default.
-3. **Keep cognitive load low.** What matters: what next reader must hold in head. Abstractions can
-   cut that load (named trait → stop thinking about mechanism) or add to it (chasing four files for
-   one operation). Inlining cuts both ways. Type count, line count, call-site count aren't the
-   test — what reader must track is.
+1. **Clean, robust, maintainable architecture.** New abstractions earn place by cutting surface
+   area or easing extension. Narrow responsibilities. `main.rs` stays short — file-type logic
+   lives in `compose_modes` + the modes.
+2. **Stream, don't load.** Multi-GB files first-class. Prefer `open_byte_source()` (random access)
+   or chunked iteration over whole-file `read_bytes()`/`read_text()`. Whole-file only when feature
+   needs it (pretty-print structured data, image decode) — never casual default.
+3. **Keep cognitive load low.** What matters: what next reader holds in head. Abstractions cut load
+   (named trait) or add it (chasing 4 files). Type/line/call-site count aren't the test — reader's
+   tracking burden is.
 
 Be critical collaborator. Push back when change would:
 
-- **Damage architecture quality** — leak abstractions, blur boundaries, conflate orthogonal
-  concerns (mixing print-mode + interactive paths), or re-introduce `match file_type` chain that
-  `compose_modes` meant to eliminate.
-- **Add cognitive load without payoff** — deep branching, scattered state synced by hand, mechanism
-  leaking through call sites, indirection that no earn the click-through, hypothetical-future
-  abstractions whose concept not real yet.
-- **Hurt performance** — redundant re-renders, hot-path allocations, full-file reads where streaming
-  or seeking would do, eager work that should be lazy.
+- **Damage architecture** — leak abstractions, blur boundaries, conflate concerns (print +
+  interactive), or re-introduce a `match file_type` chain `compose_modes` killed.
+- **Add cognitive load without payoff** — deep branching, hand-synced scattered state, mechanism
+  leaking through call sites, indirection not earning the click, hypothetical-future abstractions.
+- **Hurt performance** — redundant re-renders, hot-path allocs, full-file reads where stream/seek
+  would do, eager work that should be lazy.
 
 Surface trade-off concretely; propose alternative.
 
@@ -200,36 +141,31 @@ Surface trade-off concretely; propose alternative.
 
 ## Documentation
 
-Keep in sync with code changes:
+Keep in sync with code:
 
-- **README.md** — project overview, feature summary, usage examples
-- **manual/src/** — user-facing manual (mdbook). Update relevant chapter when user-visible feature
-  changes
-- **docs/architecture.md** — design, data flow, key abstractions, how to extend
-- **docs/memory-streaming.md** — the size/streaming guard strategy: threat model, budget classes,
-  stream/cap/spill mechanisms, and the decision rule every whole-file read must follow
-- **CLAUDE.md file map + module `//!` doc-comments** — the per-file breakdown. When you add / move /
-  remove a file, update the tree above and the moved file's `//!` header; there is no separate map doc
-- **docs/features.md** — currently shipped features (✅ + ◐). Engineering-detail superset of manual;
-  manual stays concise
-- **docs/planned.md** — planned features and open ideas (☐ + ❓)
-- **docs/conventions.md** — coding conventions
-- **docs/release.md** — release pipeline and recovery
-- **CLAUDE.md** — top-level architecture overview (update when top-level structure changes)
+- **README.md** — overview, features, usage.
+- **manual/src/** — user manual (mdbook). Update chapter on user-visible change.
+- **docs/architecture.md** — design, data flow, abstractions, how to extend.
+- **docs/memory-streaming.md** — size/streaming guard: threat model, budget classes, mechanisms,
+  the rule every whole-file read follows.
+- **CLAUDE.md file map + `//!` headers** — per-file breakdown. Add/move/remove a file → update
+  tree + the file's `//!` header.
+- **docs/features.md** — shipped features (✅ ◐). Superset of manual.
+- **docs/planned.md** — planned + ideas (☐ ❓).
+- **docs/conventions.md** — coding conventions.
+- **docs/release.md** — release pipeline + recovery.
+- **CLAUDE.md** — top-level architecture (update on structure change).
 
 ### Docs hygiene
 
-- `docs/` holds **live reference only** — features, planned, conventions, architecture, in-progress
-  plans. Anything here must reflect current code.
-- **Plans are temporary.** When plan done:
-    - If lasting historical value (design rationale, why-we-rejected, postmortem), move to
-      `docs/archived/`. Add status blockquote right under title:
-      `> **Status: Completed YYYY-MM-DD.** Archived for reference.` Title stays same. Linked
-      references in other docs must point at archived path. No entry in CLAUDE.md's file map —
-      archived files are graveyard, not part of the live map.
-    - Otherwise, delete it.
-    - Either way, must not stay in `docs/` root as "landed" plan.
-- **Active instructions belong in own doc** (or as section of existing general doc like
-  `architecture.md` / `conventions.md`), never inside plan file. Example: "adding new file type"
-  checklist lives in `architecture.md`, not buried in refactor plan future readers won't know to
-  open.
+- `docs/` is **live reference only** — must reflect current code.
+- **Plans temporary.** When done: lasting value (rationale, why-rejected, postmortem) → move to
+  `docs/archived/` with `> **Status: Completed YYYY-MM-DD.** Archived for reference.` under title;
+  fix links; no file-map entry. Else delete. Never leave a landed plan in `docs/` root.
+- **Active instructions belong in their own doc** (or a section of architecture.md/conventions.md),
+  never inside a plan file. E.g. "adding new file type" checklist lives in architecture.md.
+- **Flag contradictions, don't resolve them silently.** When normal work has you reading these
+  docs / CLAUDE.md / module headers and two instructions conflict, stop and notify the user — name
+  both sources. Don't pick one, don't ignore it. User decides the fix.
+- **Keep docs + comments terse.** Lead with the beef, cut boilerplate; tighten verbosity in any
+  doc / `//!` header / comment you touch. Full rule: conventions.md → "Writing".
