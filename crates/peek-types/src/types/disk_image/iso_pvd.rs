@@ -114,7 +114,7 @@ pub fn parse_root_extents(data: &[u8]) -> Option<RootExtents> {
         read_both_endian_u32(&pvd[158..166]),
         read_both_endian_u32(&pvd[166..174]),
     );
-    let block_size = read_both_endian_u16(&pvd[128..132]) as u32;
+    let block_size = sane_block_size(read_both_endian_u16(&pvd[128..132]) as u32);
     let mut joliet = None;
     for idx in 1..MAX_DESCRIPTORS {
         let Some(s) = sector(data, idx) else { break };
@@ -137,6 +137,20 @@ pub fn parse_root_extents(data: &[u8]) -> Option<RootExtents> {
         joliet,
         block_size,
     })
+}
+
+/// Sanity-check the PVD logical block size before it drives extent
+/// positioning and sector-skip masking in the listing walker. A crafted
+/// image can set this to 0 (which underflows the `& !(bs-1)` sector mask)
+/// or a non-power-of-two (which misaligns the mask). ISO 9660 block sizes
+/// are always powers of two (512/2048/…); anything else falls back to the
+/// 2048-byte standard sector.
+fn sane_block_size(bs: u32) -> u32 {
+    if bs >= 512 && bs.is_power_of_two() {
+        bs
+    } else {
+        SECTOR_SIZE as u32
+    }
 }
 
 fn sector(data: &[u8], idx: usize) -> Option<&[u8]> {
@@ -343,6 +357,21 @@ mod tests {
     fn rejects_truncated_descriptor_area() {
         let buf = vec![0u8; 1024];
         assert!(parse(&buf).is_none());
+    }
+
+    /// A crafted PVD with logical-block-size 0 (or any non-power-of-two)
+    /// must not reach the listing walker's `& !(bs-1)` sector mask, where
+    /// `bs - 1` would underflow. `parse_root_extents` clamps to the 2048
+    /// standard sector instead.
+    #[test]
+    fn zero_block_size_falls_back_to_standard_sector() {
+        let mut buf = build_pvd("X", "Y");
+        buf[128..130].copy_from_slice(&0u16.to_le_bytes());
+        buf[130..132].copy_from_slice(&0u16.to_be_bytes());
+        let mut data = buf;
+        data.extend_from_slice(&build_terminator());
+        let extents = parse_root_extents(&data).expect("valid PVD");
+        assert_eq!(extents.block_size, SECTOR_SIZE as u32);
     }
 
     #[test]
