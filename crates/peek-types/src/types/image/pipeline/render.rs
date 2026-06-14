@@ -173,7 +173,7 @@ pub fn max_scroll(prep_cols: u32, prep_rows: u32, term_cols: u32, term_rows: u32
 /// to be re-sliced (escape sequences make horizontal substring expensive).
 ///
 /// Returns a vector of ANSI-colored lines, one per row in `window`.
-pub fn render_block_color(
+fn render_block_color(
     img: &DynamicImage,
     full_cols: u32,
     full_rows: u32,
@@ -348,7 +348,7 @@ pub fn render_contour(
 
 /// Render an image using the legacy density-ramp algorithm.
 /// Returns a vector of ANSI-colored lines.
-pub fn render_density(
+fn render_density(
     img: &DynamicImage,
     full_cols: u32,
     full_rows: u32,
@@ -387,7 +387,7 @@ pub fn render_density(
 }
 
 /// Add transparent margin around an image.
-pub fn add_margin(img: DynamicImage, margin: u32) -> DynamicImage {
+fn add_margin(img: DynamicImage, margin: u32) -> DynamicImage {
     if margin == 0 {
         return img;
     }
@@ -485,7 +485,7 @@ fn composite_onto(img: &DynamicImage, bg_fn: &dyn Fn(u32, u32) -> [u8; 3]) -> Dy
 }
 
 /// Apply alpha compositing with the given background mode.
-pub fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
+fn composite_with_bg(img: DynamicImage, bg: Background) -> DynamicImage {
     if !has_alpha(&img) && bg == Background::Auto {
         return img;
     }
@@ -545,17 +545,17 @@ pub fn prepare_decoded(img: DynamicImage, config: &ImageConfig, term: TermSize) 
 /// Output of the zoom > 1 render path. The lines are the rendered
 /// viewport; the dimensions describe the effective grid (base ×
 /// zoom) so the caller can clamp scroll and feed the status line.
-pub struct ZoomedRender {
-    pub lines: Vec<String>,
-    pub effective_cols: u32,
-    pub effective_rows: u32,
-    pub viewport_cols: u32,
-    pub viewport_rows: u32,
+pub(crate) struct ZoomedRender {
+    pub(crate) lines: Vec<String>,
+    pub(crate) effective_cols: u32,
+    pub(crate) effective_rows: u32,
+    pub(crate) viewport_cols: u32,
+    pub(crate) viewport_rows: u32,
     /// Scroll origin actually rendered (post-clamp), in effective
     /// cells. Overlay painters project through this — reporting it
     /// here keeps the clamp in one place.
-    pub scroll_x: u32,
-    pub scroll_y: u32,
+    pub(crate) scroll_x: u32,
+    pub(crate) scroll_y: u32,
 }
 
 /// Render the visible viewport of an image at zoom > 1 by cropping the
@@ -567,7 +567,7 @@ pub struct ZoomedRender {
 /// (= base × zoom). They are clamped here to keep the viewport on the
 /// effective grid, and the clamped values are reflected back through
 /// the returned `viewport_*` dimensions.
-pub fn render_prepared_zoomed(
+pub(crate) fn render_prepared_zoomed(
     prep: &PreparedImage,
     config: &ImageConfig,
     term: TermSize,
@@ -699,7 +699,7 @@ pub fn render_prepared(
 /// dimensions fails cleanly instead of alloc-aborting. Deliberately
 /// above the in-house caps: a legitimate 100-megapixel photo should
 /// still open.
-pub fn load_image(source: &InputSource) -> Result<DynamicImage> {
+fn load_image(source: &InputSource) -> Result<DynamicImage> {
     match source {
         InputSource::File(path) => image::ImageReader::open(path)
             .context("failed to open image")?

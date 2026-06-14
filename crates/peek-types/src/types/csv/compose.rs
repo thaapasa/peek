@@ -61,8 +61,8 @@ pub fn compose(
 /// Wrap a parsed `CsvData` in a `RowsTableMode`. The CSV-specific bits
 /// (alignment inference via `classify_cell`, header-heuristic seed)
 /// stay here so the shared mode keeps no per-source logic. Exposed
-/// `pub` so tests in the mode itself can build a CSV-backed instance.
-pub fn build_csv_mode(data: CsvData) -> RowsTableMode {
+/// `pub(crate)` so tests in the mode itself can build a CSV-backed instance.
+pub(crate) fn build_csv_mode(data: CsvData) -> RowsTableMode {
     let has_header = data.header_heuristic;
     let body_start = if has_header { 1 } else { 0 };
     let align = infer_alignments(&data, body_start);
