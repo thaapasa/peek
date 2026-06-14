@@ -61,12 +61,12 @@ use crate::types::vobject as vobject_detect;
 /// This is a deliberate read-bomb guard, not a sufficiency claim: the file
 /// path sniffs only this head because its bytes are *not* resident, and a
 /// full-parse sniff of a multi-GB file reinstates the exact read bomb
-/// 658cf59 removed. The memory (stdin) path instead sniffs up to
-/// `WHOLE_DOC_BYTES`: its bytes are already resident, so the wider sniff is
-/// free. That file-vs-memory asymmetry is intentional — see [`detect_bytes`].
+/// 658cf59 removed. A resident ([`Probe::Resident`]) source instead sniffs
+/// up to `WHOLE_DOC_BYTES`: its bytes are already in memory, so the wider
+/// sniff is free. That asymmetry is intentional — see [`Probe`].
 ///
-/// Unlike [`detect_stream`]'s head, this does *not* need to reach the ISO
-/// 9660 PVD at offset 32768: the file path probes that by `seek`
+/// Unlike the non-seekable stream head, this does *not* need to reach the
+/// ISO 9660 PVD at offset 32768: the file path probes that by `seek`
 /// ([`upgrade_disk_image_path`]) rather than out of the head, so 8 KB
 /// comfortably covers magic + every cheap top-of-file sniff.
 const HEAD_BYTES: usize = 8 * 1024;
@@ -276,80 +276,191 @@ pub fn detect_ignore_name(source: &InputSource) -> Result<Detected> {
 
 fn detect_with(source: &InputSource, ignore_name: bool) -> Result<Detected> {
     match source {
-        InputSource::File(path) => detect_file(path, ignore_name),
-        InputSource::Memory { bytes, name } => Ok(detect_bytes_named(
-            bytes,
-            if ignore_name {
-                None
-            } else {
-                Some(name.as_str())
+        InputSource::File(path) => {
+            if !path.exists() {
+                bail!("file not found: {}", path.display());
+            }
+            // Directories get their own one-level listing viewer; everything
+            // below assumes a regular file we can read bytes from.
+            if path.is_dir() {
+                return Ok(Detected::new(FileType::Directory, None));
+            }
+            // Read just the head for magic detection — `infer` inspects only
+            // the first few hundred bytes. The file path reaches the ISO 9660
+            // PVD by `seek`, not from the head, so `HEAD_BYTES` stays small.
+            let mut file = fs::File::open(path)?;
+            let mut head = vec![0u8; HEAD_BYTES];
+            let n = read_fill(&mut file, &mut head)?;
+            head.truncate(n);
+            classify(
+                name_for(ignore_name, path.file_name().and_then(|n| n.to_str())),
+                Probe::Streamed {
+                    head,
+                    reader: Box::new(file),
+                    iso: IsoSource::Seek(path),
+                },
+            )
+        }
+        InputSource::Memory { bytes, name } => classify(
+            name_for(ignore_name, Some(name.as_str())),
+            Probe::Resident {
+                data: bytes.as_ref(),
             },
-        )),
+        ),
         InputSource::FileRange { name, .. } | InputSource::TempFile { name, .. } => {
-            let name = if ignore_name {
-                None
-            } else {
-                Some(name.as_str())
-            };
-            detect_stream(source, name)
+            // A sequential stream can't seek back to the ISO 9660 PVD at
+            // offset 32768, so the head must reach it (unlike the file path).
+            const STREAM_HEAD_BYTES: usize = 64 * 1024;
+            let mut stream = source.open_stream()?;
+            let mut head = vec![0u8; STREAM_HEAD_BYTES];
+            let n = read_fill(&mut stream, &mut head)?;
+            head.truncate(n);
+            classify(
+                name_for(ignore_name, Some(name.as_str())),
+                Probe::Streamed {
+                    head,
+                    reader: Box::new(stream),
+                    iso: IsoSource::Head,
+                },
+            )
         }
     }
 }
 
-/// Detect a non-`File` source (`TempFile` / `FileRange`) without
-/// materializing it whole. Mirrors [`detect_file`] over a sequential
-/// stream: read a bounded head, classify by name + magic from it, then
-/// stream the body for the UTF-8 / binary check — never holding more than
-/// the head plus one chunk in RAM. Replaces the old whole-buffer read,
-/// which refused any entry over the 256 MB bulk-walk cap (e.g. descending
-/// into a 289 MB `.deb` inside an ISO).
-fn detect_stream(source: &InputSource, name: Option<&str>) -> Result<Detected> {
-    // Large enough to cover the ISO 9660 PVD at offset 32768 so an
-    // extracted `.img` still upgrades Raw → Iso — `detect_file` re-reads
-    // the path at that offset, but a sequential stream can't seek back.
-    const STREAM_HEAD_BYTES: usize = 64 * 1024;
+/// Drop the source name when a fallback retry asked to ignore it (the
+/// extension lied and the first render failed); otherwise pass it through
+/// for name-based routing and the plain-text syntax hint.
+fn name_for(ignore_name: bool, name: Option<&str>) -> Option<&str> {
+    if ignore_name { None } else { name }
+}
 
-    let mut stream = source.open_stream()?;
-    let mut head = vec![0u8; STREAM_HEAD_BYTES];
-    let n = read_fill(&mut stream, &mut head)?;
-    head.truncate(n);
+/// How a source reaches the ISO 9660 primary volume descriptor (offset
+/// 32768) to upgrade a name-routed `DiskImage::Raw` to `Iso`.
+enum IsoSource<'a> {
+    /// Seekable file — probe the PVD by `seek`, so no large head is needed.
+    Seek(&'a Path),
+    /// Non-seekable stream — the PVD must already sit in the head buffer.
+    Head,
+}
 
-    let magic_mime = head_magic_mime(&head);
+/// Source-specific body access for the shared [`classify`] core. Two shapes:
+/// a non-resident body validated by streaming past the head, and a resident
+/// byte buffer validated whole. They differ only in the ways residence
+/// dictates — UTF-8 scan extent and content-sniff window — every other
+/// detection rule lives once in `classify`.
+enum Probe<'a> {
+    /// Non-resident: `head` already read, the rest pulled from `reader`.
+    Streamed {
+        head: Vec<u8>,
+        reader: Box<dyn Read + 'a>,
+        iso: IsoSource<'a>,
+    },
+    /// Fully-resident bytes (stdin buffer / in-memory archive entry).
+    Resident { data: &'a [u8] },
+}
 
-    // Name routing first — an extracted entry almost always carries one,
-    // so a `.deb` / `.iso` / `.json` resolves from name + head alone.
+/// Outcome of the text-vs-binary decision plus the content sniff. The sniff
+/// result is `'static` (a `FileType` + canonical MIME), so nothing borrows
+/// the body past this struct.
+struct TextOutcome {
+    binary: bool,
+    sniffed: Option<(FileType, &'static str)>,
+}
+
+impl Probe<'_> {
+    /// Leading bytes for magic-byte detection — the whole buffer when
+    /// resident, since inspecting it is free.
+    fn head(&self) -> &[u8] {
+        match self {
+            Probe::Streamed { head, .. } => head,
+            Probe::Resident { data } => data,
+        }
+    }
+
+    /// Upgrade a name-routed `DiskImage::Raw` to `Iso` using this source's
+    /// PVD access. No-op for any non-disk-image type.
+    fn upgrade_iso(&self, file_type: FileType) -> FileType {
+        match self {
+            Probe::Streamed {
+                iso: IsoSource::Seek(path),
+                ..
+            } => upgrade_disk_image_path(file_type, path),
+            Probe::Streamed {
+                head,
+                iso: IsoSource::Head,
+                ..
+            } => upgrade_disk_image_bytes(file_type, head),
+            Probe::Resident { data } => upgrade_disk_image_bytes(file_type, data),
+        }
+    }
+
+    /// Decide text vs binary and compute the content sniff, consuming the
+    /// probe. A streamed body reads its reader to completion (capped at
+    /// `UTF8_SCAN_LIMIT`); a resident body validates the whole buffer — the
+    /// principled asymmetry, since resident bytes cost nothing to re-scan
+    /// while a non-resident full scan would reinstate the read bomb.
+    fn into_text_outcome(self) -> Result<TextOutcome> {
+        match self {
+            Probe::Streamed {
+                head, mut reader, ..
+            } => {
+                // Sniff the (UTF-8) head before it moves into the streaming
+                // validator. A non-UTF-8 head yields no sniff and the scan
+                // reports binary — consistent with the resident path.
+                let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
+                let binary = !is_utf8_streaming(head, &mut reader)?;
+                Ok(TextOutcome { binary, sniffed })
+            }
+            Probe::Resident { data } => {
+                let Ok(text) = std::str::from_utf8(data) else {
+                    return Ok(TextOutcome {
+                        binary: true,
+                        sniffed: None,
+                    });
+                };
+                // Bound the sniff to the pretty-print cap: beyond it the
+                // structured viewer stops anyway, so a full re-parse purely
+                // to label buys nothing. Clamp to a char boundary.
+                let mut cap = text.len().min(WHOLE_DOC_BYTES as usize);
+                while cap > 0 && !text.is_char_boundary(cap) {
+                    cap -= 1;
+                }
+                Ok(TextOutcome {
+                    binary: false,
+                    sniffed: sniff_text_content(&text[..cap]),
+                })
+            }
+        }
+    }
+}
+
+/// Shared detection core over a [`Probe`]. The precedence — name routing,
+/// then magic bytes, then content sniff, then a plain-text fallback — lives
+/// here once for every source. `name` is already `None` when a fallback
+/// retry asked to ignore it.
+fn classify(name: Option<&str>, probe: Probe<'_>) -> Result<Detected> {
+    let magic_mime = head_magic_mime(probe.head());
+
+    // Name-based routing first: the extension carries refinements magic
+    // can't express (a zip is really a `.docx`; a `%PDF` is really a `.ai`).
     if let Some(name) = name {
         // Keynote `.key` collides with PEM keys; zip magic disambiguates.
         if let Some(file_type) = keynote_from_name(name, magic_mime.as_deref()) {
             return Ok(Detected::new(file_type, magic_mime));
         }
         if let Some(file_type) = classify_by_name(name) {
-            return Ok(Detected::new(
-                upgrade_disk_image_bytes(file_type, &head),
-                magic_mime,
-            ));
+            return Ok(Detected::new(probe.upgrade_iso(file_type), magic_mime));
         }
     }
 
-    if let Some(ref mime) = magic_mime
-        && let Some(file_type) = file_type_from_magic_mime(mime)
-    {
+    // Magic bytes for binary containers `classify_by_name` didn't claim.
+    if let Some(file_type) = magic_mime.as_deref().and_then(file_type_from_magic_mime) {
         return Ok(Detected::new(file_type, magic_mime));
     }
 
-    // Content sniff is bounded to the head — tighter than the `Memory`
-    // path, which sniffs up to the pretty-print cap (its bytes are already
-    // resident, so a larger slice is free; a stream's are not). Magic and
-    // name detection (above) cover the vast majority; this only matters for
-    // a *nameless*, no-extension source whose type needs a full-document
-    // parse (a large JSON / `.ipynb` whose `serde_json::from_str` validates
-    // the whole string). Such a source lands on plain `SourceCode` rather
-    // than its structured type — deliberate: parsing a multi-GB value would
-    // itself OOM, the structured view caps pretty-print at that size
-    // anyway, and reading the whole stream just to label it would reinstate
-    // the read bomb this function exists to avoid.
-    let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
-    if !is_utf8_streaming(head, &mut stream)? {
+    // Body: binary short-circuits; otherwise content-sniff the text.
+    let TextOutcome { binary, sniffed } = probe.into_text_outcome()?;
+    if binary {
         return Ok(Detected::new(FileType::Binary, magic_mime));
     }
     if let Some((file_type, content_mime)) = sniffed {
@@ -358,88 +469,9 @@ fn detect_stream(source: &InputSource, name: Option<&str>) -> Result<Detected> {
             magic_mime.or_else(|| Some(content_mime.to_string())),
         ));
     }
+
+    // Plain text — the name's extension is the syntect syntax hint.
     let syntax = name.and_then(mime::extension_from_name);
-    Ok(Detected::new(FileType::SourceCode { syntax }, magic_mime))
-}
-
-fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
-    if !path.exists() {
-        bail!("file not found: {}", path.display());
-    }
-
-    // Directories get their own one-level listing viewer; everything
-    // below assumes a regular file we can read bytes from.
-    if path.is_dir() {
-        return Ok(Detected::new(FileType::Directory, None));
-    }
-
-    // Read just the head for magic-byte detection — `infer` only inspects
-    // the first few hundred bytes, so we never need the whole file. Done
-    // up front (before extension routing) so the magic-byte MIME flows
-    // into `Detected.magic_mime` even when the extension is what picks
-    // the viewer. Downstream info section uses both to flag
-    // extension/MIME mismatches.
-    let mut file = fs::File::open(path)?;
-    let mut head = vec![0u8; HEAD_BYTES];
-    let n = read_fill(&mut file, &mut head)?;
-    head.truncate(n);
-    let head_magic = head_magic_mime(&head);
-
-    // Name-based routing: extension / full-name → FileType. ISO probe
-    // upgrades a `.img` Raw to Iso when the body carries the PVD.
-    if !ignore_name && let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-        // Keynote `.key` collides with PEM keys; zip magic disambiguates
-        // it before the extension table claims it for `Cert`.
-        if let Some(file_type) = keynote_from_name(name, head_magic.as_deref()) {
-            return Ok(Detected::new(file_type, head_magic));
-        }
-        if let Some(file_type) = classify_by_name(name) {
-            return Ok(Detected::new(
-                upgrade_disk_image_path(file_type, path),
-                head_magic,
-            ));
-        }
-    }
-
-    let magic_mime = head_magic;
-    if let Some(ref mime) = magic_mime
-        && let Some(file_type) = file_type_from_magic_mime(mime)
-    {
-        return Ok(Detected::new(file_type, magic_mime));
-    }
-
-    // Content-sniff the head (cheap, ASCII-pattern based) BEFORE
-    // streaming the whole body for UTF-8 validation. The sniff is
-    // head-bounded by design (see `HEAD_BYTES`): a fuller parse would
-    // reinstate the read bomb on a large unnamed file. The result fills in
-    // `magic_mime` for text formats `infer` doesn't classify (SVG / HTML /
-    // XML / JSON / YAML). Compute now so the head buffer can move into the
-    // streaming UTF-8 check below.
-    let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
-
-    // Stream the file body to check for non-UTF-8 content. Reuses the head
-    // buffer as the first chunk so we don't read it twice.
-    if !is_utf8_streaming(head, &mut file)? {
-        return Ok(Detected::new(FileType::Binary, magic_mime));
-    }
-
-    if let Some((file_type, content_mime)) = sniffed {
-        return Ok(Detected::new(
-            file_type,
-            magic_mime.or_else(|| Some(content_mime.to_string())),
-        ));
-    }
-
-    // It's a text file — use extension as syntax hint (unless we're
-    // ignoring the name on a fallback retry).
-    let syntax = if ignore_name {
-        None
-    } else {
-        path.extension()
-            .and_then(|e| e.to_str())
-            .map(|s| s.to_lowercase())
-    };
-
     Ok(Detected::new(FileType::SourceCode { syntax }, magic_mime))
 }
 
@@ -979,76 +1011,6 @@ fn shebang_syntax(text: &str) -> Option<&'static str> {
     })
 }
 
-/// Detect the file type from an in-memory byte buffer (for stdin).
-/// Uses magic bytes for binary formats, then content sniffing for text.
-/// `name` (when present) only feeds the final syntax hint — name-based
-/// *type* routing is the caller's job ([`detect_bytes_named`]).
-fn detect_bytes(data: &[u8], name: Option<&str>) -> Detected {
-    let magic_mime = head_magic_mime(data);
-    if let Some(ref mime) = magic_mime
-        && let Some(file_type) = file_type_from_magic_mime(mime)
-    {
-        return Detected::new(file_type, magic_mime);
-    }
-
-    // Non-UTF-8 → binary. The whole buffer is validated (it's already
-    // resident — no extra read), matching the file path's full-body scan.
-    let Ok(text) = std::str::from_utf8(data) else {
-        return Detected::new(FileType::Binary, magic_mime);
-    };
-
-    // Bound content-sniff to the pretty-print cap rather than the whole
-    // buffer. A multi-GB JSON would otherwise get a full
-    // `serde_json::from_str::<Value>` (a second full-size tree) purely to
-    // label it. `WHOLE_DOC_BYTES` is exactly where the structured viewer
-    // stops pretty-printing, so beyond it the structured label buys
-    // nothing — the source falls to plain `SourceCode`, same as an
-    // over-cap file. Below it the resident slice sniffs for free, so
-    // stdin-piped JSON still routes to the structured view. (The stream
-    // path stays head-bounded: its bytes are *not* resident, so a 32 MB
-    // sniff would reinstate the read bomb this layer avoids.)
-    // Clamp to a char boundary: a multi-byte char straddling the cap
-    // would panic a raw slice.
-    let mut cap = text.len().min(WHOLE_DOC_BYTES as usize);
-    while cap > 0 && !text.is_char_boundary(cap) {
-        cap -= 1;
-    }
-    if let Some((file_type, content_mime)) = sniff_text_content(&text[..cap]) {
-        return Detected::new(
-            file_type,
-            magic_mime.or_else(|| Some(content_mime.to_string())),
-        );
-    }
-
-    // Plain text — fall back to the name's extension for a syntax hint
-    // (matching the file / stream paths), else `--language` can pin one.
-    let syntax = name.and_then(mime::extension_from_name);
-    Detected::new(FileType::SourceCode { syntax }, magic_mime)
-}
-
-/// Detect from a byte buffer with an optional source name. The name is
-/// consulted first for extension-based classification (so a file
-/// extracted from an archive into memory still routes by `.json` /
-/// `.svg` / etc. just like a real path would), then for a syntect
-/// syntax hint if content sniffing only resolves to plain SourceCode.
-///
-/// Used by `detect()` for `Memory` and `FileRange` sources so recursive
-/// peek into a container (EPUB / archive / ISO) doesn't lose the entry
-/// name's classification on its way back through the pipeline.
-fn detect_bytes_named(data: &[u8], name: Option<&str>) -> Detected {
-    if let Some(name) = name {
-        let magic = head_magic_mime(data);
-        // Keynote `.key` collides with PEM keys; zip magic disambiguates.
-        if let Some(file_type) = keynote_from_name(name, magic.as_deref()) {
-            return Detected::new(file_type, magic);
-        }
-        if let Some(file_type) = classify_by_name(name) {
-            return Detected::new(upgrade_disk_image_bytes(file_type, data), magic);
-        }
-    }
-    detect_bytes(data, name)
-}
-
 /// Single source of truth for name-based detection. Used by both the
 /// file path and the in-memory byte path so the extension rules stay
 /// consistent. Returns the unprobed `DiskImage::Raw` for `.img` /
@@ -1134,7 +1096,7 @@ mod tests {
     use super::*;
 
     /// A spooled archive entry far larger than the 256 MB bulk-walk cap
-    /// must still detect — `detect_stream` reads only the head, so the
+    /// must still detect — the stream probe reads only the head, so the
     /// size is irrelevant. (Regression: the old whole-buffer read refused
     /// a 289 MB `.deb` extracted from an ISO with "over the 256 MB cap".)
     /// The file is sparse (`set_len`), so this allocates no real disk.
@@ -1282,6 +1244,71 @@ mod tests {
         InputSource::Memory {
             bytes: bytes.to_vec().into(),
             name: name.to_string(),
+        }
+    }
+
+    /// File / resident-memory / spooled-stream sources all run through the
+    /// one `classify` core, so identical bytes + name must detect identically
+    /// regardless of entry point. Covers each precedence rung: name routing,
+    /// magic, content sniff, plain-text, and the binary gate.
+    #[test]
+    fn detection_parity_across_sources() {
+        use std::io::Write;
+        let cases: &[(&str, &[u8], FileType)] = &[
+            (
+                "doc.json",
+                b"{ \"a\": 1 }",
+                FileType::Structured(StructuredFormat::Json),
+            ),
+            (
+                "icon.svg",
+                b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+                FileType::Svg,
+            ),
+            (
+                "pic.png",
+                b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
+                FileType::Image,
+            ),
+            (
+                "notes.txt",
+                b"plain words here\n",
+                FileType::SourceCode {
+                    syntax: Some("txt".to_string()),
+                },
+            ),
+            (
+                "blob.dat",
+                b"\x00\x01\x02\xff\xfe scattered",
+                FileType::Binary,
+            ),
+        ];
+        for (name, bytes, want) in cases {
+            let (name, bytes) = (*name, *bytes);
+            let suffix = format!(".{}", name.rsplit('.').next().unwrap());
+
+            // File source: real on-disk file with the matching extension.
+            let mut f = tempfile::Builder::new().suffix(&suffix).tempfile().unwrap();
+            f.write_all(bytes).unwrap();
+            f.flush().unwrap();
+            let file_src = InputSource::File(f.path().to_path_buf());
+
+            // Resident-memory source carries the name explicitly.
+            let mem_src = mem(name, bytes);
+
+            // Spooled-stream source (non-seekable path).
+            let mut tf = tempfile::NamedTempFile::new().unwrap();
+            tf.write_all(bytes).unwrap();
+            tf.flush().unwrap();
+            let stream_src = InputSource::temp_file(tf, name);
+
+            assert_eq!(detect(&file_src).unwrap().file_type, *want, "file: {name}");
+            assert_eq!(detect(&mem_src).unwrap().file_type, *want, "memory: {name}");
+            assert_eq!(
+                detect(&stream_src).unwrap().file_type,
+                *want,
+                "stream: {name}"
+            );
         }
     }
 
