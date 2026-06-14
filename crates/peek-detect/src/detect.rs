@@ -766,6 +766,70 @@ const CLASS_MAGIC: &[u8; 4] = &[0xCA, 0xFE, 0xBA, 0xBE];
 /// `infer` didn't classify the bytes (it never identifies plain
 /// text/XML formats). Used by both file and byte detection paths so
 /// the rules stay in one place.
+/// True when the buffer opens with an HTML doctype (`<!doctype html…`),
+/// case-insensitively. Checked over a short clamped prefix so a multi-byte
+/// char straddling the cap can't panic a raw slice (found by fuzzing).
+fn leading_doctype_is_html(trimmed: &str) -> bool {
+    let mut cap = trimmed.len().min(64);
+    while cap > 0 && !trimmed.is_char_boundary(cap) {
+        cap -= 1;
+    }
+    trimmed[..cap]
+        .to_ascii_lowercase()
+        .starts_with("<!doctype html")
+}
+
+/// Strip the XML prolog — processing instructions / declarations
+/// (`<?xml …?>`), comments (`<!-- … -->`), and other `<!…>` declarations
+/// (DOCTYPE, ENTITY) — plus surrounding whitespace, returning the slice that
+/// begins at the root element. An unterminated construct (cut by the head
+/// window) stops the walk and returns the remainder as-is, so the caller
+/// falls through to generic XML rather than misclassifying.
+fn strip_xml_prolog(mut s: &str) -> &str {
+    loop {
+        s = s.trim_start();
+        if let Some(rest) = s.strip_prefix("<?") {
+            match rest.find("?>") {
+                Some(i) => s = &rest[i + 2..],
+                None => return s,
+            }
+        } else if let Some(rest) = s.strip_prefix("<!--") {
+            match rest.find("-->") {
+                Some(i) => s = &rest[i + 3..],
+                None => return s,
+            }
+        } else if s.starts_with("<!") {
+            // DOCTYPE / other declaration. Skip to its close; a doctype with
+            // an internal subset (`[ … ]>`) may cut early, which only drops
+            // to generic XML — never a false SVG/HTML.
+            match s.find('>') {
+                Some(i) => s = &s[i + 1..],
+                None => return s,
+            }
+        } else {
+            return s;
+        }
+    }
+}
+
+/// True when `s` opens the named element: `<name` followed by a tag
+/// delimiter (whitespace, `>`, or `/`), case-insensitive. The delimiter
+/// guard stops `<svgfoo` / `<htmlx` from matching `svg` / `html`.
+fn root_element_is(s: &str, name: &str) -> bool {
+    let Some(rest) = s.strip_prefix('<') else {
+        return false;
+    };
+    if rest.len() < name.len()
+        || !rest.as_bytes()[..name.len()].eq_ignore_ascii_case(name.as_bytes())
+    {
+        return false;
+    }
+    match rest.as_bytes().get(name.len()) {
+        None => true, // element name runs to the end of the head window
+        Some(b) => b.is_ascii_whitespace() || *b == b'>' || *b == b'/',
+    }
+}
+
 fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     let trimmed = text.trim_start();
     let first = trimmed.as_bytes().first().copied();
@@ -813,17 +877,20 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
             }
         }
         Some(b'<') => {
-            if trimmed.contains("<svg") {
+            // Classify by the *root* element, not by containment: an HTML
+            // page routinely embeds an inline `<svg>` icon and an XML doc may
+            // mention `<svg>` / `<html>` deep in its body, but only a document
+            // whose root is `<svg>` is an SVG image. Skip the XML prolog
+            // (declaration / comments / doctype) to reach the first element.
+            // A `<!doctype html>` is itself the strongest HTML signal.
+            if leading_doctype_is_html(trimmed) {
+                return Some((FileType::Html, "text/html"));
+            }
+            let root = strip_xml_prolog(trimmed);
+            if root_element_is(root, "svg") {
                 return Some((FileType::Svg, "image/svg+xml"));
             }
-            // Clamp to a char boundary: a multi-byte char straddling byte
-            // 512 would panic a raw slice (found by fuzzing).
-            let mut cap = trimmed.len().min(512);
-            while cap > 0 && !trimmed.is_char_boundary(cap) {
-                cap -= 1;
-            }
-            let head_lower = trimmed[..cap].to_ascii_lowercase();
-            if head_lower.starts_with("<!doctype html") || head_lower.contains("<html") {
+            if root_element_is(root, "html") {
                 return Some((FileType::Html, "text/html"));
             }
             return Some((
@@ -1160,6 +1227,53 @@ mod tests {
             sniff_text_content(nb).map(|(t, _)| t),
             Some(FileType::Notebook)
         );
+    }
+
+    /// Markup is classified by its *root* element, not by containment:
+    /// an HTML page with an inline `<svg>` icon is HTML, and an XML doc that
+    /// merely mentions `<svg>` / `<html>` deep in its body stays XML.
+    #[test]
+    fn markup_classifies_by_root_not_containment() {
+        let svg = FileType::Svg;
+        let html = FileType::Html;
+        let xml = FileType::Structured(StructuredFormat::Xml);
+        let cases: &[(&str, FileType)] = &[
+            // Genuine SVG, with and without a prolog.
+            (
+                "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect/></svg>",
+                svg.clone(),
+            ),
+            (
+                "<?xml version=\"1.0\"?>\n<!-- icon -->\n<svg viewBox=\"0 0 1 1\"/>",
+                svg.clone(),
+            ),
+            // HTML page that embeds an inline SVG — root wins.
+            (
+                "<!DOCTYPE html>\n<html><body><svg><path/></svg></body></html>",
+                html.clone(),
+            ),
+            ("<html lang=\"en\"><body><svg/></body></html>", html.clone()),
+            // XHTML: prolog then <html> root.
+            (
+                "<?xml version=\"1.0\"?><html xmlns=\"http://www.w3.org/1999/xhtml\"/>",
+                html.clone(),
+            ),
+            // Generic XML that name-drops the markup elements deep inside.
+            (
+                "<config><note>use &lt;svg&gt; here</note><html-ish/></config>",
+                xml.clone(),
+            ),
+            ("<doc><embedded><svg/></embedded></doc>", xml.clone()),
+            // Delimiter guard: <svgfoo> is not an SVG root.
+            ("<svgfoo/>", xml.clone()),
+        ];
+        for (text, want) in cases {
+            assert_eq!(
+                sniff_text_content(text).map(|(t, _)| t),
+                Some(want.clone()),
+                "root-element classification: {text:?}",
+            );
+        }
     }
 
     /// A `.pptx` magic-detects as a bare zip; the extension is what
