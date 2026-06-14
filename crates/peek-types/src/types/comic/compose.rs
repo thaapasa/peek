@@ -3,11 +3,10 @@
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, Detected};
+use crate::input::detect::Detected;
 use crate::types::archive;
 use crate::types::comic::{CbzPageRenderer, cbz};
 use crate::viewer::ComposeOpts;
-use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
@@ -30,12 +29,6 @@ pub fn compose(
         Ok(_) => warnings.push("CBZ contains no image pages".to_string()),
         Err(e) => warnings.push(format!("CBZ unreadable: {e:#}")),
     }
-    let (entries, mut listing_warnings) =
-        match archive::reader::list_entries(source, ArchiveFormat::Zip) {
-            Ok((e, _)) => (e, Vec::new()),
-            Err(e) => (Vec::new(), vec![format!("Failed to list CBZ: {e:#}")]),
-        };
-    warnings.append(&mut listing_warnings);
-    modes.push(Box::new(ListingMode::new("CBZ", "TOC", entries, warnings)));
+    archive::reader::push_zip_toc(source, "CBZ", warnings, modes);
     Ok(())
 }

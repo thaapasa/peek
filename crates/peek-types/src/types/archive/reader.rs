@@ -19,8 +19,8 @@ use zip::ZipArchive;
 use super::backends::CappedList;
 use crate::input::InputSource;
 use crate::input::detect::ArchiveFormat;
-use crate::viewer::listing::{Entry, from_flat_paths};
-use crate::viewer::modes::{RENDER_MAX_BYTES, ensure_under_render_cap};
+use crate::viewer::listing::{Entry, ListingMode, from_flat_paths};
+use crate::viewer::modes::{Mode, RENDER_MAX_BYTES, ensure_under_render_cap};
 
 /// The seekable-reader trait the backends hand to the zip layer. tar only
 /// needs `Read`, but using one helper for both keeps the call sites
@@ -182,6 +182,26 @@ impl Seek for RangeReadSeek {
 pub fn list_entries(source: &InputSource, format: ArchiveFormat) -> Result<(Vec<Entry>, bool)> {
     let capped = list_flat(source, format)?;
     Ok((from_flat_paths(capped.entries), capped.truncated))
+}
+
+/// List the source as a ZIP and push its table of contents as a
+/// [`ListingMode`] TOC, appending any listing failure to `warnings`.
+/// The shared tail of every ZIP-backed container compose (DOCX, ODT,
+/// EPUB, CBZ, PPTX/ODP, Keynote): they each parse a primary read view,
+/// then bolt the raw archive listing on as a second mode. `label` names
+/// the container in both the warning text and the listing title.
+pub fn push_zip_toc(
+    source: &InputSource,
+    label: &'static str,
+    mut warnings: Vec<String>,
+    modes: &mut Vec<Box<dyn Mode>>,
+) {
+    let (entries, mut listing_warnings) = match list_entries(source, ArchiveFormat::Zip) {
+        Ok((e, _)) => (e, Vec::new()),
+        Err(e) => (Vec::new(), vec![format!("Failed to list {label}: {e:#}")]),
+    };
+    warnings.append(&mut listing_warnings);
+    modes.push(Box::new(ListingMode::new(label, "TOC", entries, warnings)));
 }
 
 fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<CappedList> {

@@ -4,7 +4,7 @@
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, Detected, DocumentFormat};
+use crate::input::detect::{Detected, DocumentFormat};
 use crate::types::archive;
 use crate::types::document::{self, DocRenderer, rtf::RtfRenderer};
 use crate::viewer::ComposeCtx;
@@ -52,13 +52,7 @@ fn compose_zip(
         Ok(doc) => modes.push(Box::new(RenderedTextMode::new(DocRenderer::new(doc)))),
         Err(e) => warnings.push(format!("{label} unreadable: {e:#}")),
     }
-    let (entries, mut listing_warnings) =
-        match archive::reader::list_entries(source, ArchiveFormat::Zip) {
-            Ok((e, _)) => (e, Vec::new()),
-            Err(e) => (Vec::new(), vec![format!("Failed to list {label}: {e:#}")]),
-        };
-    warnings.append(&mut listing_warnings);
-    modes.push(Box::new(ListingMode::new(label, "TOC", entries, warnings)));
+    archive::reader::push_zip_toc(source, label, warnings, modes);
     Ok(())
 }
 

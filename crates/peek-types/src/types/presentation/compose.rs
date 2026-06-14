@@ -6,12 +6,11 @@ use std::sync::Arc;
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, Detected};
+use crate::input::detect::Detected;
 use crate::types::archive;
 use crate::types::presentation::keynote::preview::PreviewRenderer;
 use crate::types::presentation::read_mode::PresentationReadMode;
 use crate::types::presentation::{self, Deck, PresentationFormat};
-use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
@@ -60,7 +59,7 @@ fn compose_deck(
         Ok(_) => warnings.push(format!("{label} has no readable slides")),
         Err(e) => warnings.push(format!("{label} unreadable: {e:#}")),
     }
-    push_zip_toc(source, label, warnings, modes);
+    archive::reader::push_zip_toc(source, label, warnings, modes);
     Ok(())
 }
 
@@ -87,21 +86,6 @@ fn compose_keynote(
         },
         Err(e) => warnings.push(format!("Keynote unreadable: {e:#}")),
     }
-    push_zip_toc(source, "Keynote", warnings, modes);
+    archive::reader::push_zip_toc(source, "Keynote", warnings, modes);
     Ok(())
-}
-
-fn push_zip_toc(
-    source: &InputSource,
-    label: &'static str,
-    mut warnings: Vec<String>,
-    modes: &mut Vec<Box<dyn Mode>>,
-) {
-    let (entries, mut listing_warnings) =
-        match archive::reader::list_entries(source, ArchiveFormat::Zip) {
-            Ok((e, _)) => (e, Vec::new()),
-            Err(e) => (Vec::new(), vec![format!("Failed to list {label}: {e:#}")]),
-        };
-    warnings.append(&mut listing_warnings);
-    modes.push(Box::new(ListingMode::new(label, "TOC", entries, warnings)));
 }

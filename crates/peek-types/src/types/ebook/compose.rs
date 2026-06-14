@@ -3,11 +3,10 @@
 use anyhow::Result;
 
 use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, Detected};
+use crate::input::detect::Detected;
 use crate::types::archive;
 use crate::types::ebook::epub::{self, EpubReadMode};
 use crate::viewer::ComposeOpts;
-use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
 
@@ -27,12 +26,6 @@ pub fn compose(
         ))),
         Err(e) => warnings.push(format!("EPUB metadata unreadable: {e:#}")),
     }
-    let (entries, mut listing_warnings) =
-        match archive::reader::list_entries(source, ArchiveFormat::Zip) {
-            Ok((e, _)) => (e, Vec::new()),
-            Err(e) => (Vec::new(), vec![format!("Failed to list EPUB: {e:#}")]),
-        };
-    warnings.append(&mut listing_warnings);
-    modes.push(Box::new(ListingMode::new("EPUB", "TOC", entries, warnings)));
+    archive::reader::push_zip_toc(source, "EPUB", warnings, modes);
     Ok(())
 }
