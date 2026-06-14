@@ -7,7 +7,9 @@
 //! The tree is flattened once at construction into a depth-first row list,
 //! each row carrying its tree-connector prefix, parent index (for the
 //! sticky breadcrumb), and — for files — the slash-joined inner path used
-//! as the extract key. Directories are rendered but never selectable.
+//! as the extract key. Every row is selectable (directories included, so
+//! the cursor can rest on a parent for `Backspace` / future folding); only
+//! files carry an extract key, so extraction stays file-only.
 
 use super::entry::{Entry, EntryKind, EntryMtime};
 use super::row::{self, SizeCell};
@@ -43,7 +45,8 @@ pub(super) struct TreeRow {
     /// `None` for top-level entries. Drives the sticky breadcrumb chain.
     pub(super) parent_row: Option<usize>,
     /// Slash-joined inner path for file rows; `None` for directories.
-    /// Used as the extract key and to mark the row selectable.
+    /// Used as the extract key (so only files extract); every row is
+    /// selectable regardless.
     pub(super) inner_path: Option<String>,
 }
 
@@ -69,8 +72,17 @@ impl ListSource for TreeListSource {
         self.rows[idx].parent_row
     }
 
-    fn selectable(&self, idx: usize) -> bool {
-        self.rows[idx].inner_path.is_some()
+    /// Seed on the first file so opening a container lands on a descendable
+    /// entry; directory rows are selectable but not where the cursor starts.
+    fn initial_selection(&self) -> Option<usize> {
+        self.rows.iter().position(|r| r.inner_path.is_some())
+    }
+
+    fn selectable(&self, _idx: usize) -> bool {
+        // Every row is navigable, directories included — so `Backspace`
+        // can land on a parent directory row and (later) a directory can
+        // be folded. Extraction stays file-only via `extract_target`.
+        true
     }
 
     fn name(&self, idx: usize) -> &str {

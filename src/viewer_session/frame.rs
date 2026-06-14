@@ -10,7 +10,7 @@ use anyhow::Result;
 use peek_detect::Detected;
 use peek_foundation::extract::Extracted;
 use peek_foundation::info::FileInfo;
-use peek_foundation::viewer::modes::{Mode, ModeId, Position};
+use peek_foundation::viewer::modes::{Mode, ModeId, ParentNav, Position};
 use peek_io::InputSource;
 
 use super::render::RenderedView;
@@ -233,6 +233,31 @@ impl ViewerState {
         self.run_descend_extract(key)
     }
 
+    /// Go up one directory in a listing view (`Backspace`). Asks the
+    /// active mode how it wants to ascend: a tree TOC moves its own
+    /// selection up a level in place; the on-disk directory browser
+    /// descends into its `..` row, which [`push_extracted`](Self::push_extracted)
+    /// re-targets onto the current frame and seeds at the child we left.
+    pub(super) fn parent_dir(&mut self) -> Result<()> {
+        let nav = {
+            let f = self.frame_mut();
+            let active = f.active;
+            f.modes[active].parent_nav()
+        };
+        match nav {
+            ParentNav::Handled => {
+                // The mode moved its selection itself — refresh its view.
+                self.invalidate_active();
+                Ok(())
+            }
+            ParentNav::Descend(key) => self.run_descend_extract(key),
+            ParentNav::None => {
+                self.flash = Some("already at top level".to_string());
+                Ok(())
+            }
+        }
+    }
+
     /// Extract `key` and push it as a new session frame. The
     /// post-confirmation tail of [`descend`](Self::descend), also reached
     /// straight from the confirm prompt.
@@ -321,6 +346,19 @@ impl ViewerState {
     }
 
     fn push_extracted(&mut self, extracted: Extracted) -> Result<()> {
+        // Walking up to a parent directory (`..`): the new frame should
+        // open with the child we came from selected, not the top of the
+        // list. The came-from name is the current directory's basename;
+        // the parent listing has a row for it.
+        let came_from = (extracted.suggested_name == "..")
+            .then(|| {
+                self.frame()
+                    .source
+                    .disk_path()
+                    .and_then(|p| std::fs::canonicalize(p).ok())
+                    .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            })
+            .flatten();
         let source = extracted.source;
         let detected = match peek_detect::detect(&source) {
             Ok(d) => d,
@@ -355,6 +393,11 @@ impl ViewerState {
         frame.deferred = deferred;
         if deferred.is_some() {
             frame.focus_info();
+        }
+        // Seed the parent listing's cursor on the directory we came from.
+        if let Some(name) = came_from {
+            let active = frame.active;
+            frame.modes[active].select_entry(&name);
         }
         // Dir → Dir descent re-targets the current frame instead of
         // pushing, so navigating between sibling subdirectories doesn't

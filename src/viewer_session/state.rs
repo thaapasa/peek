@@ -306,6 +306,10 @@ impl ViewerState {
                 self.descend()?;
                 Outcome::Redraw
             }
+            Action::ParentDir => {
+                self.parent_dir()?;
+                Outcome::Redraw
+            }
             Action::OpenSearch => {
                 self.begin_search_prompt();
                 Outcome::Redraw

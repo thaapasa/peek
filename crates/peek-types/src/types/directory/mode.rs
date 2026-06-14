@@ -15,7 +15,7 @@ use std::time::SystemTime;
 
 use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 use super::read::{DirEntry, DirEntryKind};
@@ -83,6 +83,22 @@ impl ListSource for DirListSource {
         ListingHelp {
             sticky: false,
             ..Default::default()
+        }
+    }
+
+    /// `Backspace` walks up to the real parent directory via the synthetic
+    /// `..` row. At the filesystem root the row is absent (no parent to
+    /// open), so report `InListing` — the flat listing then finds nothing
+    /// above the selection and the key no-ops.
+    fn parent_nav(&self) -> ListParentNav {
+        if self
+            .entries
+            .first()
+            .is_some_and(|e| e.name == PARENT_LINK_NAME)
+        {
+            ListParentNav::Descend(PARENT_LINK_NAME.to_string())
+        } else {
+            ListParentNav::InListing
         }
     }
 
@@ -219,6 +235,18 @@ mod tests {
             Some(ExtractTarget::EntryPath(p)) => assert_eq!(p, "main.rs"),
             other => panic!("expected EntryPath, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn parent_nav_descends_dotdot_when_parent_link_present() {
+        let with = DirListSource::new(vec![file("main.rs")], true);
+        match with.parent_nav() {
+            ListParentNav::Descend(key) => assert_eq!(key, PARENT_LINK_NAME),
+            _ => panic!("expected Descend(..) when `..` row present"),
+        }
+        // At the filesystem root the `..` row is absent → in-listing no-op.
+        let without = DirListSource::new(vec![file("main.rs")], false);
+        assert!(matches!(without.parent_nav(), ListParentNav::InListing));
     }
 
     #[test]

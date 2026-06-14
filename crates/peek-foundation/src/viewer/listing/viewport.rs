@@ -296,6 +296,30 @@ impl ListingViewport {
     fn first_selectable_in_content<R: RowMeta>(&self, rows: &[R]) -> Option<usize> {
         (self.top..rows.len()).find(|&i| rows[i].selectable())
     }
+
+    /// Hop the selection up one level: land on the selected row's parent
+    /// (its containing directory). In a tree TOC every directory row is
+    /// selectable, so this lands exactly on the parent dir — sitting right
+    /// above its children. Non-selectable ancestors are skipped (climb to
+    /// the nearest selectable one) so the key always lands somewhere valid;
+    /// returns `false` at the top level (no parent to move to). Drives
+    /// `Backspace` on tree TOCs.
+    pub fn select_parent_dir<R: RowMeta>(&mut self, rows: &[R]) -> bool {
+        let Some(sel) = self.selected else {
+            return false;
+        };
+        // `parent()` indices strictly decrease, so this terminates.
+        let mut cur = rows[sel].parent();
+        while let Some(p) = cur {
+            if rows[p].selectable() {
+                self.selected = Some(p);
+                self.reconcile(rows);
+                return true;
+            }
+            cur = rows[p].parent();
+        }
+        false
+    }
 }
 
 fn next_selectable_row<R: RowMeta>(rows: &[R], from: usize, forward: bool) -> Option<usize> {
@@ -382,6 +406,50 @@ mod tests {
         assert_eq!(vp.selected(), Some(4)); // sticks at end
         vp.move_selection(&rows, false);
         assert_eq!(vp.selected(), Some(3));
+    }
+
+    /// Tree TOC shape with every row selectable (directories included, as
+    /// `TreeListSource` now marks them):
+    ///   0:sub/  1:deeper/(p=0)  2:deep.txt(p=1)  3:inner.txt(p=0)  4:README(top)
+    fn all_selectable_tree() -> Vec<Row> {
+        rows(&[
+            (None, true),
+            (Some(0), true),
+            (Some(1), true),
+            (Some(0), true),
+            (None, true),
+        ])
+    }
+
+    #[test]
+    fn select_parent_dir_lands_on_the_containing_directory_row() {
+        let rows = all_selectable_tree();
+        let mut vp = ListingViewport::new(&rows);
+        vp.set_viewport_rows(&rows, 10);
+        vp.select_row(&rows, 2); // deep.txt, in sub/deeper/
+        // Up → its directory, deeper/ (row 1).
+        assert!(vp.select_parent_dir(&rows));
+        assert_eq!(vp.selected(), Some(1));
+        // Up → sub/ (row 0).
+        assert!(vp.select_parent_dir(&rows));
+        assert_eq!(vp.selected(), Some(0));
+        // Top level: no parent, reports false.
+        assert!(!vp.select_parent_dir(&rows));
+        assert_eq!(vp.selected(), Some(0));
+    }
+
+    /// A non-selectable ancestor is skipped — the climb lands on the
+    /// nearest selectable parent.
+    #[test]
+    fn select_parent_dir_skips_nonselectable_ancestor() {
+        //   0:a/(selectable)  1:b/(p=0, NOT selectable)  2:f.txt(p=1)
+        let rows = rows(&[(None, true), (Some(0), false), (Some(1), true)]);
+        let mut vp = ListingViewport::new(&rows);
+        vp.set_viewport_rows(&rows, 10);
+        vp.select_row(&rows, 2); // f.txt
+        // b/ is non-selectable → skip it, land on a/ (row 0).
+        assert!(vp.select_parent_dir(&rows));
+        assert_eq!(vp.selected(), Some(0));
     }
 
     #[test]

@@ -207,6 +207,22 @@ pub struct DescendFrame {
     pub breadcrumb_label: Option<String>,
 }
 
+/// Response of a mode to the parent-directory key (`Backspace`). A
+/// listing over an in-memory tree moves its own selection up a level
+/// (`Handled`); the on-disk directory browser asks the session to descend
+/// into its `..` row (`Descend`); everything else has no parent concept
+/// (`None`).
+pub enum ParentNav {
+    /// The mode moved its selection up one level itself; just redraw.
+    Handled,
+    /// Descend the session into this extract key — the on-disk parent
+    /// directory `..`. The session seeds the parent listing's selection
+    /// at the directory we came from.
+    Descend(String),
+    /// Nothing to do (already at the top, or no parent concept).
+    None,
+}
+
 /// One renderable + interactive view of a file.
 pub trait Mode {
     fn id(&self) -> ModeId;
@@ -438,4 +454,19 @@ pub trait Mode {
     fn set_search(&mut self, _query: Option<&str>) -> crate::viewer::search::SearchTarget {
         crate::viewer::search::SearchTarget::Owned
     }
+
+    /// Respond to the parent-directory key (`Backspace`). Listing modes
+    /// either hop their selection up a level (in-memory tree) or ask the
+    /// session to descend into `..` (on-disk directory). Default `None` —
+    /// non-listing modes have no parent concept.
+    fn parent_nav(&mut self) -> ParentNav {
+        ParentNav::None
+    }
+
+    /// Pre-select the listing row whose entry name equals `name`, if one
+    /// exists. Called by the session after descending into a parent
+    /// directory so the cursor lands on the child we came from rather than
+    /// the top of the list. No-op (default) for modes without a selectable
+    /// listing.
+    fn select_entry(&mut self, _name: &str) {}
 }

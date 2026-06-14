@@ -1173,7 +1173,11 @@ dirs-first, then by case-insensitive name; perms / size / mtime / name columns m
 TOC view. A synthetic `..` row leads the list (suppressed at filesystem root) so the user can
 walk back up — selecting it canonicalizes the current path and re-targets to its parent.
 **Enter** descends: file → push (Esc returns to the listing); directory → re-target the current
-frame (no stack of dirs to back out of). **Esc** at any directory listing exits peek. Hidden
+frame (no stack of dirs to back out of). **Backspace** walks up to the parent directory directly
+(same `..` target), and walking up lands the cursor on the subdirectory you came from rather than
+the top of the list, so stepping in and out of siblings stays put. (In an archive / container TOC
+directory rows are selectable, so the same key moves the selection onto the parent directory row —
+one level per press.) **Esc** at any directory listing exits peek. Hidden
 entries are included; symlinks are followed for kind classification, with broken links shown as
 `?`. `--print` and `--list` both render the listing. `/` searches entry names (same leaf-name
 search as the archive TOC); `n` / `p` step matches with wrap, moving the selection onto each hit.

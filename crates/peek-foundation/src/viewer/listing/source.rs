@@ -64,6 +64,29 @@ pub trait ListSource {
     fn help(&self) -> ListingHelp {
         ListingHelp::default()
     }
+    /// Preferred row to seed the selection on, or `None` to start on the
+    /// first selectable row. Tree TOCs start on the first *file* so opening
+    /// a container lands on a descendable entry even though directory rows
+    /// are selectable too (for `Backspace` / future folding).
+    fn initial_selection(&self) -> Option<usize> {
+        None
+    }
+    /// How this source answers the parent-directory key. The default —
+    /// `InListing` — moves the selection up a level within the current
+    /// rows (the tree-TOC shape: the listing is fixed, there's no frame to
+    /// navigate to). The on-disk directory browser overrides with
+    /// `Descend("..")` so the session opens the real parent directory.
+    fn parent_nav(&self) -> ListParentNav {
+        ListParentNav::InListing
+    }
+}
+
+/// How a [`ListSource`] responds to the parent-directory key.
+pub enum ListParentNav {
+    /// Move the selection up one level inside the current rows (tree TOC).
+    InListing,
+    /// Descend the session into this extract key — the on-disk `..` row.
+    Descend(String),
 }
 
 /// Help-screen descriptor a [`ListSource`] declares so the listing

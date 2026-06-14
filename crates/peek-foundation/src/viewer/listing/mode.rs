@@ -20,15 +20,15 @@ use syntect::highlighting::Color;
 
 use super::entry::Entry;
 use super::row;
-use super::source::{ListSource, NameCell, RowMetaCell};
+use super::source::{ListParentNav, ListSource, NameCell, RowMetaCell};
 use super::tree_source::TreeListSource;
 use super::viewport::ListingViewport;
 use crate::input::InputSource;
 use crate::output::PrintOutput;
 use crate::theme::PeekTheme;
 use crate::viewer::modes::{
-    DescendFrame, ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx,
-    Window,
+    DescendFrame, ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, ParentNav, Position,
+    RenderCtx, Window,
 };
 use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, strip_ansi_width};
@@ -84,7 +84,12 @@ impl ListingMode {
             })
             .collect();
         let selectable_count = meta.iter().filter(|m| m.selectable).count();
-        let viewport = ListingViewport::new(&meta);
+        let mut viewport = ListingViewport::new(&meta);
+        // Honour the source's preferred starting row (tree TOCs seed on the
+        // first file). `None` keeps the first-selectable-row default.
+        if let Some(idx) = source.initial_selection() {
+            viewport.select_row(&meta, idx);
+        }
         Self {
             source,
             label: label.into(),
@@ -195,8 +200,9 @@ impl Mode for ListingMode {
         let win = self.viewport.window(&self.meta);
         let selected = self.viewport.selected();
         // Sticky breadcrumb rows above, content slice below — composed in
-        // one pass. Selection only ever lands on a selectable (file) row,
-        // which is never in the sticky chain, so sticky rows never light up.
+        // one pass. Reconcile keeps the selection at or below `top`, and the
+        // sticky chain is strictly the ancestors above `top`, so the
+        // selected row (even a directory) never coincides with a sticky row.
         let mut full = Vec::with_capacity(win.sticky.len() + win.content.len());
         for idx in win.sticky.iter().copied().chain(win.content.clone()) {
             let is_sel = Some(idx) == selected;
@@ -310,6 +316,7 @@ impl Mode for ListingMode {
                 &[Action::ScrollLeft, Action::ScrollRight],
                 "Pan left / right",
             ),
+            (&[Action::ParentDir], "Parent directory"),
             (&[Action::Extract], "Extract selected entry"),
             (&[Action::OpenSearch], "Search names"),
             NEXT_PREV_MATCH_HELP,
@@ -332,6 +339,7 @@ impl Mode for ListingMode {
             &[Action::ScrollLeft, Action::ScrollRight],
             "Pan left / right",
         ));
+        entries.push((&[Action::ParentDir], "Parent directory"));
         if help.extract {
             entries.push((&[Action::Extract], "Extract selected entry"));
         }
@@ -384,6 +392,30 @@ impl Mode for ListingMode {
 
     fn extract_target(&self) -> Option<ExtractTarget> {
         self.selected_target()
+    }
+
+    fn parent_nav(&mut self) -> ParentNav {
+        match self.source.parent_nav() {
+            // On-disk directory: hand the `..` key to the session, which
+            // opens the real parent directory and seeds the selection.
+            ListParentNav::Descend(key) => ParentNav::Descend(key),
+            // Tree TOC: hop the selection up a level in place.
+            ListParentNav::InListing => {
+                if self.viewport.select_parent_dir(&self.meta) {
+                    ParentNav::Handled
+                } else {
+                    ParentNav::None
+                }
+            }
+        }
+    }
+
+    fn select_entry(&mut self, name: &str) {
+        if let Some(idx) =
+            (0..self.source.len()).find(|&i| self.meta[i].selectable && self.source.name(i) == name)
+        {
+            self.viewport.select_row(&self.meta, idx);
+        }
     }
 
     fn selected_extract_size(&self) -> Option<u64> {
@@ -514,48 +546,65 @@ mod tests {
     #[test]
     fn initial_selection_is_first_file() {
         let lm = sample();
-        // Row 2 is the first file row (deep.txt) in the sample tree.
+        // Directories are selectable, but the cursor seeds on the first
+        // *file* (deep.txt, row 2) so Enter works on open.
         assert_eq!(lm.viewport.selected(), Some(2));
         assert_eq!(lm.selected_path().as_deref(), Some("sub/deeper/deep.txt"));
     }
 
     #[test]
-    fn scroll_down_advances_selection_to_next_file_skipping_dirs() {
+    fn scroll_visits_directory_rows_too() {
         let mut lm = sample();
         lm.viewport.set_viewport_rows(&lm.meta, 10);
+        // From deep.txt (row 2) down through the files.
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.viewport.selected(), Some(3));
-        assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
+        assert_eq!(lm.viewport.selected(), Some(3)); // inner.txt
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.viewport.selected(), Some(4));
-        assert_eq!(lm.selected_path().as_deref(), Some("README.txt"));
-        // Past the last file, selection sticks rather than wrapping.
+        assert_eq!(lm.viewport.selected(), Some(4)); // README.txt
         lm.scroll(Action::ScrollDown);
-        assert_eq!(lm.viewport.selected(), Some(4));
-    }
-
-    #[test]
-    fn scroll_up_walks_back_through_files() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.meta, 10);
-        lm.scroll(Action::Bottom);
-        lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.viewport.selected(), Some(3));
-        lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.viewport.selected(), Some(2));
-        // First file: stays put.
-        lm.scroll(Action::ScrollUp);
-        assert_eq!(lm.viewport.selected(), Some(2));
-    }
-
-    #[test]
-    fn top_and_bottom_jump_to_first_last_file() {
-        let mut lm = sample();
-        lm.viewport.set_viewport_rows(&lm.meta, 10);
-        lm.scroll(Action::Bottom);
-        assert_eq!(lm.viewport.selected(), Some(4));
+        assert_eq!(lm.viewport.selected(), Some(4)); // sticks at end
+        // Scrolling up now passes through the directory rows.
         lm.scroll(Action::Top);
+        assert_eq!(lm.viewport.selected(), Some(0)); // sub/ (a directory)
+        lm.scroll(Action::ScrollDown);
+        assert_eq!(lm.viewport.selected(), Some(1)); // deeper/ (a directory)
+    }
+
+    #[test]
+    fn top_and_bottom_jump_to_first_last_entry() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
+        lm.scroll(Action::Bottom);
+        assert_eq!(lm.viewport.selected(), Some(4)); // README.txt
+        lm.scroll(Action::Top);
+        assert_eq!(lm.viewport.selected(), Some(0)); // sub/ (first row)
+    }
+
+    #[test]
+    fn parent_nav_on_tree_lands_on_containing_directory() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
+        // Put the cursor on deep.txt (sub/deeper/deep.txt, row 2).
+        lm.select_entry("deep.txt");
         assert_eq!(lm.viewport.selected(), Some(2));
+        // Up → its directory deeper/ (row 1), then sub/ (row 0).
+        assert!(matches!(lm.parent_nav(), ParentNav::Handled));
+        assert_eq!(lm.viewport.selected(), Some(1));
+        assert!(matches!(lm.parent_nav(), ParentNav::Handled));
+        assert_eq!(lm.viewport.selected(), Some(0));
+        // Top level: nothing above to move to.
+        assert!(matches!(lm.parent_nav(), ParentNav::None));
+    }
+
+    #[test]
+    fn select_entry_pins_named_row() {
+        let mut lm = sample();
+        lm.viewport.set_viewport_rows(&lm.meta, 10);
+        lm.select_entry("inner.txt");
+        assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
+        // An unknown name leaves the selection untouched.
+        lm.select_entry("nope.txt");
+        assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
     }
 
     #[test]
@@ -568,20 +617,19 @@ mod tests {
     }
 
     #[test]
-    fn search_on_directory_scrolls_without_changing_selection() {
+    fn search_on_directory_moves_selection_to_it() {
         let mut lm = sample();
         lm.viewport.set_viewport_rows(&lm.meta, 10);
-        let before = lm.viewport.selected();
-        lm.set_search(Some("deeper")); // a directory row
-        // Selection (file-only) unchanged; the dir is just scrolled in.
-        assert_eq!(lm.viewport.selected(), before);
+        lm.set_search(Some("deeper")); // a directory row, now selectable
+        // The match lands the selection on deeper/ (row 1).
+        assert_eq!(lm.viewport.selected(), Some(1));
     }
 
     #[test]
-    fn status_segment_counts_files_only() {
+    fn status_segment_counts_every_entry() {
         let lm = sample();
-        // 3 files in the tree (deep.txt, inner.txt, README.txt).
-        assert_eq!(lm.selectable_count, 3);
+        // 5 entries: sub/, deeper/, deep.txt, inner.txt, README.txt.
+        assert_eq!(lm.selectable_count, 5);
     }
 
     /// Minimal flat jump-select source (the symbol-list shape): nothing

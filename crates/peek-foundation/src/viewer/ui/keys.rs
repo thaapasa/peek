@@ -153,6 +153,11 @@ pub enum Action {
     /// Pop the current session off the stack. At stack depth 1 this
     /// exits the viewer; deeper, it returns to the parent session.
     Back,
+    /// Go up one directory in a listing view: the on-disk directory
+    /// browser opens the parent directory (seeding the cursor on the
+    /// child we came from); a tree TOC hops the selection up a level.
+    /// No-op in non-listing modes.
+    ParentDir,
     /// Reflow streaming-table column widths from the currently-visible
     /// viewport. `RowsTableMode` only; no-op elsewhere.
     ReflowWidths,
@@ -225,6 +230,7 @@ impl Action {
             Action::Extract             => binds![B::plain(Char('e'))],
             Action::Descend             => binds![B::plain(Enter)],
             Action::Back                => binds![B::plain(Esc)],
+            Action::ParentDir           => binds![B::plain(Backspace)],
             Action::ReflowWidths        => binds![B::plain(Char('R'))],
             Action::ToggleHeader        => binds![B::plain(Char('H'))],
             Action::ZoomIn              => binds![B::plain(Char('+')), B::plain(Char('='))],
@@ -291,7 +297,8 @@ impl Action {
             | Action::SwitchToAbout
             | Action::OpenSearch
             | Action::Extract
-            | Action::Descend => false,
+            | Action::Descend
+            | Action::ParentDir => false,
             Action::ToggleRawSource
             | Action::ToggleTextOverlay
             | Action::PlayPause
