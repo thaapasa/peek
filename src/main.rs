@@ -35,9 +35,6 @@ fn main() -> Result<()> {
     if args.update {
         return update::run();
     }
-    if args.json && !args.info {
-        anyhow::bail!("--json is only valid together with --info");
-    }
 
     // No explicit theme → pick the light or dark default from the
     // terminal's background. Only when output is a terminal: piped output
@@ -55,6 +52,10 @@ fn main() -> Result<()> {
         let theme_manager = theme::ThemeManager::new(args.theme, args.color);
         output::render_help(&theme_manager, !args.help)?;
         return Ok(());
+    }
+
+    if args.json && !args.info {
+        anyhow::bail!("--json is only valid together with --info");
     }
 
     if let Some(aspect) = args.cell_aspect {
@@ -319,9 +320,6 @@ fn pick_extract_output(args: &Args, suggested: &str) -> extract::write::Output {
     extract::write::Output::resolve(None, suggested)
 }
 
-/// Terminal width for non-interactive (pipe) rendering. `--width N`
-/// wins (user explicitly asked for that output width); otherwise
-/// `$COLUMNS` if set and ≥ 24; else 80.
 /// Build a `RenderCtx` for the non-interactive paths (`--list`, pipe).
 /// `term_rows` is `usize::MAX` — pipes are vertically unbounded —
 /// and `term_cols` comes from `--width` or the detected terminal.
@@ -341,6 +339,9 @@ fn pipe_render_ctx<'a>(
     }
 }
 
+/// Terminal width for non-interactive (pipe) rendering. `--width N`
+/// wins (user explicitly asked for that output width); otherwise
+/// `$COLUMNS` if set and ≥ 24; else 80.
 fn pipe_term_cols(args: &Args) -> usize {
     if args.width > 0 {
         return args.width as usize;
