@@ -247,16 +247,6 @@ pub fn overlay_matches(
     out
 }
 
-/// Strip every SGR escape from `s`, leaving only the visible text.
-fn strip_ansi(s: &str) -> String {
-    scan(s)
-        .filter_map(|t| match t {
-            Sgr::Text(text) => Some(text),
-            Sgr::Esc(_) => None,
-        })
-        .collect()
-}
-
 /// One search match: a byte range within the visible text of logical
 /// line `line`.
 struct MatchPos {
@@ -324,7 +314,7 @@ impl SearchState {
             }
             let line = line.as_ref();
             scanned += line.len() as u64 + 1;
-            let visible = strip_ansi(line);
+            let visible = crate::theme::strip_ansi(line);
             for range in find_matches(&visible, query, sensitive) {
                 matches.push(MatchPos { line: idx, range });
                 if matches.len() >= MAX_MATCHES {

@@ -88,7 +88,7 @@ fn gfm_options() -> Options {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, ThemeManager};
+    use crate::theme::{PeekThemeName, ThemeManager, strip_ansi};
     use std::rc::Rc;
 
     fn render_plain(md: &str) -> Vec<String> {
@@ -283,26 +283,6 @@ mod tests {
             joined.contains("[^a]:") && joined.contains("definition text"),
             "expected def header + body in {joined:?}"
         );
-    }
-
-    /// Strip ANSI/CSI sequences so substring assertions can match plain text.
-    fn strip_ansi(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        let mut in_esc = false;
-        for c in s.chars() {
-            if in_esc {
-                if c == 'm' {
-                    in_esc = false;
-                }
-                continue;
-            }
-            if c == '\x1b' {
-                in_esc = true;
-                continue;
-            }
-            out.push(c);
-        }
-        out
     }
 
     #[test]

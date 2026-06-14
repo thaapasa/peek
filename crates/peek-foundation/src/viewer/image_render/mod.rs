@@ -15,7 +15,7 @@ pub mod scroll;
 pub mod zoom;
 pub mod zoom_pan;
 
-// `pub` (not `pub`) so the `types/image` engine can re-export these
+// `pub` (not `pub(crate)`) so the `types/image` engine can re-export these
 // with `pub use` at the historical `pipeline::*` / `render::*` paths.
 pub use config::{Background, FitMode, ImageConfig, TermSize};
 pub use image_mode::ImageMode;

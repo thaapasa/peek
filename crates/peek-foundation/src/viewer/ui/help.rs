@@ -23,7 +23,7 @@ pub fn render_help_with_keys(
     let key_width = 19 + overhead;
 
     let section_header = |lines: &mut Vec<String>, title: &str| {
-        let rule = "\u{2500}".repeat(36usize.saturating_sub(title.len()));
+        let rule = "\u{2500}".repeat(36usize.saturating_sub(crate::theme::display_width(title)));
         lines.push(format!(
             "{} {} {}",
             theme.paint_muted("\u{2500}\u{2500}"),

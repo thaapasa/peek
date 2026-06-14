@@ -57,7 +57,7 @@ pub(super) fn format_time(time: SystemTime, utc: bool) -> String {
 /// (archive TOC, etc.). Returns a fixed-width 16-char string; on overflow
 /// or formatting failure, returns a 16-char `-` filler so column widths
 /// don't shift.
-pub fn format_archive_mtime(secs: u64) -> String {
+fn format_archive_mtime(secs: u64) -> String {
     let iso = format_iso_utc(secs as i64);
     if iso.len() >= 16 {
         format!("{} {}", &iso[..10], &iso[11..16])

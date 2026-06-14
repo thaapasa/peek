@@ -84,16 +84,12 @@ fn category_label(cat: MimeCategory) -> &'static str {
 }
 
 fn compression_json(comp: &CompressionInfo) -> Value {
-    let ratio = if comp.compressed_size == 0 {
-        0.0
-    } else {
-        comp.decompressed_size as f64 / comp.compressed_size as f64
-    };
     let mut obj = json!({
         "codec": comp.codec_label,
         "compressed_size": comp.compressed_size,
         "decompressed_size": comp.decompressed_size,
-        "ratio": (ratio * 100.0).round() / 100.0,
+        // One decimal to match the print path's `{:.1}x`.
+        "ratio": (comp.ratio() * 10.0).round() / 10.0,
         "outer_name": comp.outer_name,
     });
     if let Some(ref err) = comp.error {

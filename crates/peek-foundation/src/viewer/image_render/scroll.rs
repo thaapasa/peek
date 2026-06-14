@@ -22,11 +22,11 @@ use crate::viewer::ui::Action;
 
 /// Arrow-key horizontal step. Small enough to feel responsive, big
 /// enough to cross a wide image. Page-equivalent stays vertical.
-pub const HSTEP: u32 = 4;
+pub(crate) const HSTEP: u32 = 4;
 
 /// Fallback vertical page size when terminal height isn't known at
 /// scroll time (`AnimationMode`'s decode-per-tick path).
-pub const FALLBACK_PAGE_Y: u32 = 20;
+pub(crate) const FALLBACK_PAGE_Y: u32 = 20;
 
 #[derive(Copy, Clone)]
 pub struct ScrollBounds {
@@ -60,7 +60,12 @@ impl ScrollBounds {
 
 /// Apply a scroll action to `(scroll_x, scroll_y)`. Returns true when
 /// the action was a scroll the mode handled.
-pub fn apply(scroll_x: &mut u32, scroll_y: &mut u32, action: Action, b: ScrollBounds) -> bool {
+pub(crate) fn apply(
+    scroll_x: &mut u32,
+    scroll_y: &mut u32,
+    action: Action,
+    b: ScrollBounds,
+) -> bool {
     match action {
         Action::ScrollUp => {
             *scroll_y = scroll_y.saturating_sub(1);

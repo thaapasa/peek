@@ -61,6 +61,20 @@ pub struct CompressionInfo {
     pub error: Option<String>,
 }
 
+impl CompressionInfo {
+    /// Compression ratio `decompressed / compressed` (a 4:1 gzip → `4.0`).
+    /// Zero-guarded so a missing/zero compressed size yields `0.0` rather
+    /// than NaN/inf. Both the print and JSON paths round this to one
+    /// decimal so the two `--info` outputs agree.
+    pub fn ratio(&self) -> f64 {
+        if self.compressed_size == 0 {
+            0.0
+        } else {
+            self.decompressed_size as f64 / self.compressed_size as f64
+        }
+    }
+}
+
 /// Type-specific metadata, rendered into the Info view's lower section.
 ///
 /// Each file type owns one stats struct under `types/<x>/info.rs` and

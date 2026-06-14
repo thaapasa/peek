@@ -78,11 +78,7 @@ fn push_mime_field(lines: &mut Vec<String>, mimes: &[MimeInfo], theme: &PeekThem
 /// size with friendly units, and the compression ratio. Ratio is
 /// `decompressed / compressed` so a typical 4:1 gzip shows as `4.0x`.
 fn paint_compression(comp: &CompressionInfo, theme: &PeekTheme) -> String {
-    let ratio = if comp.compressed_size == 0 {
-        0.0
-    } else {
-        comp.decompressed_size as f64 / comp.compressed_size as f64
-    };
+    let ratio = comp.ratio();
     let codec = theme.paint(comp.codec_label, theme.heading);
     let from = theme.paint(&format_size_human(comp.compressed_size), theme.value);
     let to = theme.paint(&format_size_human(comp.decompressed_size), theme.value);

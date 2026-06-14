@@ -333,29 +333,11 @@ fn byte_color(theme: &PeekTheme, b: u8) -> syntect::highlighting::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, load_embedded_theme};
+    use crate::theme::{PeekThemeName, load_embedded_theme, strip_ansi};
 
     fn test_theme() -> PeekTheme {
         let t = load_embedded_theme(PeekThemeName::IdeaDark.tmtheme_source());
         PeekTheme::from_syntect(&t)
-    }
-
-    /// Strip ANSI escape sequences and return the visible text.
-    fn strip_ansi(s: &str) -> String {
-        let mut out = String::with_capacity(s.len());
-        let mut in_escape = false;
-        for c in s.chars() {
-            if in_escape {
-                if c.is_ascii_alphabetic() {
-                    in_escape = false;
-                }
-            } else if c == '\x1b' {
-                in_escape = true;
-            } else {
-                out.push(c);
-            }
-        }
-        out
     }
 
     #[test]

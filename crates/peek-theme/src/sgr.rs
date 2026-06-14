@@ -238,6 +238,19 @@ pub fn display_width(s: &str) -> usize {
     w
 }
 
+/// Strip every SGR escape from `s`, leaving only the visible text. The
+/// canonical home for ANSI stripping — readers (notebook tracebacks,
+/// markdown) and the search overlay all route through here so the CSI
+/// skip logic lives in one place beside [`scan`].
+pub fn strip_ansi(s: &str) -> String {
+    scan(s)
+        .filter_map(|t| match t {
+            Sgr::Text(text) => Some(text),
+            Sgr::Esc(_) => None,
+        })
+        .collect()
+}
+
 impl<'a> Iterator for SgrScan<'a> {
     type Item = Sgr<'a>;
 

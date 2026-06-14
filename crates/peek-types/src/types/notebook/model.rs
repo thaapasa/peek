@@ -6,6 +6,7 @@
 //! `serde_json::Value` and pull out only the shape the viewer needs.
 //! Everything not understood is ignored, never an error.
 
+use crate::theme::strip_ansi;
 use serde_json::Value;
 
 /// A parsed notebook: kernel/language metadata plus the ordered cell
@@ -222,30 +223,6 @@ fn join_traceback(v: Option<&Value>) -> String {
             .join("\n"),
         _ => String::new(),
     }
-}
-
-/// Strip CSI SGR escape sequences. Tracebacks and some stream output
-/// embed ANSI colour; the rendered view re-styles through the theme, so
-/// raw escapes would only show as literal `␛[…m` noise here.
-pub(super) fn strip_ansi(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    while let Some(c) = chars.next() {
-        if c == '\u{1b}' {
-            // Skip `[` … final-byte of a CSI sequence.
-            if chars.peek() == Some(&'[') {
-                chars.next();
-                for d in chars.by_ref() {
-                    if ('@'..='~').contains(&d) {
-                        break;
-                    }
-                }
-            }
-            continue;
-        }
-        out.push(c);
-    }
-    out
 }
 
 #[cfg(test)]
