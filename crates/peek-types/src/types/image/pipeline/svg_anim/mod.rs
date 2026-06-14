@@ -65,7 +65,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 mod keyframes;
 mod marker;
@@ -154,7 +154,7 @@ pub fn try_parse(source: &InputSource) -> Result<Option<AnimatedSvg>> {
         return Ok(None);
     }
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by render cap above",
         ))
         .context("failed to read SVG for animation parse")?;

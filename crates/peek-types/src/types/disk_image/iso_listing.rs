@@ -17,8 +17,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::iso_pvd::{self, PVD_OFFSET};
-use crate::input::InputSource;
 use crate::viewer::listing::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
+use peek_io::InputSource;
 
 /// Cap on tree depth walked. Real ISOs respect ISO 9660's 8-level
 /// limit; this cap is loose enough for non-conformant images while
@@ -102,7 +102,7 @@ pub fn lookup_file_range(source: &InputSource, target: &Path) -> Result<Option<(
 
 #[allow(clippy::too_many_arguments)]
 fn walk_for_path(
-    bs: &dyn crate::input::source::ByteSource,
+    bs: &dyn peek_io::source::ByteSource,
     extent_lba: u32,
     data_len: u32,
     block_size: u32,
@@ -171,7 +171,7 @@ fn walk_for_path(
 
 #[allow(clippy::too_many_arguments)]
 fn walk_directory(
-    bs: &dyn crate::input::source::ByteSource,
+    bs: &dyn peek_io::source::ByteSource,
     extent_lba: u32,
     data_len: u32,
     block_size: u32,

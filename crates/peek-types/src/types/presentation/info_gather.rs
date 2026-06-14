@@ -5,7 +5,7 @@
 use anyhow::Result;
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::{Deck, PresentationFormat, PresentationStats};
 

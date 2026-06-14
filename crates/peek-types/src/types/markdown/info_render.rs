@@ -14,9 +14,9 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
-use crate::theme::PeekTheme;
 use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
 use crate::types::text::info_render::TextView;
+use peek_theme::PeekTheme;
 
 /// Themed terminal Markdown section (Content + Markdown blocks).
 pub fn render_section(lines: &mut Vec<String>, info: &MarkdownInfo, theme: &PeekTheme) {

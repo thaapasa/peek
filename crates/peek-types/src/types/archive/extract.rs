@@ -18,16 +18,16 @@ use tempfile::Builder as TempBuilder;
 use crate::extract::{
     ExtractError, ExtractOptions, Extracted, forward_slash_key, sanitize_entry_path,
 };
-use crate::input::InputSource;
-use crate::input::compression::MAX_SPILL_BYTES;
-use crate::input::detect::{ArchiveFormat, CompressionFormat};
 use crate::types::archive::reader::open_seekable;
+use peek_detect::{ArchiveFormat, CompressionFormat};
+use peek_io::InputSource;
+use peek_io::compression::MAX_SPILL_BYTES;
 
 /// Hard cap on a single in-memory extracted entry. Only enforced on
 /// the `Vec<u8>` fallback path — the spool-to-tempfile path bypasses
 /// this since disk, not RAM, is the limit. Setting `--no-tempfile`
 /// drops the cap as well: the user explicitly chose the memory path.
-const MAX_EXTRACT_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
+const MAX_EXTRACT_BYTES: u64 = peek_io::limits::BULK_WALK_BYTES;
 
 /// Spool threshold: at or above this many bytes (or when the entry's
 /// declared size is unknown), [`materialise`] writes to a
@@ -474,7 +474,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250, "fibonacci.py is 2250 bytes");
     }
@@ -491,7 +491,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -508,7 +508,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -525,7 +525,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -542,7 +542,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -559,7 +559,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -576,7 +576,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "fibonacci.py");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), 2_250);
     }
@@ -614,7 +614,7 @@ mod tests {
             let got = extract(&src, ArchiveFormat::SevenZ, name, &opts())
                 .unwrap_or_else(|e| panic!("{name}: {e}"))
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap();
             assert_eq!(
                 got.as_ref(),
@@ -644,14 +644,14 @@ mod tests {
         )
         .expect("ar over File")
         .source
-        .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+        .read_bytes(peek_io::limits::Budget::Unbounded("test"))
         .unwrap();
 
         let ranged = InputSource::File(path).subrange(0, len, "hello.deb");
         let got = extract(&ranged, ArchiveFormat::Ar, "data.tar.gz", &opts())
             .expect("ar over FileRange")
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
 
         assert!(!got.is_empty());
@@ -674,7 +674,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .len(),
             2_250
@@ -698,7 +698,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .len(),
             2_250
@@ -739,7 +739,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .as_ref(),
             body,
@@ -778,7 +778,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .as_ref(),
             payload
@@ -805,7 +805,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .len(),
             2_250
@@ -844,7 +844,7 @@ mod tests {
         assert_eq!(
             extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .as_ref(),
             payload
@@ -876,7 +876,7 @@ mod tests {
             assert_eq!(extracted.suggested_name, "theme.rs", "{name}");
             let bytes = extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap();
             assert_eq!(bytes.len(), SUBPATH_ENTRY_SIZE, "{name}");
         }
@@ -941,7 +941,7 @@ mod tests {
         );
         let bytes = res
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.len(), payload.len());
     }
@@ -1013,7 +1013,7 @@ mod tests {
         }
         let bytes = second
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.as_ref(), leaf.as_slice());
 
@@ -1023,7 +1023,7 @@ mod tests {
         drop(first.source);
         assert_eq!(
             leaf_view
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .as_ref(),
             leaf.as_slice()
@@ -1054,7 +1054,7 @@ mod tests {
         );
         assert_eq!(
             res.source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .len(),
             payload.len()

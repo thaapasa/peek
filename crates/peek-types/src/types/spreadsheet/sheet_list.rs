@@ -5,9 +5,9 @@
 //! (`spreadsheet::compose`); the extract key keeps the `.csv` suffix the
 //! handler and extractor key off.
 
-use crate::theme::PeekTheme;
 use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
+use peek_theme::PeekTheme;
 
 use super::compose::SHEET_SUFFIX;
 

@@ -13,7 +13,7 @@
 use serde::Serialize;
 
 use crate::info::{InfoNode, InfoView, Value};
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
 fn plain_theme() -> PeekTheme {
     let mut t = PeekTheme::from_syntect(&load_embedded_theme(

@@ -5,14 +5,14 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, Detected, SpreadsheetFormat};
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 use crate::viewer::table::rows_mode::RowsTableMode;
+use peek_detect::{ArchiveFormat, Detected, SpreadsheetFormat};
+use peek_io::InputSource;
 
 use super::sheet_list::SheetListSource;
 use super::workbook::Workbook;

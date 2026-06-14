@@ -1,9 +1,9 @@
 //! Gather CBZ-specific extras for the Info section.
 
 use crate::info::Extras;
-use crate::input::InputSource;
-use crate::input::detect::ComicFormat;
 use crate::types::comic::ComicStats;
+use peek_detect::ComicFormat;
+use peek_io::InputSource;
 
 use super::package;
 

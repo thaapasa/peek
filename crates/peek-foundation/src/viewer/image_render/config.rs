@@ -4,7 +4,7 @@
 //! the `types/image` rasterization engine — the config the engine reads
 //! and the terminal size it's fed. No rendering logic lives here.
 
-use crate::theme::StyleMode;
+use peek_theme::StyleMode;
 
 use super::image_mode::ImageMode;
 

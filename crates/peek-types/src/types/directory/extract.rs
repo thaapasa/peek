@@ -6,7 +6,7 @@
 //! directories.
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parent = source

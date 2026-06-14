@@ -4,10 +4,10 @@
 //! the generic listing engine. Rows extract through the standard `e`
 //! pipeline (`email::extract`), keyed by the attachment's stable name.
 
-use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, SizeCell};
 use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
+use peek_theme::PeekTheme;
 
 use super::message::ParsedEmail;
 
@@ -179,7 +179,7 @@ mod tests {
     /// width (with an ellipsis), not push the row's other cells right.
     #[test]
     fn over_cap_content_type_truncates_to_column_width() {
-        use crate::theme::{PeekThemeName, StyleMode, make_peek_theme};
+        use peek_theme::{PeekThemeName, StyleMode, make_peek_theme};
         let long = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         let src = AttachmentListSource::new(&email(vec![
             attachment("a.png", 1, "image/png"),

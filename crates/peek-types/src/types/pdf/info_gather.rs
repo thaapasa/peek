@@ -5,7 +5,7 @@
 //! encrypted, missing library) without crashing.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::PdfFlavor;
 use super::info::PdfStats;

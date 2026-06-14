@@ -40,10 +40,10 @@ use std::io::Cursor;
 use anyhow::{Context, Result};
 use csv::{Position, ReaderBuilder};
 
-use crate::input::InputSource;
-use crate::input::stream::{ByteStream, ReadSeek};
 use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
+use peek_io::InputSource;
+use peek_io::stream::{ByteStream, ReadSeek};
 
 use super::CsvFormat;
 
@@ -511,7 +511,7 @@ fn build_body_reader(
         }
         Encoding::Utf16Le | Encoding::Utf16Be => {
             let len = source.byte_len()?;
-            let cap = crate::input::limits::WHOLE_DOC_BYTES;
+            let cap = peek_io::limits::WHOLE_DOC_BYTES;
             if len > cap {
                 anyhow::bail!(
                     "UTF-16 CSV is {} MB (> {} MB cap): transcoding holds the whole file in \
@@ -521,7 +521,7 @@ fn build_body_reader(
                 );
             }
             // Gated by the WHOLE_DOC_BYTES byte_len check above.
-            let raw = source.read_bytes(crate::input::limits::Budget::Unbounded(
+            let raw = source.read_bytes(peek_io::limits::Budget::Unbounded(
                 "gated by WHOLE_DOC_BYTES above",
             ))?;
             let payload = &raw[body_offset..];
@@ -900,7 +900,7 @@ mod tests {
     fn utf16_over_cap_refuses_instead_of_transcoding() {
         // UTF-16 BOM on a body past the whole-doc cap: open must refuse
         // with the cap message, not materialise + transcode the file.
-        let cap = crate::input::limits::WHOLE_DOC_BYTES as usize;
+        let cap = peek_io::limits::WHOLE_DOC_BYTES as usize;
         let mut buf = vec![0xFF, 0xFE];
         buf.resize(cap + 2, b' ');
         let src = InputSource::stdin(Bytes::from(buf));

@@ -6,7 +6,7 @@
 //! `serde_json::Value` and pull out only the shape the viewer needs.
 //! Everything not understood is ignored, never an error.
 
-use crate::theme::strip_ansi;
+use peek_theme::strip_ansi;
 use serde_json::Value;
 
 /// A parsed notebook: kernel/language metadata plus the ordered cell

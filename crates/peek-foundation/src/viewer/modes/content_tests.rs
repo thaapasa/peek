@@ -5,8 +5,8 @@
 use super::super::pretty_view::{PRETTY_MAX_BYTES, PrettyView};
 use super::*;
 use crate::info::{FileInfo, NoExtras, RenderOptions};
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use bytes::Bytes;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 /// Minimal `FileInfo` for building a `RenderCtx` without the `gather`
 /// hub — these mode tests never read its fields, only need the struct.
@@ -82,7 +82,7 @@ fn render_window_matches_whole_file_highlight() {
     // Reference: whole-file highlight via the same path the pre-A1
     // code used.
     let raw = source
-        .read_text(crate::input::limits::Budget::Unbounded("test"))
+        .read_text(peek_io::limits::Budget::Unbounded("test"))
         .unwrap();
     let whole = crate::viewer::highlight_lines(
         &raw,

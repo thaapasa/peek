@@ -6,8 +6,8 @@
 use std::path::Path;
 
 use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
-use crate::input::InputSource;
-use crate::input::detect::DiskImageFormat;
+use peek_detect::DiskImageFormat;
+use peek_io::InputSource;
 
 pub fn extract(
     source: &InputSource,
@@ -72,7 +72,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "README.txt");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.as_ref(), b"primary\n");
     }
@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(extracted.suggested_name, "deep.txt");
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert_eq!(bytes.as_ref(), b"deep\n");
     }
@@ -126,7 +126,7 @@ mod tests {
         let view = extracted.source;
         drop(src);
         assert_eq!(
-            view.read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            view.read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
                 .as_ref(),
             b"primary\n"

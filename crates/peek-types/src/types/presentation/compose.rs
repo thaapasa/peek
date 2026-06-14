@@ -5,8 +5,6 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::archive;
 use crate::types::presentation::keynote::preview::PreviewRenderer;
 use crate::types::presentation::read_mode::PresentationReader;
@@ -14,6 +12,8 @@ use crate::types::presentation::{self, Deck, PresentationFormat};
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

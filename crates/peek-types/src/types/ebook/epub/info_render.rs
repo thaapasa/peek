@@ -4,8 +4,8 @@
 //! Metadata members render inline (and so flatten into the JSON object).
 
 use crate::info::{Muted, Value, render_info};
-use crate::theme::PeekTheme;
 use crate::types::ebook::EbookStats;
+use peek_theme::PeekTheme;
 
 /// Themed terminal EPUB section.
 pub fn render_section(lines: &mut Vec<String>, stats: &EbookStats, theme: &PeekTheme) {

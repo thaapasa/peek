@@ -2,7 +2,7 @@
 //! CB7 / CBT containers; per-format gather code populates this struct
 //! so the renderer doesn't need to know the source format.
 
-use crate::input::detect::ComicFormat;
+use peek_detect::ComicFormat;
 
 #[derive(Debug, Clone)]
 pub struct ComicStats {

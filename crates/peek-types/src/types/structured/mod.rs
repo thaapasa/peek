@@ -8,8 +8,8 @@
 pub mod info;
 pub mod pretty;
 
-use crate::input::detect::{FileType, StructuredFormat};
 use crate::viewer::modes::PrettyView;
+use peek_detect::{FileType, StructuredFormat};
 
 /// Build the pretty-print branch for a structured-ish source view
 /// (`Structured(*)` or `Svg`-as-XML), or `None` when the type has no

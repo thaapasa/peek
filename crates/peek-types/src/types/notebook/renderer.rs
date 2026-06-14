@@ -19,10 +19,10 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 use crate::types::markdown::render_markdown;
 use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
 use super::model::{Cell, CellKind, Notebook, Output};
 
@@ -64,11 +64,9 @@ impl TextRenderer for NotebookRenderer {
         if let Some(lines) = render_cap_placeholder(len, "notebook", &mut self.warning) {
             return Ok(lines);
         }
-        let text = self
-            .source
-            .read_text(crate::input::limits::Budget::Unbounded(
-                "gated by render cap above",
-            ))?;
+        let text = self.source.read_text(peek_io::limits::Budget::Unbounded(
+            "gated by render cap above",
+        ))?;
         let md = match Notebook::parse(&text) {
             Some(nb) => to_markdown(&nb),
             // Not a parseable notebook — fall back to showing the raw

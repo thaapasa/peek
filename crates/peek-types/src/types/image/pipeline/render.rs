@@ -6,8 +6,8 @@ use super::glyph_atlas::{
     CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_contour_glyph, best_glyph, dilate_bitmap,
 };
 use super::{Background, FitMode, ImageConfig, ImageMode};
-use crate::input::InputSource;
-use crate::theme::StyleMode;
+use peek_io::InputSource;
+use peek_theme::StyleMode;
 // TermSize moved to the foundation with the rest of the render vocab;
 // re-exported so engine-internal `render::TermSize` paths are unchanged.
 pub use crate::viewer::image_render::TermSize;
@@ -708,7 +708,7 @@ fn load_image(source: &InputSource) -> Result<DynamicImage> {
             .decode()
             .context("failed to decode image"),
         _ => {
-            let buf = source.read_bytes(crate::input::limits::Budget::Unbounded(
+            let buf = source.read_bytes(peek_io::limits::Budget::Unbounded(
                 "non-File source already bounded (File arm streams from path)",
             ))?;
             image::load_from_memory(&buf).context("failed to decode image")

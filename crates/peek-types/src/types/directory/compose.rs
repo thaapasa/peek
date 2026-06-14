@@ -2,13 +2,13 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::directory::{DirListSource, read};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

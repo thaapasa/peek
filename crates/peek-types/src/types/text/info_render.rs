@@ -12,8 +12,8 @@
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoNode, InfoValue, InfoView, Value, push_field, render_info};
-use crate::theme::PeekTheme;
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
+use peek_theme::PeekTheme;
 
 /// Themed terminal Content section for plain text files.
 pub fn render_section(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
@@ -198,7 +198,7 @@ fn encoding_token(enc: Encoding) -> &'static str {
 #[cfg(test)]
 mod print_tests {
     use super::*;
-    use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+    use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
     fn plain_theme() -> PeekTheme {
         let mut t = PeekTheme::from_syntect(&load_embedded_theme(

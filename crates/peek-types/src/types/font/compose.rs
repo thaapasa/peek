@@ -13,14 +13,14 @@ use std::borrow::Cow;
 use anyhow::Result;
 use bytes::Bytes;
 
-use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType};
 use crate::types::font::info_gather;
 use crate::types::font::specimen;
 use crate::types::font::specimen_mode::SpecimenMode;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
+use peek_detect::{Detected, FileType};
+use peek_io::InputSource;
 
 /// Vertical pixel budget for the rendered specimen canvas. Chosen so
 /// the image pipeline downsamples to a reasonable terminal height
@@ -42,7 +42,7 @@ pub fn compose(
 
     // Best-effort: a malformed font (or one fontdue rejects) skips the
     // specimen and falls through to the universal Info + Hex tail.
-    if let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Sidecar("font")) {
+    if let Ok(bytes) = source.read_bytes(peek_io::limits::Budget::Sidecar("font")) {
         // Unwrap WOFF to its inner sfnt before fontdue sees it. Bare
         // sfnt borrows through, so clone the refcounted handle rather
         // than copying; WOFF produces an owned buffer. SpecimenMode

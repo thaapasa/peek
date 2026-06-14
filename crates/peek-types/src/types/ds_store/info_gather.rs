@@ -7,14 +7,14 @@ use super::format::view_style_label;
 use super::info::{DsStoreInfo, DsStoreMeta};
 use super::reader::{self, DsValue};
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))
 }
 
 fn gather(source: &InputSource) -> DsStoreInfo {
-    let bytes = match source.read_bytes(crate::input::limits::Budget::Sidecar(".DS_Store")) {
+    let bytes = match source.read_bytes(peek_io::limits::Budget::Sidecar(".DS_Store")) {
         Ok(b) => b,
         Err(e) => return DsStoreInfo::err(format!("read failed: {e}")),
     };

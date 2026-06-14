@@ -10,11 +10,11 @@ use super::pipeline::render;
 use super::scroll::ScrollBounds;
 use super::view::ImageView;
 use super::zoom_pan::ViewBounds;
-use crate::theme::PeekTheme;
 use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::PeekTheme;
 
 /// Animated image view (GIF / WebP). Owns the decoded frame list plus
 /// shared frame-position / play state. Image-grid scroll, cycleable

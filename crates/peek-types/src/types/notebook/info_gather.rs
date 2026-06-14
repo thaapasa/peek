@@ -1,7 +1,7 @@
 //! Build [`NotebookInfo`] from a notebook source for the Info section.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::info::NotebookInfo;
 use super::model::Notebook;
@@ -13,7 +13,7 @@ use super::model::Notebook;
 /// the generic binary/text path.
 pub fn gather_extras(source: &InputSource) -> Option<Extras> {
     let text = source
-        .read_text(crate::input::limits::Budget::WholeDoc("notebook"))
+        .read_text(peek_io::limits::Budget::WholeDoc("notebook"))
         .ok()?;
     let nb = Notebook::parse(&text)?;
     Some(Box::new(NotebookInfo::from_notebook(&nb)))

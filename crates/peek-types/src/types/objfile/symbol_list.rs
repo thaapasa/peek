@@ -11,10 +11,10 @@
 
 use object::{Object, ObjectSection, ObjectSymbol};
 
-use crate::theme::PeekTheme;
 use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
 use crate::viewer::ui::Action;
+use peek_theme::PeekTheme;
 
 struct SymbolRow {
     address: u64,

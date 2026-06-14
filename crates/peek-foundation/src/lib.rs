@@ -12,49 +12,20 @@
 //! loop), so a parser bug in `peek-types` can never reach process /
 //! terminal control through this crate.
 //!
-//! ## Facade
-//!
-//! The historical in-crate paths are preserved so the moved modules — and
-//! `peek-types`, which depends on this crate — keep compiling unchanged:
-//!
-//! - `crate::theme::*` → the `peek-theme` crate (aliased here).
-//! - `crate::input::*` → the `peek-io` + `peek-detect` re-export façade,
-//!   mirroring the binary's own `src/input` façade.
+//! Code names the lower crates directly — `peek_io`, `peek_detect`,
+//! `peek_theme` — rather than through an in-crate re-export façade.
 
 // So the `#[derive(InfoView)]` macro's fully-qualified `::peek_foundation::…`
 // paths resolve when the derive is used inside this crate too (it generates
 // the same absolute paths regardless of call site).
 extern crate self as peek_foundation;
 
+/// Macro-support alias only: the `#[derive(InfoView)]` expansion emits
+/// `::peek_foundation::theme::PeekTheme`, routed through this crate because
+/// `peek-foundation` is the one dependency every deriving crate is
+/// guaranteed to have. Hand-written code names `peek_theme` directly — do
+/// not reach for `crate::theme`.
 pub use peek_theme as theme;
-
-/// Thin façade over `peek-io` + `peek-detect`, re-exporting them under the
-/// historical `crate::input::*` paths the reader/viewer layer uses. Mirrors
-/// the binary's own `src/input` façade (minus the CLI-level stdin dispatch,
-/// which needs `Args` and stays in the bin).
-pub mod input {
-    /// `crate::input::limits` — the memory-budget classes every size
-    /// gate aliases.
-    pub use peek_io::limits;
-    pub use peek_io::{ByteSource, InputSource, LineSource};
-    pub use peek_io::{source, stream};
-
-    /// `crate::input::term_query` — OSC 11 terminal background probe.
-    pub use peek_io::term_query;
-
-    /// `crate::input::detect::*` — the detection surface.
-    pub mod detect {
-        pub use peek_detect::*;
-    }
-
-    /// `crate::input::mime` — MIME classification helpers.
-    pub use peek_detect::mime;
-
-    /// `crate::input::compression` — transparent decompress-then-redetect.
-    pub mod compression {
-        pub use peek_detect::resolve_transparent;
-    }
-}
 
 pub mod base64;
 pub mod extract;

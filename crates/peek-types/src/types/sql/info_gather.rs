@@ -7,9 +7,9 @@
 //! a heuristic: weighted feature votes pick a winner over Generic.
 
 use crate::info::Extras;
-use crate::input::InputSource;
 use crate::types::sql::info::{SqlDialect, SqlInfo, SqlStats};
 use crate::types::text::info_gather::gather_capped_text;
+use peek_io::InputSource;
 
 /// Collect the SQL Info sidecar: streaming text stats plus a capped
 /// whole-file statement scan. Returns `None` when the source is over the

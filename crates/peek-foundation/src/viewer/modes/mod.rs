@@ -15,11 +15,11 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::info::{FileInfo, RenderOptions};
-use crate::input::InputSource;
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, PeekThemeName};
 use crate::viewer::search::SearchState;
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName};
 
 mod about;
 mod content;
@@ -197,7 +197,7 @@ pub enum ExtractTarget {
 /// SQLite table) rather than a separate extracted file.
 pub struct DescendFrame {
     pub source: InputSource,
-    pub detected: crate::input::detect::Detected,
+    pub detected: peek_detect::Detected,
     pub modes: Vec<Box<dyn Mode>>,
     /// Breadcrumb label for the pushed frame. Synthetic views reuse the
     /// *current* source, so `source.name()` would repeat the parent

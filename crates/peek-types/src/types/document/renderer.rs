@@ -8,10 +8,10 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::types::document::ast::Doc;
 use crate::types::document::render;
 use crate::viewer::modes::{ModeId, TextRenderer};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 pub(crate) struct DocRenderer {
     doc: Doc,

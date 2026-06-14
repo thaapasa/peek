@@ -5,9 +5,9 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::theme::{PeekTheme, StyleMode};
 use crate::types::document::rtf::parse::{BlockPainter, Parsed};
 use crate::types::document::wrap::{SgrStyle, emit_styled, split_words, visible_width};
+use peek_theme::{PeekTheme, StyleMode};
 
 pub(crate) fn render(
     parsed: &Parsed,

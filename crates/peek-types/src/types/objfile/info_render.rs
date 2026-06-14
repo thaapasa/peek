@@ -15,7 +15,7 @@ use serde_json::json;
 
 use super::info::{BuildIdKind, ObjectInfo};
 use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 /// Themed terminal object-file section.
 pub fn render_section(lines: &mut Vec<String>, info: &ObjectInfo, theme: &PeekTheme) {

@@ -28,8 +28,8 @@ use bytes::Bytes;
 use image::DynamicImage;
 use pdfium_render::prelude::*;
 
-use crate::input::InputSource;
 use crate::viewer::listing::FlatEntry;
+use peek_io::InputSource;
 
 /// Process-wide Pdfium handle. Holds the C++ library bindings; a
 /// `PdfDocument` borrows from it for as long as the doc lives.
@@ -456,7 +456,7 @@ fn split_digits(s: &str) -> Option<(&str, &str)> {
 pub fn open_doc(source: &InputSource) -> Result<Doc> {
     let pdfium = pdfium()?;
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::BulkWalk("PDF"))
+        .read_bytes(peek_io::limits::Budget::BulkWalk("PDF"))
         .context("failed to read PDF source")?;
     let pdf_version = read_pdf_version(&bytes);
     let document = pdfium

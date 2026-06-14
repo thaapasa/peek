@@ -8,9 +8,9 @@
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
-use crate::input::InputSource;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
+use peek_io::InputSource;
 
 use super::SpreadsheetFormat;
 

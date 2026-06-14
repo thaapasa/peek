@@ -12,9 +12,9 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::render;
 
@@ -54,11 +54,9 @@ impl TextRenderer for HtmlRenderer {
         if let Some(lines) = render_cap_placeholder(len, "HTML", &mut self.warning) {
             return Ok(lines);
         }
-        let bytes = self
-            .source
-            .read_bytes(crate::input::limits::Budget::Unbounded(
-                "gated by render cap above",
-            ))?;
+        let bytes = self.source.read_bytes(peek_io::limits::Budget::Unbounded(
+            "gated by render cap above",
+        ))?;
         render::render(&bytes, width.max(20), style_mode)
     }
 
@@ -70,8 +68,8 @@ impl TextRenderer for HtmlRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::ThemeManager;
     use crate::viewer::modes::RENDER_MAX_BYTES;
+    use peek_theme::ThemeManager;
 
     fn theme() -> PeekTheme {
         ThemeManager::new(PeekThemeName::default(), StyleMode::Plain)

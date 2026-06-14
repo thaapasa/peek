@@ -9,7 +9,7 @@
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
 
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 /// Successful extract: fresh `InputSource` + suggested filename.
 #[derive(Debug)]

@@ -3,9 +3,9 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::datetime::format_datetime;
 use super::line::{
@@ -43,7 +43,7 @@ impl TextRenderer for ContactRenderer {
         let width = width.max(20);
         let bytes = self
             .source
-            .read_bytes(crate::input::limits::Budget::Sidecar("vCard"))?;
+            .read_bytes(peek_io::limits::Budget::Sidecar("vCard"))?;
         let text = String::from_utf8_lossy(&bytes);
         let cards: Vec<Component> = parse_components(&text)
             .into_iter()

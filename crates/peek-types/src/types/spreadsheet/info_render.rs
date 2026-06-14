@@ -12,7 +12,7 @@
 use serde::{Serialize, Serializer};
 
 use crate::info::{Muted, Value, render_info};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;

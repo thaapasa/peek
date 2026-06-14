@@ -8,8 +8,8 @@
 use serde::{Serialize, Serializer};
 
 use crate::info::{Muted, Value, render_info};
-use crate::input::detect::DocumentFormat;
-use crate::theme::PeekTheme;
+use peek_detect::DocumentFormat;
+use peek_theme::PeekTheme;
 
 use super::info::DocumentStats;
 

@@ -18,7 +18,7 @@ use std::rc::Rc;
 use anyhow::Result;
 use pulldown_cmark::{Options, Parser};
 
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
 /// Render `text` as styled markdown wrapped to `width` columns.
 ///
@@ -88,7 +88,7 @@ fn gfm_options() -> Options {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, ThemeManager, strip_ansi};
+    use peek_theme::{PeekThemeName, ThemeManager, strip_ansi};
     use std::rc::Rc;
 
     fn render_plain(md: &str) -> Vec<String> {

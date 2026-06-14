@@ -154,9 +154,9 @@ impl PageRenderer for PdfPageRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::InputSource;
     use crate::types::pdf::package;
     use crate::viewer::image_render::{Background, FitMode, ImageMode, TermSize, ZoomLevel};
+    use peek_io::InputSource;
     use peek_theme::StyleMode;
 
     /// Open the text-heavy fixture, or `None` when Pdfium isn't

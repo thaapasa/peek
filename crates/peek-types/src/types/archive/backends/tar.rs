@@ -12,9 +12,9 @@ use anyhow::{Context, Result};
 use tar::EntryType;
 
 use super::CappedList;
-use crate::input::detect::CompressionFormat;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry, time_from_epoch_secs};
+use peek_detect::CompressionFormat;
 
 /// Wrap a seekable tar reader in the streaming decoder for `fmt`. Shared
 /// by listing and extraction so codec dispatch lives in one place. Every

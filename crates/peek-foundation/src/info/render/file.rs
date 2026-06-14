@@ -5,8 +5,8 @@ use syntect::highlighting::Color;
 use super::super::time::format_time;
 use super::super::{CompressionInfo, FileInfo};
 use super::{LABEL_WIDTH, push_field, push_section_header};
-use crate::input::mime::{MimeCategory, MimeInfo};
-use crate::theme::{PeekTheme, lerp_color};
+use peek_detect::mime::{MimeCategory, MimeInfo};
+use peek_theme::{PeekTheme, lerp_color};
 
 pub(super) fn render_section(
     lines: &mut Vec<String>,

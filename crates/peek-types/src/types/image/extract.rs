@@ -9,8 +9,8 @@ use bytes::Bytes;
 use image::{ImageEncoder, codecs::png::PngEncoder};
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
 use crate::types::image::pipeline::animate::{AnimFrame, decode_anim_frames};
+use peek_io::InputSource;
 
 /// Extract frame `key` (1-based) as a Memory-backed PNG `InputSource`.
 pub fn extract(
@@ -88,7 +88,7 @@ fn source_stem(source: &InputSource) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::InputSource;
+    use peek_io::InputSource;
     use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {
@@ -109,7 +109,7 @@ mod tests {
         );
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert!(
             bytes.starts_with(b"\x89PNG\r\n\x1a\n"),

@@ -10,9 +10,9 @@ use anyhow::Result;
 use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style};
 use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
-use crate::input::InputSource;
-use crate::input::detect::{FileType, StructuredFormat};
-use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+use peek_detect::{FileType, StructuredFormat};
+use peek_io::InputSource;
+use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
 /// Highlight text content as colored terminal lines.
 ///

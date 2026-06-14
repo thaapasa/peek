@@ -11,8 +11,8 @@ use anyhow::Result;
 use bytes::Bytes;
 use zip::ZipArchive;
 
-use crate::input::InputSource;
 use crate::types::archive::reader::{self, ReadSeek};
+use peek_io::InputSource;
 
 /// Image extensions that count as a comic page. Matches what
 /// established readers (Komga, Tachiyomi, ComicRack) accept; uncommon

@@ -3,7 +3,7 @@
 //! comments, MP4 atoms, and APE; per-format quirks collapse to the
 //! same display rows.
 
-use crate::input::detect::AudioFormat;
+use peek_detect::AudioFormat;
 
 #[derive(Debug, Clone, Default)]
 pub struct AudioMetadata {

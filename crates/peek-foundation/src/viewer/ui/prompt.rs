@@ -5,7 +5,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 pub struct Prompt {
     title: String,

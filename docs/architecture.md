@@ -64,9 +64,8 @@ Why these cuts:
   owns the heavy parser dependency set.
 - The **binary** is the thin session layer: the CLI plus the three `FileType → types::<x>` dispatch
   hubs (`compose.rs`, `gather/`, `extract/`) and the interactive event loop (`viewer_session/`). It
-  reaches the lower crates through thin façades (`crate::input` over peek-io/peek-detect; re-exports
-  of `peek_foundation::{viewer, info, …}` and `peek_types::types`) so the hubs' `crate::*` paths are
-  unchanged.
+  names the lower crates directly — `peek_io`, `peek_detect`, `peek_theme`,
+  `peek_foundation::{viewer, info, …}`, `peek_types::types` — with no re-export shims.
 
 The top-level file map lives in [CLAUDE.md](../CLAUDE.md); the per-file detail (what each module
 does and why) lives in each file's `//!` module doc-comment.
@@ -95,8 +94,7 @@ detect::detect(source) --> FileType
 ### InputSource (`crates/peek-io/src/source.rs`)
 
 The input layer is its own crate, `peek-io` — the dependency-free foundation everything builds on
-(see the crate structure section above). The binary reaches it through
-the `crate::input` façade, so the paths below are also reachable as `crate::input::*`.
+(see the crate structure section above). Every crate names it directly as `peek_io::*`.
 
 Decouples "where data comes from" from "how it's displayed". Four variants: `File` (path on
 disk, reads on demand), `Memory { bytes: Bytes, name }` (stdin, small extracted archive
@@ -587,7 +585,7 @@ toggles `Hex ↔ Info` via the binary-file branch in `cycle_view`.
 > is the budget-class *index*.
 
 Every size gate in the workspace draws its number from one of three budget classes in
-`peek-io::limits` (reachable as `crate::input::limits` from foundation / types / bin). The classes
+`peek-io::limits` (named directly as `peek_io::limits` from foundation / types / bin). The classes
 are named by consumption shape; per-site constants alias a class and keep their domain name plus
 local rationale. Membership is by rationale, not by number — a byte limit guarding a different
 shape (per-record caps, pixel ceilings, count caps) stays local to its site.

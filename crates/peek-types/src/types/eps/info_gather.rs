@@ -3,7 +3,7 @@
 //! availability.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::PostScriptFormat;
 use super::dos_eps::{self, PreviewKind};
@@ -12,7 +12,7 @@ use super::info::{EpsInfo, PreviewMeta};
 use super::{gs, postscript_text};
 
 pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> Extras {
-    let bytes = match source.read_bytes(crate::input::limits::Budget::Sidecar("EPS file")) {
+    let bytes = match source.read_bytes(peek_io::limits::Budget::Sidecar("EPS file")) {
         Ok(b) => b,
         Err(_) => {
             return Box::new(EpsInfo {

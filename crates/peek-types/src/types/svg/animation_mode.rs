@@ -24,7 +24,6 @@ use std::time::Duration;
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::theme::PeekTheme;
 use crate::types::image::anim_frame::AnimFrameState;
 use crate::types::image::pipeline::render::{self, PreparedImage, TermSize};
 use crate::types::image::pipeline::svg_anim::{self, AnimatedSvg};
@@ -36,6 +35,7 @@ use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::PeekTheme;
 
 /// Maximum number of (frame, grid) prepared images held in memory.
 const FRAME_CACHE: usize = 64;

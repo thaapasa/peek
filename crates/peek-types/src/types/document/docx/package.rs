@@ -16,10 +16,10 @@ use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
 
-use crate::input::InputSource;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
+use peek_io::InputSource;
 
 pub(crate) fn open(source: &InputSource) -> Result<Doc> {
     let mut zip = open_zip(source, "DOCX")?;

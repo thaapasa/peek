@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
-use crate::theme::{PeekThemeName, StyleMode};
+use peek_theme::{PeekThemeName, StyleMode};
 
 #[derive(Default)]
 pub struct InfoMode {
@@ -97,7 +97,7 @@ mod tests {
     use super::wrap_info_lines;
     use super::*;
     use crate::info::{FileInfo, NoExtras, RenderOptions};
-    use crate::theme::ThemeManager;
+    use peek_theme::ThemeManager;
 
     fn synthetic_file_info() -> FileInfo {
         FileInfo {
@@ -116,7 +116,7 @@ mod tests {
 
     fn make_ctx<'a>(
         file_info: &'a FileInfo,
-        peek_theme: &'a crate::theme::PeekTheme,
+        peek_theme: &'a peek_theme::PeekTheme,
     ) -> RenderCtx<'a> {
         RenderCtx {
             file_info,

@@ -12,7 +12,7 @@ use cafebabe::bytecode::Opcode;
 use cafebabe::{MethodInfo, ParseOptions, parse_class_with_options};
 
 use super::descriptor;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 /// One disassembled class: its methods in declaration order.
 pub struct Disassembly {
@@ -40,7 +40,7 @@ pub struct Insn {
 
 /// Parse `source` with bytecode enabled and disassemble every method.
 pub fn build(source: &InputSource) -> Result<Disassembly> {
-    let bytes = source.read_bytes(crate::input::limits::Budget::Sidecar("class file"))?;
+    let bytes = source.read_bytes(peek_io::limits::Budget::Sidecar("class file"))?;
     let mut opts = ParseOptions::default();
     opts.parse_bytecode(true);
     let class = parse_class_with_options(&bytes, &opts)

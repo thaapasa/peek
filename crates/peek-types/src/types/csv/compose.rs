@@ -13,14 +13,14 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::csv::CsvFormat;
 use crate::types::csv::parse::{CellKind, CsvData, classify_cell};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 use crate::viewer::table::rows_mode::{Alignment, RowsTableMode};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,
@@ -104,8 +104,8 @@ mod tests {
     use bytes::Bytes;
 
     use super::*;
-    use crate::input::detect::FileType;
-    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use peek_detect::FileType;
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     /// A CSV whose table view refuses to open (here: an over-cap UTF-16
     /// file whose transcode the memory budget rejects) must degrade to
@@ -114,7 +114,7 @@ mod tests {
     /// a propagated refusal would lose Source / Hex / Info entirely.
     #[test]
     fn over_cap_utf16_degrades_to_source_view() {
-        let cap = crate::input::limits::WHOLE_DOC_BYTES as usize;
+        let cap = peek_io::limits::WHOLE_DOC_BYTES as usize;
         let mut buf = vec![0xFF, 0xFE];
         buf.resize(cap + 2, b' ');
         let source = InputSource::stdin(Bytes::from(buf));

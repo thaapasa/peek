@@ -12,7 +12,7 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::info::NotebookInfo;
 

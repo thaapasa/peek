@@ -3,13 +3,13 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::image::{ImageKind, ImageRenderMode};
 use crate::types::svg::SvgAnimationMode;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,
@@ -41,9 +41,9 @@ pub fn compose(
     // Pair the SVG view with its XML source (the only view in `--plain`).
     modes.push(ctx.text_content_mode(
         source,
-        &crate::input::detect::FileType::Svg,
+        &peek_detect::FileType::Svg,
         args,
-        crate::types::structured::pretty_view_for(&crate::input::detect::FileType::Svg, args.plain),
+        crate::types::structured::pretty_view_for(&peek_detect::FileType::Svg, args.plain),
     )?);
     Ok(())
 }

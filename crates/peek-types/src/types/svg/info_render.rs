@@ -12,9 +12,9 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoNode, InfoValue, Value, render_info};
-use crate::theme::PeekTheme;
 use crate::types::svg::info::SvgStats;
 use crate::types::text::info_render::TextView;
+use peek_theme::PeekTheme;
 
 /// Themed terminal SVG section (SVG + Source blocks).
 pub fn render_section(lines: &mut Vec<String>, stats: &SvgStats, theme: &PeekTheme) {

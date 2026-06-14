@@ -27,12 +27,12 @@ use crate::info::{
     InfoNode, InfoRow, Role, Value, format_size_human, push_rows, render_info, rows_to_json,
     thousands_sep,
 };
-use crate::theme::PeekTheme;
 use crate::types::disk_image::info::{
     DiskImageInfo, DiskImageMeta, DmgChecksumKind, DmgMeta, DmgPartition, DmgVariant, IsoDateTime,
     IsoVolumeMeta, MbrPartition, RawImageMeta,
 };
 use crate::types::disk_image::mbr;
+use peek_theme::PeekTheme;
 use serde_json::json;
 
 /// Convenience for a `label  value` row.
@@ -822,9 +822,8 @@ mod tests {
     }
 
     fn test_theme() -> PeekTheme {
-        let t = crate::theme::load_embedded_theme(
-            crate::theme::PeekThemeName::IdeaDark.tmtheme_source(),
-        );
+        let t =
+            peek_theme::load_embedded_theme(peek_theme::PeekThemeName::IdeaDark.tmtheme_source());
         PeekTheme::from_syntect(&t)
     }
 

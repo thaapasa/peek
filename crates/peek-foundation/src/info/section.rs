@@ -22,7 +22,7 @@
 
 use std::borrow::Cow;
 
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::{push_field, push_section_header};
 
@@ -208,7 +208,7 @@ impl MaybeZero for super::Value {
 mod tests {
     use super::*;
     use crate::info::{Role, Value};
-    use crate::theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+    use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
     fn plain_theme() -> PeekTheme {
         let mut t = PeekTheme::from_syntect(&load_embedded_theme(

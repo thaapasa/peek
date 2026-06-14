@@ -31,10 +31,10 @@ use symphonia::core::meta::{
 use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
 
-use crate::input::InputSource;
-use crate::input::detect::AudioFormat;
 use crate::types::audio::info::{AudioMetadata, AudioStats};
 use crate::viewer::listing::FlatEntry;
+use peek_detect::AudioFormat;
+use peek_io::InputSource;
 
 /// Full probe result. Everything info-gather, listing, and extract need
 /// flows from this single struct.
@@ -109,7 +109,7 @@ fn open_audio_stream(source: &InputSource) -> Result<(Box<dyn MediaSource>, u64)
         }
         InputSource::FileRange { .. } => {
             let bytes =
-                source.read_bytes(crate::input::limits::Budget::Unbounded("FileRange bounded"))?;
+                source.read_bytes(peek_io::limits::Budget::Unbounded("FileRange bounded"))?;
             let len = bytes.len() as u64;
             (Box::new(Cursor::new(bytes)), len)
         }

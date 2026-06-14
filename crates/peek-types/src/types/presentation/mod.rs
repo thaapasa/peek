@@ -35,4 +35,4 @@ pub use info::{PresentationMetadata, PresentationStats};
 
 // Re-export the format enum at the module root, mirroring the other type
 // modules (the enum + sniff helpers live in `peek-detect`).
-pub use crate::input::detect::PresentationFormat;
+pub use peek_detect::PresentationFormat;

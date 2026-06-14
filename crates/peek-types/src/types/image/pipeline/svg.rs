@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use image::DynamicImage;
 use resvg::usvg::fontdb;
 
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 /// Lazily-initialized font database shared across all SVG parses. Loading
 /// system fonts is slow (~100 ms — 1 s on macOS); we do it once. Without
@@ -92,7 +92,7 @@ fn load_svg(source: &InputSource) -> Result<resvg::usvg::Tree> {
     // still streams the full file.
     crate::viewer::modes::ensure_under_render_cap(source.byte_len()?, "SVG")?;
     let svg_data = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by render cap above",
         ))
         .context("failed to read SVG")?;

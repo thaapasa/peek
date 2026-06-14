@@ -11,9 +11,9 @@ use serde_json::json;
 use crate::info::{
     InfoNode, InfoRow, Role, Value, paint_count, push_rows, render_info, rows_to_json,
 };
-use crate::theme::PeekTheme;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
+use peek_theme::PeekTheme;
 
 /// Themed terminal Font section.
 pub fn render_section(lines: &mut Vec<String>, info: &FontInfo, theme: &PeekTheme) {

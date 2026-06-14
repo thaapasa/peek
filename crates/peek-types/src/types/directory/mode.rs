@@ -11,10 +11,10 @@
 //! the same `row::` primitives the tree source uses, so the two stay
 //! aligned by construction.
 
-use crate::theme::PeekTheme;
 use crate::viewer::listing::row::{self, SizeCell};
 use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
+use peek_theme::PeekTheme;
 
 use super::read::{DirEntry, DirEntryKind};
 

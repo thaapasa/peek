@@ -7,8 +7,8 @@ use cafebabe::{
 };
 
 use super::descriptor;
-use crate::input::InputSource;
 use crate::viewer::table::{Align, Cell, CellRole, Table, cell, cell_spans, fit_columns};
+use peek_io::InputSource;
 
 /// Both rendered tables for one classfile.
 pub struct ClassfileTables {
@@ -18,7 +18,7 @@ pub struct ClassfileTables {
 
 /// Parse `source` and build its Fields and Methods tables.
 pub fn build(source: &InputSource) -> Result<ClassfileTables> {
-    let bytes = source.read_bytes(crate::input::limits::Budget::Sidecar("class file"))?;
+    let bytes = source.read_bytes(peek_io::limits::Budget::Sidecar("class file"))?;
     let mut opts = ParseOptions::default();
     opts.parse_bytecode(false);
     let class = parse_class_with_options(&bytes, &opts)

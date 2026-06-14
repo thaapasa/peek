@@ -58,7 +58,7 @@ use std::ops::Range;
 
 use syntect::highlighting::Color;
 
-use crate::theme::{ActiveStyle, PeekTheme, Sgr, scan};
+use peek_theme::{ActiveStyle, PeekTheme, Sgr, scan};
 
 /// Hard cap on collected search matches. A pathological query (a single
 /// common letter in a huge file) would otherwise build an unbounded
@@ -75,7 +75,7 @@ pub const MAX_MATCHES: usize = 100_000;
 /// found, which the status line (`+` / `partial scan`) and a warning
 /// surface honestly. In-memory scans (rendered views, listings, pretty
 /// text) are bounded by their own caps and don't need this.
-pub const SEARCH_SCAN_MAX_BYTES: u64 = crate::input::limits::BULK_WALK_BYTES;
+pub const SEARCH_SCAN_MAX_BYTES: u64 = peek_io::limits::BULK_WALK_BYTES;
 
 /// Outcome of `Mode::set_search` — tells the caller whether the mode
 /// already scrolled to the first match itself, or hands back a line for
@@ -314,7 +314,7 @@ impl SearchState {
             }
             let line = line.as_ref();
             scanned += line.len() as u64 + 1;
-            let visible = crate::theme::strip_ansi(line);
+            let visible = peek_theme::strip_ansi(line);
             for range in find_matches(&visible, query, sensitive) {
                 matches.push(MatchPos { line: idx, range });
                 if matches.len() >= MAX_MATCHES {
@@ -489,8 +489,8 @@ pub fn reveal_h_scroll(h_scroll: usize, cols: usize, start: usize, end: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, StyleMode};
     use crate::viewer::ui::make_peek_theme;
+    use peek_theme::{PeekThemeName, StyleMode};
 
     #[test]
     fn reveal_h_scroll_pans_only_when_needed() {

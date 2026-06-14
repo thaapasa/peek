@@ -30,11 +30,11 @@ use super::scroll::ScrollBounds;
 use super::zoom::{ZoomLevel, ZoomedView};
 use super::zoom_pan::{ViewBounds, ZoomPanState};
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::cell_size;
 use crate::viewer::modes::{Handled, RenderCtx, Window};
 use crate::viewer::paged::cycle_image_config;
 use crate::viewer::ui::Action;
+use peek_theme::PeekTheme;
 
 /// Image-grid view state: image config + zoom/pan apparatus. Embedded
 /// by every Mode that scrolls through a [`PreparedImage`].

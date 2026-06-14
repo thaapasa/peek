@@ -7,7 +7,7 @@
 //! soft-wrapped logical line get a blank gutter of the same width, so
 //! wrapped text still lines up under its first row.
 
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 /// Visible width of the ` │ ` separator that trails the number column.
 const SEPARATOR_WIDTH: usize = 3;
@@ -117,7 +117,7 @@ impl Gutter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     fn plain_theme() -> PeekTheme {
         ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)

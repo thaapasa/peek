@@ -23,10 +23,10 @@
 use anyhow::{Context, Result, anyhow};
 use rtf_parser::{Color as RtfColor, Painter, Paragraph as RtfParagraph, RtfDocument};
 
-use crate::input::InputSource;
 use crate::types::document::DocumentMetadata;
 use crate::viewer::listing::{Entry, EntryKind};
 use crate::viewer::modes::ensure_under_render_cap;
+use peek_io::InputSource;
 
 pub(crate) struct Parsed {
     pub metadata: DocumentMetadata,
@@ -184,7 +184,7 @@ pub(crate) fn open_source(source: &InputSource) -> Result<Parsed> {
     let len = source.byte_len().context("failed to stat RTF source")?;
     ensure_under_render_cap(len, "RTF")?;
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by render cap above",
         ))
         .context("failed to read RTF source")?;

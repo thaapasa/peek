@@ -48,12 +48,14 @@ crates/
   peek-theme/          — theming leaf: PeekTheme semantic roles + paint helpers; PeekThemeName +
                          embedded .tmTheme data (themes/); StyleMode + SGR encoders/tokenizer +
                          ActiveStyle; ThemeManager. Depends on nothing in-tree (parallel to
-                         peek-io). Aliased as `crate::theme` via `use peek_theme as theme`.
+                         peek-io). Named directly as `peek_theme` everywhere.
   peek-foundation/     — reader/viewer toolkit + info base. Sits above theme/io/detect, below
-                         peek-types; barred from the bin. lib.rs façade: `theme` alias + `input`
-                         re-export of peek-io/peek-detect (so moved modules' `crate::*` resolve).
-                         A `testing` feature exposes a few test helpers to the other crates'
-                         test builds (off in release).
+                         peek-types; barred from the bin. Names the lower crates directly
+                         (`peek_io` / `peek_detect` / `peek_theme`) — no in-crate re-export façade.
+                         lib.rs keeps one `pub use peek_theme as theme` solely so the
+                         `#[derive(InfoView)]` expansion's `::peek_foundation::theme::PeekTheme`
+                         path resolves; not for hand-written use. A `testing` feature exposes a few
+                         test helpers to the other crates' test builds (off in release).
     viewer/            — Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes
                          (content / pretty_view / gutter / hex / info / about / rendered_text<R>);
                          listing/ (generic listing engine: ListingMode navigates +
@@ -98,8 +100,11 @@ crates/
   peek-types/          — per-file-type readers, one module per type (reader + info + view-mode;
                          the format enum + sniff helpers live in peek-detect, re-exported at each
                          module root). Depends on foundation/detect/io/theme — Cargo bars it from
-                         naming the bin's session layer. lib.rs façade mirrors foundation's +
-                         `pub mod types`. Owns the parser dependency set (object, cafebabe,
+                         naming the bin's session layer. Names the leaf crates directly
+                         (`peek_io` / `peek_detect` / `peek_theme`); the foundation toolkit is
+                         re-exported as `crate::{base64, extract, info, output, viewer, xml}`.
+                         lib.rs is that re-export + `pub mod types`. Owns the parser dependency set
+                         (object, cafebabe,
                          rusqlite, pdfium, calamine, symphonia, ttf-parser, fontdue, mail-parser,
                          x509-parser, …). Types:
                          binary, text, markdown, notebook (ipynb), sql, sqlite (read-only via

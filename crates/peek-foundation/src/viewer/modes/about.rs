@@ -5,9 +5,9 @@ use crossterm::terminal;
 
 use super::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::{DESCRIPTION, paint_logo};
-use crate::theme::PeekTheme;
 use crate::viewer::logo_anim::LogoAnimation;
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::PeekTheme;
 
 // Version / authors / license / repository inherit from the workspace
 // `[workspace.package]`, so this crate's values match the bin's. The
@@ -187,7 +187,7 @@ fn terminal_dimensions() -> (u16, u16) {
 /// Detected terminal background (OSC 11), read from the startup cache.
 /// `#rrggbb · light/dark` when the terminal answered, else "not detected".
 fn terminal_bg_desc() -> String {
-    match crate::input::term_query::background_color_cached() {
+    match peek_io::term_query::background_color_cached() {
         Some(bg) => {
             let kind = if bg.is_light() { "light" } else { "dark" };
             format!("#{:02x}{:02x}{:02x} · {kind}", bg.r, bg.g, bg.b)

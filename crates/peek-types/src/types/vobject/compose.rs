@@ -7,11 +7,11 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType, VObjectFormat};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use peek_detect::{Detected, FileType, VObjectFormat};
+use peek_io::InputSource;
 
 use super::calendar::CalendarRenderer;
 use super::contact::ContactRenderer;

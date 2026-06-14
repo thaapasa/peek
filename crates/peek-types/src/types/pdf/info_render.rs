@@ -11,8 +11,8 @@
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoValue, Muted, Value, Warn, render_info};
-use crate::theme::PeekTheme;
 use crate::types::pdf::PdfFlavor;
+use peek_theme::PeekTheme;
 
 use super::info::PdfStats;
 

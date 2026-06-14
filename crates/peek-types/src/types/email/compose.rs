@@ -9,12 +9,12 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{Detected, EmailFormat, FileType};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, EntryMtime, ListingMode, time_from_epoch_secs};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
+use peek_detect::{Detected, EmailFormat, FileType};
+use peek_io::InputSource;
 
 use super::attachment_list::AttachmentListSource;
 use super::message;
@@ -61,7 +61,7 @@ fn rendered_mode(source: &InputSource) -> Box<dyn Mode> {
 /// standard `e` pipeline (`email::extract`).
 fn attachments_listing(source: &InputSource) -> Option<ListingMode> {
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+        .read_bytes(peek_io::limits::Budget::Sidecar("email"))
         .ok()?;
     let email = message::parse(&bytes)?;
     if email.attachments.is_empty() {

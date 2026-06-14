@@ -15,12 +15,12 @@ use serde_json::json;
 use crate::info::{
     InfoNode, InfoRow, Role, Value, paint_count, push_rows, render_info, rows_to_json,
 };
-use crate::theme::PeekTheme;
 use crate::types::cert::info::{
     CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, JwkEntry, KeyEntry, KeyType,
     SshPubKeyEntry, UnknownEntry,
 };
 use crate::types::text::info_render::TextView;
+use peek_theme::PeekTheme;
 
 /// Render the cert section through the shared node tree. A Content block (text
 /// stats) leads when the source is text; the cert-specific block follows.

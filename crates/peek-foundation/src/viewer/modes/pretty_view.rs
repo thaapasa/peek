@@ -17,17 +17,17 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::limits::Budget;
-use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::highlight_lines;
 use crate::viewer::wrap_scroll::PrettyLines;
+use peek_io::InputSource;
+use peek_io::limits::Budget;
+use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
 /// Pretty-printing holds the whole document in memory — no streaming
 /// pretty-printer exists. Above this size the branch refuses and the
 /// raw streamed view takes over, so a multi-GB JSON-shaped log stays
 /// openable.
-pub const PRETTY_MAX_BYTES: u64 = crate::input::limits::WHOLE_DOC_BYTES;
+pub const PRETTY_MAX_BYTES: u64 = peek_io::limits::WHOLE_DOC_BYTES;
 
 /// Injected whole-document pretty-printer: raw text → re-indented text,
 /// or a parse error whose `Display` becomes a warning. Boxed so the

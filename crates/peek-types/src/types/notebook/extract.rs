@@ -10,13 +10,13 @@
 use anyhow::anyhow;
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::listing;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let text = source
-        .read_text(crate::input::limits::Budget::WholeDoc("notebook"))
+        .read_text(peek_io::limits::Budget::WholeDoc("notebook"))
         .map_err(ExtractError::Other)?;
     let (name, bytes) = listing::extract_block(&text, key)
         .ok_or_else(|| ExtractError::NotFound(key.to_string()))?;

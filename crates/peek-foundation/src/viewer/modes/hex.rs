@@ -11,10 +11,10 @@ use crossterm::terminal;
 use syntect::highlighting::Color;
 
 use super::{Mode, ModeId, Position, RenderCtx, Window};
-use crate::input::{ByteSource, InputSource};
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::ui::Action;
+use peek_io::{ByteSource, InputSource};
+use peek_theme::PeekTheme;
 
 pub struct HexMode {
     bs: Box<dyn ByteSource>,
@@ -333,7 +333,7 @@ fn byte_color(theme: &PeekTheme, b: u8) -> syntect::highlighting::Color {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, load_embedded_theme, strip_ansi};
+    use peek_theme::{PeekThemeName, load_embedded_theme, strip_ansi};
 
     fn test_theme() -> PeekTheme {
         let t = load_embedded_theme(PeekThemeName::IdeaDark.tmtheme_source());

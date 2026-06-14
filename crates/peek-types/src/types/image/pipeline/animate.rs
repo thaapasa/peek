@@ -4,7 +4,7 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use image::DynamicImage;
 
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 /// A single decoded animation frame with its display duration.
 pub struct AnimFrame {
@@ -46,7 +46,7 @@ fn detect_format(source: &InputSource, magic_mime: Option<&str>) -> Option<AnimF
         }
         _ => {
             let buf = source
-                .read_bytes(crate::input::limits::Budget::Unbounded(
+                .read_bytes(peek_io::limits::Budget::Unbounded(
                     "non-File source already bounded (File arm sniffs by extension)",
                 ))
                 .ok()?;
@@ -154,7 +154,7 @@ pub fn decode_anim_frames(
         }
         (other, AnimFormat::Gif) => {
             let buf = other
-                .read_bytes(crate::input::limits::Budget::Unbounded(
+                .read_bytes(peek_io::limits::Budget::Unbounded(
                     "non-File source already bounded (File arm streams from path)",
                 ))
                 .context("failed to read animated GIF source")?;
@@ -165,7 +165,7 @@ pub fn decode_anim_frames(
         }
         (other, AnimFormat::Webp) => {
             let buf = other
-                .read_bytes(crate::input::limits::Budget::Unbounded(
+                .read_bytes(peek_io::limits::Budget::Unbounded(
                     "non-File source already bounded (File arm streams from path)",
                 ))
                 .context("failed to read animated WebP source")?;

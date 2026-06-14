@@ -9,8 +9,8 @@
 use anyhow::anyhow;
 
 use crate::extract::{ExtractError, ExtractOptions, Extracted};
-use crate::input::InputSource;
-use crate::input::detect::{ArchiveFormat, SpreadsheetFormat};
+use peek_detect::{ArchiveFormat, SpreadsheetFormat};
+use peek_io::InputSource;
 
 use super::compose::SHEET_SUFFIX;
 use super::workbook::Workbook;

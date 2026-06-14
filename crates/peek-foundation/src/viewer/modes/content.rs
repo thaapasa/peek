@@ -8,13 +8,13 @@ use super::content_window::{WindowRenderer, usable_width};
 use super::gutter::Gutter;
 use super::pretty_view::PrettyView;
 use super::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window};
-use crate::input::{InputSource, LineSource};
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, PeekThemeName, ThemeManager};
 use crate::viewer::LineStreamHighlighter;
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use crate::viewer::wrap_scroll::{LineView, PrettyLines, WrapScroll};
+use peek_io::{InputSource, LineSource};
+use peek_theme::{PeekTheme, PeekThemeName, ThemeManager};
 
 #[cfg(test)]
 #[path = "content_tests.rs"]

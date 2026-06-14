@@ -14,7 +14,7 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{InfoNode, Role, Value, format_size_human, paint_count, render_info};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::EmailFormat;
 use super::info::EmailInfo;

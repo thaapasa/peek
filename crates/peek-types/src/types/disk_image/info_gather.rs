@@ -7,11 +7,11 @@ use bytes::Bytes;
 
 use super::{dmg_plist, dmg_trailer, iso_pvd, mbr, mish};
 use crate::info::Extras;
-use crate::input::InputSource;
-use crate::input::detect::DiskImageFormat;
 use crate::types::disk_image::info::{
     DiskImageInfo, DiskImageMeta, DmgMeta, DmgPartition, RawImageMeta,
 };
+use peek_detect::DiskImageFormat;
+use peek_io::InputSource;
 
 /// Sectors of the descriptor area we pull on a single read for ISO.
 /// Eight 2 KiB sectors covers PVD + supplementary descriptors + boot
@@ -140,7 +140,7 @@ fn read_dmg_trailer(source: &InputSource) -> anyhow::Result<Bytes> {
 /// Upper bound on the embedded plist we'll read into memory. Real DMG
 /// plists run a few KB to low single-digit MB; this only guards a corrupt
 /// length field from driving a huge allocation.
-const DMG_PLIST_MAX_BYTES: u64 = crate::input::limits::SIDECAR_PARSE_BYTES;
+const DMG_PLIST_MAX_BYTES: u64 = peek_io::limits::SIDECAR_PARSE_BYTES;
 
 /// Read the embedded XML plist and decode its blkx tables into partition
 /// rows. Touches only the plist region — no payload bytes.

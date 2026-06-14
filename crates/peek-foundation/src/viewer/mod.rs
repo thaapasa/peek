@@ -2,14 +2,14 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::FileType;
-use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
 use crate::viewer::modes::{
     AboutMode, ContentMode, ContentModeConfig, HelpMode, HexMode, InfoMode, Mode, PrettyView,
 };
 use crate::viewer::ui::help::HelpSection;
 use crate::viewer::ui::{GLOBAL_ACTIONS, HelpEntry};
+use peek_detect::FileType;
+use peek_io::InputSource;
+use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
 pub mod cell_size;
 pub mod highlight;

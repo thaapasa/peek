@@ -9,8 +9,8 @@ use bytes::Bytes;
 
 use super::{animation_stats, exif, xmp};
 use crate::info::Extras;
-use crate::input::InputSource;
 use crate::types::image::info::{AnimationStats, ImageStats};
+use peek_io::InputSource;
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
 pub(crate) const IMAGE_HEAD_SCAN: usize = 256 * 1024;
@@ -24,7 +24,7 @@ pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> Extras {
         InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
         _ => {
             let buf = source
-                .read_bytes(crate::input::limits::Budget::Unbounded(
+                .read_bytes(peek_io::limits::Budget::Unbounded(
                     "non-File source already bounded (File arm uses path)",
                 ))
                 .unwrap_or_default();
@@ -47,7 +47,7 @@ fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
             // path — extracted ISO entries / archive entries pointed at an
             // image during recursive peek).
             let buf = source
-                .read_bytes(crate::input::limits::Budget::Unbounded(
+                .read_bytes(peek_io::limits::Budget::Unbounded(
                     "non-File source already bounded (File arm uses path)",
                 ))
                 .ok()?;

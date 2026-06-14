@@ -5,7 +5,7 @@
 use crossterm::terminal;
 use syntect::highlighting::Color;
 
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::styled::{strip_ansi_width, truncate_ansi};
 

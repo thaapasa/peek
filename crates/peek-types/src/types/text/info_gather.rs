@@ -5,8 +5,8 @@
 //! whole-file path because the chunked UTF-8 path can't validate split
 //! 16-bit code units.
 
-use crate::input::{ByteSource, InputSource};
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
+use peek_io::{ByteSource, InputSource};
 
 /// Chunk size for streaming text-extras counting.
 const TEXT_SCAN_CHUNK: usize = 64 * 1024;
@@ -39,7 +39,7 @@ pub fn gather_text_stats(source: &InputSource) -> Option<TextStats> {
 /// CSS). Above this we keep only the streaming text stats and skip the
 /// language-specific pass — so multi-GB dumps stay openable without
 /// burning RAM on a parse that would just be noise anyway.
-pub const SIDECAR_TEXT_LIMIT: u64 = crate::input::limits::SIDECAR_PARSE_BYTES;
+pub const SIDECAR_TEXT_LIMIT: u64 = peek_io::limits::SIDECAR_PARSE_BYTES;
 
 /// Capped whole-file read for a sidecar parser. Returns the [`TextStats`]
 /// paired with the full decoded text, or `None` when the source is over
@@ -56,7 +56,7 @@ pub fn gather_capped_text(source: &InputSource) -> Option<(TextStats, String)> {
     }
     // Already gated by the SIDECAR_TEXT_LIMIT byte_len check above.
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by SIDECAR_TEXT_LIMIT above",
         ))
         .ok()?;
@@ -187,7 +187,7 @@ fn decode_utf16_stats(
     if !matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be) {
         return None;
     }
-    if total > crate::input::limits::SIDECAR_PARSE_BYTES {
+    if total > peek_io::limits::SIDECAR_PARSE_BYTES {
         return None;
     }
     let body = bs.read_range(offset, (total - offset) as usize).ok()?;
@@ -588,7 +588,7 @@ mod tests {
         // over-cap UTF-16 file must return None (binary fallback)
         // rather than fall through to the UTF-8 scan and report
         // confidently wrong stats.
-        let cap = crate::input::limits::SIDECAR_PARSE_BYTES as usize;
+        let cap = peek_io::limits::SIDECAR_PARSE_BYTES as usize;
         let mut buf = vec![0xFF, 0xFE];
         buf.resize(cap + 2, b' ');
         let src = InputSource::stdin(Bytes::from(buf));

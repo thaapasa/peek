@@ -9,10 +9,10 @@ use serde_json::json;
 
 use super::reader::list_entries;
 use crate::info::{Extras, InfoNode, Role, Value, Warn, render_info, thousands_sep};
-use crate::input::InputSource;
-use crate::input::detect::ArchiveFormat;
-use crate::theme::PeekTheme;
 use crate::viewer::listing::Stats;
+use peek_detect::ArchiveFormat;
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 
 pub struct ArchiveStats {
     pub format_name: &'static str,
@@ -82,7 +82,7 @@ pub fn gather_extras(source: &InputSource, format: ArchiveFormat) -> Extras {
 /// run hundreds of MB, where the sidecar budget would drop the section
 /// for legitimate inputs. So this aliases the bulk-walk budget; over the
 /// cap the info view shows a "summary skipped" note instead.
-const STATIC_LIB_SUMMARY_CAP: u64 = crate::input::limits::BULK_WALK_BYTES;
+const STATIC_LIB_SUMMARY_CAP: u64 = peek_io::limits::BULK_WALK_BYTES;
 
 /// Probe an `ar` archive's object members. `(None, false)` for non-`ar`
 /// formats and for `ar` archives with no object members (e.g. a `.deb`,
@@ -111,7 +111,7 @@ fn static_lib_summary(
 /// [`STATIC_LIB_SUMMARY_CAP`].
 fn parse_static_lib(source: &InputSource) -> Option<StaticLibSummary> {
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by STATIC_LIB_SUMMARY_CAP in caller",
         ))
         .ok()?;
@@ -367,8 +367,8 @@ mod tests {
         };
         let (_, json) = json_section(&stats);
         assert_eq!(json["static_lib_skipped"], serde_json::json!(true));
-        let theme = PeekTheme::from_syntect(&crate::theme::load_embedded_theme(
-            crate::theme::PeekThemeName::IdeaDark.tmtheme_source(),
+        let theme = PeekTheme::from_syntect(&peek_theme::load_embedded_theme(
+            peek_theme::PeekThemeName::IdeaDark.tmtheme_source(),
         ));
         let mut lines = Vec::new();
         render_section(&mut lines, &stats, &theme);

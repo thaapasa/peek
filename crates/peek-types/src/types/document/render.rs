@@ -7,9 +7,9 @@
 use anyhow::Result;
 use syntect::highlighting::Color;
 
-use crate::theme::{PeekTheme, StyleMode};
 use crate::types::document::ast::{Block, Doc, Paragraph, Run};
 use crate::types::document::wrap::{SgrStyle, emit_styled, split_words, visible_width};
+use peek_theme::{PeekTheme, StyleMode};
 
 /// Render an in-memory document AST to ANSI-styled lines.
 pub fn render(

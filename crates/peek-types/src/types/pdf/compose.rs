@@ -3,8 +3,6 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::image::pipeline::FitMode;
 use crate::types::pdf::{self, PdfPageRenderer, PdfTextRenderer};
 use crate::viewer::ComposeOpts;
@@ -12,6 +10,8 @@ use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{Mode, RenderedTextMode};
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

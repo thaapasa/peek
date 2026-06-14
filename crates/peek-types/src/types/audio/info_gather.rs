@@ -4,9 +4,9 @@
 //! extraction live in [`super::package`].
 
 use crate::info::Extras;
-use crate::input::InputSource;
-use crate::input::detect::AudioFormat;
 use crate::types::audio::info::AudioStats;
+use peek_detect::AudioFormat;
+use peek_io::InputSource;
 
 use super::package;
 

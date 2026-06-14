@@ -15,7 +15,7 @@ use serde::{Serialize, Serializer};
 
 use super::info::ClassfileInfo;
 use crate::info::{InfoValue, Value, Warn, render_info};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 /// Themed terminal classfile section.
 pub fn render_section(lines: &mut Vec<String>, info: &ClassfileInfo, theme: &PeekTheme) {

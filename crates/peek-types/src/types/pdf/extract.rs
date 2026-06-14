@@ -4,7 +4,7 @@
 //! listing-mode surface uses.
 
 use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::package;
 

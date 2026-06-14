@@ -30,10 +30,10 @@ use unicode_width::UnicodeWidthStr;
 
 use super::{Align, Cell, CellRole, Column, Table};
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, lerp_color};
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{SearchState, SearchTarget, overlay_matches, reveal_h_scroll};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
+use peek_theme::{PeekTheme, lerp_color};
 
 /// Sticky rows at the top of the viewport — the header and its rule.
 const STICKY_ROWS: usize = 2;
@@ -477,7 +477,7 @@ fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     fn plain_theme() -> PeekTheme {
         // Plain style mode: paint helpers emit no escapes, so painted

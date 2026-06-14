@@ -6,13 +6,13 @@ use bytes::Bytes;
 use mail_parser::MessageParser;
 
 use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::message;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+        .read_bytes(peek_io::limits::Budget::Sidecar("email"))
         .map_err(ExtractError::Other)?;
     let msg = MessageParser::default()
         .parse(bytes.as_ref())

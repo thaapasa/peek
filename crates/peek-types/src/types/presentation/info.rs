@@ -4,7 +4,7 @@
 //! populates the same struct so the renderer doesn't need to know the
 //! source format.
 
-use crate::input::detect::PresentationFormat;
+use peek_detect::PresentationFormat;
 
 #[derive(Debug, Clone, Default)]
 pub struct PresentationMetadata {

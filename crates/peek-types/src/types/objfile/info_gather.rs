@@ -8,7 +8,7 @@ use object::Object;
 use super::info::{BuildIdKind, ObjectInfo, ObjectMeta};
 use super::load;
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))
@@ -19,7 +19,7 @@ fn gather(source: &InputSource) -> ObjectInfo {
     // cap keeps a pathological multi-GB input from slurping into RAM
     // (streaming isn't an option — symbol / section tables need random
     // access). Over the cap, the Info view shows the refusal message.
-    let bytes = match source.read_bytes(crate::input::limits::Budget::BulkWalk("object file")) {
+    let bytes = match source.read_bytes(peek_io::limits::Budget::BulkWalk("object file")) {
         Ok(b) => b,
         Err(e) => return ObjectInfo::err(format!("{e}")),
     };

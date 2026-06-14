@@ -11,12 +11,12 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType};
 use crate::types::markdown::MarkdownRenderer;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use peek_detect::{Detected, FileType};
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

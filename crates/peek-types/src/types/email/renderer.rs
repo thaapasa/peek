@@ -10,11 +10,11 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode, display_width};
 use crate::types::html;
 use crate::viewer::modes::{ModeId, TextRenderer};
 use crate::viewer::ui::wrap_styled_words;
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, display_width};
 
 use super::message::{self, Body};
 
@@ -47,7 +47,7 @@ impl TextRenderer for EmailRenderer {
         let width = width.max(20);
         let bytes = self
             .source
-            .read_bytes(crate::input::limits::Budget::Sidecar("email"))?;
+            .read_bytes(peek_io::limits::Budget::Sidecar("email"))?;
         let Some(email) = message::parse(&bytes) else {
             return Ok(vec![theme.paint_muted("[unparseable email]")]);
         };

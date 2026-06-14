@@ -12,8 +12,8 @@ use std::rc::Rc;
 
 use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
-use crate::theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager, display_width};
 use crate::viewer::highlight_lines;
+use peek_theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager, display_width};
 
 use super::table;
 use super::wrap::wrap_with_prefix;

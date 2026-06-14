@@ -9,11 +9,11 @@ use std::rc::Rc;
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{CertFormat, Detected, FileType, StructuredFormat};
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
+use peek_detect::{CertFormat, Detected, FileType, StructuredFormat};
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

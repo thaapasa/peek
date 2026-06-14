@@ -18,8 +18,8 @@ use serde_json::{Map, Value, json};
 
 use super::time::format_time;
 use super::{CompressionInfo, FileInfo};
-use crate::input::mime::{MimeCategory, MimeInfo};
-use crate::theme::{PeekTheme, StyleMode};
+use peek_detect::mime::{MimeCategory, MimeInfo};
+use peek_theme::{PeekTheme, StyleMode};
 
 /// Encode `info` as a single JSON object. `theme` is used only to render the
 /// per-type `details` section; the encoder forces it to [`StyleMode::Plain`]
@@ -130,7 +130,7 @@ mod tests {
 
     use super::*;
     use crate::info::{FileInfo, InfoExtras, push_field, push_section_header};
-    use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+    use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
 
     fn theme() -> PeekTheme {
         PeekTheme::from_syntect(&load_embedded_theme(

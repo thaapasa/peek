@@ -13,10 +13,10 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::info::{AudioMetadata, AudioStats};
-use crate::input::detect::AudioFormat;
+use peek_detect::AudioFormat;
 
 /// Themed terminal audio section.
 pub fn render_section(lines: &mut Vec<String>, stats: &AudioStats, theme: &PeekTheme) {

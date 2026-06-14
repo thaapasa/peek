@@ -8,8 +8,8 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use crate::info::{Accent, Extras, InfoNode, paint_count, render_info};
-use crate::input::detect::StructuredFormat;
-use crate::theme::PeekTheme;
+use peek_detect::StructuredFormat;
+use peek_theme::PeekTheme;
 
 pub struct StructuredInfo {
     pub format_name: &'static str,

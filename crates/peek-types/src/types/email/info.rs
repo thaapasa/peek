@@ -1,7 +1,7 @@
 //! Email Info sidecar — header summary + attachment / message tallies.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::EmailFormat;
 use super::message::ParsedEmail;
@@ -64,7 +64,7 @@ pub fn gather_extras(source: &InputSource, fmt: EmailFormat) -> Option<Extras> {
     let info = match fmt {
         EmailFormat::Eml => EmailInfo::from_message(&message::parse(
             &source
-                .read_bytes(crate::input::limits::Budget::Sidecar("email"))
+                .read_bytes(peek_io::limits::Budget::Sidecar("email"))
                 .ok()?,
         )?),
         EmailFormat::Mbox => EmailInfo::mbox(mbox::split(source).ok()?.len()),

@@ -6,8 +6,6 @@
 
 use anyhow::{Result, anyhow};
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::sqlite::SqliteFormat;
 use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::reader::SqliteReader;
@@ -16,6 +14,8 @@ use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 /// File suffix used for schema-row inner_paths. Mirrors the SQL viewer
 /// the user opens when the row is Enter'd — keeps the listing's leaf

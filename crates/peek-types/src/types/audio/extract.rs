@@ -7,8 +7,8 @@
 //! re-detect as plain text).
 
 use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
-use crate::input::InputSource;
-use crate::input::detect::AudioFormat;
+use peek_detect::AudioFormat;
+use peek_io::InputSource;
 
 use super::package;
 

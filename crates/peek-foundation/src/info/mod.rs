@@ -1,8 +1,8 @@
 use std::fs;
 use std::time::SystemTime;
 
-use crate::input::mime::MimeInfo;
-use crate::theme::PeekTheme;
+use peek_detect::mime::MimeInfo;
+use peek_theme::PeekTheme;
 
 mod json;
 mod render;

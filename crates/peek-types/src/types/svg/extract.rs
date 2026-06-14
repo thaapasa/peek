@@ -10,10 +10,10 @@ use bytes::Bytes;
 use image::{ImageEncoder, codecs::png::PngEncoder};
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
 use crate::types::image::pipeline::glyph_atlas::CELL_W;
 use crate::types::image::pipeline::svg;
 use crate::types::image::pipeline::svg_anim;
+use peek_io::InputSource;
 
 pub fn extract(
     source: &InputSource,
@@ -166,7 +166,7 @@ mod tests {
         assert!(extracted.suggested_name.ends_with(".png"));
         let bytes = extracted
             .source
-            .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+            .read_bytes(peek_io::limits::Budget::Unbounded("test"))
             .unwrap();
         assert!(
             bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
@@ -187,7 +187,7 @@ mod tests {
         let img = image::load_from_memory(
             &extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap(),
         )
         .unwrap();
@@ -203,7 +203,7 @@ mod tests {
         let img = image::load_from_memory(
             &extracted
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap(),
         )
         .unwrap();

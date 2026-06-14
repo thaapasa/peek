@@ -15,8 +15,8 @@ use std::path::PathBuf;
 
 use super::render::{self, GridWindow, TermSize};
 use super::{Background, FitMode, ImageConfig, ImageMode};
-use crate::input::InputSource;
-use crate::theme::StyleMode;
+use peek_io::InputSource;
+use peek_theme::StyleMode;
 
 const TERM: TermSize = TermSize {
     cols: 40,

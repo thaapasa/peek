@@ -1,7 +1,7 @@
 //! Build `CsvStats` from a `CsvData` seed scan.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::CsvFormat;
 use super::info::{ColumnStats, ColumnType, CsvStats};

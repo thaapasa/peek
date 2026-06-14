@@ -1,8 +1,8 @@
 //! Gather EPUB-specific extras for the Info section.
 
 use crate::info::Extras;
-use crate::input::InputSource;
 use crate::types::ebook::EbookStats;
+use peek_io::InputSource;
 
 use super::package;
 

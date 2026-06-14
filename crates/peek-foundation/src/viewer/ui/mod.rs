@@ -30,4 +30,4 @@ pub use term::test_term_override;
 
 /// Re-exported from `peek-theme` (its real home) — kept here so viewer
 /// code keeps one import path for theme construction.
-pub use crate::theme::make_peek_theme;
+pub use peek_theme::make_peek_theme;

@@ -19,9 +19,9 @@ use anyhow::Result;
 use super::super::{LineStreamHighlighter, highlight_lines};
 use super::RenderCtx;
 use super::gutter::Gutter;
-use crate::input::LineSource;
 use crate::output::PrintOutput;
-use crate::theme::ThemeManager;
+use peek_io::LineSource;
+use peek_theme::ThemeManager;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn render(

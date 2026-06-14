@@ -7,7 +7,7 @@
 
 use syntect::highlighting::Color;
 
-use crate::theme::{Attr, StyleMode};
+use peek_theme::{Attr, StyleMode};
 
 /// Run-style attributes shared by both AST shapes (DOCX run, RTF block
 /// painter). Built per emission by the caller and consumed by

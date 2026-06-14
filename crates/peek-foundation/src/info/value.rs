@@ -25,7 +25,7 @@ use serde::{Serialize, Serializer};
 
 use super::InfoValue;
 use super::time::format_time;
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 /// One info-field value tagged with its semantic kind. See the module docs.
 #[derive(Debug, Clone)]

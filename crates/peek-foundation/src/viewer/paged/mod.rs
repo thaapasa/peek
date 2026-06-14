@@ -28,13 +28,13 @@
 use anyhow::Result;
 
 use crate::output::PrintOutput;
-use crate::theme::StyleMode;
 use crate::viewer::cell_size;
 use crate::viewer::image_render::{
     Background, FitMode, ImageConfig, ImageMode, TermSize, ZoomLevel,
 };
 use crate::viewer::modes::Handled;
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::StyleMode;
 
 mod mode;
 mod text_mode;

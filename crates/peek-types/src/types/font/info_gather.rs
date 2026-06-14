@@ -5,9 +5,9 @@
 use ttf_parser::{Face, fonts_in_collection};
 
 use crate::info::Extras;
-use crate::input::InputSource;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
+use peek_io::InputSource;
 
 /// Cap on bytes read for font parsing. The largest fonts in the wild —
 /// Noto CJK supersets, Apple's San Francisco collection — sit around
@@ -25,7 +25,7 @@ pub fn gather_extras(source: &InputSource, fmt: FontFormat, magic_mime: Option<&
     {
         return crate::types::binary::info::gather_extras(magic_mime);
     }
-    let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Unbounded(
+    let Ok(bytes) = source.read_bytes(peek_io::limits::Budget::Unbounded(
         "gated by FONT_BYTE_LIMIT above",
     )) else {
         return crate::types::binary::info::gather_extras(magic_mime);

@@ -15,10 +15,10 @@ use serde_json::json;
 use crate::info::{
     Accent, InfoNode, InfoValue, Role, Value, paint_count, render_info, thousands_sep,
 };
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::info::{ColumnStats, ColumnType, CsvStats, delimiter_label};
-use crate::input::detect::CsvFormat;
+use peek_detect::CsvFormat;
 
 /// Themed terminal CSV section (format + Columns blocks).
 pub fn render_section(lines: &mut Vec<String>, stats: &CsvStats, theme: &PeekTheme) {

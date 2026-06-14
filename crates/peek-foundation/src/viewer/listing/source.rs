@@ -12,9 +12,9 @@
 //! listings (jump-to-hex via `jump_target`). New sources plug in here
 //! without touching the engine.
 
-use crate::theme::PeekTheme;
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
 use crate::viewer::ui::HelpEntry;
+use peek_theme::PeekTheme;
 
 use super::viewport::RowMeta;
 

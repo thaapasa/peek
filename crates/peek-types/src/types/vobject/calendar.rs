@@ -4,9 +4,9 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::datetime::{date_key, format_datetime};
 use super::line::{Component, ContentLine, format_list, parse_components, unescape_text};
@@ -45,7 +45,7 @@ impl TextRenderer for CalendarRenderer {
         let width = width.max(20);
         let bytes = self
             .source
-            .read_bytes(crate::input::limits::Budget::Sidecar("iCalendar"))?;
+            .read_bytes(peek_io::limits::Budget::Sidecar("iCalendar"))?;
         let text = String::from_utf8_lossy(&bytes);
         let roots = parse_components(&text);
 

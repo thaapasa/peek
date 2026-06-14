@@ -10,7 +10,7 @@
 use bytes::Bytes;
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::parse;
 

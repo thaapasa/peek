@@ -14,14 +14,14 @@ use x509_parser::prelude::{
 use x509_parser::public_key::{ECPoint, PublicKey};
 
 use crate::info::Extras;
-use crate::input::InputSource;
-use crate::input::detect::CertFormat;
 use crate::types::cert::info::{
     CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, KeyEntry, KeyType, SshPubKeyEntry,
     UnknownEntry,
 };
 use crate::types::text::info::TextStats;
 use crate::types::text::info_gather::{SIDECAR_TEXT_LIMIT, gather_text_stats};
+use peek_detect::CertFormat;
+use peek_io::InputSource;
 
 /// Collect the cert/key Info sidecar. PEM/JWK read the source text
 /// (falling back to text stats / binary if it isn't valid UTF-8 — that
@@ -36,7 +36,7 @@ pub fn gather_extras(source: &InputSource, fmt: CertFormat, magic_mime: Option<&
         return crate::types::binary::info::gather_extras(magic_mime);
     }
     if fmt == CertFormat::Der {
-        return match source.read_bytes(crate::input::limits::Budget::Unbounded(
+        return match source.read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by SIDECAR_TEXT_LIMIT above",
         )) {
             Ok(der) => Box::new(gather_der(&der)),
@@ -46,7 +46,7 @@ pub fn gather_extras(source: &InputSource, fmt: CertFormat, magic_mime: Option<&
     let Some(text_stats) = gather_text_stats(source) else {
         return crate::types::binary::info::gather_extras(magic_mime);
     };
-    let Ok(text) = source.read_text(crate::input::limits::Budget::Unbounded(
+    let Ok(text) = source.read_text(peek_io::limits::Budget::Unbounded(
         "gated by SIDECAR_TEXT_LIMIT above",
     )) else {
         return crate::types::binary::info::gather_extras(magic_mime);

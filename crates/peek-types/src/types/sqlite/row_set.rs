@@ -22,12 +22,12 @@ use std::cmp::min;
 use anyhow::{Context, Result, anyhow};
 use rusqlite::types::ValueRef;
 
-use crate::input::InputSource;
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::sql::quote_ident;
 use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
+use peek_io::InputSource;
 
 pub struct SqliteRowSet {
     reader: SqliteReader,

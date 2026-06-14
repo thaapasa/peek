@@ -1,9 +1,9 @@
 //! Gather DOCX-specific extras for the Info section.
 
 use crate::info::Extras;
-use crate::input::InputSource;
-use crate::input::detect::DocumentFormat;
 use crate::types::document::DocumentStats;
+use peek_detect::DocumentFormat;
+use peek_io::InputSource;
 
 use super::package;
 

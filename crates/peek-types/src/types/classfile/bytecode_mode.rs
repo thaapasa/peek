@@ -10,10 +10,10 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use super::bytecode::{Disassembly, MethodAsm};
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, strip_ansi_width, wrap_styled};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
@@ -249,9 +249,9 @@ fn push_wrapped(lines: &mut Vec<String>, line: String, width: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::InputSource;
-    use crate::theme::PeekThemeName;
     use crate::viewer::ui::make_peek_theme;
+    use peek_io::InputSource;
+    use peek_theme::PeekThemeName;
     use std::path::PathBuf;
 
     fn disasm() -> Disassembly {

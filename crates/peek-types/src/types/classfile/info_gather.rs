@@ -7,14 +7,14 @@ use cafebabe::{ParseOptions, parse_class_with_options};
 
 use super::info::{ClassfileInfo, ClassfileMeta};
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))
 }
 
 fn gather(source: &InputSource) -> ClassfileInfo {
-    let bytes = match source.read_bytes(crate::input::limits::Budget::Sidecar("class file")) {
+    let bytes = match source.read_bytes(peek_io::limits::Budget::Sidecar("class file")) {
         Ok(b) => b,
         Err(e) => return ClassfileInfo::err(format!("read failed: {e}")),
     };

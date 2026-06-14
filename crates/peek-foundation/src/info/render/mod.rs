@@ -2,7 +2,7 @@ use syntect::highlighting::Color;
 
 use super::time::format_time;
 use super::{FileInfo, InfoValue, Value};
-use crate::theme::{PeekTheme, lerp_color};
+use peek_theme::{PeekTheme, lerp_color};
 
 mod file;
 
@@ -149,11 +149,11 @@ pub fn thousands_sep(n: u64) -> String {
 mod tests {
     use super::thousands_sep;
     use crate::info::{InfoValue, Role, Value};
-    use crate::theme::{PeekThemeName, StyleMode, load_embedded_theme};
+    use peek_theme::{PeekThemeName, StyleMode, load_embedded_theme};
 
     #[test]
     fn split_paints_text_not_json() {
-        let mut theme = crate::theme::PeekTheme::from_syntect(&load_embedded_theme(
+        let mut theme = peek_theme::PeekTheme::from_syntect(&load_embedded_theme(
             PeekThemeName::default().tmtheme_source(),
         ));
         theme.style_mode = StyleMode::Plain;

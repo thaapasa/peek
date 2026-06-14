@@ -2,7 +2,7 @@ pub mod print;
 
 pub use print::PrintOutput;
 
-use crate::theme::{PeekTheme, lerp_color};
+use peek_theme::{PeekTheme, lerp_color};
 
 /// The product tagline, shown under the logo on the About view and the
 /// CLI help screen. Lives here (not `env!("CARGO_PKG_DESCRIPTION")`)

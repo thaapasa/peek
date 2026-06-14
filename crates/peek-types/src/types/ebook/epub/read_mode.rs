@@ -27,8 +27,6 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::theme::StyleMode;
 use crate::types::image::pipeline::ImageConfig;
 use crate::types::image::pipeline::render::{self as image_render, GridWindow, prepare_decoded};
 use crate::viewer::cell_size;
@@ -37,6 +35,8 @@ use crate::viewer::paged::{
     self, CYCLE_FIT_HELP, PageCacheKey, PagedText, PagedTextReadMode, cycle_image_config,
 };
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_io::InputSource;
+use peek_theme::StyleMode;
 
 use super::package::{self, Chapter, Package};
 
@@ -444,10 +444,10 @@ fn render_inline_image(
 mod tests {
     use super::*;
     use crate::info::{FileInfo, NoExtras, RenderOptions};
-    use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
     use crate::types::image::pipeline::ImageConfig;
     use crate::viewer::image_render::{Background, FitMode, ImageMode};
     use crate::viewer::modes::{Mode, RenderCtx};
+    use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
     fn epub_fixture() -> InputSource {
         let path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))

@@ -7,8 +7,8 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{ModeId, TextRenderer};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::parse::Parsed;
 use super::render;

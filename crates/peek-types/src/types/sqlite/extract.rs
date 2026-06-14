@@ -25,12 +25,12 @@ use rusqlite::{Connection, OptionalExtension};
 use tempfile::NamedTempFile;
 
 use crate::extract::{ExtractError, Extracted};
-use crate::input::InputSource;
 use crate::types::sqlite::compose::{
     CONTENTS_SUFFIX, KIND_INDEXES, KIND_TABLES, KIND_TRIGGERS, KIND_VIEWS, SCHEMA_SUFFIX,
 };
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::sql::quote_ident;
+use peek_io::InputSource;
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parsed = parse_key(key).ok_or_else(|| ExtractError::InvalidKey(key.to_string()))?;

@@ -17,17 +17,17 @@ use tempfile::NamedTempFile;
 use zip::ZipArchive;
 
 use super::backends::CappedList;
-use crate::input::InputSource;
-use crate::input::detect::ArchiveFormat;
 use crate::viewer::listing::{Entry, ListingMode, from_flat_paths};
 use crate::viewer::modes::{Mode, RENDER_MAX_BYTES, ensure_under_render_cap};
+use peek_detect::ArchiveFormat;
+use peek_io::InputSource;
 
 /// The seekable-reader trait the backends hand to the zip layer. tar only
 /// needs `Read`, but using one helper for both keeps the call sites
 /// uniform. Re-exported from `peek-io` rather than redefined — it is the
 /// same `Read + Seek` alias the csv reader uses, and one definition keeps
 /// the two call sites from drifting.
-pub(crate) use crate::input::stream::ReadSeek;
+pub(crate) use peek_io::stream::ReadSeek;
 
 /// Open a `Read + Seek` over the source. File-backed sources open the
 /// underlying path (and seek to the range start when needed); in-memory

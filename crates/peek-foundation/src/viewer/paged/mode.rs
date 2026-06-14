@@ -14,12 +14,12 @@ use super::{
     cycle_image_config, pipe_walk_pages, step_paged, term_size_for,
 };
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::image_render::{
     ImageConfig, ScrollBounds, ViewBounds, ZOOM_PRESET_HELP, ZoomPanState,
 };
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::PeekTheme;
 
 /// Mode-local help entries for [`PagedImageMode`]: page navigation plus
 /// the shared image-config block plus zoom.
@@ -310,8 +310,8 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
 mod tests {
     use super::super::PagedRender;
     use super::*;
-    use crate::theme::StyleMode;
     use crate::viewer::image_render::{Background, FitMode, ImageMode};
+    use peek_theme::StyleMode;
 
     /// Regression: PagedImageMode must advertise `ScrollLeft` /
     /// `ScrollRight` in its `EXTRA_ACTIONS` slice so the global key
@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn paged_mode_horizontal_scroll_under_zoom() {
         use crate::info::{FileInfo, NoExtras, RenderOptions};
-        use crate::theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+        use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
         use std::cell::Cell;
 
         struct WideRenderer {

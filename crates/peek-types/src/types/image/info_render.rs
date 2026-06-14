@@ -14,8 +14,8 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{Accent, InfoNode, InfoValue, Role, Value, render_info};
-use crate::theme::{PeekTheme, lerp_color};
 use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
+use peek_theme::{PeekTheme, lerp_color};
 
 /// Themed terminal image sections.
 pub fn render_section(lines: &mut Vec<String>, stats: &ImageStats, theme: &PeekTheme) {

@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use syntect::highlighting::Color;
 
 use crate::info::{format_archive_mtime_zoned, format_size_human, thousands_sep};
-use crate::theme::{PeekTheme, lerp_color};
+use peek_theme::{PeekTheme, lerp_color};
 
 /// Width (chars) of the size column, including thousands separators.
 pub const SIZE_COL_WIDTH: usize = 12;
@@ -233,7 +233,7 @@ pub fn file_row_left(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     fn plain_theme() -> ThemeManager {
         ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)

@@ -15,9 +15,9 @@ use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use calamine::{Data, Ods, Reader, Sheets, Xlsx};
 
-use crate::input::InputSource;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
+use peek_io::InputSource;
 
 use super::SpreadsheetFormat;
 
@@ -32,9 +32,9 @@ impl Workbook {
         // Read it into a refcounted `Bytes` cursor (cheap to hand to
         // calamine, no per-attempt copy). The container is small; the
         // memory that matters is the materialised sheet, not this.
-        let cursor = Cursor::new(source.read_bytes(crate::input::limits::Budget::WholeDoc(
-            "spreadsheet container",
-        ))?);
+        let cursor = Cursor::new(
+            source.read_bytes(peek_io::limits::Budget::WholeDoc("spreadsheet container"))?,
+        );
         // Dispatch to the concrete reader by detected format.
         let sheets = if fmt.is_ooxml() {
             Sheets::Xlsx(Xlsx::new(cursor).map_err(|e| anyhow!("failed to open workbook: {e:?}"))?)

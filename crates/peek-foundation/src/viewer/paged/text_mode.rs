@@ -21,10 +21,10 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::PeekTheme;
 
 use super::{pipe_walk_pages, step_paged};
 

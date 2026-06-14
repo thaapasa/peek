@@ -5,13 +5,13 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{InfoMode, Mode};
 use crate::viewer::table::TableMode;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,
@@ -28,7 +28,7 @@ pub fn compose(
     // Parse once: the Sections table and the Symbols listing share the
     // single `object::File` view. A parse failure leaves the stack
     // Info-only; the Info section surfaces the same error.
-    if let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::BulkWalk("object file"))
+    if let Ok(bytes) = source.read_bytes(peek_io::limits::Budget::BulkWalk("object file"))
         && let Ok(loaded) = super::load::load(&bytes)
     {
         let sections = super::tables::build_sections(&loaded.file);

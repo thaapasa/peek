@@ -18,7 +18,7 @@
 
 use std::borrow::Cow;
 
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 use super::{InfoValue, Value, push_field};
 

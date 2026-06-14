@@ -6,13 +6,13 @@ use super::pipeline::{ImageConfig, ImageMode};
 use super::scroll::ScrollBounds;
 use super::view::ImageView;
 use super::zoom::integer_bucket;
-use crate::input::InputSource;
-use crate::theme::PeekTheme;
 use crate::viewer::cell_size;
 use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ImageKind {

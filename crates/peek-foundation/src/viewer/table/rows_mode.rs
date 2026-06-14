@@ -38,7 +38,6 @@ use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{
     MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, ScanStop, SearchTarget, count_status_label, find_matches,
@@ -46,6 +45,7 @@ use crate::viewer::search::{
 };
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
+use peek_theme::PeekTheme;
 
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
@@ -961,8 +961,8 @@ mod tests {
 
     use super::*;
     use crate::info::{FileInfo, NoExtras, RenderOptions};
-    use crate::theme::{PeekThemeName, StyleMode, ThemeManager};
     use crate::viewer::ui::strip_ansi_width;
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     /// In-memory [`RowSource`] for the table-mode mechanics tests. The CSV
     /// reader's own behaviour (quoting, delimiter sniff, header heuristic,

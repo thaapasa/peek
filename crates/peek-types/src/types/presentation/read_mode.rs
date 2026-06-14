@@ -11,12 +11,12 @@
 
 use anyhow::Result;
 
-use crate::theme::{PeekThemeName, StyleMode};
 use crate::types::document::ast::Doc;
 use crate::types::document::render;
 use crate::viewer::modes::RenderCtx;
 use crate::viewer::paged::{PagedText, PagedTextReadMode};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::{PeekThemeName, StyleMode};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (

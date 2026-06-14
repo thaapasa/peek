@@ -23,15 +23,15 @@ use super::row;
 use super::source::{ListParentNav, ListSource, NameCell, RowMetaCell};
 use super::tree_source::TreeListSource;
 use super::viewport::ListingViewport;
-use crate::input::InputSource;
 use crate::output::PrintOutput;
-use crate::theme::PeekTheme;
 use crate::viewer::modes::{
     DescendFrame, ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, ParentNav, Position,
     RenderCtx, Window,
 };
 use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, strip_ansi_width};
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 
 /// Columns moved per Left/Right keypress — matches `TableMode`'s pan step.
 const H_STEP: usize = 8;

@@ -14,11 +14,11 @@ use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
 
-use crate::input::InputSource;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words};
 use crate::types::presentation::{Deck, PresentationMetadata};
+use peek_io::InputSource;
 
 pub fn open(source: &InputSource) -> Result<Deck> {
     let mut zip = open_zip(source, "ODP")?;

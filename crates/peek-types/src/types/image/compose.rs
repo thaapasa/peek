@@ -2,12 +2,12 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::{ComposeCtx, image_config};
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 /// Push the image view modes onto `modes`. Animated GIF/WebP gets
 /// [`AnimationMode`] (driven by the Mode trait's tick contract);

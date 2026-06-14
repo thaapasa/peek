@@ -13,9 +13,9 @@ use serde::{Serialize, Serializer};
 use syntect::highlighting::Color;
 
 use crate::info::{InfoNode, InfoValue, Value, paint_count, render_info};
-use crate::theme::PeekTheme;
 use crate::types::css::info::{CssInfo, CssStats, SelectorKindCounts};
 use crate::types::text::info_render::TextView;
+use peek_theme::PeekTheme;
 
 /// Swatches per row in the palette grid.
 const SWATCH_COLS: usize = 4;

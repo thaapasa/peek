@@ -11,7 +11,7 @@ use super::catalog;
 use super::info::{SqliteInfo, SqliteStats};
 use super::reader::SqliteReader;
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 /// Cap on the number of biggest tables surfaced in the Info section.
 /// Keep small — the Info view is for at-a-glance scanning, not

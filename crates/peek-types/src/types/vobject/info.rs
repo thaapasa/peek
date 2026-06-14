@@ -6,8 +6,8 @@
 use serde::{Serialize, Serializer};
 
 use crate::info::{Extras, InfoNode, paint_count, render_info};
-use crate::input::InputSource;
-use crate::theme::PeekTheme;
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 
 use super::VObjectFormat;
 use super::calendar::{self, CalendarSummary};
@@ -40,7 +40,7 @@ pub fn gather_extras(source: &InputSource, fmt: VObjectFormat) -> Option<Extras>
         return None;
     }
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Unbounded(
+        .read_bytes(peek_io::limits::Budget::Unbounded(
             "gated by SUMMARY_BYTE_LIMIT above",
         ))
         .ok()?;

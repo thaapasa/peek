@@ -6,7 +6,7 @@
 
 use anyhow::Result;
 
-use crate::input::detect::StructuredFormat;
+use peek_detect::StructuredFormat;
 
 /// Pretty-print a structured document.
 pub fn pretty_print(raw: &str, format: StructuredFormat) -> Result<String> {

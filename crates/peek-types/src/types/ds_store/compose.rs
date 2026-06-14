@@ -6,12 +6,12 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::Detected;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{InfoMode, Mode};
 use crate::viewer::table::TableMode;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,
@@ -23,7 +23,7 @@ pub fn compose(
     // Records table first — the landing view, and what the print/pipe path
     // emits. A parse failure pushes nothing here, so Info (appended below)
     // becomes the landing view and surfaces the same error.
-    if let Ok(bytes) = source.read_bytes(crate::input::limits::Budget::Sidecar(".DS_Store"))
+    if let Ok(bytes) = source.read_bytes(peek_io::limits::Budget::Sidecar(".DS_Store"))
         && let Ok(store) = super::reader::parse(&bytes)
     {
         modes.push(Box::new(TableMode::new(

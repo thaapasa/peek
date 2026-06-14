@@ -1,10 +1,10 @@
 //! Unit tests for the email type: detection, parsing, mbox splitting,
 //! and attachment extraction. Fixtures live in `test-data/`.
 
-use crate::input::InputSource;
+use peek_io::InputSource;
 
-use crate::input::detect::{Detected, FileType};
 use crate::viewer::modes::ModeId;
+use peek_detect::{Detected, FileType};
 
 use peek_detect::types::email as detect;
 
@@ -108,7 +108,7 @@ fn extracts_attachment_by_key() {
     assert_eq!(extracted.suggested_name, "notes.txt");
     let bytes = extracted
         .source
-        .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+        .read_bytes(peek_io::limits::Budget::Unbounded("test"))
         .expect("read");
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.contains("attached notes"));
@@ -145,7 +145,7 @@ fn duplicate_attachment_filenames_stay_distinct() {
         String::from_utf8_lossy(
             &first
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
         )
         .contains("first")
@@ -156,7 +156,7 @@ fn duplicate_attachment_filenames_stay_distinct() {
         String::from_utf8_lossy(
             &second
                 .source
-                .read_bytes(crate::input::limits::Budget::Unbounded("test"))
+                .read_bytes(peek_io::limits::Budget::Unbounded("test"))
                 .unwrap()
         )
         .contains("second")

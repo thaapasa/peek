@@ -15,12 +15,12 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
-use crate::theme::{PeekTheme, PeekThemeName, StyleMode};
 use crate::viewer::modes::{
     Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
 };
 use crate::viewer::search::{self, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PREV_MATCH_HELP];
 
@@ -37,7 +37,7 @@ const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PR
 /// keep working), and typical pages run 1–5 MB. If a real over-cap page
 /// ever surfaces, add a second, larger image-payload cap passed into
 /// `read_zip_entry` per call — don't remove the gate.
-pub const RENDER_MAX_BYTES: u64 = crate::input::limits::WHOLE_DOC_BYTES;
+pub const RENDER_MAX_BYTES: u64 = peek_io::limits::WHOLE_DOC_BYTES;
 
 /// Cap-violation message — `None` when `len` fits under
 /// [`RENDER_MAX_BYTES`]. Split from [`ensure_under_render_cap`] for

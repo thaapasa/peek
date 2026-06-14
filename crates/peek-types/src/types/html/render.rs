@@ -10,7 +10,7 @@ use anyhow::Result;
 use html2text::render::RichAnnotation;
 use syntect::highlighting::Color;
 
-use crate::theme::{Attr, StyleMode};
+use peek_theme::{Attr, StyleMode};
 
 /// Drive `html2text` to ANSI-styled lines. In `Plain` mode emits no
 /// escapes; otherwise wraps annotated spans in SGR sequences via

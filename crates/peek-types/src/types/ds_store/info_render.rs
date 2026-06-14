@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use super::info::DsStoreInfo;
 use crate::info::{Value, Warn, render_info};
-use crate::theme::PeekTheme;
+use peek_theme::PeekTheme;
 
 /// Themed terminal `.DS_Store` section.
 pub fn render_section(lines: &mut Vec<String>, info: &DsStoreInfo, theme: &PeekTheme) {

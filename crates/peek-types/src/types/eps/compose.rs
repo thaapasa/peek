@@ -15,12 +15,12 @@
 
 use anyhow::Result;
 
-use crate::input::InputSource;
-use crate::input::detect::{Detected, FileType, PostScriptFormat};
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
+use peek_detect::{Detected, FileType, PostScriptFormat};
+use peek_io::InputSource;
 
 use super::dos_eps;
 use super::gs;
@@ -43,7 +43,7 @@ pub fn compose(
     // `bytes` is `None`: the byte-dependent Preview / Render views are
     // dropped and the Source view falls back to streaming the raw file.
     let bytes = source
-        .read_bytes(crate::input::limits::Budget::Sidecar("EPS file"))
+        .read_bytes(peek_io::limits::Budget::Sidecar("EPS file"))
         .ok();
     let header = bytes.as_ref().and_then(|b| dos_eps::parse(b));
 

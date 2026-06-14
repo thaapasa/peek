@@ -2,7 +2,7 @@
 //! plus core document properties.
 
 use crate::info::Extras;
-use crate::input::InputSource;
+use peek_io::InputSource;
 
 use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;

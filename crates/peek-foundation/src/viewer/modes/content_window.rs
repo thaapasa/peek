@@ -21,12 +21,12 @@ use super::RenderCtx;
 use super::content_rendering::RenderingMode;
 use super::gutter::Gutter;
 use super::pretty_view::{PrettyView, SyntaxRef};
-use crate::input::LineSource;
-use crate::theme::{PeekTheme, ThemeManager};
 use crate::viewer::LineStreamHighlighter;
 use crate::viewer::search::{self, SearchState};
 use crate::viewer::ui::{slice_styled_h, wrap_styled};
 use crate::viewer::wrap_scroll::{PrettyLines, WrapScroll};
+use peek_io::LineSource;
+use peek_theme::{PeekTheme, ThemeManager};
 
 /// Visible columns left for content after the line-number gutter. The
 /// wrap geometry and h-scroll slicing all work in this width. A free
