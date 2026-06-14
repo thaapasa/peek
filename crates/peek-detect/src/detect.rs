@@ -1298,12 +1298,19 @@ mod tests {
 
     /// File / resident-memory / spooled-stream sources all run through the
     /// one `classify` core, so identical bytes + name must detect identically
-    /// regardless of entry point. Covers each precedence rung: name routing,
-    /// magic, content sniff, plain-text, and the binary gate.
+    /// regardless of entry point. Covers every precedence rung — name routing,
+    /// magic, content sniff, plain-text, the binary gate — *and* both sides of
+    /// the extension/magic decision (a lying extension overridden by content;
+    /// a coarse magic refined by the extension), so the Option-A behaviour is
+    /// proven on all three paths, not just one.
     #[test]
     fn detection_parity_across_sources() {
         use std::io::Write;
+        let zip = b"PK\x03\x04\x14\x00\x00\x00";
+        let png: &[u8] = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
+        let pdf: &[u8] = b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n";
         let cases: &[(&str, &[u8], FileType)] = &[
+            // Precedence rungs.
             (
                 "doc.json",
                 b"{ \"a\": 1 }",
@@ -1314,11 +1321,7 @@ mod tests {
                 b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
                 FileType::Svg,
             ),
-            (
-                "pic.png",
-                b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
-                FileType::Image,
-            ),
+            ("pic.png", png, FileType::Image),
             (
                 "notes.txt",
                 b"plain words here\n",
@@ -1331,6 +1334,13 @@ mod tests {
                 b"\x00\x01\x02\xff\xfe scattered",
                 FileType::Binary,
             ),
+            // Lying extension → content overrides the name.
+            ("data.csv", zip, FileType::Archive(ArchiveFormat::Zip)),
+            ("payload.json", png, FileType::Image),
+            // Coarse magic → the extension refines it, name kept.
+            ("d.docx", zip, FileType::Document(DocumentFormat::Docx)),
+            ("art.ai", pdf, FileType::Pdf(PdfFlavor::Illustrator)),
+            ("book.epub", zip, FileType::Ebook(EbookFormat::Epub)),
         ];
         for (name, bytes, want) in cases {
             let (name, bytes) = (*name, *bytes);
@@ -1359,45 +1369,6 @@ mod tests {
                 "stream: {name}"
             );
         }
-    }
-
-    /// A lying extension follows its bytes: strong magic that contradicts
-    /// the name overrides it (`.csv` holding a zip, `.json` holding a PNG),
-    /// while a coarse container/codec the extension refines (zip → `.docx`,
-    /// `%PDF` → `.ai`) keeps the name.
-    #[test]
-    fn lying_extension_defers_to_strong_magic() {
-        let png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
-        let zip = b"PK\x03\x04\x14\x00\x00\x00";
-        let pdf = b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n";
-
-        // Contradictions: magic wins.
-        assert_eq!(
-            detect(&mem("data.csv", zip)).unwrap().file_type,
-            FileType::Archive(ArchiveFormat::Zip)
-        );
-        assert_eq!(
-            detect(&mem("a.json", png)).unwrap().file_type,
-            FileType::Image
-        );
-        assert_eq!(
-            detect(&mem("notes.txt", png)).unwrap().file_type,
-            FileType::Image
-        );
-
-        // Refinements: name wins.
-        assert_eq!(
-            detect(&mem("d.docx", zip)).unwrap().file_type,
-            FileType::Document(DocumentFormat::Docx)
-        );
-        assert_eq!(
-            detect(&mem("art.ai", pdf)).unwrap().file_type,
-            FileType::Pdf(PdfFlavor::Illustrator)
-        );
-        assert_eq!(
-            detect(&mem("book.epub", zip)).unwrap().file_type,
-            FileType::Ebook(EbookFormat::Epub)
-        );
     }
 
     /// Unit coverage for the refinement relation that drives the override.
