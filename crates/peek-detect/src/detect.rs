@@ -48,9 +48,24 @@ use crate::types::sqlite as sqlite_detect;
 use crate::types::structured as structured_detect;
 use crate::types::vobject as vobject_detect;
 
-/// Bytes read from the head of a file for magic-byte detection. `infer`
-/// inspects only the first few hundred bytes; 16 KB is comfortable headroom.
-const HEAD_BYTES: usize = 16 * 1024;
+/// Bytes read from the head of a file for magic-byte detection and the
+/// content-sniff string. `infer` inspects only the first few hundred bytes;
+/// the larger window is for content sniffing (JSON / YAML / XML) where a
+/// fuller parse classifies more.
+///
+/// This is a deliberate read-bomb guard, not a sufficiency claim: the file
+/// and stream paths sniff only this head because their bytes are *not*
+/// resident — sniffing more would mean reading more off disk, and a
+/// full-parse sniff of a multi-GB file reinstates the exact read bomb
+/// 658cf59 removed. The memory (stdin) path instead sniffs up to
+/// `WHOLE_DOC_BYTES`: its bytes are already resident, so the wider sniff is
+/// free. That file-vs-memory asymmetry is intentional — see [`detect_bytes`].
+///
+/// Set to 64 KB (matching [`detect_stream`]'s head) so the common nameless,
+/// extensionless JSON/YAML still routes to its structured type; only such a
+/// file *larger* than this and with no name to classify by falls to plain
+/// text, which is rare and unprintable anyway.
+const HEAD_BYTES: usize = 64 * 1024;
 
 /// Chunk size for streaming UTF-8 validation of the file body.
 const SCAN_CHUNK: usize = 64 * 1024;
@@ -390,11 +405,12 @@ fn detect_file(path: &Path, ignore_name: bool) -> Result<Detected> {
     }
 
     // Content-sniff the head (cheap, ASCII-pattern based) BEFORE
-    // streaming the whole body for UTF-8 validation — sniffing only
-    // needs the head bytes, and the result fills in `magic_mime` for
-    // text formats `infer` doesn't classify (SVG / HTML / XML / JSON /
-    // YAML). Compute now so the head buffer can move into the streaming
-    // UTF-8 check below.
+    // streaming the whole body for UTF-8 validation. The sniff is
+    // head-bounded by design (see `HEAD_BYTES`): a fuller parse would
+    // reinstate the read bomb on a large unnamed file. The result fills in
+    // `magic_mime` for text formats `infer` doesn't classify (SVG / HTML /
+    // XML / JSON / YAML). Compute now so the head buffer can move into the
+    // streaming UTF-8 check below.
     let sniffed = std::str::from_utf8(&head).ok().and_then(sniff_text_content);
 
     // Stream the file body to check for non-UTF-8 content. Reuses the head

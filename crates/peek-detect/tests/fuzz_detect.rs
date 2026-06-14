@@ -18,7 +18,7 @@ use std::io::Write;
 /// Bytes the file path reads before consulting the body in full — mirrors
 /// the private `HEAD_BYTES`. At or below this size the file and in-memory
 /// paths see identical content, so their content verdict must agree.
-const HEAD_BYTES: usize = 16 * 1024;
+const HEAD_BYTES: usize = 64 * 1024;
 
 fn mem(bytes: &[u8], name: &str) -> InputSource {
     InputSource::memory(bytes.to_vec(), name)

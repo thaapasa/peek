@@ -37,22 +37,16 @@ pub fn format_from_ext(ext: &str) -> Option<CertFormat> {
     }
 }
 
-/// True when a parsed JSON value is a JWK or JWK Set. Lets the content
-/// sniffer route a `.json` JWK to the key viewer instead of the generic
-/// JSON pretty-printer. Tight (`kty` must be a known type) so unrelated
-/// JSON isn't grabbed; the pretty-JSON source view is preserved either
-/// way, so nothing is lost on a match.
-pub fn sniff_jwk(value: &serde_json::Value) -> bool {
-    looks_like_jwk(value)
-}
-
-/// True when `value` looks like a JWK (object with a recognised `kty`) or
-/// a JWK Set (a `keys` array of such objects). Tight enough that an
-/// unrelated JSON file carrying a `kty` or `keys` field won't match.
+/// True when a parsed JSON value is a JWK (object with a recognised `kty`)
+/// or a JWK Set (a `keys` array of such objects). Lets the content sniffer
+/// route a `.json` JWK to the key viewer instead of the generic JSON
+/// pretty-printer. Tight (`kty` must be a known type) so unrelated JSON
+/// isn't grabbed; the pretty-JSON source view is preserved either way, so
+/// nothing is lost on a match.
 ///
 /// The full JWK decode (thumbprints, key sizes) lives in the cert
 /// reader's `jwk` module; detection only needs this recognition check.
-fn looks_like_jwk(value: &serde_json::Value) -> bool {
+pub fn sniff_jwk(value: &serde_json::Value) -> bool {
     if let Some(keys) = value.get("keys").and_then(serde_json::Value::as_array) {
         return !keys.is_empty() && keys.iter().all(has_known_kty);
     }
