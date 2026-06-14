@@ -8,12 +8,17 @@ mod file;
 
 pub use file::format_size_human;
 
-/// Per-render options for the Info view.
+/// Per-render display options shared by the Info view and the listing
+/// size/time columns.
 #[derive(Clone, Copy, Default)]
 pub struct RenderOptions {
     /// When true, show timestamps in UTC (ISO 8601 `...Z`). When false
     /// (default), show local time with `±HH:MM` offset.
     pub utc: bool,
+    /// When true, listing size columns render human-readable units
+    /// (KiB/MiB/GiB) instead of exact byte counts. Toggled at runtime;
+    /// the Info view is unaffected (it always shows both).
+    pub human_sizes: bool,
 }
 
 pub(super) const LABEL_WIDTH: usize = 14;

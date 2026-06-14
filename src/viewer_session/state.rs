@@ -130,6 +130,17 @@ impl ViewerState {
         f.modes[f.active].label()
     }
 
+    pub(crate) fn active_mode_id(&self) -> ModeId {
+        let f = self.frame();
+        f.modes[f.active].id()
+    }
+
+    /// Whether human-readable size units are currently selected (the `z`
+    /// toggle). Drives the status indicator.
+    pub(crate) fn human_sizes(&self) -> bool {
+        self.render_opts.human_sizes
+    }
+
     pub(crate) fn active_status_segments(&self) -> Vec<(String, syntect::highlighting::Color)> {
         let f = self.frame();
         f.modes[f.active].status_segments(&self.peek_theme)
@@ -308,6 +319,13 @@ impl ViewerState {
             }
             Action::ParentDir => {
                 self.parent_dir()?;
+                Outcome::Redraw
+            }
+            Action::ToggleSizeUnits => {
+                self.render_opts.human_sizes = !self.render_opts.human_sizes;
+                // Size columns live in cached listing views across the whole
+                // stack, so drop every cache, not just the active frame's.
+                self.invalidate_all_views();
                 Outcome::Redraw
             }
             Action::OpenSearch => {

@@ -59,9 +59,14 @@ impl AttachmentListSource {
         theme.paint(&cell, theme.value)
     }
 
-    fn size_cell(&self, idx: usize, theme: &PeekTheme) -> String {
+    fn size_cell(&self, idx: usize, theme: &PeekTheme, human: bool) -> String {
         let size = self.rows[idx].size;
-        row::paint_size(&row::format_size(SizeCell::Bytes(size)), size, false, theme)
+        row::paint_size(
+            &row::format_size(SizeCell::Bytes(size), human),
+            size,
+            false,
+            theme,
+        )
     }
 }
 
@@ -104,7 +109,7 @@ impl ListSource for AttachmentListSource {
             prefix: String::new(),
             left: vec![
                 self.content_type_cell(idx, theme),
-                self.size_cell(idx, theme),
+                self.size_cell(idx, theme, ctx.render_opts.human_sizes),
             ],
             name: NameCell {
                 text: self.rows[idx].key.clone(),
@@ -118,7 +123,7 @@ impl ListSource for AttachmentListSource {
         Some(format!(
             "{}  {}  {}",
             self.content_type_cell(idx, theme),
-            self.size_cell(idx, theme),
+            self.size_cell(idx, theme, false),
             name
         ))
     }

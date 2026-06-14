@@ -109,11 +109,14 @@ impl ListSource for TreeListSource {
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let row = &self.rows[idx];
         let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
-        let size = row::format_size(if row.is_dir {
-            SizeCell::Dir
-        } else {
-            SizeCell::Bytes(row.size)
-        });
+        let size = row::format_size(
+            if row.is_dir {
+                SizeCell::Dir
+            } else {
+                SizeCell::Bytes(row.size)
+            },
+            ctx.render_opts.human_sizes,
+        );
         let left = row::file_row_left(
             &perms,
             &size,
@@ -140,7 +143,8 @@ impl ListSource for TreeListSource {
         let row = &self.rows[idx];
         let path = row.inner_path.as_ref()?;
         let perms = row::format_perms('-', row.mode, false);
-        let size = row::format_size(SizeCell::Bytes(row.size));
+        // `--list` pipe output stays exact bytes (the toggle is interactive).
+        let size = row::format_size(SizeCell::Bytes(row.size), false);
         Some(row::compose_row(
             &row::paint_perms(&perms, theme),
             &row::paint_size(&size, row.size, false, theme),

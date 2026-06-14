@@ -317,6 +317,7 @@ impl Mode for ListingMode {
                 "Pan left / right",
             ),
             (&[Action::ParentDir], "Parent directory"),
+            (&[Action::ToggleSizeUnits], "Bytes / human sizes"),
             (&[Action::Extract], "Extract selected entry"),
             (&[Action::OpenSearch], "Search names"),
             NEXT_PREV_MATCH_HELP,
@@ -340,6 +341,7 @@ impl Mode for ListingMode {
             "Pan left / right",
         ));
         entries.push((&[Action::ParentDir], "Parent directory"));
+        entries.push((&[Action::ToggleSizeUnits], "Bytes / human sizes"));
         if help.extract {
             entries.push((&[Action::Extract], "Extract selected entry"));
         }

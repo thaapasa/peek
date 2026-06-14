@@ -1177,7 +1177,10 @@ frame (no stack of dirs to back out of). **Backspace** walks up to the parent di
 (same `..` target), and walking up lands the cursor on the subdirectory you came from rather than
 the top of the list, so stepping in and out of siblings stays put. (In an archive / container TOC
 directory rows are selectable, so the same key moves the selection onto the parent directory row —
-one level per press.) **Esc** at any directory listing exits peek. Hidden
+one level per press.) **z** toggles the size column between exact byte counts and human-readable
+units (KiB/MiB/GiB) in every listing view (directories, archive/container TOCs, email attachments);
+exact bytes are the default and `--list` / `--print` stay exact. **Esc** at any directory listing
+exits peek. Hidden
 entries are included; symlinks are followed for kind classification, with broken links shown as
 `?`. `--print` and `--list` both render the listing. `/` searches entry names (same leaf-name
 search as the archive TOC); `n` / `p` step matches with wrap, moving the selection onto each hit.

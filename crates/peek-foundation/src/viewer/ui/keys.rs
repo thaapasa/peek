@@ -158,6 +158,10 @@ pub enum Action {
     /// child we came from); a tree TOC hops the selection up a level.
     /// No-op in non-listing modes.
     ParentDir,
+    /// Toggle listing size columns between exact byte counts and
+    /// human-readable units (KiB/MiB/GiB). No-op in modes without a
+    /// size column.
+    ToggleSizeUnits,
     /// Reflow streaming-table column widths from the currently-visible
     /// viewport. `RowsTableMode` only; no-op elsewhere.
     ReflowWidths,
@@ -231,6 +235,7 @@ impl Action {
             Action::Descend             => binds![B::plain(Enter)],
             Action::Back                => binds![B::plain(Esc)],
             Action::ParentDir           => binds![B::plain(Backspace)],
+            Action::ToggleSizeUnits     => binds![B::plain(Char('z'))],
             Action::ReflowWidths        => binds![B::plain(Char('R'))],
             Action::ToggleHeader        => binds![B::plain(Char('H'))],
             Action::ZoomIn              => binds![B::plain(Char('+')), B::plain(Char('='))],
@@ -298,7 +303,8 @@ impl Action {
             | Action::OpenSearch
             | Action::Extract
             | Action::Descend
-            | Action::ParentDir => false,
+            | Action::ParentDir
+            | Action::ToggleSizeUnits => false,
             Action::ToggleRawSource
             | Action::ToggleTextOverlay
             | Action::PlayPause

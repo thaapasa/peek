@@ -86,6 +86,7 @@ PDF / CBZ, and font specimen views. See
 | `Up` / `Down` | Move selection                               |
 | `Enter`       | Descend into selected entry (recursive peek) |
 | `Backspace`   | Up one directory level                       |
+| `z`           | Toggle exact bytes / human-readable sizes    |
 | `e`           | Extract selected entry                       |
 | `s`           | Toggle sticky parent breadcrumb              |
 | `/`           | Search leaf names (last path segment only)   |
@@ -96,6 +97,10 @@ directory with the cursor on the subdirectory you came from (so repeated presses
 tree and you can step straight back in). In an archive / container TOC (zip, tar, ISO, epub, …)
 it moves the selection onto the parent directory row — directory rows are selectable, so the
 cursor lands right above their contents and each press climbs one level.
+
+`z` toggles the size column between exact byte counts (thousands-separated) and human-readable
+units (KiB/MiB/GiB); the status line shows `human sizes` while the latter is active. Exact bytes
+are the default, and `--list` / `--print` output always stays exact.
 
 Listing search matches the last path segment of each row only — `sub/` finds nothing because
 no leaf carries a slash. Directory leaves participate so a search for an ancestor name brings

@@ -6,7 +6,7 @@
 
 use syntect::highlighting::Color;
 
-use crate::info::{format_archive_mtime_zoned, thousands_sep};
+use crate::info::{format_archive_mtime_zoned, format_size_human, thousands_sep};
 use crate::theme::{PeekTheme, lerp_color};
 
 /// Width (chars) of the size column, including thousands separators.
@@ -76,10 +76,13 @@ pub fn pad_size(raw: &str) -> String {
     format!("{raw:>w$}", w = SIZE_COL_WIDTH)
 }
 
-/// Format a size cell, padded to [`SIZE_COL_WIDTH`].
-pub fn format_size(cell: SizeCell) -> String {
+/// Format a size cell, padded to [`SIZE_COL_WIDTH`]. `human` picks
+/// human-readable units (KiB/MiB/GiB) over exact thousands-separated
+/// bytes — driven by the runtime size-unit toggle.
+pub fn format_size(cell: SizeCell, human: bool) -> String {
     match cell {
         SizeCell::Dir => pad_size("-"),
+        SizeCell::Bytes(n) if human => pad_size(&format_size_human(n)),
         SizeCell::Bytes(n) => pad_size(&thousands_sep(n)),
         SizeCell::Unknown => pad_size("?"),
     }
@@ -218,6 +221,21 @@ mod tests {
         ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)
     }
 
+    #[test]
+    fn format_size_honours_human_toggle() {
+        // Exact bytes (thousands-separated) vs human-readable units, both
+        // right-padded to the fixed column width.
+        assert_eq!(format_size(SizeCell::Bytes(2956), false).trim(), "2,956");
+        assert_eq!(format_size(SizeCell::Bytes(2956), true).trim(), "2.89 KiB");
+        assert_eq!(
+            format_size(SizeCell::Bytes(5 * 1024 * 1024), true).trim(),
+            "5.00 MiB"
+        );
+        // Dir / unknown cells are unit-agnostic.
+        assert_eq!(format_size(SizeCell::Dir, true).trim(), "-");
+        assert_eq!(format_size(SizeCell::Unknown, true).trim(), "?");
+    }
+
     /// The mtime column is the only width-gated cell: present at and above
     /// [`MTIME_HIDE_BELOW_COLS`], dropped below it. Pin the breakpoint here
     /// so both file-shaped sources stay aligned through the one helper.
@@ -226,7 +244,7 @@ mod tests {
         let tm = plain_theme();
         let theme = tm.peek_theme();
         let perms = format_perms('-', None, false);
-        let size = format_size(SizeCell::Bytes(42));
+        let size = format_size(SizeCell::Bytes(42), false);
         let mtime = || "2026-06-10 12:00".to_string();
 
         let wide = file_row_left(
@@ -265,7 +283,7 @@ mod tests {
         let tm = plain_theme();
         let theme = tm.peek_theme();
         let perms = format_perms('-', None, false);
-        let size = format_size(SizeCell::Bytes(0));
+        let size = format_size(SizeCell::Bytes(0), false);
         let mut called = false;
         file_row_left(
             &perms,

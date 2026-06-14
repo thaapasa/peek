@@ -6,7 +6,7 @@ use crossterm::event::{self, Event, KeyEventKind};
 
 use peek_detect::Detected;
 use peek_foundation::info::RenderOptions;
-use peek_foundation::viewer::modes::Mode;
+use peek_foundation::viewer::modes::{Mode, ModeId};
 use peek_foundation::viewer::ui::{
     Action, Outcome, render_themed_status_line, with_alternate_screen,
 };
@@ -209,6 +209,9 @@ fn render_status_line(state: &mut ViewerState) -> String {
     let breadcrumb = state.breadcrumb().join(" > ");
     let has_warnings = !state.frame().file_info.warnings.is_empty();
     let deferred_hint = state.deferred_hint();
+    // Surface human-size mode only where a size column exists (listings)
+    // and only when it's on — default byte display stays unannounced.
+    let show_human_sizes = state.active_mode_id() == ModeId::Listing && state.human_sizes();
     let theme = &state.peek_theme;
 
     // Prefix breadcrumb with a yellow `!` when the active frame's
@@ -242,6 +245,9 @@ fn render_status_line(state: &mut ViewerState) -> String {
     // so a freshly-opened big `.xz` shows "Enter to decompress" up front.
     if let Some(msg) = deferred_hint.as_deref() {
         segs.push((msg, theme.warning));
+    }
+    if show_human_sizes {
+        segs.push(("human sizes", theme.muted));
     }
     segs.push((theme_name, theme.muted));
     // Only surface color mode when it's been changed off the default —

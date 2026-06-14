@@ -156,7 +156,12 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
     let detected = &detected_owned;
 
     let viewers = compose::Registry::new(&args.compose_opts())?;
-    let render_opts = info::RenderOptions { utc: args.utc };
+    // Size units start at exact bytes; the `z` key toggles human-readable
+    // at runtime (no CLI flag yet, so pipe / --info stay on bytes).
+    let render_opts = info::RenderOptions {
+        utc: args.utc,
+        human_sizes: false,
+    };
 
     // --info mode: a fixed-size summary, written straight to stdout. For
     // a scrollable view, use the interactive viewer's Info mode (key `i`).

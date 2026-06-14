@@ -105,7 +105,7 @@ impl ListSource for DirListSource {
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let entry = &self.entries[idx];
         let perms = format_perms(entry);
-        let size = format_size(entry);
+        let size = format_size(entry, ctx.render_opts.human_sizes);
         let is_dir = entry.kind == DirEntryKind::Dir;
         let left = row::file_row_left(
             &perms,
@@ -133,7 +133,8 @@ impl ListSource for DirListSource {
         let entry = &self.entries[idx];
         let is_dir = entry.kind == DirEntryKind::Dir;
         let perms = format_perms(entry);
-        let size = format_size(entry);
+        // `--list` pipe output stays exact bytes (the toggle is interactive).
+        let size = format_size(entry, false);
         let suffix = if is_dir { "/" } else { "" };
         let painted_name = theme.paint(&format!("{}{}", entry.name, suffix), theme.foreground);
         Some(row::compose_row(
@@ -155,7 +156,7 @@ fn format_perms(entry: &DirEntry) -> String {
     row::format_perms(type_ch, entry.mode, entry.kind == DirEntryKind::Dir)
 }
 
-fn format_size(entry: &DirEntry) -> String {
+fn format_size(entry: &DirEntry, human: bool) -> String {
     let cell = if entry.kind == DirEntryKind::Dir {
         SizeCell::Dir
     } else if entry.stat_error {
@@ -163,7 +164,7 @@ fn format_size(entry: &DirEntry) -> String {
     } else {
         SizeCell::Bytes(entry.size)
     };
-    row::format_size(cell)
+    row::format_size(cell, human)
 }
 
 fn parent_link_entry() -> DirEntry {
