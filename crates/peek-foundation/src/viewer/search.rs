@@ -489,7 +489,7 @@ pub fn reveal_h_scroll(h_scroll: usize, cols: usize, start: usize, end: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::viewer::ui::make_peek_theme;
+    use peek_theme::make_peek_theme;
     use peek_theme::{PeekThemeName, StyleMode};
 
     #[test]

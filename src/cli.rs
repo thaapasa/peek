@@ -2,7 +2,6 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use std::path::PathBuf;
 
 use peek_foundation::viewer::ComposeOpts;
-use peek_theme as theme;
 
 /// peek — a modern file viewer for the terminal.
 ///
@@ -53,22 +52,22 @@ pub struct Args {
         short,
         long,
         env = "PEEK_THEME",
-        default_value_t = theme::PeekThemeName::default(),
+        default_value_t = peek_theme::PeekThemeName::default(),
         value_enum,
         hide_short_help = true,
     )]
-    pub theme: theme::PeekThemeName,
+    pub theme: peek_theme::PeekThemeName,
 
     /// Output color encoding (truecolor / 256 / 16 / grayscale / plain)
     #[arg(
         short = 'C',
         long,
         env = "PEEK_COLOR",
-        default_value_t = theme::StyleMode::default(),
+        default_value_t = peek_theme::StyleMode::default(),
         value_enum,
         hide_short_help = true,
     )]
-    pub color: theme::StyleMode,
+    pub color: peek_theme::StyleMode,
 
     /// Force a specific language for syntax highlighting (skip auto-detection)
     #[arg(short = 'L', long, hide_short_help = true)]

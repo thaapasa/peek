@@ -5,7 +5,6 @@ use peek_foundation::extract::ExtractOptions;
 use peek_foundation::output::PrintOutput;
 use peek_foundation::{info, viewer};
 use peek_io::InputSource;
-use peek_theme as theme;
 
 pub use cli::Args;
 
@@ -25,7 +24,7 @@ fn main() -> Result<()> {
     // Otherwise the status bar and UI chrome stay themed while content is
     // unstyled, which is surprising.
     if args.plain {
-        args.color = theme::StyleMode::Plain;
+        args.color = peek_theme::StyleMode::Plain;
     }
 
     if args.version {
@@ -43,13 +42,13 @@ fn main() -> Result<()> {
     // hit the cache instead of a live round-trip mid event loop.
     if !theme_explicit && std::io::stdout().is_terminal() {
         let light = peek_io::term_query::background_color_cached().is_some_and(|bg| bg.is_light());
-        args.theme = theme::PeekThemeName::default_for_light_background(light);
+        args.theme = peek_theme::PeekThemeName::default_for_light_background(light);
     }
 
     // No args + interactive stdin → show short help instead of erroring.
     let no_input = args.file.is_none() && std::io::stdin().is_terminal();
     if args.short_help || args.help || no_input {
-        let theme_manager = theme::ThemeManager::new(args.theme, args.color);
+        let theme_manager = peek_theme::ThemeManager::new(args.theme, args.color);
         output::render_help(&theme_manager, !args.help)?;
         return Ok(());
     }

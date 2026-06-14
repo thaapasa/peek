@@ -249,9 +249,9 @@ fn push_wrapped(lines: &mut Vec<String>, line: String, width: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::viewer::ui::make_peek_theme;
     use peek_io::InputSource;
     use peek_theme::PeekThemeName;
+    use peek_theme::make_peek_theme;
     use std::path::PathBuf;
 
     fn disasm() -> Disassembly {

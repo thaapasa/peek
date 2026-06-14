@@ -27,7 +27,3 @@ pub use term::{content_rows, terminal_cols, terminal_rows, with_alternate_screen
 
 #[cfg(any(test, feature = "testing"))]
 pub use term::test_term_override;
-
-/// Re-exported from `peek-theme` (its real home) — kept here so viewer
-/// code keeps one import path for theme construction.
-pub use peek_theme::make_peek_theme;
