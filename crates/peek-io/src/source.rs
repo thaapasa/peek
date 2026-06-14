@@ -215,8 +215,11 @@ impl InputSource {
         Ok(())
     }
 
-    /// Total byte length without reading the content. `File` / `TempFile`
-    /// stat the path; `Memory` / `FileRange` already know their length.
+    /// Total byte length without reading the content. `File` / `TempFile` /
+    /// `FileRange` stat the backing path; `Memory` already knows its length.
+    /// A `FileRange` clamps its caller-supplied `len` to the backing file's
+    /// real extent so the gate sees what a read would actually yield (the
+    /// declared len of e.g. an archive entry can exceed the file).
     /// Used by size-cap gates (e.g. the rendered-view cap) that must decide
     /// before committing to a whole-file read.
     pub fn byte_len(&self) -> Result<u64> {
@@ -225,7 +228,14 @@ impl InputSource {
                 .with_context(|| format!("failed to stat {}", path.display()))?
                 .len()),
             Self::Memory { bytes, .. } => Ok(bytes.len() as u64),
-            Self::FileRange { len, .. } => Ok(*len),
+            Self::FileRange {
+                base, offset, len, ..
+            } => {
+                let total = fs::metadata(base)
+                    .with_context(|| format!("failed to stat {}", base.display()))?
+                    .len();
+                Ok((*len).min(total.saturating_sub(*offset)))
+            }
             Self::TempFile { file, .. } => Ok(fs::metadata(file.path())
                 .with_context(|| format!("failed to stat tempfile {}", file.path().display()))?
                 .len()),
@@ -245,7 +255,9 @@ impl InputSource {
     /// On-disk filesystem path of the source — `Some` only when the
     /// source is a literal `File` the user named. `None` for in-memory,
     /// for ranged views (the backing file path of a range is an
-    /// internal handle, not the inner item the user is viewing), and
+    /// internal handle, not the inner item the user is viewing — this
+    /// holds even when the range was carved from a user-named `File`, since
+    /// the path then points at the container, not the inner item), and
     /// for `TempFile` (the temp path is internal scratch).
     ///
     /// Named `disk_path`, not `path`, to keep call sites honest:
@@ -376,9 +388,18 @@ impl InputSource {
 
 fn read_file_range(base: &Path, offset: u64, len: u64) -> Result<Bytes> {
     let mut f = File::open(base).with_context(|| format!("failed to open {}", base.display()))?;
+    // Clamp to the backing file's real extent before pre-allocating: a
+    // `subrange` len is caller-supplied (archive entries declare their own
+    // uncompressed size), so an over-large declared len must not size the
+    // buffer past what the file can yield.
+    let total = f
+        .metadata()
+        .with_context(|| format!("failed to stat {}", base.display()))?
+        .len();
+    let want = len.min(total.saturating_sub(offset));
     f.seek(SeekFrom::Start(offset))
         .with_context(|| format!("failed to seek in {}", base.display()))?;
-    let cap = usize::try_from(len).unwrap_or(usize::MAX);
+    let cap = usize::try_from(want).unwrap_or(usize::MAX);
     let mut buf = vec![0u8; cap];
     let mut filled = 0usize;
     while filled < cap {
@@ -697,6 +718,21 @@ mod tests {
         let bs = src.open_byte_source().unwrap();
         assert_eq!(bs.len(), 5);
         assert_eq!(bs.read_range(1, 3).unwrap().as_ref(), b"ell");
+        let _ = fs::remove_file(&path);
+    }
+
+    #[test]
+    fn file_range_over_large_len_clamps_to_file() {
+        // A subrange declaring more bytes than the file holds (an archive
+        // entry can declare its own uncompressed size) must not over-report
+        // its length or pre-allocate past the file's real extent.
+        let path = write_temp("overlen", b"AAAAhello");
+        let src = InputSource::File(path.clone()).subrange(4, 1_000_000, "hello");
+        assert_eq!(src.byte_len().unwrap(), 5);
+        assert_eq!(
+            src.read_bytes(Budget::Unbounded("test")).unwrap().as_ref(),
+            b"hello"
+        );
         let _ = fs::remove_file(&path);
     }
 
