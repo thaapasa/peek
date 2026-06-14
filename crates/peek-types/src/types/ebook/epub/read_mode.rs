@@ -439,3 +439,88 @@ fn render_inline_image(
     let lines = image_render::render_prepared(&prep, &config, window);
     Ok(lines)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::info::{FileInfo, NoExtras, RenderOptions};
+    use crate::theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
+    use crate::types::image::pipeline::ImageConfig;
+    use crate::viewer::image_render::{Background, FitMode, ImageMode};
+    use crate::viewer::modes::{Mode, RenderCtx};
+
+    fn epub_fixture() -> InputSource {
+        let path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("test-books/frankenstein.epub");
+        InputSource::File(path)
+    }
+
+    fn image_config() -> ImageConfig {
+        ImageConfig {
+            mode: ImageMode::from_str("block"),
+            width: 0,
+            background: Background::from_str("auto"),
+            margin: 0,
+            style_mode: StyleMode::Plain,
+            edge_density: 0.1,
+            fit: FitMode::Contain,
+        }
+    }
+
+    fn synthetic_file_info() -> FileInfo {
+        FileInfo {
+            file_name: String::new(),
+            path: String::new(),
+            size_bytes: 0,
+            mimes: Vec::new(),
+            warnings: Vec::new(),
+            modified: None,
+            created: None,
+            permissions: None,
+            compression: None,
+            extras: Box::new(NoExtras),
+        }
+    }
+
+    fn make_ctx<'a>(file_info: &'a FileInfo, peek_theme: &'a PeekTheme) -> RenderCtx<'a> {
+        RenderCtx {
+            file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 80,
+            term_rows: 40,
+        }
+    }
+
+    /// End-to-end through the shared `PagedTextReadMode` shell: the EPUB
+    /// reader renders a chapter, reports a `ch i/N` status, and `n` steps
+    /// to the next chapter. Guards the `EpubReader` → shell wiring (cache
+    /// key, page label, step dispatch) against a real multi-chapter book.
+    #[test]
+    fn renders_and_steps_chapters() {
+        let source = epub_fixture();
+        let pkg = package::open(&source).unwrap();
+        let chapter_count = pkg.chapters.len();
+        assert!(chapter_count > 1, "fixture must have multiple chapters");
+
+        let mut mode = EpubReader::into_mode(source.clone(), image_config(), pkg);
+        let file_info = synthetic_file_info();
+        let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
+        let ctx = make_ctx(&file_info, tm.peek_theme());
+
+        // First chapter renders to a non-empty window.
+        let win = mode.render_window(&ctx, 0, 40).unwrap();
+        assert!(win.total > 0);
+        assert!(!win.lines.is_empty());
+
+        // Status reports the page counter through the shell.
+        let seg = |m: &dyn Mode| m.status_segments(tm.peek_theme())[0].0.clone();
+        assert_eq!(seg(&mode), format!("ch 1/{chapter_count}"));
+
+        // `n` steps to the next chapter; render it so the counter updates.
+        mode.handle(Action::Next);
+        let _ = mode.render_window(&ctx, 0, 40).unwrap();
+        assert_eq!(seg(&mode), format!("ch 2/{chapter_count}"));
+    }
+}

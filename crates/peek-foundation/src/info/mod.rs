@@ -112,10 +112,10 @@ pub type Extras = Box<dyn InfoExtras>;
 /// Lets viewer-mode unit tests build a `RenderCtx` without running the
 /// full `gather` hub (or naming any concrete per-type stats struct), so
 /// those tests stay pure mechanics — no dependency on the reader crate.
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 pub struct NoExtras;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 impl InfoExtras for NoExtras {
     fn render_section(&self, _lines: &mut Vec<String>, _theme: &PeekTheme) {}
 }
