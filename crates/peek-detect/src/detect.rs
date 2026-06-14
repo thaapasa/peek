@@ -440,6 +440,7 @@ impl Probe<'_> {
 /// retry asked to ignore it.
 fn classify(name: Option<&str>, probe: Probe<'_>) -> Result<Detected> {
     let magic_mime = head_magic_mime(probe.head());
+    let magic_type = magic_mime.as_deref().and_then(file_type_from_magic_mime);
 
     // Name-based routing first: the extension carries refinements magic
     // can't express (a zip is really a `.docx`; a `%PDF` is really a `.ai`).
@@ -448,13 +449,23 @@ fn classify(name: Option<&str>, probe: Probe<'_>) -> Result<Detected> {
         if let Some(file_type) = keynote_from_name(name, magic_mime.as_deref()) {
             return Ok(Detected::new(file_type, magic_mime));
         }
-        if let Some(file_type) = classify_by_name(name) {
-            return Ok(Detected::new(probe.upgrade_iso(file_type), magic_mime));
+        if let Some(name_type) = classify_by_name(name) {
+            let name_type = probe.upgrade_iso(name_type);
+            // The extension routed it, but trust strong magic when it
+            // *contradicts* the name — a lying extension (`.csv` holding a
+            // zip, `.json` holding a PNG) should follow its bytes. A coarse
+            // container/codec magic the extension merely refines (zip →
+            // `.docx`, `%PDF` → `.ai`) is not a contradiction; the name wins.
+            let chosen = match magic_type {
+                Some(mt) if !name_refines_magic(&name_type, &mt) => mt,
+                _ => name_type,
+            };
+            return Ok(Detected::new(chosen, magic_mime));
         }
     }
 
     // Magic bytes for binary containers `classify_by_name` didn't claim.
-    if let Some(file_type) = magic_mime.as_deref().and_then(file_type_from_magic_mime) {
+    if let Some(file_type) = magic_type {
         return Ok(Detected::new(file_type, magic_mime));
     }
 
@@ -473,6 +484,44 @@ fn classify(name: Option<&str>, probe: Probe<'_>) -> Result<Detected> {
     // Plain text — the name's extension is the syntect syntax hint.
     let syntax = name.and_then(mime::extension_from_name);
     Ok(Detected::new(FileType::SourceCode { syntax }, magic_mime))
+}
+
+/// True when a name-routed type is a legitimate *refinement* of what the
+/// magic bytes saw, rather than a contradiction. The extension adds detail
+/// magic can't: a zip is really a `.docx`/`.epub`/`.cbz`; a compressed-tar's
+/// outer codec hides the tarball; `%PDF` can't tell PDF from Illustrator.
+/// When this is false the two describe incompatible formats — the extension
+/// is lying and the bytes win.
+///
+/// Conservative by design (the override throws away the name): it fires only
+/// when a *strong, concrete* magic signature disagrees. The generic `Binary`
+/// catch-all (e.g. `video/*`, which `infer` also reports for audio-only MP4)
+/// is too weak to overrule a specific extension, so it never contradicts.
+fn name_refines_magic(name_type: &FileType, magic_type: &FileType) -> bool {
+    use FileType::*;
+    // A weak magic verdict never overrules the name.
+    if matches!(magic_type, Binary) {
+        return true;
+    }
+    // Same variant (incl. exact equality): the extension only sharpens a
+    // flavour the magic already agrees on (PDF → Illustrator, EPS flavour,
+    // disk-image flavour, zip ↔ zip). Never a contradiction.
+    if std::mem::discriminant(name_type) == std::mem::discriminant(magic_type) {
+        return true;
+    }
+    // Cross-category refinements: a coarse container/codec the extension
+    // specialises into a concrete document type.
+    match magic_type {
+        // A zip is the carrier for every OOXML / ODF / ebook / comic format.
+        Archive(ArchiveFormat::Zip) => matches!(
+            name_type,
+            Document(_) | Spreadsheet(_) | Presentation(_) | Ebook(_) | Comic(_)
+        ),
+        // A compressed-tar shows only its outer codec's magic; the
+        // extension knows it's a tarball.
+        Compressed(_) => matches!(name_type, Archive(_)),
+        _ => false,
+    }
 }
 
 /// Magic-byte MIME for a file head. Combines the explicit AR / RTF /
@@ -1310,6 +1359,84 @@ mod tests {
                 "stream: {name}"
             );
         }
+    }
+
+    /// A lying extension follows its bytes: strong magic that contradicts
+    /// the name overrides it (`.csv` holding a zip, `.json` holding a PNG),
+    /// while a coarse container/codec the extension refines (zip → `.docx`,
+    /// `%PDF` → `.ai`) keeps the name.
+    #[test]
+    fn lying_extension_defers_to_strong_magic() {
+        let png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0dIHDR";
+        let zip = b"PK\x03\x04\x14\x00\x00\x00";
+        let pdf = b"%PDF-1.5\n%\xe2\xe3\xcf\xd3\n";
+
+        // Contradictions: magic wins.
+        assert_eq!(
+            detect(&mem("data.csv", zip)).unwrap().file_type,
+            FileType::Archive(ArchiveFormat::Zip)
+        );
+        assert_eq!(
+            detect(&mem("a.json", png)).unwrap().file_type,
+            FileType::Image
+        );
+        assert_eq!(
+            detect(&mem("notes.txt", png)).unwrap().file_type,
+            FileType::Image
+        );
+
+        // Refinements: name wins.
+        assert_eq!(
+            detect(&mem("d.docx", zip)).unwrap().file_type,
+            FileType::Document(DocumentFormat::Docx)
+        );
+        assert_eq!(
+            detect(&mem("art.ai", pdf)).unwrap().file_type,
+            FileType::Pdf(PdfFlavor::Illustrator)
+        );
+        assert_eq!(
+            detect(&mem("book.epub", zip)).unwrap().file_type,
+            FileType::Ebook(EbookFormat::Epub)
+        );
+    }
+
+    /// Unit coverage for the refinement relation that drives the override.
+    #[test]
+    fn name_refines_magic_relation() {
+        use FileType::*;
+        // Refinements (name kept).
+        assert!(name_refines_magic(
+            &Document(DocumentFormat::Docx),
+            &Archive(ArchiveFormat::Zip)
+        ));
+        assert!(name_refines_magic(
+            &Comic(ComicFormat::Cbz),
+            &Archive(ArchiveFormat::Zip)
+        ));
+        assert!(name_refines_magic(
+            &Pdf(PdfFlavor::Illustrator),
+            &Pdf(PdfFlavor::Pdf)
+        ));
+        assert!(name_refines_magic(
+            &Archive(ArchiveFormat::TarGz),
+            &Compressed(CompressionFormat::Gz)
+        ));
+        assert!(name_refines_magic(&Image, &Image));
+        // A weak `Binary` magic never overrules a specific name.
+        assert!(name_refines_magic(&Audio(AudioFormat::M4a), &Binary));
+        // Contradictions (magic wins).
+        assert!(!name_refines_magic(
+            &Csv(CsvFormat::Csv),
+            &Archive(ArchiveFormat::Zip)
+        ));
+        assert!(!name_refines_magic(
+            &Structured(StructuredFormat::Json),
+            &Image
+        ));
+        assert!(!name_refines_magic(
+            &Structured(StructuredFormat::Xml),
+            &ObjectFile
+        ));
     }
 
     #[test]
