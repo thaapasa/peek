@@ -33,10 +33,8 @@ mechanical.
 ### 1.0 — 0.4 plus the last user-facing must-have ☐
 
 - **Regex search** — the "desirable" from the original search spec; highest-value
-  user-facing gap. See [§ Text Search](#text-search-).
-- **Detection correctness** — extension-vs-magic precedence (silent mis-routes
-  self-correct only reactively) + two-path unify. (Truncated-head JSON sniff: done.) See
-  [§ Detection hardening](#detection-hardening-).
+  user-facing gap. See [§ Text Search](#text-search-). **This is now the last 1.0
+  blocker** — detection correctness shipped.
 
 ### Post-1.0 / 1.x — deepening ☐
 
@@ -108,21 +106,20 @@ plan's Sequencing step 6.
 `Mode::loads_whole_file()` signal that lands *any* over-threshold transform view on Info. Fold in
 only if a non-decompress view ever needs it.
 
-### Detection hardening ☐
+### Detection hardening ◐
 
 The `peek-detect` crate split (see the archived
 [crate-split plan](archived/crate-split-plan.md)) was built to make these tractable:
 detection is now a small, reader-free, fuzzable surface. Full rationale + file/line
-references live in that plan's "Follow-up backlog" section; summary, ordered by value
-(milestone tag in brackets):
+references live in that plan's "Follow-up backlog" section.
 
-- ☐ **[1.0] Extension-vs-magic precedence.** A lying extension (`.txt` holding a PNG,
-  `.csv` holding a zip) routes by name; the only correction (`detect_ignore_name`)
-  fires reactively on render failure, so silent mis-routes never self-correct. Prefer
-  magic when it strongly disagrees — minding the deliberate `.ai`/`.pdf` ambiguity.
-- ☐ **[1.0] Unify the two detection paths.** File path and in-memory path differ in
-  order *and* UTF-8 rigor; collapse to one core over a `Read`, parity-test both entry
-  points.
+The 1.0 items shipped: the three detect paths now collapse into one `classify` core over
+a `Probe` (file / resident / stream), parity-tested; the truncated-head JSON sniff uses
+serde's `Eof` signal instead of a whole-document parse; and a lying extension defers to
+strongly-disagreeing magic (`.csv` holding a zip → zip, `.json` holding a PNG → image)
+while refinements (zip → `.docx`, `%PDF` → `.ai`) keep the name. `detect_ignore_name`
+remains as a last-ditch reactive retry. Remaining:
+
 - ☐ **[1.x] Tighten loose heuristics.** YAML `---` prefix over-matches; extension-
   routed binary types and `.br` aren't magic-verified.
 
@@ -171,8 +168,8 @@ The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
   from here" would scale better. (The per-query whole-file walk that was finding M17 has
   its byte-cap floor; this lazy scan is the proper fix.)
 
-Detection correctness items for the 1.0 bar live under
-[§ Detection hardening](#detection-hardening-) (the `[1.0]`-tagged bullets).
+The 1.0 detection-correctness items shipped — see
+[§ Detection hardening](#detection-hardening-). Regex search is the last 1.0 blocker.
 
 ---
 

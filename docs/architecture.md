@@ -128,8 +128,12 @@ read keystrokes (resolved via `ttyname()` on stderr/stdout, not `/dev/tty` direc
 rejects the latter with EINVAL). The CLI-level "file vs stdin" decision (`build_source`, needs
 `Args`) stays in the binary at `src/input.rs`.
 
-Stdin detection: magic bytes (images, binary) → content sniffing (leading `{`/`[` → JSON, `<` →
-XML/SVG, `---` → YAML), in `peek-detect`'s `detect_bytes()` (`crates/peek-detect/src/detect.rs`).
+Detection: file, resident-memory (stdin / archive entry), and spooled-stream sources all run
+through one `classify` core over a `Probe` in `peek-detect` (`crates/peek-detect/src/detect.rs`).
+Precedence is name routing → magic bytes → content sniff (leading `{`/`[` → JSON via serde's `Eof`
+prefix signal, root `<svg>`/`<html>` → SVG/HTML, `---` → YAML) → plain text. A strong magic
+signature that *contradicts* a recognised extension overrides it (a `.csv` holding a zip); a coarse
+magic the extension merely refines (zip → `.docx`, `%PDF` → `.ai`) keeps the name.
 
 ## Key abstractions
 
