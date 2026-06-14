@@ -98,6 +98,31 @@ Anti-pattern: a `match file_type` inside `types/<name>/` or anywhere besides the
 wiring sites above. If logic needs to branch on the active file type, the dispatch
 belongs at a wiring site and the per-arm body belongs in the corresponding type module.
 
+## Crate imports
+
+Name dependency crates directly — `peek_io::`, `peek_detect::`, `peek_theme::`,
+`peek_foundation::{viewer, info, …}`. Do **not** add an in-crate re-export façade or a
+`use peek_x as y` alias to dodge the crate name. The import path should say which crate an
+item comes from, and agree with the dependency named in `Cargo.toml`. A re-export of a
+stable leaf the crate already depends on buys nothing: it's one more hop on jump-to-def and
+a path that hides the real source.
+
+Re-export from a dependency **only** when the bare path genuinely can't carry, with the
+reason stated at the re-export site:
+
+- **The dependency type is part of this crate's own public API.** `peek-detect` re-exports
+  `peek_io::compression::CompressionFormat` because its public `FileType::Compressed(..)`
+  embeds it — a consumer matching the variant must name the payload, and the idiom surfaces
+  it from the crate that owns the enclosing type. The per-type format-enum re-export
+  (`mod.rs`: `pub use peek_detect::types::<name>::<Name>Format`) is this same case: the
+  reader module surfaces the enum it's built around as part of its own root API.
+- **Proc-macro surface.** `info::InfoView` re-exports the derive from the
+  `peek-foundation-derive` sub-crate — proc-macro crates export only macros.
+- **Macro hygiene.** `peek-foundation` keeps `pub use peek_theme as theme` solely so the
+  `#[derive(InfoView)]` expansion's `::peek_foundation::theme::PeekTheme` path resolves
+  through the one crate every deriving crate is guaranteed to depend on. Not for
+  hand-written use.
+
 ## Module organization
 
 - **Split before unwieldy.** A file past ~400 lines mixing unrelated concerns is a refactor signal.
