@@ -17,7 +17,6 @@ pub fn make_peek_theme(name: PeekThemeName, style_mode: StyleMode) -> PeekTheme 
 #[rustfmt::skip] const WHITE: Color = Color { r: 255, g: 255, b: 255, a: 255 };
 #[rustfmt::skip] const BLACK: Color = Color { r: 0, g: 0, b: 0, a: 255 };
 #[rustfmt::skip] const RED: Color = Color { r: 255, g: 80, b: 80, a: 255 };
-#[rustfmt::skip] const YELLOW: Color = Color { r: 255, g: 255, b: 0, a: 255 };
 /// Neutral (unsaturated) text colors picked by `contrast_text` for
 /// search-match backgrounds — not pure black/white, to take the harsh
 /// edge off.
@@ -26,7 +25,6 @@ pub fn make_peek_theme(name: PeekThemeName, style_mode: StyleMode) -> PeekTheme 
 
 /// Semantic color roles for all non-syntax UI output.
 #[derive(Clone)]
-#[allow(unused)]
 pub struct PeekTheme {
     pub foreground: Color,
     pub background: Color,
@@ -37,7 +35,6 @@ pub struct PeekTheme {
     pub muted: Color,
     pub warning: Color,
     pub gutter: Color,
-    pub search_match: Color,
     pub selection: Color,
     /// Subtle block-level background tint (rendered Markdown code
     /// blocks, blockquotes, similar "card" surfaces). Sits between
@@ -70,7 +67,6 @@ impl PeekTheme {
             muted,
             warning: scope_color(theme, "invalid").unwrap_or(RED),
             gutter: theme.settings.gutter_foreground.unwrap_or(muted),
-            search_match: theme.settings.find_highlight.unwrap_or(YELLOW),
             selection: theme
                 .settings
                 .selection
@@ -216,7 +212,6 @@ impl PeekTheme {
         )
     }
 
-    #[allow(unused)]
     pub fn paint_warning(&self, text: &str) -> String {
         self.paint(text, self.warning)
     }
