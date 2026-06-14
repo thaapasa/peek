@@ -35,7 +35,7 @@ mechanical.
 - **Regex search** — the "desirable" from the original search spec; highest-value
   user-facing gap. See [§ Text Search](#text-search-).
 - **Detection correctness** — extension-vs-magic precedence (silent mis-routes
-  self-correct only reactively) + the truncated-head JSON sniff + two-path unify. See
+  self-correct only reactively) + two-path unify. (Truncated-head JSON sniff: done.) See
   [§ Detection hardening](#detection-hardening-).
 
 ### Post-1.0 / 1.x — deepening ☐
@@ -120,9 +120,6 @@ references live in that plan's "Follow-up backlog" section; summary, ordered by 
   `.csv` holding a zip) routes by name; the only correction (`detect_ignore_name`)
   fires reactively on render failure, so silent mis-routes never self-correct. Prefer
   magic when it strongly disagrees — minding the deliberate `.ai`/`.pdf` ambiguity.
-- ☐ **[1.0] Truncated-head JSON sniff.** Large extensionless/stdin JSON fails to parse
-  on the head and falls through to plain text; use a structural brace-sniff / valid-
-  prefix instead of a full parse.
 - ☐ **[1.0] Unify the two detection paths.** File path and in-memory path differ in
   order *and* UTF-8 rigor; collapse to one core over a `Read`, parity-test both entry
   points.

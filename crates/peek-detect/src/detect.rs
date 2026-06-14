@@ -49,23 +49,27 @@ use crate::types::structured as structured_detect;
 use crate::types::vobject as vobject_detect;
 
 /// Bytes read from the head of a file for magic-byte detection and the
-/// content-sniff string. `infer` inspects only the first few hundred bytes;
-/// the larger window is for content sniffing (JSON / YAML / XML) where a
-/// fuller parse classifies more.
+/// content-sniff string. Every consumer is satisfied by a small prefix:
+/// `infer` inspects the first few hundred bytes, and the text sniffs
+/// ([`sniff_text_content`]) key off the top of the file — a JSON/array
+/// opener, a YAML `---`, a PEM `-----BEGIN`, a shebang line. JSON no longer
+/// needs a whole-document window: a head-bounded buffer that cuts a large
+/// document mid-value still classifies as JSON via the tokenizer's `Eof`
+/// signal (see [`sniff_text_content`]), so the head only has to be long
+/// enough for the *first* token, not the whole value.
 ///
 /// This is a deliberate read-bomb guard, not a sufficiency claim: the file
-/// and stream paths sniff only this head because their bytes are *not*
-/// resident — sniffing more would mean reading more off disk, and a
+/// path sniffs only this head because its bytes are *not* resident, and a
 /// full-parse sniff of a multi-GB file reinstates the exact read bomb
 /// 658cf59 removed. The memory (stdin) path instead sniffs up to
 /// `WHOLE_DOC_BYTES`: its bytes are already resident, so the wider sniff is
 /// free. That file-vs-memory asymmetry is intentional — see [`detect_bytes`].
 ///
-/// Set to 64 KB (matching [`detect_stream`]'s head) so the common nameless,
-/// extensionless JSON/YAML still routes to its structured type; only such a
-/// file *larger* than this and with no name to classify by falls to plain
-/// text, which is rare and unprintable anyway.
-const HEAD_BYTES: usize = 64 * 1024;
+/// Unlike [`detect_stream`]'s head, this does *not* need to reach the ISO
+/// 9660 PVD at offset 32768: the file path probes that by `seek`
+/// ([`upgrade_disk_image_path`]) rather than out of the head, so 8 KB
+/// comfortably covers magic + every cheap top-of-file sniff.
+const HEAD_BYTES: usize = 8 * 1024;
 
 /// Chunk size for streaming UTF-8 validation of the file body.
 const SCAN_CHUNK: usize = 64 * 1024;
@@ -768,27 +772,44 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
     #[allow(clippy::collapsible_match)]
     match first {
         Some(b'{') | Some(b'[') => {
-            if let Ok(value) = serde_json::from_str::<serde_json::Value>(text) {
-                // A JSON object carrying `nbformat` + `cells` is a
-                // Jupyter notebook — route it to the cell viewer rather
-                // than the generic JSON pretty-printer.
-                if value.get("nbformat").is_some() && value.get("cells").is_some() {
-                    return Some((FileType::Notebook, "application/x-ipynb+json"));
+            match serde_json::from_str::<serde_json::Value>(text) {
+                Ok(value) => {
+                    // A JSON object carrying `nbformat` + `cells` is a
+                    // Jupyter notebook — route it to the cell viewer rather
+                    // than the generic JSON pretty-printer.
+                    if value.get("nbformat").is_some() && value.get("cells").is_some() {
+                        return Some((FileType::Notebook, "application/x-ipynb+json"));
+                    }
+                    // A JSON Web Key / Key Set routes to the cert viewer (key
+                    // sidecar + pretty JSON source), not the generic JSON view.
+                    if cert_detect::sniff_jwk(&value) {
+                        let mime = if value.get("keys").is_some() {
+                            "application/jwk-set+json"
+                        } else {
+                            "application/jwk+json"
+                        };
+                        return Some((FileType::Cert(CertFormat::Jwk), mime));
+                    }
+                    return Some((
+                        FileType::Structured(StructuredFormat::Json),
+                        "application/json",
+                    ));
                 }
-                // A JSON Web Key / Key Set routes to the cert viewer (key
-                // sidecar + pretty JSON source), not the generic JSON view.
-                if cert_detect::sniff_jwk(&value) {
-                    let mime = if value.get("keys").is_some() {
-                        "application/jwk-set+json"
-                    } else {
-                        "application/jwk+json"
-                    };
-                    return Some((FileType::Cert(CertFormat::Jwk), mime));
+                // A head-bounded buffer routinely cuts a large JSON document
+                // mid-value, so a full parse fails with `Eof` — the tokenizer
+                // ran out of input while still well-formed. That is a valid
+                // JSON *prefix*, so classify it as JSON (sub-typing as
+                // notebook / JWK needs the parsed value, so a truncated head
+                // falls back to plain JSON — both are tiny in practice and
+                // notebooks route by `.ipynb` name anyway). A `Syntax` / `Data`
+                // error means a real violating byte: not JSON, fall through.
+                Err(e) if e.classify() == serde_json::error::Category::Eof => {
+                    return Some((
+                        FileType::Structured(StructuredFormat::Json),
+                        "application/json",
+                    ));
                 }
-                return Some((
-                    FileType::Structured(StructuredFormat::Json),
-                    "application/json",
-                ));
+                Err(_) => {}
             }
         }
         Some(b'<') => {
@@ -1089,6 +1110,56 @@ mod tests {
             }
         );
         assert_eq!(mime, "text/x-shellscript");
+    }
+
+    /// JSON classification must not require a whole-document parse: a
+    /// head-bounded buffer routinely cuts a large value mid-token, which a
+    /// full parse rejects. The `Eof`-tolerant sniff accepts any well-formed
+    /// JSON *prefix* (truncated object / array / string / number / keyword)
+    /// while still rejecting a real syntax violation.
+    #[test]
+    fn truncated_json_head_still_sniffs_as_json() {
+        let json = FileType::Structured(StructuredFormat::Json);
+        for cut in [
+            r#"{ "data": "foo"#, // string cut mid-value
+            r#"{ "data": "#,     // right after the opening quote
+            r#"{ "data": 123"#,  // number, unterminated
+            r#"{ "a": tru"#,     // truncated keyword
+            r#"[1, 2, 3"#,       // array, no close
+            "{",                 // bare opener
+        ] {
+            assert_eq!(
+                sniff_text_content(cut).map(|(t, _)| t),
+                Some(json.clone()),
+                "truncated prefix should sniff as JSON: {cut:?}",
+            );
+        }
+    }
+
+    /// A complete value plus trailing garbage, or a real bad token, is a
+    /// `Syntax` error — not a truncated prefix — so it must not sniff as JSON.
+    #[test]
+    fn malformed_json_does_not_sniff_as_json() {
+        for bad in [r#"{ "a": "b" } trailing junk"#, r#"{ "a": @ }"#] {
+            assert!(
+                !matches!(
+                    sniff_text_content(bad).map(|(t, _)| t),
+                    Some(FileType::Structured(StructuredFormat::Json))
+                ),
+                "malformed input must not sniff as JSON: {bad:?}",
+            );
+        }
+    }
+
+    /// A full notebook / JWK still sub-types precisely when the whole
+    /// document fits the buffer (the `Ok` parse path is unchanged).
+    #[test]
+    fn complete_notebook_still_sub_types() {
+        let nb = r#"{"cells":[],"nbformat":4,"nbformat_minor":5}"#;
+        assert_eq!(
+            sniff_text_content(nb).map(|(t, _)| t),
+            Some(FileType::Notebook)
+        );
     }
 
     /// A `.pptx` magic-detects as a bare zip; the extension is what
