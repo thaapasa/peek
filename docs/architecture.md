@@ -187,7 +187,7 @@ pub trait Mode {
         { /* default: set_position; Hex also marks the landed byte */ }
 
     // Text search
-    fn set_search(&mut self, _query: Option<&str>) -> SearchTarget { SearchTarget::Owned }
+    fn set_search(&mut self, _query: Option<&SearchQuery>) -> SearchTarget { SearchTarget::Owned }
 }
 
 pub enum Handled { No, Yes, YesResetScroll, YesScrollTo(usize) }
@@ -516,13 +516,17 @@ mode's `set_search`). Esc cancels; an empty-query confirm clears.
 
 ### Text search (`viewer/search.rs`)
 
-`/` opens the `Search` prompt; confirm calls `Mode::set_search(Some(query))` on the active mode.
-Searchable modes scan their lines into a `SearchState` — every match + the `n`/`p` cursor — and arm
-highlight overlays. `search.rs` holds the shared pieces: `smart_case_sensitive` (any uppercase ⇒
-case-sensitive), `find_matches` (non-overlapping byte ranges, exact substring), `overlay_matches`
-(paints `search_match` / `search_current` onto an already-SGR-styled line, dropping the syntax
-colour under a match), `SearchState` itself. The scan is one full pass over the active view's lines,
-capped at `MAX_MATCHES` (100 000).
+`/` opens the `Search` prompt; `Ctrl-R` toggles literal/regex (remembered across searches), confirm
+compiles a `SearchQuery` and calls `Mode::set_search(Some(&query))` on the active mode (a bad regex
+flashes the parse reason instead). `SearchQuery` is the one compiled matching primitive — `Literal`
+(exact substring, default) or `Regex` (linear-time `regex` engine) — that every scan site runs
+against, so regex reaches all file types without per-type wiring. Searchable modes scan their lines
+into a `SearchState` — every match + the `n`/`p` cursor — and arm highlight overlays. `search.rs`
+holds the shared pieces: `smart_case_sensitive` (any uppercase ⇒ case-sensitive), `find_matches`
+(non-overlapping byte ranges, exact substring — the `Literal` arm's backend), `SearchQuery::find`
+(dispatches literal/regex per line), `overlay_matches` (paints `search_match` / `search_current`
+onto an already-SGR-styled line, dropping the syntax colour under a match), `SearchState` itself.
+The scan is one full pass over the active view's lines, capped at `MAX_MATCHES` (100 000).
 
 `set_search` returns the first match's line for the caller to scroll to (caller-scrolled modes
 ignore it + scroll themselves). `n`/`p` go through `step_search`, a `handle` helper shared by every

@@ -172,6 +172,12 @@ impl SearchQuery {
     /// smart-case — any uppercase character in the query forces a
     /// case-sensitive match. A malformed regex returns the compile error
     /// for the caller to surface; the literal path never fails.
+    ///
+    /// Case-fold breadth differs by engine, deliberately: the literal arm
+    /// ([`find_matches`]) folds ASCII only, while the regex arm folds
+    /// Unicode. So a lowercase non-ASCII query (`é`) matches `É`
+    /// case-insensitively under regex but not under literal. Pre-existing
+    /// (the literal folder is unchanged); not worth a slower literal path.
     pub fn compile(query: &str, regex: bool) -> Result<SearchQuery, regex::Error> {
         let sensitive = smart_case_sensitive(query);
         if regex {
