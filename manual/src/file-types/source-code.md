@@ -4,6 +4,11 @@ Source files render as syntax-highlighted text via [syntect](https://github.com/
 with [two-face](https://github.com/Enselic/two-face) / bat extended grammars — 100+ languages
 including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML, Dockerfile.
 
+![Rust source rendered with syntax highlighting](../img/source-highlight.svg)
+
+*Highlighting applies automatically when you open a recognized source file; the theme follows the
+active [color theme](../viewer/themes.md).*
+
 If detection misses, force a language with `-L`:
 
 ```sh

@@ -12,6 +12,12 @@ with a dual view like Markdown:
     as fenced text, `error` outputs as a bold `ename: evalue` line followed by the traceback (ANSI
     colour stripped), and image outputs noted by name (matching the Blocks listing, e.g.
     `image-1.png`).
+
+  ![A notebook rendered with a markdown cell, a highlighted code cell, and its output](../img/notebook.svg)
+
+  *The rendered view: markdown prose, an `In [n]:` code cell highlighted in the kernel language,
+  and the cell's output below it.*
+
 - **Source** — the raw notebook JSON, pretty-printed via the structured content mode. Reachable
   with Tab; `r` toggles the raw (unformatted) JSON. Becomes the entry view with `--raw`.
 - **Blocks** — a flat table of contents listing every code cell and image output as an ordered

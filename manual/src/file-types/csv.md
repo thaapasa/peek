@@ -8,6 +8,11 @@
 peek renders CSV and TSV files as an **aligned table**: sticky header row at the top, body
 rows scrolled underneath, columns padded to a common width per column.
 
+![A CSV file shown as an aligned table with a header row and padded columns](../img/csv-table.svg)
+
+*Columns are measured and padded to a common width; numeric columns right-align. The header
+stays pinned as you scroll the body.*
+
 ## View modes
 
 - **Table** (default) — aligned columns with sticky header.

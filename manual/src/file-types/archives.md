@@ -4,6 +4,10 @@ Container archives open in a **TOC view** — one row per entry with permissions
 size, mtime, and path. Listing reads only the per-entry headers, so multi-GB archives open
 instantly.
 
+![An archive's table of contents — permissions, size, and path per entry](../img/archive-list.svg)
+
+*One row per entry. From here you can descend into an entry to preview it, or extract it.*
+
 | Format        | Extensions                     | Spec |
 |---------------|--------------------------------|------|
 | ZIP           | `.zip`, `.jar`, `.war`, `.apk` | [PKWARE APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT) |

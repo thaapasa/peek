@@ -11,14 +11,14 @@
 Modern terminal file viewer — preview any file, any format.
 
 <p align="center">
-  <img src="docs/img/heron.png" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="640"><br>
+  <img src="manual/src/img/image-render.png" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="640"><br>
   <sub>Glyph-matched 24-bit image rendering — a real photo, drawn with characters.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/img/source.svg" alt="Rust source with syntax highlighting" width="270">
-  <img src="docs/img/markdown.svg" alt="Markdown rendered with headings, callouts, tables" width="270">
-  <img src="docs/img/heron-contour.svg" alt="The same photo as Sobel edge line-art" width="270">
+  <img src="manual/src/img/source-highlight.svg" alt="Rust source with syntax highlighting" width="270">
+  <img src="manual/src/img/markdown-render.svg" alt="Markdown rendered with headings, callouts, tables" width="270">
+  <img src="manual/src/img/image-contour.svg" alt="The same photo as Sobel edge line-art" width="270">
 </p>
 
 - **Syntax highlighting** for 100+ languages via syntect

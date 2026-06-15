@@ -2,6 +2,11 @@
 
 Raster images render as ASCII art with 24-bit color, using glyph-matched character selection.
 
+![A photo rendered as glyph-matched color art in the default mode](../img/image-render.png)
+
+*The default `full` mode: every terminal cell picks the glyph and foreground/background colors
+that best match the pixels beneath it.*
+
 | Format  | Extensions             |
 |---------|------------------------|
 | PNG     | `.png`                 |
@@ -33,6 +38,11 @@ Cycle with `m` (or `--image-mode <mode>`):
 | `contour` | Sobel edge detection rendered as line-art                           |
 
 `--edge-density` tunes the `contour` line count.
+
+![The same photo rendered as Sobel edge line-art](../img/image-contour.svg)
+
+*The same photo in `contour` mode — Sobel edge detection drawn as line-art instead of filled
+color.*
 
 ## Backgrounds
 

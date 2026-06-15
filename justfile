@@ -31,27 +31,41 @@ lint:
 test:
     cargo test --workspace
 
-# Capture README demo stills into docs/img (needs `just setup`). freeze keeps bg colors, so
-# every mode renders faithfully; SVG for text/line-art (font.family=monospace → no 366KB font
-# embed), PNG for the photo render (raster is honest for half-block pixels).
+# Capture demo stills into manual/src/img (needs `just setup`). Shared by the README and the
+# mdbook manual — mdbook only bundles files under src/, so they live there. freeze keeps bg
+# colors, so every mode renders faithfully; SVG for text/line-art (font.family=monospace → no
+# 366KB font embed), PNG for the photo render (raster is honest for half-block pixels).
 demos:
     #!/usr/bin/env bash
     set -euo pipefail
     cargo build --release
     peek=target/release/peek
-    out=docs/img; mkdir -p "$out"
+    out=manual/src/img; mkdir -p "$out"
     shot() { # name format width rows(0=full) peek-args...
       local name=$1 fmt=$2 width=$3 rows=$4; shift 4
       local font=(); [ "$fmt" = svg ] && font=(--font.family monospace)
-      local cap=(cat); [ "$rows" -gt 0 ] && cap=(head -n "$rows")
+      # awk (not head) so the stream is fully drained — head closing early would SIGPIPE
+      # peek and trip `set -o pipefail`.
+      local cap=(cat); [ "$rows" -gt 0 ] && cap=(awk -v n="$rows" 'NR<=n')
       "$peek" "$@" -p --color truecolor -w "$width" | "${cap[@]}" \
         | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
       echo "  $out/$name.$fmt"
     }
-    shot heron         png 80  0 test-images/heron.jpg              # glyph photo render
-    shot heron-contour svg 80  0 test-images/heron.jpg -m contour   # Sobel edge line-art
-    shot source        svg 92 28 test-data/theme.rs                 # syntax highlight
-    shot markdown      svg 88 30 test-data/release-notes.md         # rich markdown render
+    shot image-render     png 80  0 test-images/heron.jpg            # glyph photo render
+    shot image-contour    svg 80  0 test-images/heron.jpg -m contour # Sobel edge line-art
+    shot source-highlight svg 92 28 test-data/theme.rs               # syntax highlight
+    shot markdown-render  svg 88 30 test-data/release-notes.md       # rich markdown render
+    shot structured-data  svg 80 26 test-data/config.json           # JSON pretty-print
+    shot file-info        svg 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
+    shot notebook         svg 88 24 test-data/notebook.ipynb        # Jupyter notebook
+    shot csv-table        svg 100 14 test-data/books.csv            # aligned CSV table
+    shot archive-list     svg 76 16 test-data/archive.zip --list    # archive listing
+    shot iso-list         svg 64  0 test-data/sample.iso --list     # ISO disk-image listing
+    # SQLite browses table rows in a streaming viewer; print mode shows the schema instead, so
+    # extract one table to CSV and render it as the same aligned table the row viewer draws.
+    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+    "$peek" test-data/library.sqlite -x tables/authors.csv -o "$tmp/authors.csv" >/dev/null
+    shot sqlite-table     svg 90 14 "$tmp/authors.csv"             # a table's rows, browsable
 
 # Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
 # verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.

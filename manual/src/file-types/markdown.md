@@ -15,6 +15,11 @@ and PDF:
 
 `--plain` drops the rendered view entirely.
 
+![Markdown rendered with styled headings, a callout, and a table of contents](../img/markdown-render.svg)
+
+*The default rendered view: headings, emphasis, strikethrough, blockquotes, and tables styled
+inline rather than shown as raw markup.*
+
 The Info view adds a Markdown section:
 
 - Heading counts by level (H1..H6)

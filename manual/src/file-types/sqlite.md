@@ -66,6 +66,11 @@ tempfile and saves it where you point the prompt. Cell mapping in extracts:
 
 Enter on a contents leaf opens a **streaming row view**:
 
+![A SQLite table's rows shown as an aligned table with header and NULL cells](../img/sqlite-table.svg)
+
+*A table's rows, drawn as an aligned table — the same renderer CSV uses, fed by a SQLite cursor.
+Empty cells are NULLs; the body scrolls a 1000-row sliding window without loading the whole table.*
+
 - Sticky header row with the column names.
 - Body rows fetched lazily — a sliding window of 1000 rows is held in memory and the
   buffer refills with a new `SELECT * FROM "<entity>" LIMIT 1000 OFFSET k` whenever
