@@ -60,22 +60,43 @@ Manual downloads, Windows, building from source, and updating: see the
 
 ## Usage
 
+Point peek at a file and it picks the view — source highlight, image render, structured
+pretty-print, paged document, container listing:
+
 ```sh
-peek src/main.rs        # source code (syntax highlighted, interactive viewer)
-peek photo.jpg          # image (glyph-matched ASCII art)
-peek config.json        # structured data (pretty-printed + highlighted)
-peek book.epub          # paged read with TOC + metadata views
-peek archive.tar.gz     # listing view + per-entry extract
-peek /bin/ls            # executable — header / sections / symbols
-peek Main.class         # Java classfile — fields, methods, signatures
-peek server.pem         # certificate / key — subject, validity, SANs, fingerprints
-peek Lobster.ttf        # font — rasterised specimen + family / weight / scripts
-peek invite.ics         # calendar — agenda with dates, recurrence, attendees
-peek contacts.vcf       # vCard — grouped contact cards
-peek .DS_Store          # Finder store — records table (icons, window, view style)
-peek -                  # explicit stdin
-echo '{"a":1}' | peek   # piped stdin auto-detected
+peek src/main.rs                    # source code, syntax highlighted
+peek photo.jpg                      # image rendered as glyph-matched art
+peek config.json                    # structured data, pretty-printed
+peek book.epub                      # paged read with TOC + metadata
+peek server.pem                     # certificate — subject, validity, SANs, fingerprints
 ```
+
+But the file types are only half the tool. The same binary does **operations** on those files:
+
+```sh
+# Inspect metadata — human-readable, or JSON for pipelines
+peek server.pem --info              # subject, issuer, validity, key type, SANs
+peek photo.jpg --info --json | jq .image.width
+
+# Render an image as Sobel edge line-art (other modes: full / block / geo / ascii)
+peek diagram.png -m contour
+peek photo.jpg -m contour --edge-density 0.1   # denser edges
+
+# List a container's entries — the keys you feed back to --extract
+peek archive.tar.gz --list
+peek book.epub --list
+
+# Extract a sub-item out of a container, optionally renaming it
+peek archive.tar.gz -x src/main.rs -o main.rs   # pull one entry, rename on the way out
+peek archive.tar.gz -x logo.png -o -            # raw bytes straight to stdout
+
+# Force print mode (no interactive viewer) — pipe-friendly
+peek config.json -p | grep version
+echo '{"a":1}' | peek               # stdin auto-detected
+```
+
+peek also reads executables, Java classfiles, fonts, calendars, vCards, `.DS_Store`, and more —
+see the manual for the full list.
 
 Run `peek -h` for the short option list, `peek --help` for the full set, or read the
 [manual](https://thaapasa.github.io/peek/) for per-format details, keyboard shortcuts,
