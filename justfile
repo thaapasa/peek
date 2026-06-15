@@ -3,6 +3,20 @@ install_dir := env_var_or_default("PEEK_INSTALL_DIR", env_var_or_default("HOME",
 default:
     @just --list
 
+# Install dev tooling (Rust fuzzing + demo-capture pipeline). Idempotent; skips what's present.
+setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Rust fuzzing (see `just fuzz`)
+    command -v cargo-fuzz >/dev/null || cargo install --locked cargo-fuzz
+    # Stills: charmbracelet/freeze — ANSI -> SVG/PNG, keeps fg AND bg truecolor (see `just demos`)
+    command -v freeze    >/dev/null || brew install charmbracelet/tap/freeze
+    # Animated demos: svg-term-cli — asciicast -> CSS-animated SVG that autoplays on GitHub
+    command -v svg-term  >/dev/null || npm install -g svg-term-cli
+    # Terminal recorder feeding the animated path
+    command -v asciinema >/dev/null || brew install asciinema
+    echo "dev tools ready"
+
 # Format codebase
 format:
     cargo +nightly fmt
@@ -16,6 +30,28 @@ lint:
 # Run all tests
 test:
     cargo test --workspace
+
+# Capture README demo stills into docs/img (needs `just setup`). freeze keeps bg colors, so
+# every mode renders faithfully; SVG for text/line-art (font.family=monospace → no 366KB font
+# embed), PNG for the photo render (raster is honest for half-block pixels).
+demos:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release
+    peek=target/release/peek
+    out=docs/img; mkdir -p "$out"
+    shot() { # name format width rows(0=full) peek-args...
+      local name=$1 fmt=$2 width=$3 rows=$4; shift 4
+      local font=(); [ "$fmt" = svg ] && font=(--font.family monospace)
+      local cap=(cat); [ "$rows" -gt 0 ] && cap=(head -n "$rows")
+      "$peek" "$@" -p --color truecolor -w "$width" | "${cap[@]}" \
+        | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
+      echo "  $out/$name.$fmt"
+    }
+    shot heron         png 80  0 test-images/heron.jpg              # glyph photo render
+    shot heron-contour svg 80  0 test-images/heron.jpg -m contour   # Sobel edge line-art
+    shot source        svg 92 28 test-data/theme.rs                 # syntax highlight
+    shot markdown      svg 88 30 test-data/release-notes.md         # rich markdown render
 
 # Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
 # verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.

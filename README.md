@@ -10,6 +10,17 @@
 
 Modern terminal file viewer — preview any file, any format.
 
+<p align="center">
+  <img src="docs/img/heron.png" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="640"><br>
+  <sub>Glyph-matched 24-bit image rendering — a real photo, drawn with characters.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/img/source.svg" alt="Rust source with syntax highlighting" width="270">
+  <img src="docs/img/markdown.svg" alt="Markdown rendered with headings, callouts, tables" width="270">
+  <img src="docs/img/heron-contour.svg" alt="The same photo as Sobel edge line-art" width="270">
+</p>
+
 - **Syntax highlighting** for 100+ languages via syntect
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
@@ -113,6 +124,14 @@ Local preview:
 cargo install mdbook
 mdbook serve manual    # opens http://localhost:3000
 ```
+
+## Credits
+
+Demo photo
+by [Dmytro Koplyk on Unsplash](https://unsplash.com/photos/a-green-heron-stands-on-one-leg-by-the-water-LHZgiiQz97o).
+Full attribution for all bundled sample files: [CREDITS.md](CREDITS.md).
+
+Screenshots regenerate from repo fixtures with `just demos` (see `just setup` for the tooling).
 
 ## License
 
