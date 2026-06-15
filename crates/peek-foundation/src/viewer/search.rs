@@ -1,6 +1,9 @@
 //! Text-search primitives shared by the interactive search feature.
 //!
 //! Pure pieces, no per-mode state:
+//! - [`SearchQuery`] is the one compiled matching primitive — literal
+//!   substring (default) or regex, built once per scan. Every searchable
+//!   view runs against it, so regex reaches new file types for free.
 //! - [`smart_case_sensitive`] resolves smart-case from a query string.
 //! - [`find_matches`] locates non-overlapping query occurrences in a line.
 //! - [`overlay_matches`] paints match backgrounds onto an already
@@ -56,6 +59,7 @@
 
 use std::ops::Range;
 
+use regex::Regex;
 use syntect::highlighting::Color;
 
 use peek_theme::{ActiveStyle, PeekTheme, Sgr, scan};
@@ -140,6 +144,71 @@ pub fn find_matches(haystack: &str, query: &str, sensitive: bool) -> Vec<Range<u
         }
     }
     out
+}
+
+/// A compiled search query — the one matching primitive every searchable
+/// view runs against. Built once per scan (never per line), then handed
+/// to each line via [`find`](Self::find). Keeping match logic behind this
+/// one type is why regex reaches every file type for free: the scan sites
+/// ([`SearchState::scan_capped`] and the table view's record walk) name
+/// `SearchQuery`, not a literal-vs-regex branch, so a new mode that scans
+/// through them inherits both engines unchanged.
+///
+/// The `Literal` arm is the zero-surprise default (plain substring, no
+/// metacharacters) and defers to [`find_matches`]; `Regex` wraps a
+/// compiled [`regex::Regex`]. Both honour smart-case.
+pub enum SearchQuery {
+    /// Plain substring match. `sensitive` is resolved from the query by
+    /// [`smart_case_sensitive`] at compile time.
+    Literal { query: String, sensitive: bool },
+    /// Regular-expression match (linear-time `regex` engine — no
+    /// catastrophic backtracking on a hostile pattern).
+    Regex(Regex),
+}
+
+impl SearchQuery {
+    /// Compile a query string. `regex` selects the engine: a literal
+    /// substring (default) or a regular expression. Both honour
+    /// smart-case — any uppercase character in the query forces a
+    /// case-sensitive match. A malformed regex returns the compile error
+    /// for the caller to surface; the literal path never fails.
+    pub fn compile(query: &str, regex: bool) -> Result<SearchQuery, regex::Error> {
+        let sensitive = smart_case_sensitive(query);
+        if regex {
+            let re = regex::RegexBuilder::new(query)
+                .case_insensitive(!sensitive)
+                .build()?;
+            Ok(SearchQuery::Regex(re))
+        } else {
+            Ok(SearchQuery::Literal {
+                query: query.to_string(),
+                sensitive,
+            })
+        }
+    }
+
+    /// Locate every non-overlapping match in `haystack`, left-to-right,
+    /// as byte ranges into `haystack`. Literal queries defer to
+    /// [`find_matches`]; regex queries walk `find_iter` (already
+    /// non-overlapping). Zero-width regex matches (`^`, `\b`, `a*` on a
+    /// non-match) are dropped — an empty span has nothing to highlight
+    /// and would stall the overlay's boundary walk.
+    pub fn find(&self, haystack: &str) -> Vec<Range<usize>> {
+        match self {
+            SearchQuery::Literal { query, sensitive } => find_matches(haystack, query, *sensitive),
+            SearchQuery::Regex(re) => re
+                .find_iter(haystack)
+                .filter(|m| m.start() != m.end())
+                .map(|m| m.start()..m.end())
+                .collect(),
+        }
+    }
+
+    /// True for a regex query — drives the active-search `regex` status
+    /// marker (literal is the default, so it shows nothing).
+    pub fn is_regex(&self) -> bool {
+        matches!(self, SearchQuery::Regex(_))
+    }
 }
 
 /// Paint match backgrounds onto an already-styled line.
@@ -280,16 +349,18 @@ pub struct SearchState {
     /// cause. Matches (and the total) past the stop point are unknown;
     /// the status segment marks the counts as partial.
     stop: Option<ScanStop>,
+    /// The query was a regex — drives the `regex` status marker.
+    is_regex: bool,
 }
 
 impl SearchState {
     /// Scan the visible text of `lines` for `query`. Each line's SGR
     /// escapes are stripped before matching, so the returned ranges are
     /// byte offsets into visible text — exactly what [`overlay_matches`]
-    /// expects. Smart-case is resolved from the query; the scan stops at
-    /// [`MAX_MATCHES`]. `lines` is anything string-like (`&str`,
-    /// `String`, `&String`) so streamed and cached sources both fit.
-    pub fn scan<S: AsRef<str>>(lines: impl Iterator<Item = S>, query: &str) -> SearchState {
+    /// expects. The scan stops at [`MAX_MATCHES`]. `lines` is anything
+    /// string-like (`&str`, `String`, `&String`) so streamed and cached
+    /// sources both fit.
+    pub fn scan<S: AsRef<str>>(lines: impl Iterator<Item = S>, query: &SearchQuery) -> SearchState {
         Self::scan_capped(lines, query, u64::MAX)
     }
 
@@ -300,10 +371,9 @@ impl SearchState {
     /// use plain `scan`.
     pub fn scan_capped<S: AsRef<str>>(
         lines: impl Iterator<Item = S>,
-        query: &str,
+        query: &SearchQuery,
         max_bytes: u64,
     ) -> SearchState {
-        let sensitive = smart_case_sensitive(query);
         let mut matches = Vec::new();
         let mut stop = None;
         let mut scanned: u64 = 0;
@@ -315,7 +385,7 @@ impl SearchState {
             let line = line.as_ref();
             scanned += line.len() as u64 + 1;
             let visible = peek_theme::strip_ansi(line);
-            for range in find_matches(&visible, query, sensitive) {
+            for range in query.find(&visible) {
                 matches.push(MatchPos { line: idx, range });
                 if matches.len() >= MAX_MATCHES {
                     stop = Some(ScanStop::MatchCap);
@@ -327,6 +397,7 @@ impl SearchState {
             matches,
             current: 0,
             stop,
+            is_regex: query.is_regex(),
         }
     }
 
@@ -395,9 +466,33 @@ impl SearchState {
             theme.muted
         };
         (
-            count_status_label(self.current, self.matches.len(), self.truncated()),
+            search_status_label(
+                self.current,
+                self.matches.len(),
+                self.truncated(),
+                self.is_regex,
+            ),
             color,
         )
+    }
+}
+
+/// [`count_status_label`] with the active-search `regex` marker prepended
+/// when the query was a regex. Literal search is the default and shows
+/// nothing extra — the status bar carries only non-default state. Shared
+/// by [`SearchState`] and the table view's cell search so both render the
+/// marker identically.
+pub fn search_status_label(
+    current: usize,
+    total: usize,
+    truncated: bool,
+    is_regex: bool,
+) -> String {
+    let label = count_status_label(current, total, truncated);
+    if is_regex {
+        format!("regex {label}")
+    } else {
+        label
     }
 }
 
@@ -492,6 +587,16 @@ mod tests {
     use peek_theme::make_peek_theme;
     use peek_theme::{PeekThemeName, StyleMode};
 
+    /// Compile a literal query for the scan tests (the default engine).
+    fn lit(q: &str) -> SearchQuery {
+        SearchQuery::compile(q, false).unwrap()
+    }
+
+    /// Compile a regex query.
+    fn rx(q: &str) -> SearchQuery {
+        SearchQuery::compile(q, true).unwrap()
+    }
+
     #[test]
     fn reveal_h_scroll_pans_only_when_needed() {
         // Already fully visible — no move.
@@ -511,7 +616,7 @@ mod tests {
     fn scan_capped_stops_at_byte_budget_and_marks_truncated() {
         // 10-byte lines (incl. the counted newline); budget admits ~3.
         let lines = (0..100).map(|i| format!("hit {i:04}"));
-        let s = SearchState::scan_capped(lines, "hit", 30);
+        let s = SearchState::scan_capped(lines, &lit("hit"), 30);
         assert_eq!(s.stop(), Some(ScanStop::ByteBudget));
         let n = s.match_count();
         assert!(
@@ -521,14 +626,14 @@ mod tests {
 
         // Same data, unbounded budget: complete and not truncated.
         let lines = (0..100).map(|i| format!("hit {i:04}"));
-        let s = SearchState::scan_capped(lines, "hit", u64::MAX);
+        let s = SearchState::scan_capped(lines, &lit("hit"), u64::MAX);
         assert!(!s.truncated());
         assert_eq!(s.match_count(), 100);
     }
 
     #[test]
     fn scan_marks_truncated_at_match_cap() {
-        let s = SearchState::scan((0..MAX_MATCHES + 10).map(|_| "x"), "x");
+        let s = SearchState::scan((0..MAX_MATCHES + 10).map(|_| "x"), &lit("x"));
         assert_eq!(s.stop(), Some(ScanStop::MatchCap));
         assert_eq!(s.match_count(), MAX_MATCHES);
     }
@@ -549,14 +654,14 @@ mod tests {
     fn status_segment_marks_partial_counts() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
 
-        let full = SearchState::scan(["hit", "hit"].iter(), "hit");
+        let full = SearchState::scan(["hit", "hit"].iter(), &lit("hit"));
         assert_eq!(full.status_segment(&theme).0, "1/2");
 
-        let capped = SearchState::scan_capped((0..50).map(|_| "hit"), "hit", 10);
+        let capped = SearchState::scan_capped((0..50).map(|_| "hit"), &lit("hit"), 10);
         assert!(capped.truncated());
         assert!(capped.status_segment(&theme).0.ends_with('+'));
 
-        let no_hit = SearchState::scan_capped((0..50).map(|_| "miss"), "zzz", 10);
+        let no_hit = SearchState::scan_capped((0..50).map(|_| "miss"), &lit("zzz"), 10);
         assert_eq!(no_hit.status_segment(&theme).0, "no match (partial scan)");
     }
 
@@ -566,6 +671,47 @@ mod tests {
         assert!(!smart_case_sensitive("foo_bar 123"));
         assert!(smart_case_sensitive("Foo"));
         assert!(smart_case_sensitive("fooBAR"));
+    }
+
+    #[test]
+    fn search_query_literal_matches_substring() {
+        // '.' is a plain character in a literal query.
+        assert_eq!(lit("a.b").find("a.b axb"), vec![0..3]);
+    }
+
+    #[test]
+    fn search_query_regex_matches_pattern() {
+        // '.' is any-char in a regex — both forms match.
+        assert_eq!(rx("a.b").find("a.b axb"), vec![0..3, 4..7]);
+    }
+
+    #[test]
+    fn search_query_regex_drops_zero_width() {
+        // `a*` matches empty at every position; zero-width spans are
+        // dropped, leaving only the real run.
+        assert_eq!(rx("a*").find("baaab"), vec![1..4]);
+    }
+
+    #[test]
+    fn search_query_regex_smart_case() {
+        // All-lowercase pattern → case-insensitive.
+        assert_eq!(rx("foo").find("FOO foo").len(), 2);
+        // An uppercase character → case-sensitive.
+        assert_eq!(rx("Foo").find("FOO Foo foo"), vec![4..7]);
+    }
+
+    #[test]
+    fn search_query_bad_regex_errors_but_literal_ok() {
+        assert!(SearchQuery::compile("a(b", true).is_err());
+        // The same string is a fine literal.
+        assert!(SearchQuery::compile("a(b", false).is_ok());
+    }
+
+    #[test]
+    fn status_segment_marks_regex_query() {
+        let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
+        let s = SearchState::scan(["a hit"].iter(), &rx("h.t"));
+        assert_eq!(s.status_segment(&theme).0, "regex 1/1");
     }
 
     #[test]
@@ -691,7 +837,7 @@ mod tests {
     #[test]
     fn search_state_scan_finds_and_steps() {
         let lines = ["alpha", "beta hit", "hit again", "delta"];
-        let mut s = SearchState::scan(lines.iter(), "hit");
+        let mut s = SearchState::scan(lines.iter(), &lit("hit"));
         assert_eq!(s.match_count(), 2);
         assert_eq!(s.first_line(), Some(1));
         // step forward, wrap, step back.
@@ -705,7 +851,7 @@ mod tests {
         // A styled line: the escape bytes must not shift the match
         // offset, and must not themselves be searchable.
         let styled = "\x1b[31mfn\x1b[0m main";
-        let s = SearchState::scan(std::iter::once(styled), "main");
+        let s = SearchState::scan(std::iter::once(styled), &lit("main"));
         let (ranges, _) = s.line_overlay(0).expect("match on line 0");
         // "fn main" — "main" starts at visible byte 3.
         assert_eq!(ranges, vec![3..7]);
@@ -714,7 +860,7 @@ mod tests {
     #[test]
     fn search_state_line_overlay_marks_current() {
         let lines = ["x x", "x"];
-        let mut s = SearchState::scan(lines.iter(), "x");
+        let mut s = SearchState::scan(lines.iter(), &lit("x"));
         // matches: line0@0, line0@2, line1@0. current = 0.
         let (ranges, current) = s.line_overlay(0).unwrap();
         assert_eq!(ranges, vec![0..1, 2..3]);
@@ -729,16 +875,16 @@ mod tests {
     #[test]
     fn search_state_status_segment() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let hit = SearchState::scan(["a hit"].iter(), "hit");
+        let hit = SearchState::scan(["a hit"].iter(), &lit("hit"));
         assert_eq!(hit.status_segment(&theme).0, "1/1");
-        let miss = SearchState::scan(["abc"].iter(), "zzz");
+        let miss = SearchState::scan(["abc"].iter(), &lit("zzz"));
         assert_eq!(miss.status_segment(&theme).0, "no match");
     }
 
     #[test]
     fn overlay_window_paints_only_matched_lines() {
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        let s = SearchState::scan(["nope", "yes hit", "nope"].iter(), "hit");
+        let s = SearchState::scan(["nope", "yes hit", "nope"].iter(), &lit("hit"));
         let mut win = vec!["yes hit".to_string(), "nope".to_string()];
         // Window starts at scroll 1 → win[0] is line 1 (has a match).
         overlay_window(&mut win, 1, Some(&s), &theme);

@@ -8,6 +8,11 @@ use crate::info::{FileInfo, NoExtras, RenderOptions};
 use bytes::Bytes;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
+/// Compile a literal query for the search tests (the default engine).
+fn lit(q: &str) -> SearchQuery {
+    SearchQuery::compile(q, false).unwrap()
+}
+
 /// Minimal `FileInfo` for building a `RenderCtx` without the `gather`
 /// hub — these mode tests never read its fields, only need the struct.
 fn synthetic_file_info() -> FileInfo {
@@ -335,7 +340,7 @@ fn status_segments_show_wrap_only_when_on() {
 #[test]
 fn set_search_finds_matches_and_jumps() {
     let mut mode = plain_mode_from_bytes(b"alpha\nbeta\ngamma beta\ndelta\n");
-    let first = mode.set_search(Some("beta"));
+    let first = mode.set_search(Some(&lit("beta")));
     let search = mode.search.as_ref().expect("search armed");
     assert_eq!(search.match_count(), 2);
     assert_eq!(search.first_line(), Some(1));
@@ -353,7 +358,7 @@ fn next_prev_match_wrap() {
     // otherwise the 4-line doc fits whole and clamp pins top at 0.
     mode.cached_cols = 80;
     mode.cached_rows = 1;
-    mode.set_search(Some("hit"));
+    mode.set_search(Some(&lit("hit")));
     assert_eq!(mode.search.as_ref().unwrap().match_count(), 2);
     assert_eq!(mode.wrap.top_logical(), 1);
 
@@ -369,17 +374,14 @@ fn next_prev_match_wrap() {
     assert_eq!(mode.wrap.top_logical(), 3);
 }
 
-/// A `None` or empty query clears any active search.
+/// `None` clears any active search. (Empty input is mapped to `None` by
+/// the session before it reaches the mode.)
 #[test]
-fn set_search_none_and_empty_clear() {
+fn set_search_none_clears() {
     let mut mode = plain_mode_from_bytes(b"foo\nfoo\n");
-    mode.set_search(Some("foo"));
+    mode.set_search(Some(&lit("foo")));
     assert!(mode.search.is_some());
     mode.set_search(None);
-    assert!(mode.search.is_none());
-    mode.set_search(Some("foo"));
-    assert!(mode.search.is_some());
-    mode.set_search(Some(""));
     assert!(mode.search.is_none());
 }
 
@@ -403,7 +405,7 @@ fn toggle_raw_source_clears_search() {
             ..Default::default()
         },
     );
-    mode.set_search(Some("1"));
+    mode.set_search(Some(&lit("1")));
     assert!(mode.search.is_some());
     assert_eq!(mode.handle(Action::ToggleRawSource), Handled::Yes);
     assert!(mode.search.is_none(), "raw/pretty toggle clears search");
@@ -420,7 +422,7 @@ fn back_clears_search_then_falls_through() {
         Handled::No,
         "no search: Back untouched"
     );
-    mode.set_search(Some("foo"));
+    mode.set_search(Some(&lit("foo")));
     assert!(mode.search.is_some());
     assert_eq!(
         mode.handle(Action::Back),
@@ -443,9 +445,9 @@ fn status_segments_show_search_position() {
     let tm = ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain);
     let theme = tm.peek_theme().clone();
     assert!(!mode.status_segments(&theme).iter().any(|(s, _)| s == "1/2"));
-    mode.set_search(Some("hit"));
+    mode.set_search(Some(&lit("hit")));
     assert!(mode.status_segments(&theme).iter().any(|(s, _)| s == "1/2"));
-    mode.set_search(Some("zzz"));
+    mode.set_search(Some(&lit("zzz")));
     assert!(
         mode.status_segments(&theme)
             .iter()

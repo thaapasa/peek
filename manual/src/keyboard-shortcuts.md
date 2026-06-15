@@ -39,13 +39,18 @@ for `p` everywhere `n` / `p` step (search matches, pages, chapters, frames).
 | `l`       | Toggle line numbers                   |
 | `w`       | Toggle soft line wrap                 |
 | `r`       | Toggle pretty / raw (structured data) |
-| `/`       | Open the search prompt                |
-| `n` / `p` | Next / previous search match          |
+| `/`        | Open the search prompt                |
+| `Ctrl-R`   | Toggle literal / regex (in the prompt) |
+| `n` / `p`  | Next / previous search match          |
 
-Search is exact-substring with smart-case: an all-lowercase query matches case-insensitively;
-any uppercase character makes the query case-sensitive. Type the query and press Enter to run
-it — the viewer jumps to the first match. `n` / `p` cycle through matches (wrapping at the
-ends); the status line shows `cur/total`. `Esc` while a search is active clears the matches
+Search defaults to exact-substring; press `Ctrl-R` in the prompt to switch to a regular
+expression (the prompt title shows `Search (literal)` or `Search (regex)`). Either way matching
+is smart-case: an all-lowercase query matches case-insensitively, any uppercase character makes
+it case-sensitive. Type the query and press Enter to run it — the viewer jumps to the first
+match. `n` / `p` cycle through matches (wrapping at the ends); the status line shows `cur/total`,
+prefixed with `regex` while a regex search is active. A malformed regex shows the parse reason
+and keeps your previous search. Regex matches one line at a time, so `^` and `$` anchor to line
+bounds and a pattern can't span a line break. `Esc` while a search is active clears the matches
 (press it again to leave the viewer); an empty-query Enter also clears the search.
 
 On very large files the text view and the CSV / SQLite table view scan the first 256 MB per

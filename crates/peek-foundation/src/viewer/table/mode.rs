@@ -31,7 +31,9 @@ use unicode_width::UnicodeWidthStr;
 use super::{Align, Cell, CellRole, Column, Table};
 use crate::output::PrintOutput;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
-use crate::viewer::search::{SearchState, SearchTarget, overlay_matches, reveal_h_scroll};
+use crate::viewer::search::{
+    SearchQuery, SearchState, SearchTarget, overlay_matches, reveal_h_scroll,
+};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
 use peek_theme::{PeekTheme, lerp_color};
 
@@ -287,10 +289,10 @@ impl Mode for TableMode {
         segs
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         let query = match query {
-            Some(q) if !q.is_empty() => q,
-            _ => {
+            Some(q) => q,
+            None => {
                 self.search = None;
                 return SearchTarget::Owned;
             }

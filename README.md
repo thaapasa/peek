@@ -39,8 +39,8 @@ Modern terminal file viewer — preview any file, any format.
 - **`.DS_Store`** — Apple Finder's per-folder store decoded to a records table: icon positions,
   window geometry, view style, background, modification dates
 - **Hex dump** fallback for binary, reachable from any view with `x`
-- **Interactive viewer** with live theme cycling, info screen, extraction, text search, soft wrap,
-  image zoom/pan
+- **Interactive viewer** with live theme cycling, info screen, extraction, text search (literal or
+  regex), soft wrap, image zoom/pan
 
 peek is a single-file viewer: one path (or stdin) at a time. Run peek once per file.
 

@@ -28,6 +28,15 @@ fn key(code: KeyCode) -> KeyEvent {
     }
 }
 
+fn ctrl(c: char) -> KeyEvent {
+    KeyEvent {
+        code: KeyCode::Char(c),
+        modifiers: KeyModifiers::CONTROL,
+        kind: KeyEventKind::Press,
+        state: KeyEventState::NONE,
+    }
+}
+
 fn build_state(args_argv: &[&str], source: InputSource, detected: Detected) -> ViewerState {
     let args = Args::parse_from(args_argv);
     let registry = Rc::new(Registry::new(&args.compose_opts()).unwrap());
@@ -409,6 +418,81 @@ fn search_prompt_confirm_runs_search_without_quitting() {
     assert!(!state.prompt_active(), "prompt closes on confirm");
 
     // The post-confirm render must not panic.
+    state.ensure_active_rendered().unwrap();
+}
+
+/// Ctrl-R in the search prompt switches to regex; a regex query confirms
+/// and renders like any other search.
+#[test]
+fn regex_search_confirms_and_renders() {
+    let source = fixture_source("test-data/theme.rs");
+    let detected = peek_detect::detect(&source).unwrap();
+    let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
+
+    state.apply(Action::OpenSearch).unwrap();
+    state.handle_prompt_key(ctrl('r')).unwrap(); // → regex mode
+    for c in "fn .*".chars() {
+        state.handle_prompt_key(key(KeyCode::Char(c))).unwrap();
+    }
+    state.handle_prompt_key(key(KeyCode::Enter)).unwrap();
+    assert!(!state.prompt_active(), "prompt closes on confirm");
+    assert!(
+        state.take_flash().is_none(),
+        "a valid regex flashes nothing"
+    );
+    state.ensure_active_rendered().unwrap();
+}
+
+/// The literal/regex toggle is remembered across searches in a session:
+/// switch to regex once, and the next `/` prompt opens already in regex.
+#[test]
+fn regex_toggle_persists_across_searches() {
+    let source = fixture_source("test-data/theme.rs");
+    let detected = peek_detect::detect(&source).unwrap();
+    let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
+
+    // First search: flip to regex, run it.
+    state.apply(Action::OpenSearch).unwrap();
+    state.handle_prompt_key(ctrl('r')).unwrap();
+    state.handle_prompt_key(key(KeyCode::Char('f'))).unwrap();
+    state.handle_prompt_key(key(KeyCode::Enter)).unwrap();
+
+    // Second `/` opens already in regex mode.
+    state.apply(Action::OpenSearch).unwrap();
+    assert!(
+        state.active_prompt().expect("prompt open").is_regex(),
+        "regex choice should carry to the next search"
+    );
+    // Esc back to literal is also remembered.
+    state.handle_prompt_key(ctrl('r')).unwrap();
+    state.handle_prompt_key(key(KeyCode::Esc)).unwrap();
+    state.apply(Action::OpenSearch).unwrap();
+    assert!(
+        !state.active_prompt().expect("prompt open").is_regex(),
+        "literal choice (even via cancel) carries to the next search"
+    );
+}
+
+/// A malformed regex flashes the parse reason and leaves the prompt
+/// closed without panicking — the prior search (none here) is untouched.
+#[test]
+fn bad_regex_flashes_and_does_not_crash() {
+    let source = fixture_source("test-data/theme.rs");
+    let detected = peek_detect::detect(&source).unwrap();
+    let mut state = build_state(&["peek", "test-data/theme.rs"], source, detected);
+
+    state.apply(Action::OpenSearch).unwrap();
+    state.handle_prompt_key(ctrl('r')).unwrap(); // → regex mode
+    for c in "a(b".chars() {
+        state.handle_prompt_key(key(KeyCode::Char(c))).unwrap();
+    }
+    state.handle_prompt_key(key(KeyCode::Enter)).unwrap();
+    assert!(
+        !state.prompt_active(),
+        "prompt closes even on a bad pattern"
+    );
+    let flash = state.take_flash().expect("bad regex flashes an error");
+    assert!(flash.contains("invalid regex"), "got: {flash}");
     state.ensure_active_rendered().unwrap();
 }
 

@@ -32,9 +32,10 @@ mechanical.
 
 ### 1.0 — 0.4 plus the last user-facing must-have ☐
 
-- **Regex search** — the "desirable" from the original search spec; highest-value
-  user-facing gap. See [§ Text Search](#text-search-). **This is now the last 1.0
-  blocker** — detection correctness shipped.
+- **Regex search** ✅ — shipped. `Ctrl-R` in the search prompt toggles a `regex`-engine
+  match; literal substring stays the default. One compiled `SearchQuery` at the matching
+  primitive, so every view (present and future) inherits both engines. See
+  [§ Text Search](#text-search-).
 
 ### Post-1.0 / 1.x — deepening ☐
 
@@ -158,8 +159,8 @@ The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
 
 ### Text Search ◐
 
-- **Regex matching** — the "desirable" from the original spec. Plain substring is the
-  shipped minimum. The headline 1.0 search feature.
+- **Regex matching** ✅ — shipped. `Ctrl-R` toggles the `regex` engine in the search prompt;
+  plain substring stays the default. Matched per logical line (no cross-line patterns).
 - **Incremental search** — re-scan + re-highlight on every keystroke instead of
   confirm-on-Enter.
 - **Wider reach** — file-info view and the hex dump. Those don't participate yet.
@@ -168,8 +169,9 @@ The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
   from here" would scale better. (The per-query whole-file walk that was finding M17 has
   its byte-cap floor; this lazy scan is the proper fix.)
 
-The 1.0 detection-correctness items shipped — see
-[§ Detection hardening](#detection-hardening-). Regex search is the last 1.0 blocker.
+The 1.0 detection-correctness items and regex search both shipped — see
+[§ Detection hardening](#detection-hardening-). The remaining Text Search items
+(incremental, wider reach, lazy scan) are quality-of-life, not 1.0 blockers.
 
 ---
 

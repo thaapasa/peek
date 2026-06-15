@@ -58,6 +58,9 @@ clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 # Terminal handling and colors
 crossterm = "0.29"
 
+# Regex engine for interactive search (linear-time, no catastrophic backtracking)
+regex = "1"
+
 # Syntax highlighting
 syntect = "5"
 two-face = "0.5.1"

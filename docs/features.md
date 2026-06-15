@@ -45,8 +45,8 @@ straight to Info; hex (`x`); help (`h`/`?`); about (`a`); live theme cycle (`t`)
 cycle (`c`); `r` toggles raw/pretty inside the structured-data viewer. Image-specific: `b` cycles
 background, `m` cycles
 render mode. Animation: `Space` play/pause, `n`/`p` and Left/Right step frames. `l` toggles the
-line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt, `n`/
-`p` cycle matches) works in the text / source / structured views; the raw text scan and the
+line-number gutter and `w` toggles soft wrap in text views. Text search (`/` opens the prompt,
+`Ctrl-R` toggles regex, `n`/`p` cycle matches) works in the text / source / structured views; the raw text scan and the
 CSV / SQLite table-cell scan are budgeted at 256 MB per query (`SEARCH_SCAN_MAX_BYTES`) — past it
 the counts show as partial (`12/3400+`) and a warning surfaces.
 
@@ -1304,9 +1304,14 @@ content is already fully visible. The gutter does not pan; it stays anchored to 
 
 ### Text Search ◐
 
-`/` opens a search prompt over the status line; type a query and Enter runs it. Matching is
-**exact substring** with **smart-case** — an all-lowercase query matches case-insensitively, any
-uppercase character makes the whole query case-sensitive. Available in every text-rendering
+`/` opens a search prompt over the status line; type a query and Enter runs it. Matching defaults
+to **exact substring**; `Ctrl-R` inside the prompt toggles **regex** (linear-time `regex` engine —
+no catastrophic backtracking), the prompt title showing the active mode (`Search (literal)` /
+`Search (regex)`). Both honour **smart-case** — an all-lowercase query matches case-insensitively,
+any uppercase character makes the whole query case-sensitive. A malformed regex flashes the parse
+reason and leaves the previous search untouched; while a regex search is active the status segment
+prefixes the count with `regex`. Regex is matched per logical line, so `^`/`$` anchor to line
+bounds and a pattern can't span a line break. Available in every text-rendering
 view: source / plain text / structured raw-pretty / SVG XML (`ContentMode`), the rendered HTML
 view, the EPUB **Read** view, the DOCX / ODT / RTF **Read** views, the PDF **Text** view, the
 CSV / TSV **Table** view and the SQLite contents view that shares it (single-cell scope —
@@ -1314,7 +1319,8 @@ a query can't span a delimiter; over a SQLite table the scan currently covers on
 buffered window), and every listing TOC (leaf-name scope — matches the last path segment only, so
 `sub/` finds nothing).
 The shared search primitives in `viewer/search.rs` back all of them — each view scans its
-own content domain into one.
+own content domain through one compiled `SearchQuery`, so literal and regex reach every view
+(present and future) without per-type wiring.
 
 On confirm the viewer jumps to the first match. `n` / `p` cycle forward / backward through every
 match (wrapping at the ends), scrolling each match's line into view. (In the EPUB Read view
@@ -1332,7 +1338,7 @@ first, then falls through to the normal back / quit behaviour on a second press)
 when the scanned line set changes underneath it — the `ContentMode` raw/pretty toggle, an EPUB
 chapter step, or a terminal resize (the read-mode views key match indices to wrapped lines).
 
-Regex matching and incremental (search-as-you-type) are still planned — see
+Incremental (search-as-you-type) is still planned — see
 [planned.md](planned.md#viewer-features-).
 
 ### Help Screen ✅

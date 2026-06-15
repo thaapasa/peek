@@ -11,7 +11,7 @@ use syntect::highlighting::Color;
 
 use super::bytecode::{Disassembly, MethodAsm};
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
-use crate::viewer::search::{self, SearchState, SearchTarget};
+use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, strip_ansi_width, wrap_styled};
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
@@ -157,9 +157,9 @@ impl Mode for BytecodeMode {
         }
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         match query {
-            Some(q) if !q.is_empty() => {
+            Some(q) => {
                 let lines = self
                     .cache
                     .as_ref()
@@ -170,7 +170,7 @@ impl Mode for BytecodeMode {
                 self.search = Some(state);
                 first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
             }
-            _ => {
+            None => {
                 self.search = None;
                 SearchTarget::Owned
             }
@@ -249,6 +249,11 @@ fn push_wrapped(lines: &mut Vec<String>, line: String, width: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Compile a literal query for the search tests (the default engine).
+    fn lit(q: &str) -> SearchQuery {
+        SearchQuery::compile(q, false).unwrap()
+    }
     use peek_io::InputSource;
     use peek_theme::PeekThemeName;
     use peek_theme::make_peek_theme;
@@ -310,7 +315,7 @@ mod tests {
         let mut mode = BytecodeMode::new(disasm());
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::TrueColor);
         let _ = mode.ensure_rendered(100, &theme, PeekThemeName::IdeaDark, StyleMode::TrueColor);
-        mode.set_search(Some("a")); // matches many lines
+        mode.set_search(Some(&lit("a"))); // matches many lines
         assert!(mode.search.is_some());
 
         assert!(mode.handle(Action::Next).was_consumed());

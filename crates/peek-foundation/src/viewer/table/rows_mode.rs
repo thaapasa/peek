@@ -40,8 +40,8 @@ use unicode_width::UnicodeWidthStr;
 use crate::output::PrintOutput;
 use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
 use crate::viewer::search::{
-    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, ScanStop, SearchTarget, count_status_label, find_matches,
-    overlay_matches, smart_case_sensitive, truncated_scan_warning,
+    MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, ScanStop, SearchQuery, SearchTarget, overlay_matches,
+    search_status_label, truncated_scan_warning,
 };
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
@@ -117,6 +117,8 @@ struct CellSearch {
     /// the stop point are unknown; the status segment marks the counts
     /// as partial.
     stop: Option<ScanStop>,
+    /// The query was a regex — drives the `regex` status marker.
+    is_regex: bool,
 }
 
 #[derive(Clone)]
@@ -298,8 +300,7 @@ impl RowsTableMode {
     /// a mostly-malformed multi-GB file end-to-end. Stopping early marks
     /// the search truncated so the status segment reports the counts as
     /// partial.
-    fn build_search_capped(&mut self, query: &str, max_bytes: u64) -> CellSearch {
-        let sensitive = smart_case_sensitive(query);
+    fn build_search_capped(&mut self, query: &SearchQuery, max_bytes: u64) -> CellSearch {
         let mut matches: Vec<CellMatch> = Vec::new();
         let cols = self.widths.len();
         let mut stop = None;
@@ -327,7 +328,7 @@ impl RowsTableMode {
                 for (col_idx, cell) in cells.iter().enumerate().take(cols) {
                     let raw = cell.as_deref().unwrap_or("");
                     let display = display_cell(raw);
-                    for r in find_matches(&display, query, sensitive) {
+                    for r in query.find(&display) {
                         matches.push(CellMatch {
                             record_idx,
                             col_idx,
@@ -346,6 +347,7 @@ impl RowsTableMode {
             matches,
             cursor: 0,
             stop,
+            is_regex: query.is_regex(),
         }
     }
 
@@ -904,17 +906,17 @@ impl Mode for RowsTableMode {
         // coverage they don't have.
         if let Some(s) = &self.search {
             segs.push((
-                count_status_label(s.cursor, s.matches.len(), s.stop.is_some()),
+                search_status_label(s.cursor, s.matches.len(), s.stop.is_some(), s.is_regex),
                 theme.label,
             ));
         }
         segs
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         let query = match query {
-            Some(q) if !q.is_empty() => q,
-            _ => {
+            Some(q) => q,
+            None => {
                 self.search = None;
                 return SearchTarget::Owned;
             }
@@ -1257,11 +1259,16 @@ mod tests {
         mode
     }
 
+    /// Compile a literal query for the search tests (the default engine).
+    fn lit(q: &str) -> SearchQuery {
+        SearchQuery::compile(q, false).unwrap()
+    }
+
     #[test]
     fn search_finds_matches_in_cells_only() {
         let mut mode =
             make_mode_from_str("name,city\nAlice,Helsinki\nBob,Helsingborg\nCarol,Tampere\n");
-        mode.set_search(Some("Helsi"));
+        mode.set_search(Some(&lit("Helsi")));
         let s = mode.search.as_ref().expect("search armed");
         assert_eq!(s.matches.len(), 2, "two cells start with Helsi");
         // First match: record_idx 1 (Alice / Helsinki), col_idx 1.
@@ -1275,7 +1282,7 @@ mod tests {
     fn search_does_not_match_across_cells() {
         // Substring "Alice,30" appears only across the field separator.
         let mut mode = make_mode_from_str("name,age\nAlice,30\nBob,25\n");
-        mode.set_search(Some("Alice,30"));
+        mode.set_search(Some(&lit("Alice,30")));
         let s = mode.search.as_ref().unwrap();
         assert_eq!(
             s.matches.len(),
@@ -1287,7 +1294,7 @@ mod tests {
     #[test]
     fn search_step_wraps_and_pans_h_col() {
         let mut mode = make_mode_from_str("a,b,c\nfoo,x,y\nbar,foo,z\nbaz,w,foo\n");
-        mode.set_search(Some("foo"));
+        mode.set_search(Some(&lit("foo")));
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.matches.len(), 3);
         // Cursor on first match: col 0 → h_col panned to 0.
@@ -1320,30 +1327,28 @@ mod tests {
     fn search_smart_case() {
         // All-lowercase query is case-insensitive.
         let mut mode = make_mode_from_str("city\nHelsinki\nhelsinki\nOulu\n");
-        mode.set_search(Some("helsinki"));
+        mode.set_search(Some(&lit("helsinki")));
         assert_eq!(mode.search.as_ref().unwrap().matches.len(), 2);
         // Mixed case query is case-sensitive.
-        mode.set_search(Some("Helsinki"));
+        mode.set_search(Some(&lit("Helsinki")));
         assert_eq!(mode.search.as_ref().unwrap().matches.len(), 1);
     }
 
     #[test]
-    fn search_empty_query_clears() {
+    fn search_none_clears() {
+        // `None` clears the active search. (Empty input is mapped to
+        // `None` by the session before it reaches the mode.)
         let mut mode = make_mode_from_str("a\nfoo\n");
-        mode.set_search(Some("foo"));
+        mode.set_search(Some(&lit("foo")));
         assert!(mode.search.is_some());
         mode.set_search(None);
-        assert!(mode.search.is_none());
-        mode.set_search(Some("foo"));
-        assert!(mode.search.is_some());
-        mode.set_search(Some(""));
         assert!(mode.search.is_none());
     }
 
     #[test]
     fn back_clears_search() {
         let mut mode = make_mode_from_str("a\nfoo\n");
-        mode.set_search(Some("foo"));
+        mode.set_search(Some(&lit("foo")));
         assert_eq!(mode.handle(Action::Back), Handled::Yes);
         assert!(mode.search.is_none());
         // Second Back with no search falls through.
@@ -1357,7 +1362,7 @@ mod tests {
         let mut mode = make_mode_from_str("a\nfoo\nfoo\n");
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
-        mode.set_search(Some("zzz"));
+        mode.set_search(Some(&lit("zzz")));
         let segs = mode.status_segments(&theme);
         assert!(segs.iter().any(|(s, _)| s == "no match"));
         mode.set_search(None);
@@ -1383,7 +1388,7 @@ mod tests {
         ]);
         mode.cached_cols = 200;
         mode.cached_rows = 30;
-        mode.set_search(Some("Includes worked"));
+        mode.set_search(Some(&lit("Includes worked")));
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.matches.len(), 1);
         // It's in column 3 (description), not the title / author columns.
@@ -1439,7 +1444,7 @@ mod tests {
     fn search_walks_lazy_source_to_end_within_budget() {
         let mut mode = lazy_mode(&["alpha", "beta", "needle"]);
         assert_eq!(mode.source.loaded(), 1, "only the seed row loaded");
-        mode.set_search(Some("needle"));
+        mode.set_search(Some(&lit("needle")));
         let s = mode.search.as_ref().unwrap();
         assert_eq!(s.matches.len(), 1);
         assert_eq!(s.matches[0].record_idx, 2);
@@ -1456,7 +1461,7 @@ mod tests {
         let mut mode = lazy_mode(&refs);
 
         // 8-byte cells; a 30-byte budget admits only a few records.
-        let s = mode.build_search_capped("hit", 30);
+        let s = mode.build_search_capped(&lit("hit"), 30);
         assert_eq!(s.stop, Some(ScanStop::ByteBudget));
         let n = s.matches.len();
         assert!(
@@ -1465,7 +1470,7 @@ mod tests {
         );
 
         // Unbounded budget: complete and not truncated.
-        let s = mode.build_search_capped("hit", u64::MAX);
+        let s = mode.build_search_capped(&lit("hit"), u64::MAX);
         assert!(s.stop.is_none());
         assert_eq!(s.matches.len(), 100);
     }
@@ -1529,7 +1534,7 @@ mod tests {
             "Table",
         );
         // 1000 records × 10 bytes each; a 100-byte budget admits ~10.
-        let s = mode.build_search_capped("x", 100);
+        let s = mode.build_search_capped(&lit("x"), 100);
         assert_eq!(s.stop, Some(ScanStop::ByteBudget));
         assert!(s.matches.is_empty(), "malformed rows produce no matches");
         let walked = max_ensured.get();
@@ -1585,7 +1590,7 @@ mod tests {
             false,
             "Table",
         );
-        let s = mode.build_search_capped("hit", u64::MAX);
+        let s = mode.build_search_capped(&lit("hit"), u64::MAX);
         assert_eq!(
             s.stop,
             Some(ScanStop::Error),
@@ -1603,7 +1608,7 @@ mod tests {
         let tm = theme_manager();
         let theme = tm.peek_theme().clone();
 
-        let s = mode.build_search_capped("hit", 30);
+        let s = mode.build_search_capped(&lit("hit"), 30);
         assert!(s.stop.is_some());
         mode.search = Some(s);
         let segs = mode.status_segments(&theme);
@@ -1613,7 +1618,7 @@ mod tests {
             "truncated count must end with '+': {segs:?}"
         );
 
-        let s = mode.build_search_capped("zzz", 30);
+        let s = mode.build_search_capped(&lit("zzz"), 30);
         assert!(s.stop.is_some());
         mode.search = Some(s);
         let segs = mode.status_segments(&theme);

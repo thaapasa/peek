@@ -28,7 +28,7 @@ use crate::viewer::modes::{
     DescendFrame, ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, ParentNav, Position,
     RenderCtx, Window,
 };
-use crate::viewer::search::{SearchState, SearchTarget, overlay_matches};
+use crate::viewer::search::{SearchQuery, SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, strip_ansi_width};
 use peek_io::InputSource;
 use peek_theme::PeekTheme;
@@ -378,10 +378,10 @@ impl Mode for ListingMode {
         }
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         let query = match query {
-            Some(q) if !q.is_empty() => q,
-            _ => {
+            Some(q) => q,
+            None => {
                 self.search = None;
                 return SearchTarget::Owned;
             }
@@ -482,6 +482,11 @@ fn paint_name(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Compile a literal query for the search tests (the default engine).
+    fn lit(q: &str) -> SearchQuery {
+        SearchQuery::compile(q, false).unwrap()
+    }
     use crate::viewer::listing::entry::EntryKind;
 
     impl ListingMode {
@@ -616,7 +621,7 @@ mod tests {
     fn search_moves_selection_to_matching_file() {
         let mut lm = sample();
         lm.viewport.set_viewport_rows(&lm.meta, 10);
-        lm.set_search(Some("inner"));
+        lm.set_search(Some(&lit("inner")));
         assert_eq!(lm.viewport.selected(), Some(3));
         assert_eq!(lm.selected_path().as_deref(), Some("sub/inner.txt"));
     }
@@ -625,7 +630,7 @@ mod tests {
     fn search_on_directory_moves_selection_to_it() {
         let mut lm = sample();
         lm.viewport.set_viewport_rows(&lm.meta, 10);
-        lm.set_search(Some("deeper")); // a directory row, now selectable
+        lm.set_search(Some(&lit("deeper"))); // a directory row, now selectable
         // The match lands the selection on deeper/ (row 1).
         assert_eq!(lm.viewport.selected(), Some(1));
     }

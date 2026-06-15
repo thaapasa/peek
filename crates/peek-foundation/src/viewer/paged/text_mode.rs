@@ -22,7 +22,7 @@ use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
-use crate::viewer::search::{self, SearchState, SearchTarget};
+use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use peek_theme::PeekTheme;
 
@@ -243,9 +243,9 @@ impl<R: PagedText> Mode for PagedTextReadMode<R> {
         self.search = None;
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         match query {
-            Some(q) if !q.is_empty() => {
+            Some(q) => {
                 // Scan the current page's rendered lines. The prompt only
                 // opens while viewing, so the cache is populated.
                 let state = SearchState::scan(self.cached_lines().iter(), q);
@@ -253,7 +253,7 @@ impl<R: PagedText> Mode for PagedTextReadMode<R> {
                 self.search = Some(state);
                 first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
             }
-            _ => {
+            None => {
                 self.search = None;
                 SearchTarget::Owned
             }

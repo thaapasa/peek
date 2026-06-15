@@ -16,6 +16,10 @@ pub struct Prompt {
     /// Enter confirms (with an empty value), `n` / Esc cancels. Used to
     /// gate a slow/large op behind an explicit keystroke.
     confirm: bool,
+    /// `Some` makes this a search prompt with a literal/regex toggle —
+    /// the bool is the current regex state, flipped by Ctrl-R. `None` for
+    /// every other prompt (no toggle, no mode hint).
+    regex: Option<bool>,
 }
 
 pub enum PromptOutcome {
@@ -36,6 +40,7 @@ impl Prompt {
             input,
             cursor,
             confirm: false,
+            regex: None,
         }
     }
 
@@ -47,7 +52,27 @@ impl Prompt {
             input: String::new(),
             cursor: 0,
             confirm: true,
+            regex: None,
         }
+    }
+
+    /// A search prompt: text entry with a literal/regex toggle. `regex`
+    /// is the starting mode — the session passes its remembered choice so
+    /// the toggle sticks across searches; Ctrl-R flips it.
+    pub fn search(regex: bool) -> Self {
+        Self {
+            title: "Search".into(),
+            input: String::new(),
+            cursor: 0,
+            confirm: false,
+            regex: Some(regex),
+        }
+    }
+
+    /// Regex-toggle state — `true` only for a search prompt currently in
+    /// regex mode. Read on confirm to pick the matching engine.
+    pub fn is_regex(&self) -> bool {
+        self.regex == Some(true)
     }
 
     #[cfg(test)]
@@ -116,6 +141,13 @@ impl Prompt {
                 self.input.truncate(self.cursor);
                 PromptOutcome::Continue
             }
+            // Toggle literal/regex on a search prompt; no-op elsewhere.
+            KeyCode::Char('r') if ctrl => {
+                if let Some(r) = &mut self.regex {
+                    *r = !*r;
+                }
+                PromptOutcome::Continue
+            }
             KeyCode::Char(c) if !ctrl => {
                 self.insert_char(c);
                 PromptOutcome::Continue
@@ -162,13 +194,20 @@ impl Prompt {
             let hint = theme.paint("  y:yes  n/Esc:no", theme.muted);
             return format!("{painted_title}{hint}");
         }
-        let title = format!("{}: ", self.title);
+        // A search prompt names its engine and offers the ^R toggle; every
+        // other prompt keeps the bare title + save hint.
+        let (mode, hint_text) = match self.regex {
+            Some(true) => (" (regex)", "  ^R:literal  Esc:cancel  Enter:search"),
+            Some(false) => (" (literal)", "  ^R:regex  Esc:cancel  Enter:search"),
+            None => ("", "  Esc:cancel  Enter:save"),
+        };
+        let title = format!("{}{mode}: ", self.title);
         let painted_title = theme.paint(&title, theme.label);
         let (left, right) = self.input.split_at(self.cursor);
         let painted_left = theme.paint(left, theme.foreground);
         let painted_caret = theme.paint("\u{2581}", theme.accent);
         let painted_right = theme.paint(right, theme.foreground);
-        let hint = theme.paint("  Esc:cancel  Enter:save", theme.muted);
+        let hint = theme.paint(hint_text, theme.muted);
         format!("{painted_title}{painted_left}{painted_caret}{painted_right}{hint}")
     }
 }
@@ -208,6 +247,39 @@ mod tests {
             kind: KeyEventKind::Press,
             state: KeyEventState::NONE,
         }
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent {
+            code: KeyCode::Char(c),
+            modifiers: KeyModifiers::CONTROL,
+            kind: KeyEventKind::Press,
+            state: KeyEventState::NONE,
+        }
+    }
+
+    #[test]
+    fn search_prompt_starts_literal_and_ctrl_r_toggles_regex() {
+        let mut p = Prompt::search(false);
+        assert!(!p.is_regex(), "search starts in literal mode");
+        p.handle_key(ctrl('r'));
+        assert!(p.is_regex(), "^R flips to regex");
+        p.handle_key(ctrl('r'));
+        assert!(!p.is_regex(), "^R flips back to literal");
+        // A prompt seeded as regex starts there.
+        assert!(
+            Prompt::search(true).is_regex(),
+            "seeded regex starts in regex mode"
+        );
+    }
+
+    #[test]
+    fn ctrl_r_is_inert_on_non_search_prompt() {
+        let mut p = Prompt::new("Save to", "");
+        p.handle_key(ctrl('r'));
+        assert!(!p.is_regex());
+        // The typed text field is untouched — ^R inserts nothing.
+        assert_eq!(p.input(), "");
     }
 
     #[test]

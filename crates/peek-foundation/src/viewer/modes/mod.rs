@@ -448,10 +448,13 @@ pub trait Mode {
     /// their content, arm match highlighting, and return a
     /// [`SearchTarget`]: `Owned` when the mode positioned its own scroll
     /// (or had nothing to do), or `ScrollTo(line)` when the caller is
-    /// expected to scroll the viewport. `None` or an empty query clears
-    /// any active search. Default no-op (`Owned`) for modes without
-    /// search.
-    fn set_search(&mut self, _query: Option<&str>) -> crate::viewer::search::SearchTarget {
+    /// expected to scroll the viewport. `None` clears any active search
+    /// (the session maps an empty query to `None` before it reaches
+    /// here). Default no-op (`Owned`) for modes without search.
+    fn set_search(
+        &mut self,
+        _query: Option<&crate::viewer::search::SearchQuery>,
+    ) -> crate::viewer::search::SearchTarget {
         crate::viewer::search::SearchTarget::Owned
     }
 

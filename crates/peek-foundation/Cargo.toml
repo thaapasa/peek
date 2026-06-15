@@ -25,6 +25,7 @@ peek-foundation-derive = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }
 crossterm = { workspace = true }
+regex = { workspace = true }
 syntect = { workspace = true }
 unicode-width = { workspace = true }
 quick-xml = { workspace = true }

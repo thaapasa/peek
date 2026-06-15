@@ -18,7 +18,7 @@ use crate::output::PrintOutput;
 use crate::viewer::modes::{
     Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
 };
-use crate::viewer::search::{self, SearchState, SearchTarget};
+use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
@@ -230,9 +230,9 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
         }
     }
 
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         match query {
-            Some(q) if !q.is_empty() => {
+            Some(q) => {
                 let lines = self
                     .cache
                     .as_ref()
@@ -243,7 +243,7 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
                 self.search = Some(state);
                 first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
             }
-            _ => {
+            None => {
                 self.search = None;
                 SearchTarget::Owned
             }

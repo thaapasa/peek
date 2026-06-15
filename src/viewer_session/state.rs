@@ -57,6 +57,11 @@ pub(crate) struct ViewerState {
     /// one redraw.
     pub(super) flash: Option<String>,
 
+    /// Last literal/regex choice from the search prompt, so the toggle
+    /// sticks across searches within a session (reset on restart). Seeds
+    /// each new search prompt; updated when one closes.
+    pub(super) search_regex: bool,
+
     /// Mirror of the CLI `--no-tempfile` flag. Threaded into every
     /// `ExtractOptions` the interactive viewer builds so user choice
     /// persists across descend / extract presses.
@@ -103,6 +108,7 @@ impl ViewerState {
             render_opts,
             prompt: None,
             flash: None,
+            search_regex: false,
             no_tempfile,
             access,
         })

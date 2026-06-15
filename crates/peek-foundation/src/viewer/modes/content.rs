@@ -10,7 +10,7 @@ use super::pretty_view::PrettyView;
 use super::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, Position, RenderCtx, Window};
 use crate::output::PrintOutput;
 use crate::viewer::LineStreamHighlighter;
-use crate::viewer::search::{self, SearchState, SearchTarget};
+use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use crate::viewer::wrap_scroll::{LineView, PrettyLines, WrapScroll};
 use peek_io::{InputSource, LineSource};
@@ -545,10 +545,10 @@ impl Mode for ContentMode {
     /// and the status segment marks the counts partial. `ContentMode`
     /// owns its scroll, so it positions itself on the first match and
     /// returns `Owned`.
-    fn set_search(&mut self, query: Option<&str>) -> SearchTarget {
+    fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
         let query = match query {
-            Some(q) if !q.is_empty() => q,
-            _ => {
+            Some(q) => q,
+            None => {
                 self.search = None;
                 return SearchTarget::Owned;
             }

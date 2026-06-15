@@ -7,6 +7,7 @@ use anyhow::Result;
 use crossterm::event::KeyEvent;
 
 use peek_foundation::extract::Extracted;
+use peek_foundation::viewer::search::{SearchQuery, SearchTarget};
 use peek_foundation::viewer::ui::prompt::{Prompt, PromptOutcome};
 
 use super::state::ViewerState;
@@ -23,6 +24,18 @@ pub(super) enum PromptKind {
     /// unlocks and the extract runs — pushing a frame (`save = false`,
     /// from descend) or opening the save prompt (`save = true`, from `x`).
     ConfirmExtract { key: String, save: bool },
+}
+
+/// Condense a regex compile error into a one-line status message. The
+/// `regex` crate renders a multi-line parse error (the pattern, a caret,
+/// then `error: <reason>`); the status bar has room only for the reason.
+fn regex_reason(e: &impl std::fmt::Display) -> String {
+    e.to_string()
+        .lines()
+        .rev()
+        .find_map(|l| l.trim().strip_prefix("error:"))
+        .map(|r| r.trim().to_string())
+        .unwrap_or_else(|| "invalid pattern".to_string())
 }
 
 /// Compact byte-size for prompt copy: GiB once past a gigabyte, MiB below.
@@ -62,7 +75,7 @@ impl ViewerState {
     /// Open the text-search prompt; Enter hands the query to the active
     /// mode's `set_search`, Esc closes without changing the search.
     pub(super) fn begin_search_prompt(&mut self) {
-        self.prompt = Some((Prompt::new("Search", ""), PromptKind::Search));
+        self.prompt = Some((Prompt::search(self.search_regex), PromptKind::Search));
     }
 
     /// Open the large-extract confirmation; `y` / Enter unlocks the
@@ -84,17 +97,19 @@ impl ViewerState {
         match outcome {
             PromptOutcome::Continue => Ok(true),
             PromptOutcome::Cancelled => {
-                let (_, kind) = self.prompt.take().expect("prompt present");
-                if matches!(
-                    kind,
-                    PromptKind::Extract(_) | PromptKind::ConfirmExtract { .. }
-                ) {
-                    self.flash = Some("extract cancelled".to_string());
+                let (prompt, kind) = self.prompt.take().expect("prompt present");
+                match kind {
+                    PromptKind::Extract(_) | PromptKind::ConfirmExtract { .. } => {
+                        self.flash = Some("extract cancelled".to_string());
+                    }
+                    // Remember the toggle even on a cancelled search, so a
+                    // mistoggle-then-Esc still sticks for the next `/`.
+                    PromptKind::Search => self.search_regex = prompt.is_regex(),
                 }
                 Ok(true)
             }
             PromptOutcome::Confirmed(value) => {
-                let (_, kind) = self.prompt.take().expect("prompt present");
+                let (prompt, kind) = self.prompt.take().expect("prompt present");
                 match kind {
                     PromptKind::Extract(extracted) => {
                         let dest = if value.is_empty() {
@@ -125,21 +140,34 @@ impl ViewerState {
                         }
                     }
                     PromptKind::Search => {
-                        let query = (!value.is_empty()).then_some(value.as_str());
-                        {
-                            let f = self.frame_mut();
-                            let active = f.active;
-                            let target = f.modes[active].set_search(query);
-                            // owns-scroll modes return `Owned` and
-                            // position themselves; flat modes return
-                            // `ScrollTo(line)` for the caller.
-                            if let peek_foundation::viewer::search::SearchTarget::ScrollTo(line) =
-                                target
-                            {
-                                f.scroll[active] = line;
+                        // Remember the literal/regex choice for the next `/`.
+                        self.search_regex = prompt.is_regex();
+                        // Empty input clears the search; otherwise compile
+                        // the query (literal or regex per the prompt's
+                        // toggle). A bad regex flashes the parse error and
+                        // leaves any active search untouched.
+                        let query = if value.is_empty() {
+                            Ok(None)
+                        } else {
+                            SearchQuery::compile(&value, prompt.is_regex()).map(Some)
+                        };
+                        match query {
+                            Ok(query) => {
+                                let f = self.frame_mut();
+                                let active = f.active;
+                                let target = f.modes[active].set_search(query.as_ref());
+                                // owns-scroll modes return `Owned` and
+                                // position themselves; flat modes return
+                                // `ScrollTo(line)` for the caller.
+                                if let SearchTarget::ScrollTo(line) = target {
+                                    f.scroll[active] = line;
+                                }
+                                self.invalidate_active();
+                            }
+                            Err(e) => {
+                                self.flash = Some(format!("invalid regex: {}", regex_reason(&e)))
                             }
                         }
-                        self.invalidate_active();
                     }
                 }
                 Ok(true)
