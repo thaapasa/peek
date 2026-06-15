@@ -10,32 +10,24 @@ the index; the detailed per-feature notes follow under the same milestone headin
 
 ## Roadmap
 
-Current: **0.3.2**. Feature *breadth* is already 1.0-level — the gap is robustness
-against the project's own two north stars (*stream, don't load*; *multi-GB
-first-class*). The plan closes those first, then ships the last user-facing
-must-have, then deepens.
+Feature *breadth* is already 1.0-level — the gap is robustness against the project's own
+two north stars (*stream, don't load*; *multi-GB first-class*). The plan closes the
+remaining streaming leaks, then deepens.
 
 ### 0.4 — Hardening (make the tagline true) ☐
 
-The "stream, don't load" / "multi-GB first-class" promises have leaks. These are
-not features — they're the marketing claim not yet holding. All small, mostly
-mechanical.
+The "stream, don't load" / "multi-GB first-class" promises still have leaks. Not
+features — the marketing claim not yet fully holding.
 
-- **Large File Safeguards** ✅ — memory guards, budget-required reads, the latency load prompts
-  (decompress + compressed-tar TOC, `--yes` to pre-grant), the large-extract confirm, and the 8 GiB
-  spill ceiling all shipped; memory-tier elevation declined. One optional idea (generalized
-  info-default landing) open. See [§ Large File Safeguards](#large-file-safeguards-)
-  and the strategy doc [memory-streaming.md](memory-streaming.md).
-- **Memory / Streaming audit** ◐ — the scroll-cache / oversized-embed / pretty double-buffer
-  leaks are capped; only the stdin slurp remains (documented, spill deferred). See
-  [§ Memory / Streaming](#memory--streaming-).
+- **Memory / Streaming audit** ◐ — only the stdin slurp remains (documented, spill
+  deferred). See [§ Memory / Streaming](#memory--streaming-).
+- **Large File Safeguards** ◐ — one optional idea (generalized info-default landing)
+  open. See [§ Large File Safeguards](#large-file-safeguards-).
 
-### 1.0 — 0.4 plus the last user-facing must-have ☐
+### 1.0 — the last user-facing must-haves ☐
 
-- **Regex search** ✅ — shipped. `Ctrl-R` in the search prompt toggles a `regex`-engine
-  match; literal substring stays the default. One compiled `SearchQuery` at the matching
-  primitive, so every view (present and future) inherits both engines. See
-  [§ Text Search](#text-search-).
+- **Text Search** ◐ — incremental re-scan, wider reach (info view + hex dump), and a
+  lazy/bounded scan remain. See [§ Text Search](#text-search-).
 
 ### Post-1.0 / 1.x — deepening ☐
 
@@ -68,58 +60,21 @@ mechanical.
 
 ## 0.4 — Hardening
 
-### Large File Safeguards ✅ (one optional idea open)
+### Large File Safeguards ◐ (one optional idea open)
 
-Making the "multi-GB first-class" claim hold. The work reframed (2026-06-13) from a single
-"default to the info screen" toggle into a **two-threat model** — see the strategy doc,
-[memory-streaming.md](memory-streaming.md):
+The "multi-GB first-class" guards shipped — see [features.md](features.md) and the
+strategy doc [memory-streaming.md](memory-streaming.md). One optional item remains:
 
-- **Memory** — unbounded materialization (whole-file slurp / parse / transform). Guard = hard cap
-  or spill-to-tempfile; never bypassable to OOM.
-- **Latency** — a streaming, memory-bounded op that is *slow* because the source is non-seekable
-  (full decompress pass to list a `.tar.xz`, deep seek into a compressed stream). Guard = a
-  confirmation prompt; the user may proceed.
-
-Designed as one **session access-unlock** model; the design rationale is archived at
-[archived/large-file-safeguards-plan.md](archived/large-file-safeguards-plan.md).
-
-**Shipped:**
-
-- ✅ **Bare-codec → tempfile spill** + **compose / info whole-file caps** (the original memory
-  guards): RAM bounded by the spill threshold; objfile / EPS / notebook soft-degrade over cap.
-- ✅ **Budget-required reads.** `read_bytes(Budget)` / `read_text(Budget)` over the three classes +
-  the greppable `Budget::Unbounded` escape; the ~44-site audit landed. (`Budget::cap()` stays fixed
-  at Default — `Access` lives in the bin, not threaded into the leaf caps.)
-- ✅ **Latency load prompts.** A big transparent decompress (compressed size over
-  `LATENCY_PROMPT_BYTES`, 50 MB) or a compressed-tar TOC walk in a Default viewer session lands on
-  Info with a load hint instead of running up front; Enter loads + unlocks the session. Covers the
-  top-level open and nested descend. `--yes` / non-interactive paths pre-grant.
-- ✅ **Large-extract confirm.** Extracting / descending into an entry over `EXTRACT_PROMPT_BYTES`
-  (256 MB) asks a yes/no confirm before spooling.
-- ✅ **Spill disk ceiling.** Both spill paths cap at `MAX_SPILL_BYTES` (8 GiB) and fail cleanly
-  instead of `ENOSPC` — always enforced, including pipe / `--print`.
-
-**Declined:** memory-tier elevation (raising the non-spillable caps on unlock) — trades a
-recoverable wait/`ENOSPC` for a real OOM; the transforms already soft-degrade. See the archived
-plan's Sequencing step 6.
-
-**Open (optional):** generalize the info-default landing beyond decompress / TOC — a
-`Mode::loads_whole_file()` signal that lands *any* over-threshold transform view on Info. Fold in
-only if a non-decompress view ever needs it.
+- ◐ **Generalize the info-default landing** beyond decompress / TOC — a
+  `Mode::loads_whole_file()` signal that lands *any* over-threshold transform view on
+  Info. Fold in only if a non-decompress view ever needs it.
 
 ### Detection hardening ◐
 
 The `peek-detect` crate split (see the archived
-[crate-split plan](archived/crate-split-plan.md)) was built to make these tractable:
-detection is now a small, reader-free, fuzzable surface. Full rationale + file/line
-references live in that plan's "Follow-up backlog" section.
-
-The 1.0 items shipped: the three detect paths now collapse into one `classify` core over
-a `Probe` (file / resident / stream), parity-tested; the truncated-head JSON sniff uses
-serde's `Eof` signal instead of a whole-document parse; and a lying extension defers to
-strongly-disagreeing magic (`.csv` holding a zip → zip, `.json` holding a PNG → image)
-while refinements (zip → `.docx`, `%PDF` → `.ai`) keep the name. `detect_ignore_name`
-remains as a last-ditch reactive retry. Remaining:
+[crate-split plan](archived/crate-split-plan.md)) made these tractable: detection is now
+a small, reader-free, fuzzable surface. Full rationale + file/line references live in
+that plan's "Follow-up backlog" section. Remaining:
 
 - ☐ **[1.x] Tighten loose heuristics.** YAML `---` prefix over-matches; extension-
   routed binary types and `.br` aren't magic-verified.
@@ -130,22 +85,8 @@ North star #2 from CLAUDE.md: *stream, don't load*. Sites where view-mode caches
 unboundedly with scroll, or whole-file slurps lack a cap. Audit snapshot (2026-05-17)
 in [archived/memory-audit-2026-05.md](archived/memory-audit-2026-05.md) — file paths
 in that snapshot have drifted; treat its categorization as the source-of-truth shape,
-the specific file:line citations as starting points to re-find.
-
-The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
-
-- ✅ **CBZ decoded-page cache** — was an unbounded `HashMap`; now a small MRU ring
-  (`MAX_CACHED_PAGES`, `cbz/page_renderer.rs`). PDF (single-slot) + EPUB (per-chapter,
-  bounded by doc) were already bounded.
-- ✅ **Audio embedded visuals** — `convert_visual` (`audio/package.rs`) now drops any
-  picture over `MAX_EMBED_VISUAL_BYTES` (64 MiB) before copying / rendering, so a crafted
-  oversized `APIC` frame can't balloon peek's footprint.
-- ✅ **Pretty-print plain view** — the un-highlighted (no-colour) view now borrows line
-  spans into the single parsed buffer (`PrettyLines::Plain`) instead of copying every
-  line. The highlighted view still carries its ANSI buffer, but that's distinct content,
-  not a duplicate of the raw text.
-
-**Open:**
+the specific file:line citations as starting points to re-find. The scroll-cache /
+whole-file-slurp leaks it flagged are closed; one remains:
 
 - ◐ **Stdin slurp** — documented (`stdin.rs` module doc) as an inherent unbounded read:
   a pipe is non-seekable, so the whole stream materialises before viewing. Spill-to-
@@ -159,19 +100,14 @@ The scroll-cache / whole-file-slurp leaks the audit flagged are closed:
 
 ### Text Search ◐
 
-- **Regex matching** ✅ — shipped. `Ctrl-R` toggles the `regex` engine in the search prompt;
-  plain substring stays the default. Matched per logical line (no cross-line patterns).
 - **Incremental search** — re-scan + re-highlight on every keystroke instead of
   confirm-on-Enter.
 - **Wider reach** — file-info view and the hex dump. Those don't participate yet.
 - **Lazy / bounded scan** — the current scan is one full pass over the active view,
   capped at 100,000 matches; a multi-GB file pays that pass up front. A lazy "search
-  from here" would scale better. (The per-query whole-file walk that was finding M17 has
-  its byte-cap floor; this lazy scan is the proper fix.)
+  from here" would scale better.
 
-The 1.0 detection-correctness items and regex search both shipped — see
-[§ Detection hardening](#detection-hardening-). The remaining Text Search items
-(incremental, wider reach, lazy scan) are quality-of-life, not 1.0 blockers.
+These are quality-of-life, not 1.0 blockers.
 
 ---
 

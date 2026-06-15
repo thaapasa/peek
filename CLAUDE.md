@@ -46,7 +46,7 @@ crates/
                     barred from bin. Names lower crates directly. One `pub use peek_theme as theme`
                     only so `#[derive(InfoView)]` paths resolve. `testing` feature exposes test
                     helpers (off in release).
-    viewer/         Mode trait + ModeId + RenderCtx + ExtractTarget; shared modes (content/
+    viewer/         Mode trait + ModeId + RenderCtx + ExtractTarget; modes/ (shared modes: content/
                     pretty_view/gutter/hex/info/about/rendered_text<R>); listing/ (ListingMode over
                     ListSource — TreeListSource for TOCs, directory listing); table/ (TableMode +
                     RowsTableMode via RowSource); ui/ (Action/ScreenBuffer/Prompt/styled/status/

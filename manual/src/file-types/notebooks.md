@@ -17,7 +17,7 @@ with a dual view like Markdown:
 - **Blocks** — a flat table of contents listing every code cell and image output as an ordered
   sequence with readable names (`code-1.py`, `image-1.png`, …) rather than the notebook's opaque
   cell ids. From this view you can:
-  - **Extract** (`x`) the selected block — a code cell saves as its `.py` (or kernel-language)
+  - **Extract** (`e`) the selected block — a code cell saves as its `.py` (or kernel-language)
     source, an image saves as the decoded `.png` / `.jpg` / `.svg`. Same as `peek --extract
     code-1.py notebook.ipynb`.
   - **Descend** (Enter) into the block — peek recurses over an in-memory copy: code opens

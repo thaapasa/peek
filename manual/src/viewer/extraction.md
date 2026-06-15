@@ -19,7 +19,10 @@ Pull an inner item out of a container as a standalone file.
   for a table or view's contents (streamed `SELECT *`).
 - **Spreadsheet sheets** — `<sheet>.csv` streams one worksheet to CSV; raw ZIP-container paths
   extract the underlying workbook part.
-- **Document embeds** (DOCX / ODT / RTF) — extract an embedded image by its inner path.
+- **Document & presentation embeds** (DOCX / ODT / RTF / PPTX / PPTM / PPSX / ODP / Keynote) —
+  extract an embedded image by its inner path.
+- **Directory entries** — resolve a listed child name against the directory path and hand back
+  the file itself (`..` walks up one level); the result re-detects like any other file.
 - **Animation frames** (`.gif`, `.webp`, animated SVG) — extract a single composited frame as
   a PNG at the source's native pixel size (sub-512px SVG scales up to 512 on the longest
   axis; override with `--extract-size`).

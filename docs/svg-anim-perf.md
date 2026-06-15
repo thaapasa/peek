@@ -1,5 +1,9 @@
 # SVG animation: performance findings + optimization options
 
+> **Status: planning notes (active).** Working doc for the SVG-animation perf queue —
+> measurements + proposed optimizations, not a description of shipped behaviour. Move to
+> `docs/archived/` once the queue drains.
+
 Phase-1 status notes for `types/image/pipeline/svg_anim/` +
 `types/svg/animation_mode.rs`. Numbers measured against
 `~/Downloads/demo.svg` (termsvg recording, 1550×928.4 viewport, 55

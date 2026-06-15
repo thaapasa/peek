@@ -8,7 +8,7 @@ item to disk or stdout):
 | Viewer    | Stdout is a TTY (default)        | Full-screen interactive viewer            |
 | Print     | `--print`/`-p` or stdout is piped| Direct stdout, no interactivity           |
 | Info-only | `--info`                         | Print metadata and exit                   |
-| List-only | `--list`                         | Print container TOC and exit (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / audio / comic embeds) |
+| List-only | `--list`                         | Print container TOC and exit (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) |
 
 Binary files default to the hex-dump viewer when interactive; piped binary streams a hex dump.
 
@@ -37,4 +37,4 @@ input still works.
   strips ANSI escapes, pretty-printing, and rich renders.
 - **`--info`**: prints the [file info screen](./viewer/info-screen.md) and exits.
 - **`--list`**: prints the container TOC and exits — works for archives, ISOs, directories,
-  and per-page / per-file embed listings in PDF / EPUB / DOCX / ODT / audio / comic files.
+  and per-page / per-file embed listings in PDF / EPUB / DOCX / ODT / RTF / audio / comic files.

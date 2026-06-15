@@ -189,9 +189,14 @@ as shipped in README). Then group:
   consistency nits between a module's `//!` header and the `CLAUDE.md`
   file map.
 
-Each finding: `path:line — what's wrong, why it matters, concrete
-fix`. For accuracy findings, cite both the doc claim and the code
-ground truth so the fix is unambiguous.
+**Number every finding** with a severity-class ID so it's easy to refer
+to later: `H` / `M` / `L` + a sequential number within that class (`H1`,
+`H2`, `M1`, `L1`, …), numbered from 1 per class in report order. The IDs
+are local to this report — a handle for the user, not stable tracker IDs.
+
+Each finding: `**H1** `path:line` — what's wrong, why it matters,
+concrete fix`. For accuracy findings, cite both the doc claim and the
+code ground truth so the fix is unambiguous.
 
 Rules:
 

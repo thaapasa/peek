@@ -157,8 +157,13 @@ findings, architecture and duplication first. Then the rest, grouped:
   longer earn their place, refactor candidates
 - **Low** — convention nits, minor cleanups
 
-Each finding: file path + line, what's wrong, *why it matters now*, and a
-concrete fix or direction. For refactor candidates, sketch the target
+**Number every finding** with a severity-class ID so it's easy to refer
+to later: `H` / `M` / `L` + a sequential number within that class (`H1`,
+`H2`, `M1`, `L1`, …), numbered from 1 per class in report order. The IDs
+are local to this report — a handle for the user, not stable tracker IDs.
+
+Each finding: `**H1** `path:line` — what's wrong, *why it matters now*,
+concrete fix or direction`. For refactor candidates, sketch the target
 shape. If you considered and rejected a related finding (e.g. a
 dedup candidate where the existing rationale still holds), do **not**
 mention it — silence is the right outcome.

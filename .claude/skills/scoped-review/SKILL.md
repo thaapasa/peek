@@ -217,10 +217,15 @@ fixing, grouped:
   docs that contradict the code.
 - **Low** — minor doc gaps, naming, small cleanups.
 
-Each finding: `path:line — what's wrong, why it matters now, concrete
-fix`. For duplication / extraction findings, list every site and sketch
-the target shape. For source-of-truth divergences, cite both the promise
-and the code.
+**Number every finding** with a severity-class ID so it's easy to refer
+to later: `H` / `M` / `L` + a sequential number within that class (`H1`,
+`H2`, `M1`, `L1`, …), numbered from 1 per class in report order. The IDs
+are local to this report — a handle for the user, not stable tracker IDs.
+
+Each finding: `**H1** `path:line` — what's wrong, why it matters now,
+concrete fix`. For duplication / extraction findings, list every site and
+sketch the target shape. For source-of-truth divergences, cite both the
+promise and the code.
 
 Rules:
 
