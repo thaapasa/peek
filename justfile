@@ -51,8 +51,10 @@ demos:
         | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
       echo "  $out/$name.$fmt"
     }
-    shot image-render     png 80  0 test-images/heron.jpg            # glyph photo render
-    shot image-contour    svg 80  0 test-images/heron.jpg -m contour # Sobel edge line-art
+    # --cell-aspect 2.0 pins the render to freeze's font geometry; without it peek auto-detects
+    # the *running* terminal's cell aspect and the still comes out stretched under freeze.
+    shot image-render     png 80  0 test-images/heron.jpg --cell-aspect 2.0            # glyph photo render
+    shot image-contour    svg 80  0 test-images/heron.jpg -m contour --cell-aspect 2.0 # Sobel edge line-art
     shot source-highlight svg 92 28 test-data/theme.rs               # syntax highlight
     shot markdown-render  svg 88 30 test-data/release-notes.md       # rich markdown render
     shot structured-data  svg 80 26 test-data/config.json           # JSON pretty-print
