@@ -57,8 +57,11 @@ demos:
     # peek inside a tmux pane sized to the still, let it draw, dump the live screen as ANSI, and
     # pipe to freeze. RGB terminal-feature keeps peek's 24-bit color through the capture.
     abspeek="$PWD/$peek"
-    tshot() { # name width height peek-args...
-      local name=$1 w=$2 h=$3; shift 3
+    # ready = regex unique to the TARGET screen (poll waits for it); keys = tmux send-keys
+    # sequence to drive a non-landing mode (empty for the landing view). q:quit is in every
+    # interactive status bar, so it's the universal "peek is up" signal before keys are sent.
+    tshot() { # name width height ready_regex keys peek-args...
+      local name=$1 w=$2 h=$3 ready=$4 keys=$5; shift 5
       tmux kill-server 2>/dev/null || true
       tmux new-session -d -s pkdemo -x "$w" -y "$h"
       tmux set -g default-terminal tmux-256color
@@ -68,7 +71,11 @@ demos:
       done
       tmux send-keys -t pkdemo "$abspeek $* --color truecolor" Enter
       for _ in $(seq 1 600); do
-        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE 'TOC|Listing'; then break; fi
+        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -q 'q:quit'; then break; fi
+      done
+      [ -n "$keys" ] && tmux send-keys -t pkdemo $keys
+      for _ in $(seq 1 600); do
+        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE "$ready"; then break; fi
       done
       tmux capture-pane -t pkdemo -e -p -J \
         | freeze --output "$out/$name.svg" --padding 20 --border.radius 8 --font.family monospace
@@ -91,13 +98,13 @@ demos:
     "$peek" test-data/library.sqlite -x tables/authors.csv -o "$tmp/authors.csv" >/dev/null
     shot sqlite-table     svg 90 14 "$tmp/authors.csv"             # a table's rows, browsable
     # Interactive container browsers — the nested TOC tree, which the flat --list can't show.
-    tshot archive-browser 96 18 test-data/archive.zip               # ZIP, nested tree + status bar
-    tshot iso-browser     90  9 test-data/sample.iso                # ISO 9660, multi-level nesting
+    tshot archive-browser 96 18 'TOC' '' test-data/archive.zip      # ZIP, nested tree + status bar
+    tshot iso-browser     90  9 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
     # Directory browser — capture a clean checkout (worktree) so the still shows the structure a
     # fresh clone sees, no local target/ / editor dirs. NB: mtimes are checkout-time, so unlike
     # the fixture shots this one changes each run.
     work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
-    tshot dir-browser 92 26 "$work"
+    tshot dir-browser 92 26 'Listing' '' "$work"
     git worktree remove --force "$work"
 
 # Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
