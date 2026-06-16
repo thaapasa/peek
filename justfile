@@ -11,6 +11,8 @@ setup:
     command -v cargo-fuzz >/dev/null || cargo install --locked cargo-fuzz
     # Stills: charmbracelet/freeze — ANSI -> SVG/PNG, keeps fg AND bg truecolor (see `just demos`)
     command -v freeze    >/dev/null || brew install charmbracelet/tap/freeze
+    # Interactive-screen capture for `just demos` (drives peek in a pane, dumps the live screen)
+    command -v tmux      >/dev/null || brew install tmux
     # Animated demos: svg-term-cli — asciicast -> CSS-animated SVG that autoplays on GitHub
     command -v svg-term  >/dev/null || npm install -g svg-term-cli
     # Terminal recorder feeding the animated path
@@ -51,6 +53,28 @@ demos:
         | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
       echo "  $out/$name.$fmt"
     }
+    # tshot captures an *interactive* peek screen (the browsers/viewers, not print mode): drive
+    # peek inside a tmux pane sized to the still, let it draw, dump the live screen as ANSI, and
+    # pipe to freeze. RGB terminal-feature keeps peek's 24-bit color through the capture.
+    abspeek="$PWD/$peek"
+    tshot() { # name width height peek-args...
+      local name=$1 w=$2 h=$3; shift 3
+      tmux kill-server 2>/dev/null || true
+      tmux new-session -d -s pkdemo -x "$w" -y "$h"
+      tmux set -g default-terminal tmux-256color
+      tmux set -as terminal-features ",*:RGB"
+      for _ in $(seq 1 300); do
+        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qE '[$%#] *$|➜|❯'; then break; fi
+      done
+      tmux send-keys -t pkdemo "$abspeek $* --color truecolor" Enter
+      for _ in $(seq 1 600); do
+        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE 'TOC|Listing'; then break; fi
+      done
+      tmux capture-pane -t pkdemo -e -p -J \
+        | freeze --output "$out/$name.svg" --padding 20 --border.radius 8 --font.family monospace
+      tmux kill-server 2>/dev/null || true
+      echo "  $out/$name.svg"
+    }
     # --cell-aspect 2.0 pins the render to freeze's font geometry; without it peek auto-detects
     # the *running* terminal's cell aspect and the still comes out stretched under freeze.
     shot image-render     png 80  0 test-images/heron.jpg --cell-aspect 2.0            # glyph photo render
@@ -61,13 +85,20 @@ demos:
     shot file-info        svg 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
     shot notebook         svg 88 24 test-data/notebook.ipynb        # Jupyter notebook
     shot csv-table        svg 100 14 test-data/books.csv            # aligned CSV table
-    shot archive-list     svg 76 16 test-data/archive.zip --list    # archive listing
-    shot iso-list         svg 64  0 test-data/sample.iso --list     # ISO disk-image listing
     # SQLite browses table rows in a streaming viewer; print mode shows the schema instead, so
     # extract one table to CSV and render it as the same aligned table the row viewer draws.
     tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
     "$peek" test-data/library.sqlite -x tables/authors.csv -o "$tmp/authors.csv" >/dev/null
     shot sqlite-table     svg 90 14 "$tmp/authors.csv"             # a table's rows, browsable
+    # Interactive container browsers — the nested TOC tree, which the flat --list can't show.
+    tshot archive-browser 96 18 test-data/archive.zip               # ZIP, nested tree + status bar
+    tshot iso-browser     90  9 test-data/sample.iso                # ISO 9660, multi-level nesting
+    # Directory browser — capture a clean checkout (worktree) so the still shows the structure a
+    # fresh clone sees, no local target/ / editor dirs. NB: mtimes are checkout-time, so unlike
+    # the fixture shots this one changes each run.
+    work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
+    tshot dir-browser 92 26 "$work"
+    git worktree remove --force "$work"
 
 # Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
 # verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.
