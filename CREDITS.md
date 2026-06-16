@@ -13,6 +13,16 @@ The example images included in this repository are used under the
 | `test-images/sunglasses-man.jpg` | [Vitaliy Shevchenko](https://unsplash.com/@vitaliyshev89) | [Unsplash](https://unsplash.com/photos/man-with-sunglasses-and-ring-touches-his-chin-IYFdZLC1gv0)          |
 | `test-images/heron.jpg`          | [Dmytro Koplyk](https://unsplash.com/@dkoplyk)            | [Unsplash](https://unsplash.com/photos/a-green-heron-stands-on-one-leg-by-the-water-LHZgiiQz97o)           |
 
+## Other example images
+
+| File                        | Source                                                                                                                                     | License                                                                                |
+|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
+| `test-images/clover.png`    | [Gluecksklee (transparent background) — Kolossos, Lvova](https://commons.wikimedia.org/wiki/File:Gluecksklee_(transparent_background).png) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (also GFDL)            |
+| `test-images/bionicle.webp` | [BIONICLE Logo (transparent) — Amongusiek](https://commons.wikimedia.org/wiki/File:BIONICLE_Logo_(transparent).webp)                       | Public domain ([PD-textlogo](https://commons.wikimedia.org/wiki/Template:PD-textlogo)) |
+
+"BIONICLE" is a trademark of the LEGO Group, used here only as a test fixture; no endorsement
+implied.
+
 ## Example vectors
 
 | File                                         | Source                                                                                                                       | License                                                               |
