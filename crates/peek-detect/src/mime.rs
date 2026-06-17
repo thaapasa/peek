@@ -6,6 +6,12 @@ use crate::{
     SpreadsheetFormat, StructuredFormat,
 };
 
+/// MIME reported for a shebang-detected script (`detect.rs::shebang_syntax`).
+/// A textual heuristic, not an authoritative magic-byte signature — set when
+/// emitting it, read when deciding it can't be an extension mismatch, so both
+/// sides stay in lockstep.
+pub const SHEBANG_SCRIPT_MIME: &str = "text/x-shellscript";
+
 /// How official a MIME type is — drives display markers in the info view.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MimeCategory {
@@ -94,14 +100,21 @@ pub fn mimes_for_path(
 
     if let Some(ext) = path.and_then(|p| p.extension()).and_then(|e| e.to_str()) {
         let ext = ext.to_lowercase();
-        for guess in mime_guess::from_ext(&ext).iter() {
-            push_unique(&mut out, MimeInfo::new(guess.essence_str()));
-        }
-        // Supplement: mime_guess misses many language conventions (returns
-        // text/plain or nothing). Add the well-established `text/x-*` MIMEs
-        // for popular languages so users see e.g. text/x-python for .py.
-        if let Some(extra) = source_code_convention(&ext) {
-            push_unique(&mut out, MimeInfo::new(extra));
+        // Skip extension-derived MIMEs when the extension contradicts the
+        // content (e.g. JPEG bytes named `.sh`): they describe the wrong
+        // format, and showing `application/x-sh` next to the mismatch warning
+        // would present the lie as fact. The magic + type-derived entries
+        // above already carry the truth.
+        if extension_mismatch(&ext, magic_mime, file_type).is_none() {
+            for guess in mime_guess::from_ext(&ext).iter() {
+                push_unique(&mut out, MimeInfo::new(guess.essence_str()));
+            }
+            // Supplement: mime_guess misses many language conventions (returns
+            // text/plain or nothing). Add the well-established `text/x-*` MIMEs
+            // for popular languages so users see e.g. text/x-python for .py.
+            if let Some(extra) = source_code_convention(&ext) {
+                push_unique(&mut out, MimeInfo::new(extra));
+            }
         }
     }
 
@@ -277,6 +290,14 @@ pub fn extension_mismatch(
 ) -> Option<String> {
     let magic = magic_mime?;
     let ext = ext.to_lowercase();
+
+    // The shebang heuristic ([`SHEBANG_SCRIPT_MIME`]) only says "this is a
+    // script", never which language, so it can't contradict a source-code
+    // extension (`.sh`, `.bash`, `.lua`, …). A genuinely misnamed file carries
+    // real magic bytes (e.g. `image/png`) and is still caught below.
+    if magic == SHEBANG_SCRIPT_MIME && matches!(file_type, FileType::SourceCode { .. }) {
+        return None;
+    }
 
     let mut acceptable: Vec<String> = Vec::new();
     if let Some(exts) = mime_guess::get_mime_extensions_str(magic) {
@@ -475,6 +496,19 @@ mod tests {
     }
 
     #[test]
+    fn mismatch_drops_extension_derived_mimes() {
+        // JPEG bytes named `.sh`: content wins the type (Image), and the
+        // extension is a known lie — so `application/x-sh` must not appear.
+        let mimes = mimes_for_path(
+            &FileType::Image,
+            Some(Path::new("fake.sh")),
+            Some("image/jpeg"),
+        );
+        let strings: Vec<&str> = mimes.iter().map(|m| m.mime.as_str()).collect();
+        assert_eq!(strings, vec!["image/jpeg"]);
+    }
+
+    #[test]
     fn binary_falls_back_to_octet_stream_when_unknown() {
         let mimes = mimes_for_path(&FileType::Binary, None, None);
         assert_eq!(mimes[0].mime, "application/octet-stream");
@@ -491,6 +525,35 @@ mod tests {
     fn extension_mismatch_silent_when_consistent() {
         let warn = extension_mismatch("png", Some("image/png"), &FileType::Image);
         assert!(warn.is_none());
+    }
+
+    #[test]
+    fn extension_mismatch_silent_on_shebang_script() {
+        // The shebang heuristic reports `text/x-shellscript` for any script;
+        // it must not warn against a real shell extension.
+        for ext in ["sh", "bash", "zsh", "lua"] {
+            assert!(
+                extension_mismatch(
+                    ext,
+                    Some("text/x-shellscript"),
+                    &FileType::SourceCode { syntax: None }
+                )
+                .is_none(),
+                ".{ext} script should not warn against shebang text/x-shellscript magic"
+            );
+        }
+    }
+
+    #[test]
+    fn extension_mismatch_still_catches_real_bytes_under_script_extension() {
+        // A PNG misnamed `.sh` carries real magic bytes, not the shebang
+        // heuristic — the mismatch must still fire.
+        let warn = extension_mismatch(
+            "sh",
+            Some("image/png"),
+            &FileType::SourceCode { syntax: None },
+        );
+        assert!(warn.is_some(), "PNG bytes under .sh should still warn");
     }
 
     #[test]

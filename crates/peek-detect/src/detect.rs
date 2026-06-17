@@ -1019,7 +1019,7 @@ fn sniff_text_content(text: &str) -> Option<(FileType, &'static str)> {
             FileType::SourceCode {
                 syntax: Some(syntax.to_string()),
             },
-            "text/x-shellscript",
+            mime::SHEBANG_SCRIPT_MIME,
         ));
     }
     None
