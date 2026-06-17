@@ -33,79 +33,9 @@ lint:
 test:
     cargo test --workspace
 
-# Capture demo stills into manual/src/img (needs `just setup`). Shared by the README and the
-# mdbook manual — mdbook only bundles files under src/, so they live there. freeze keeps bg
-# colors, so every mode renders faithfully; SVG for text/line-art (font.family=monospace → no
-# 366KB font embed), PNG for the photo render (raster is honest for half-block pixels).
-demos:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cargo build --release
-    peek=target/release/peek
-    out=manual/src/img; mkdir -p "$out"
-    shot() { # name format width rows(0=full) peek-args...
-      local name=$1 fmt=$2 width=$3 rows=$4; shift 4
-      local font=(); [ "$fmt" = svg ] && font=(--font.family monospace)
-      # awk (not head) so the stream is fully drained — head closing early would SIGPIPE
-      # peek and trip `set -o pipefail`.
-      local cap=(cat); [ "$rows" -gt 0 ] && cap=(awk -v n="$rows" 'NR<=n')
-      "$peek" "$@" -p --color truecolor -w "$width" | "${cap[@]}" \
-        | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
-      echo "  $out/$name.$fmt"
-    }
-    # tshot captures an *interactive* peek screen (the browsers/viewers, not print mode): drive
-    # peek inside a tmux pane sized to the still, let it draw, dump the live screen as ANSI, and
-    # pipe to freeze. RGB terminal-feature keeps peek's 24-bit color through the capture.
-    abspeek="$PWD/$peek"
-    # ready = regex unique to the TARGET screen (poll waits for it); keys = tmux send-keys
-    # sequence to drive a non-landing mode (empty for the landing view). q:quit is in every
-    # interactive status bar, so it's the universal "peek is up" signal before keys are sent.
-    tshot() { # name width height ready_regex keys peek-args...
-      local name=$1 w=$2 h=$3 ready=$4 keys=$5; shift 5
-      tmux kill-server 2>/dev/null || true
-      tmux new-session -d -s pkdemo -x "$w" -y "$h"
-      tmux set -g default-terminal tmux-256color
-      tmux set -as terminal-features ",*:RGB"
-      for _ in $(seq 1 300); do
-        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qE '[$%#] *$|➜|❯'; then break; fi
-      done
-      tmux send-keys -t pkdemo "$abspeek $* --color truecolor" Enter
-      for _ in $(seq 1 600); do
-        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -q 'q:quit'; then break; fi
-      done
-      [ -n "$keys" ] && tmux send-keys -t pkdemo $keys
-      for _ in $(seq 1 600); do
-        if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE "$ready"; then break; fi
-      done
-      tmux capture-pane -t pkdemo -e -p -J \
-        | freeze --output "$out/$name.svg" --padding 20 --border.radius 8 --font.family monospace
-      tmux kill-server 2>/dev/null || true
-      echo "  $out/$name.svg"
-    }
-    # --cell-aspect 2.0 pins the render to freeze's font geometry; without it peek auto-detects
-    # the *running* terminal's cell aspect and the still comes out stretched under freeze.
-    shot image-render     png 80  0 test-images/heron.jpg --cell-aspect 2.0            # glyph photo render
-    shot image-contour    svg 80  0 test-images/heron.jpg -m contour --cell-aspect 2.0 # Sobel edge line-art
-    shot source-highlight svg 92 28 test-data/theme.rs               # syntax highlight
-    shot markdown-render  svg 88 30 test-data/release-notes.md       # rich markdown render
-    shot structured-data  svg 80 26 test-data/config.json           # JSON pretty-print
-    shot file-info        svg 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
-    shot notebook         svg 88 24 test-data/notebook.ipynb        # Jupyter notebook
-    shot csv-table        svg 100 14 test-data/books.csv            # aligned CSV table
-    # SQLite browses table rows in a streaming viewer; print mode shows the schema instead, so
-    # extract one table to CSV and render it as the same aligned table the row viewer draws.
-    tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
-    "$peek" test-data/library.sqlite -x tables/authors.csv -o "$tmp/authors.csv" >/dev/null
-    shot sqlite-table     svg 90 14 "$tmp/authors.csv"             # a table's rows, browsable
-    # Interactive container browsers — the nested TOC tree, which the flat --list can't show.
-    tshot archive-browser 96 18 'TOC' '' test-data/archive.zip      # ZIP, nested tree + status bar
-    tshot iso-browser     90  9 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
-    # Directory browser — capture a clean checkout (worktree) so the still shows the structure a
-    # fresh clone sees, no local target/ / editor dirs. NB: mtimes are checkout-time, so unlike
-    # the fixture shots this one changes each run.
-    work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
-    tshot dir-browser 92 26 'Listing' '' "$work"
-    git worktree remove --force "$work"
+# Capture manual demo stills (needs `just setup`); pass shot names to re-render some, none for all
+demos *shots:
+    ./scripts/capture-demos.sh {{ shots }}
 
 # Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
 # verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.
@@ -133,65 +63,12 @@ install:
 
 # Fetch Pdfium dynamic library into .pdfium/ (build="latest" or e.g. "7825"); also pins .pdfium/VERSION used by release workflow
 pdfium build="latest":
-    #!/usr/bin/env bash
-    set -euo pipefail
-
-    os=$(uname -s); arch=$(uname -m)
-    case "$os/$arch" in
-      Darwin/arm64)              asset="pdfium-mac-arm64.tgz" ;;
-      Darwin/x86_64)             asset="pdfium-mac-x64.tgz" ;;
-      Linux/x86_64)              asset="pdfium-linux-x64.tgz" ;;
-      Linux/aarch64|Linux/arm64) asset="pdfium-linux-arm64.tgz" ;;
-      *) echo "unsupported host: $os/$arch" >&2; exit 1 ;;
-    esac
-
-    build="{{ build }}"
-    if [ "$build" = "latest" ]; then
-      echo "resolving latest pdfium build..."
-      # Pure-bash extract; piping into grep -m1 trips pipefail (SIGPIPE
-      # back to the upstream printf/curl).
-      api_body=$(curl -fsSL https://api.github.com/repos/bblanchon/pdfium-binaries/releases/latest)
-      if [[ "$api_body" =~ \"tag_name\":[[:space:]]*\"chromium/([0-9]+)\" ]]; then
-        build="${BASH_REMATCH[1]}"
-      else
-        echo "could not resolve latest pdfium build from GitHub API" >&2
-        exit 1
-      fi
-    fi
-
-    url="https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$build/$asset"
-    echo "fetching $url"
-
-    tmp=$(mktemp -d)
-    trap 'rm -rf "$tmp"' EXIT
-    curl -fsSL -o "$tmp/pdfium.tgz" "$url"
-
-    rm -rf .pdfium
-    mkdir .pdfium
-    tar xzf "$tmp/pdfium.tgz" -C .pdfium
-
-    if [ -f .pdfium/VERSION ]; then
-      echo "installed pdfium build $build to .pdfium/"
-      cat .pdfium/VERSION
-    else
-      echo "warning: extracted but .pdfium/VERSION missing" >&2
-    fi
+    ./scripts/fetch-pdfium.sh {{ build }}
 
 # Bump project version, kind = patch | minor | major
 bump kind="patch":
     #!/usr/bin/env bash
     set -euo pipefail
-    case "{{ kind }}" in patch|minor|major) ;; *) echo "kind must be patch|minor|major" >&2; exit 1 ;; esac
-    cur=$(awk -F'"' '/^version *=/ {print $2; exit}' Cargo.toml)
-    IFS=. read -r maj min pat <<<"$cur"
-    case "{{ kind }}" in
-      major) maj=$((maj+1)); min=0; pat=0 ;;
-      minor) min=$((min+1)); pat=0 ;;
-      patch) pat=$((pat+1)) ;;
-    esac
-    new="$maj.$min.$pat"
-    awk -v v="$new" 'BEGIN{done=0} /^version *=/ && !done {sub(/"[^"]+"/, "\"" v "\""); done=1} {print}' Cargo.toml > Cargo.toml.tmp
-    mv Cargo.toml.tmp Cargo.toml
-    cargo check --workspace
+    new=$(./scripts/bump-version.sh {{ kind }})
     git add Cargo.toml Cargo.lock
     git commit -m "Bump version to $new"

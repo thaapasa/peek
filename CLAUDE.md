@@ -94,6 +94,9 @@ docs/               builder/agent reference (architecture.md = design + index).
 fuzz/               cargo-fuzz crate (excluded, nightly). `just fuzz`. Stable floor in
                     peek-detect/tests/fuzz_detect.rs.
 manual/             user manual (mdbook). `mdbook serve manual`.
+scripts/            dev tooling. capture-demos.sh = manual stills (freeze/tmux, `just demos`);
+                    fetch-pdfium.sh = Pdfium dylib + .pdfium/VERSION (`just pdfium`);
+                    bump-version.sh = Cargo.toml/lock version math, prints new ver (`just bump`).
 .github/workflows/  ci.yml + release.yml (5-target matrix) + manual.yml.
 install.sh          POSIX installer for curl | sh.
 ```
