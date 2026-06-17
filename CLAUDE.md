@@ -18,6 +18,9 @@ cargo clippy --workspace     # ALL crates — bare skips member crates
 **Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and
 skips library-crates.
 
+**Verify against the debug build** — `cargo run -- [args]` or `target/debug/peek`. Release builds
+take minutes; never `cargo build --release` just to check a change. Reserve release for shipping.
+
 No external runtime deps. Image render built in. PDF via Pdfium (ships beside binary, loaded
 dynamically at startup). Ghostscript used if on path.
 
