@@ -10,4 +10,9 @@ dual view:
   author colors are filtered so body / heading defaults don't fight the terminal foreground.
 - **Source** — raw HTML with XML syntax highlighting. Tab cycles between the two.
 
+![HTML rendered as styled flow text with headings, emphasis, a list, and numbered link references](../img/html-render.svg)
+
+*The default rendered view: lynx-style flow with paragraph wrap, list bullets, and ANSI styling
+from author colors rather than raw tags.*
+
 The Info view shows structured XML stats (root element, element counts).

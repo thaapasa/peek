@@ -18,10 +18,10 @@ Two sub-modes, toggled with `r` (or `--raw` on the CLI):
   highlighting.
 - **Raw** — verbatim source, still highlighted unless `--plain` / `-P` is set.
 
-![A JSON file reformatted and syntax-highlighted in pretty mode](../img/structured-data.svg)
+![A JSON-with-comments file syntax-highlighted, comments and all](../img/structured-data.svg)
 
-*Pretty mode: keys, strings, numbers, and booleans each colored, re-indented from the source
-regardless of its original formatting.*
+*Keys, strings, numbers, and booleans each colored — comments preserved, source formatting
+intact (JSONC defaults to raw rather than pretty).*
 
 JSONC and JSON5 default to **raw** because the pretty path collapses comments and JSON5 syntax;
 press `r` to opt into strict-JSON pretty when needed.
