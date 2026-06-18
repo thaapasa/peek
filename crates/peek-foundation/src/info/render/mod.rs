@@ -92,7 +92,7 @@ fn count_color(count: usize, theme: &PeekTheme) -> Color {
 /// `Value` fields paint consistently:
 /// - `Size`  → `N bytes (H.HH KiB)` on the magnitude gradient
 /// - `Count` → thousands-separated, log-intensity colour
-/// - `Timestamp` → local time, age-dimmed
+/// - `Timestamp` → local time, muted (secondary metadata)
 /// - `Token`/`Text` → value colour; `Bool` → `yes`/`no`; etc.
 impl InfoValue for Value {
     fn render_value(&self, theme: &PeekTheme) -> String {
@@ -103,17 +103,14 @@ impl InfoValue for Value {
             Value::Count(n) => paint_count_u64(*n, theme),
             Value::Int(n) => theme.paint_value(&thousands_sep_signed(*n)),
             Value::Ratio(r) => theme.paint_value(&format!("{r:.2}")),
-            Value::Timestamp(t) => {
-                // NB: always local time. `InfoValue::render_value` has no
-                // `RenderOptions`, so a derived-section timestamp can't honour
-                // `--utc` the way the File section's own `paint_timestamp`
-                // does. No shipping section constructs a `Value::Timestamp`
-                // yet (timestamps arrive pre-formatted from gather), so this is
-                // latent — but a future one would silently disagree with the
-                // File section under `--utc`. Threading `utc` here needs a
-                // `render_value` signature change.
-                theme.paint(&format_time(*t, false), file::timestamp_color(*t, theme))
-            }
+            // Domain timestamps (PDF / document / email authoring dates, …)
+            // render muted — secondary metadata, distinct from the File
+            // section's own age-dimmed mtime/ctime. NB: always local time;
+            // `render_value` has no `RenderOptions`, so these can't honour
+            // `--utc` the way the File section does — a minor inconsistency
+            // for secondary fields, fixable only by threading `utc` through
+            // the whole `render_value` chain.
+            Value::Timestamp(t) => theme.paint_muted(&format_time(*t, false)),
             Value::DurationMs(ms) => theme.paint_value(&format!("{} ms", thousands_sep(*ms))),
             Value::Text(s) | Value::Token(s) => theme.paint_value(s),
             Value::Bool(b) => theme.paint_value(if *b { "yes" } else { "no" }),

@@ -102,8 +102,9 @@ fn assign(meta: &mut DocumentMetadata, field: Field, value: &str) {
         Field::Subject => &mut meta.subject,
         Field::Description => &mut meta.description,
         Field::Keywords => &mut meta.keywords,
-        Field::Created => &mut meta.created,
-        Field::Modified => &mut meta.modified,
+        // ISO-8601 dates (`dcterms:created` / `dc:date` / …) — parse to instants.
+        Field::Created => return meta.set_created_iso(value),
+        Field::Modified => return meta.set_modified_iso(value),
     };
     if slot.is_none() {
         *slot = Some(value.to_string());

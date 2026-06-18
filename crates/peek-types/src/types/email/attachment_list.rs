@@ -141,6 +141,7 @@ mod tests {
             cc: None,
             subject: None,
             date: None,
+            timestamp: None,
             message_id: None,
             body: Body::Empty,
             attachments,

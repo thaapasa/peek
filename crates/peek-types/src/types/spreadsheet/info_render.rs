@@ -65,10 +65,10 @@ struct SpreadsheetView {
     keywords: Option<Muted>,
     #[info(label = "Created")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    created: Option<Muted>,
+    created: Option<Value>,
     #[info(label = "Modified")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    modified: Option<Muted>,
+    modified: Option<Value>,
 }
 
 impl SpreadsheetView {
@@ -93,8 +93,8 @@ impl From<&SpreadsheetInfo> for SpreadsheetView {
             creator: if ok { m.creator.clone() } else { None },
             subject: muted(&m.subject),
             keywords: muted(&m.keywords),
-            created: muted(&m.created),
-            modified: muted(&m.modified),
+            created: ok.then(|| m.created.map(Value::timestamp)).flatten(),
+            modified: ok.then(|| m.modified.map(Value::timestamp)).flatten(),
         }
     }
 }

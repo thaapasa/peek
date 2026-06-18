@@ -605,8 +605,9 @@ fn assign_core(meta: &mut DocumentMetadata, field: CoreField, value: String) {
         CoreField::Subject => &mut meta.subject,
         CoreField::Description => &mut meta.description,
         CoreField::Keywords => &mut meta.keywords,
-        CoreField::Created => &mut meta.created,
-        CoreField::Modified => &mut meta.modified,
+        // `dcterms:created/modified` are ISO-8601 — parse to a typed instant.
+        CoreField::Created => return meta.set_created_iso(&value),
+        CoreField::Modified => return meta.set_modified_iso(&value),
     };
     if slot.is_none() {
         *slot = Some(value);

@@ -5,6 +5,8 @@
 //! whole-message parse is cheap, and owning the result frees the caller
 //! from `mail-parser`'s borrow lifetimes).
 
+use std::time::{Duration, SystemTime};
+
 use mail_parser::{Address, Message, MessageParser, MimeHeaders};
 
 /// The display-facing view of one email message.
@@ -13,7 +15,13 @@ pub struct ParsedEmail {
     pub to: Option<String>,
     pub cc: Option<String>,
     pub subject: Option<String>,
+    /// `Date:` header verbatim (RFC-822), for the faithful read-view header
+    /// block. The Info section uses [`timestamp`](Self::timestamp) instead.
     pub date: Option<String>,
+    /// `Date:` resolved to a wall-clock instant (`mail-parser` folds the
+    /// RFC-822 zone to a UTC epoch). `None` when absent or at/before the epoch
+    /// — the `> 0` guard doubles as a parse-failure / bogus-1970 filter.
+    pub timestamp: Option<SystemTime>,
     pub message_id: Option<String>,
     /// Preferred renderable body — HTML when the message carries one,
     /// otherwise the plain-text part.
@@ -72,6 +80,11 @@ pub fn parse(bytes: &[u8]) -> Option<ParsedEmail> {
         cc: msg.cc().and_then(format_address),
         subject: msg.subject().map(str::to_owned),
         date: msg.date().map(|d| d.to_rfc822()),
+        timestamp: msg
+            .date()
+            .map(|d| d.to_timestamp())
+            .filter(|&s| s > 0)
+            .map(|s| SystemTime::UNIX_EPOCH + Duration::from_secs(s as u64)),
         message_id: msg.message_id().map(str::to_owned),
         body,
         attachments,

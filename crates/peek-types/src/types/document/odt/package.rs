@@ -678,8 +678,9 @@ fn assign_meta(meta: &mut DocumentMetadata, field: MetaField, value: String) {
         MetaField::Creator => &mut meta.creator,
         MetaField::Subject => &mut meta.subject,
         MetaField::Description => &mut meta.description,
-        MetaField::Created => &mut meta.created,
-        MetaField::Modified => &mut meta.modified,
+        // `meta:creation-date` / `dc:date` are ISO-8601 — parse to instants.
+        MetaField::Created => return meta.set_created_iso(&value),
+        MetaField::Modified => return meta.set_modified_iso(&value),
         MetaField::Keyword => unreachable!("keywords aggregate in parse_meta"),
     };
     if slot.is_none() {
@@ -757,10 +758,14 @@ mod tests {
             Some("peek, odt, fixture"),
             "keyword aggregation must join all <meta:keyword> values",
         );
-        assert_eq!(doc.metadata.created.as_deref(), Some("2026-05-12T10:00:00"),);
+        // Dates parse to typed instants (no zone in the fixture → UTC).
         assert_eq!(
-            doc.metadata.modified.as_deref(),
-            Some("2026-05-12T10:30:00"),
+            doc.metadata.created,
+            crate::info::parse_iso8601("2026-05-12T10:00:00"),
+        );
+        assert_eq!(
+            doc.metadata.modified,
+            crate::info::parse_iso8601("2026-05-12T10:30:00"),
         );
     }
 

@@ -232,8 +232,9 @@ fn assign_meta(meta: &mut PresentationMetadata, field: MetaField, value: String)
         MetaField::Creator => &mut meta.creator,
         MetaField::Subject => &mut meta.subject,
         MetaField::Keyword => &mut meta.keywords,
-        MetaField::Created => &mut meta.created,
-        MetaField::Modified => &mut meta.modified,
+        // `meta:creation-date` / `dc:date` are ISO-8601 — parse to instants.
+        MetaField::Created => return meta.set_created_iso(&value),
+        MetaField::Modified => return meta.set_modified_iso(&value),
         MetaField::Generator => &mut meta.application,
     };
     if slot.is_none() {

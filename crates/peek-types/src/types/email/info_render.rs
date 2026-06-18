@@ -85,7 +85,7 @@ impl From<&EmailInfo> for EmailView {
             to: header(&e.to),
             cc: header(&e.cc),
             subject: header(&e.subject),
-            date: header(&e.date),
+            date: e.date.map(Value::timestamp),
             message_id: header(&e.message_id),
             attachments: Attachments {
                 count: e.attachment_count,

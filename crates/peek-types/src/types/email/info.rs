@@ -16,7 +16,9 @@ pub struct EmailInfo {
     pub to: Option<String>,
     pub cc: Option<String>,
     pub subject: Option<String>,
-    pub date: Option<String>,
+    /// `Date:` header as a wall-clock instant; rendered muted / serialized
+    /// ISO-8601 UTC.
+    pub date: Option<std::time::SystemTime>,
     pub message_id: Option<String>,
     pub attachment_count: usize,
     pub attachment_bytes: u64,
@@ -32,7 +34,7 @@ impl EmailInfo {
             to: email.to.clone(),
             cc: email.cc.clone(),
             subject: email.subject.clone(),
-            date: email.date.clone(),
+            date: email.timestamp,
             message_id: email.message_id.clone(),
             attachment_count: email.attachments.len(),
             attachment_bytes: email.attachments.iter().map(|a| a.size).sum(),

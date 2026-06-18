@@ -58,10 +58,10 @@ struct PdfView {
     keywords: Option<Muted>,
     #[info(label = "Created")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    created: Option<Muted>,
+    created: Option<Value>,
     #[info(label = "Modified")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    modified: Option<Muted>,
+    modified: Option<Value>,
     // Zero counts vanish from both outputs.
     #[info(label = "Pages")]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -96,8 +96,8 @@ impl From<&PdfStats> for PdfView {
             creator: m.creator.clone(),
             subject: m.subject.clone().map(Muted),
             keywords: m.keywords.clone().map(Muted),
-            created: m.created.clone().map(Muted),
-            modified: m.modified.clone().map(Muted),
+            created: m.created.map(Value::timestamp),
+            modified: m.modified.map(Value::timestamp),
             page_count: count(s.page_count),
             attachment_count: count(s.attachment_count),
             image_count: count(s.image_count),

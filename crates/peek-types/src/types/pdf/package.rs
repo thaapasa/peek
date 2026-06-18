@@ -22,6 +22,7 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
+use std::time::SystemTime;
 
 use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
@@ -219,11 +220,9 @@ impl Doc {
                 PdfDocumentMetadataTagType::Author => meta.creator = Some(value),
                 PdfDocumentMetadataTagType::Subject => meta.subject = Some(value),
                 PdfDocumentMetadataTagType::Keywords => meta.keywords = Some(value),
-                PdfDocumentMetadataTagType::CreationDate => {
-                    meta.created = Some(format_pdf_date(&value))
-                }
+                PdfDocumentMetadataTagType::CreationDate => meta.created = parse_pdf_date(&value),
                 PdfDocumentMetadataTagType::ModificationDate => {
-                    meta.modified = Some(format_pdf_date(&value))
+                    meta.modified = parse_pdf_date(&value)
                 }
                 _ => {}
             }
@@ -470,60 +469,33 @@ pub fn open_doc(source: &InputSource) -> Result<Doc> {
     })
 }
 
-/// Reformat a PDF date string (`D:YYYYMMDDHHmmSSOHH'mm'`) into a
-/// readable `YYYY-MM-DD HH:MM:SS [±HH:MM | UTC]`. Falls back to the
-/// raw value when the prefix or layout doesn't match.
-fn format_pdf_date(raw: &str) -> String {
+/// Parse a PDF date string (`D:YYYYMMDDHHmmSS±HH'mm'`) into a wall-clock
+/// instant. Only the year is required; absent lower fields default (month/day
+/// → 1, time → 0). Returns `None` when the prefix or layout doesn't match, so
+/// the caller drops the field rather than record a wrong date.
+fn parse_pdf_date(raw: &str) -> Option<SystemTime> {
     let body = raw.strip_prefix("D:").unwrap_or(raw);
-    if body.len() < 4 {
-        return raw.to_string();
-    }
-    let bytes = body.as_bytes();
-    if !bytes.iter().take(4).all(|b| b.is_ascii_digit()) {
-        return raw.to_string();
-    }
-    let take = |start: usize, len: usize| -> Option<&str> {
-        if body.len() < start + len {
-            return None;
-        }
-        let slice = &body[start..start + len];
-        if slice.bytes().all(|b| b.is_ascii_digit()) {
-            Some(slice)
-        } else {
-            None
+    let field = |start: usize, len: usize, default: u32| -> Option<u32> {
+        match body.get(start..start + len) {
+            None => Some(default),
+            Some(s) if s.bytes().all(|b| b.is_ascii_digit()) => s.parse().ok(),
+            Some(_) => None,
         }
     };
-    let year = &body[..4];
-    let month = take(4, 2).unwrap_or("01");
-    let day = take(6, 2).unwrap_or("01");
-    let hour = take(8, 2).unwrap_or("00");
-    let minute = take(10, 2).unwrap_or("00");
-    let second = take(12, 2).unwrap_or("00");
-    let date_part = format!("{year}-{month}-{day} {hour}:{minute}:{second}");
-
-    // Trailing offset: `Z` (UTC), `+HH'mm'` or `-HH'mm'`. Strip the
-    // apostrophes per PDF spec and present as `±HH:MM`.
-    let tz_start = 14usize;
-    if body.len() <= tz_start {
-        return date_part;
-    }
-    let tz = &body[tz_start..];
-    if tz.starts_with('Z') {
-        return format!("{date_part} UTC");
-    }
-    if (tz.starts_with('+') || tz.starts_with('-')) && tz.len() >= 3 {
-        let sign = &tz[..1];
-        let hh = &tz[1..3];
-        let mm = if tz.len() >= 6 && (tz.as_bytes()[3] == b'\'' || tz.as_bytes()[3] == b':') {
-            &tz[4..6]
-        } else {
-            "00"
-        };
-        if hh.bytes().all(|b| b.is_ascii_digit()) && mm.bytes().all(|b| b.is_ascii_digit()) {
-            return format!("{date_part} {sign}{hh}:{mm}");
-        }
-    }
-    date_part
+    // Year is mandatory and must be four digits; everything below it defaults.
+    let year: i64 = body
+        .get(0..4)
+        .filter(|s| s.bytes().all(|b| b.is_ascii_digit()))?
+        .parse()
+        .ok()?;
+    let month = field(4, 2, 1)?;
+    let day = field(6, 2, 1)?;
+    let hour = field(8, 2, 0)?;
+    let minute = field(10, 2, 0)?;
+    let second = field(12, 2, 0)?;
+    // Trailing offset: empty / `Z` → UTC; `±HH'mm'` → the local−UTC offset.
+    let offset = crate::info::parse_utc_offset(body.get(14..).unwrap_or(""))?;
+    crate::info::timestamp_from_civil(year, month, day, hour, minute, second, offset)
 }
 
 /// Read the PDF version string from the file header (`%PDF-1.7\n…`).

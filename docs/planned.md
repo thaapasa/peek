@@ -55,6 +55,9 @@ features — the marketing claim not yet fully holding.
   [§ Type-support plugin trait](#type-support-plugin-trait-).
 - **DMG nested-filesystem metadata / entry extract** — significant work, "probably
   never worth it." See [§ Disk Images](#disk-images-).
+- **Unified `Timestamp` type** — fold the remaining String / decomposed / freeform date
+  sites onto one granularity enum behind `Value::Timestamp`. Cleanup, demand-driven. See
+  [§ Unified Timestamp type](#unified-timestamp-type-).
 
 ---
 
@@ -383,3 +386,42 @@ the whole match in one screen" property is real.
 the central matches stop fitting on one screen, or if external plugins (loading a
 `TypeSupport` from a dynamic library) become a goal. Until then, the hard-coded matches
 established by the colocation refactor are easier to read and modify.
+
+### Unified Timestamp type ❓
+
+Domain-data dates are *partly* unified. Precise instants now share one representation —
+`SystemTime` wrapped by `Value::Timestamp`, serialized ISO-8601 UTC, rendered muted
+(landed 2026-06-18: PDF, document, spreadsheet, presentation, email; the parse +
+`days_from_civil` primitives live in `peek-foundation` `info/time.rs`). Several sites
+still store dates their own way:
+
+| site | stored as |
+|---|---|
+| **cert** (`not_before` / `not_after` / `this_update` / `next_update`) | pre-formatted ISO-8601 `String` — has the epoch (`ASN1Time::timestamp()`), formats early; left as-is because its JSON is already correct and a typed render would regress its print from absolute UTC to viewer-local |
+| **disk_image** `IsoDateTime` | decomposed struct (y/m/d/h/m/s + offset), never assembled into an instant |
+| **iCalendar** `date_range` | `(String, String)` of `YYYY-MM-DD` — date-only, and a *range* |
+| **audio / ebook** `date` | freeform `String`, often year-only (`2011`) |
+| **EPS** `creation_date`, **image** EXIF/XMP | freeform `String`, may not be a date |
+
+The consolidation worth doing is **not** a `SystemTime` vs UTC enum — those carry the
+same information (a `SystemTime` *is* an absolute instant = a UTC civil time), so the
+split is meaningless. The variation that actually exists is **granularity**:
+
+```rust
+enum Timestamp {
+    Instant(SystemTime),            // precise: cert, iso, the converted five
+    Date { y: i32, m: u8, d: u8 },  // date-only: iCalendar, audio year
+    Raw(String),                    // un-parseable original, preserved verbatim: EXIF, EPS
+}
+```
+
+It would `Value::Timestamp(Timestamp)` — one `Serialize` (instant → `…Z`, date →
+`YYYY-MM-DD`, raw → string), one `InfoValue` render, one parse entry point — so the
+messy-case policy lives in one place instead of scattered per-type String formatting.
+
+**Pays off** at cert (String → `Instant`, kills its duplicate `gregorian`), iCalendar
+(`Date` ×2), disk_image (`IsoDateTime` → `Instant`). **Stays `Raw`**: EXIF, EPS — no
+false precision. **Judgment call**: audio/ebook year-only as `Date` vs `Raw`.
+
+**Recommendation:** earns its place once 3–4 sites adopt it; if only cert ever moves, a
+plain `SystemTime` field is simpler. Demand-driven cleanup, not a blocker.

@@ -1,4 +1,4 @@
-//! Timestamp formatting for FileInfo.
+//! Timestamp formatting *and parsing* for FileInfo + domain dates.
 //!
 //! Two output forms:
 //!
@@ -6,6 +6,14 @@
 //!   and as the fallback whenever local time can't be resolved.
 //! - **Local time with offset** (`2025-01-15 09:30:00 -05:00`) — the
 //!   default on Unix.
+//!
+//! The inbound direction ([`parse_iso8601`], [`timestamp_from_civil`],
+//! [`parse_utc_offset`]) turns a source date string — a PDF `D:` stamp, an
+//! OOXML/ODF `dcterms` date, an email zone — into a UTC [`SystemTime`] that a
+//! `Value::Timestamp` then re-emits in the two forms above. Because every such
+//! source carries its own numeric offset, parsing needs no tzdata either (same
+//! reasoning as below); the calendar math is one `days_from_civil`, the exact
+//! inverse of the `days_to_date` the formatters already use.
 //!
 //! ### Why this is correct without `chrono`
 //!
@@ -190,6 +198,125 @@ fn days_to_date(days: u64) -> (u64, u64, u64) {
     (y, m, d)
 }
 
+/// Days from 1970-01-01 to a proleptic-Gregorian civil date — the inverse of
+/// [`days_to_date`]. Howard Hinnant's `days_from_civil`; the same leap-year /
+/// century / 400-year exceptions, encoded directly in integer math. `month`
+/// and `day` are 1-based; the result is negative for pre-1970 dates.
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = (if y >= 0 { y } else { y - 399 }) / 400;
+    let yoe = y - era * 400; // [0, 399]
+    let doy = (153 * (if m > 2 { m - 3 } else { m + 9 }) + 2) / 5 + d - 1; // [0, 365]
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy; // [0, 146096]
+    era * 146097 + doe - 719468
+}
+
+/// Build a UTC [`SystemTime`] from civil date-time components and a UTC offset
+/// in seconds (the amount to *subtract* to reach UTC: `+02:00` → `7200`, `Z` →
+/// `0`). Returns `None` if any component is out of range. There is no timezone
+/// resolution here — the offset is supplied by the caller, so no DST / tzdata
+/// is involved (see this module's header on why that keeps us off `chrono`).
+///
+/// The result may be pre-1970 (negative epoch); [`format_time`] renders such
+/// instants as `"unknown"`, matching how it treats pre-epoch filesystem times.
+pub fn timestamp_from_civil(
+    year: i64,
+    month: u32,
+    day: u32,
+    hour: u32,
+    min: u32,
+    sec: u32,
+    offset_secs: i32,
+) -> Option<SystemTime> {
+    if !(1..=12).contains(&month) || !(1..=31).contains(&day) || hour > 23 || min > 59 || sec > 60 {
+        return None;
+    }
+    let secs = days_from_civil(year, month as i64, day as i64) * 86_400
+        + hour as i64 * 3600
+        + min as i64 * 60
+        + sec.min(59) as i64 // fold a leap second (`:60`) into `:59`
+        - offset_secs as i64;
+    Some(if secs >= 0 {
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs as u64)
+    } else {
+        SystemTime::UNIX_EPOCH - std::time::Duration::from_secs(secs.unsigned_abs())
+    })
+}
+
+/// Parse a subset of ISO-8601 / RFC-3339 into a UTC [`SystemTime`]:
+/// `YYYY-MM-DD` optionally followed by `('T'|' ')HH:MM[:SS][.fff]` and an
+/// optional zone (`Z`, `±HH:MM`, `±HHMM`, or `±HH`). A missing zone is read as
+/// UTC — the only sane default for the naked-local stamps some ODF documents
+/// emit. Returns `None` on any layout it doesn't recognise, so a caller drops
+/// the field rather than record a wrong instant.
+pub fn parse_iso8601(s: &str) -> Option<SystemTime> {
+    let s = s.trim();
+    let (date, time) = match s.split_once(['T', 't', ' ']) {
+        Some((d, t)) => (d, Some(t)),
+        None => (s, None),
+    };
+
+    let mut dp = date.split('-');
+    let year: i64 = dp.next()?.parse().ok()?;
+    let month: u32 = dp.next()?.parse().ok()?;
+    let day: u32 = dp.next()?.parse().ok()?;
+    if dp.next().is_some() {
+        return None;
+    }
+
+    let (mut hour, mut min, mut sec, mut offset) = (0u32, 0u32, 0u32, 0i32);
+    if let Some(time) = time.filter(|t| !t.is_empty()) {
+        let (clock, zone) = split_zone(time);
+        offset = parse_utc_offset(zone)?;
+        let clock = clock.split('.').next().unwrap_or(clock); // drop fractional secs
+        let mut tp = clock.split(':');
+        hour = tp.next()?.parse().ok()?;
+        min = tp.next()?.parse().ok()?;
+        sec = match tp.next() {
+            Some(s) => s.parse().ok()?,
+            None => 0,
+        };
+        if tp.next().is_some() {
+            return None;
+        }
+    }
+    timestamp_from_civil(year, month, day, hour, min, sec, offset)
+}
+
+/// Split the zone suffix (`Z`, `±HH…`) off a `HH:MM:SS[.fff]` clock string.
+/// A clock has no sign of its own, so any trailing `+`/`-` starts the zone.
+/// Returns `(clock, zone)`; `zone` is empty when none is present (→ UTC).
+fn split_zone(time: &str) -> (&str, &str) {
+    if let Some(clock) = time.strip_suffix(['Z', 'z']) {
+        return (clock, "Z");
+    }
+    match time.rfind(['+', '-']) {
+        Some(pos) => time.split_at(pos),
+        None => (time, ""),
+    }
+}
+
+/// Parse a UTC-offset suffix into seconds to subtract to reach UTC. `""` and
+/// `Z` → 0; `±HH`, `±HHMM`, `±HH:MM` → signed seconds. Non-digits are skipped,
+/// so the PDF form `+02'00'` parses too. `None` on a malformed offset.
+pub fn parse_utc_offset(zone: &str) -> Option<i32> {
+    if zone.is_empty() || zone.eq_ignore_ascii_case("Z") {
+        return Some(0);
+    }
+    let sign = match zone.as_bytes().first()? {
+        b'+' => 1,
+        b'-' => -1,
+        _ => return None,
+    };
+    let digits: String = zone[1..].chars().filter(char::is_ascii_digit).collect();
+    let (hh, mm) = match digits.len() {
+        2 => (&digits[..2], "0"),
+        4 => (&digits[..2], &digits[2..4]),
+        _ => return None,
+    };
+    Some(sign * (hh.parse::<i32>().ok()? * 3600 + mm.parse::<i32>().ok()? * 60))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +380,84 @@ mod tests {
         assert_eq!(&s[19..20], " ");
         let sign = &s[20..21];
         assert!(sign == "+" || sign == "-", "expected ± offset, got {s:?}");
+    }
+
+    /// `days_from_civil` must invert `days_to_date` for every day across a wide
+    /// range — the cheapest proof the new direction shares the old one's exact
+    /// leap-year handling (the forward function is already trusted by the
+    /// `format_iso_utc` tests above).
+    #[test]
+    fn civil_round_trips_with_days_to_date() {
+        for days in 0..=40_000u64 {
+            // 1970 → ~2079
+            let (y, m, d) = days_to_date(days);
+            assert_eq!(
+                days_from_civil(y as i64, m as i64, d as i64),
+                days as i64,
+                "round-trip failed at day {days} ({y:04}-{m:02}-{d:02})"
+            );
+        }
+    }
+
+    fn at(secs: i64) -> SystemTime {
+        SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(secs as u64)
+    }
+
+    #[test]
+    fn timestamp_from_civil_known_and_offset() {
+        // 2025-01-15 14:30:00 UTC.
+        assert_eq!(
+            timestamp_from_civil(2025, 1, 15, 14, 30, 0, 0),
+            Some(at(1_736_951_400))
+        );
+        // Same instant expressed in +02:00 wall-clock: 16:30 local − 2h = UTC.
+        assert_eq!(
+            timestamp_from_civil(2025, 1, 15, 16, 30, 0, 7200),
+            Some(at(1_736_951_400))
+        );
+        // 400-year leap day — the case hand-rolled calendars miscode.
+        assert_eq!(
+            timestamp_from_civil(2000, 2, 29, 0, 0, 0, 0),
+            Some(at(951_782_400))
+        );
+        // Leap second folds into :59 rather than rejecting.
+        assert_eq!(
+            timestamp_from_civil(2023, 12, 31, 23, 59, 60, 0),
+            timestamp_from_civil(2023, 12, 31, 23, 59, 59, 0)
+        );
+    }
+
+    #[test]
+    fn timestamp_from_civil_rejects_out_of_range() {
+        assert_eq!(timestamp_from_civil(2025, 13, 1, 0, 0, 0, 0), None);
+        assert_eq!(timestamp_from_civil(2025, 0, 1, 0, 0, 0, 0), None);
+        assert_eq!(timestamp_from_civil(2025, 1, 32, 0, 0, 0, 0), None);
+        assert_eq!(timestamp_from_civil(2025, 1, 1, 24, 0, 0, 0), None);
+        assert_eq!(timestamp_from_civil(2025, 1, 1, 0, 60, 0, 0), None);
+    }
+
+    #[test]
+    fn parse_iso8601_forms() {
+        let want = Some(at(1_736_951_400)); // 2025-01-15 14:30:00 UTC
+        assert_eq!(parse_iso8601("2025-01-15T14:30:00Z"), want);
+        assert_eq!(parse_iso8601("2025-01-15 14:30:00Z"), want); // space separator
+        assert_eq!(parse_iso8601("2025-01-15T14:30:00"), want); // no zone → UTC
+        assert_eq!(parse_iso8601("2025-01-15T14:30:00.000Z"), want); // fractional dropped
+        assert_eq!(parse_iso8601("2025-01-15T16:30:00+02:00"), want); // offset
+        assert_eq!(parse_iso8601("2025-01-15T16:30:00+0200"), want); // compact offset
+        assert_eq!(parse_iso8601("2025-01-15T12:30:00-02:00"), want); // negative offset
+        // Date only → midnight UTC.
+        assert_eq!(parse_iso8601("2025-01-15"), Some(at(1_736_899_200)));
+        // Minutes-only time (no seconds).
+        assert_eq!(parse_iso8601("2025-01-15T14:30"), want);
+    }
+
+    #[test]
+    fn parse_iso8601_rejects_junk() {
+        assert_eq!(parse_iso8601(""), None);
+        assert_eq!(parse_iso8601("not a date"), None);
+        assert_eq!(parse_iso8601("2025/01/15"), None);
+        assert_eq!(parse_iso8601("2025-01-15T14:30:00+bad"), None);
+        assert_eq!(parse_iso8601("2025-13-15T00:00:00Z"), None); // bad month
     }
 }

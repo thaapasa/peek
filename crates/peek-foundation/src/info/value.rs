@@ -6,8 +6,8 @@
 //! byte count, a [`Value::Timestamp`] an ISO-8601 UTC string, a
 //! [`Value::Token`] a bare string. Print (the [`InfoValue`] impl in `render/`)
 //! switches on the same tag to format and colour — a `Size` as `"1 KiB"` on a
-//! magnitude gradient, a `Count` with thousands separators, a `Timestamp`
-//! age-coloured. JSON can't tell `Size` from `Count` (both numbers), but print
+//! magnitude gradient, a `Count` with thousands separators, a `Timestamp` as
+//! muted local time. JSON can't tell `Size` from `Count` (both numbers), but print
 //! can, so the distinction is recorded at construction time.
 //!
 //! [`Value::Split`] is the escape hatch for a leaf whose print text and JSON
@@ -38,8 +38,10 @@ pub enum Value {
     Int(i64),
     /// Ratio / fraction. JSON: number.
     Ratio(f64),
-    /// Wall-clock instant. JSON: ISO-8601 UTC string. Print (later):
-    /// local time, age-colored.
+    /// Wall-clock instant — a domain authoring/validity date. JSON: ISO-8601
+    /// UTC string. Print: muted local time. Build from a parsed source date
+    /// via [`timestamp_from_civil`](super::timestamp_from_civil) /
+    /// [`parse_iso8601`](super::parse_iso8601).
     Timestamp(SystemTime),
     /// Duration in milliseconds. JSON: number (ms).
     DurationMs(u64),

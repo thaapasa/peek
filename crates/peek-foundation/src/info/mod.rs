@@ -19,7 +19,7 @@ pub use render::{RenderOptions, render, thousands_sep};
 pub use render::{format_size_human, paint_count, push_field, push_section_header};
 pub use rows::{InfoRow, push_rows, rows_to_json};
 pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
-pub use time::format_archive_mtime_zoned;
+pub use time::{format_archive_mtime_zoned, parse_iso8601, parse_utc_offset, timestamp_from_civil};
 pub use value::{Accent, Muted, Role, Value, Warn};
 
 /// Collected file metadata.

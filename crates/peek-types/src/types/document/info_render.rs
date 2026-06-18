@@ -49,10 +49,10 @@ struct DocumentView {
     keywords: Option<Muted>,
     #[info(label = "Created")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    created: Option<Muted>,
+    created: Option<Value>,
     #[info(label = "Modified")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    modified: Option<Muted>,
+    modified: Option<Value>,
     #[info(label = "Paragraphs", skip_if_zero)]
     paragraph_count: Value,
     #[info(label = "Words", skip_if_zero)]
@@ -84,8 +84,8 @@ impl From<&DocumentStats> for DocumentView {
             creator: m.creator.clone(),
             subject: m.subject.clone().map(Muted),
             keywords: m.keywords.clone().map(Muted),
-            created: m.created.clone().map(Muted),
-            modified: m.modified.clone().map(Muted),
+            created: m.created.map(Value::timestamp),
+            modified: m.modified.map(Value::timestamp),
             paragraph_count: Value::count(s.paragraph_count as u64),
             word_count: Value::count(s.word_count as u64),
             image_count: Value::count(s.image_count as u64),

@@ -3,6 +3,8 @@
 //! gather code populates the same struct so the renderer doesn't need
 //! to know the source format.
 
+use std::time::SystemTime;
+
 use peek_detect::DocumentFormat;
 
 #[derive(Debug, Clone, Default)]
@@ -12,8 +14,28 @@ pub struct DocumentMetadata {
     pub subject: Option<String>,
     pub description: Option<String>,
     pub keywords: Option<String>,
-    pub created: Option<String>,
-    pub modified: Option<String>,
+    /// Authoring timestamps, parsed to a wall-clock instant at gather time
+    /// (`None` when the source date is absent or unparseable). Rendered muted /
+    /// serialized ISO-8601 UTC via [`Value::timestamp`](crate::info::Value).
+    pub created: Option<SystemTime>,
+    pub modified: Option<SystemTime>,
+}
+
+impl DocumentMetadata {
+    /// Parse an ISO-8601 source date into `created` unless already set —
+    /// first non-empty wins. Unparseable input leaves the slot `None`.
+    pub fn set_created_iso(&mut self, raw: &str) {
+        if self.created.is_none() {
+            self.created = crate::info::parse_iso8601(raw);
+        }
+    }
+    /// ISO-8601 counterpart of [`set_created_iso`](Self::set_created_iso) for
+    /// `modified`.
+    pub fn set_modified_iso(&mut self, raw: &str) {
+        if self.modified.is_none() {
+            self.modified = crate::info::parse_iso8601(raw);
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

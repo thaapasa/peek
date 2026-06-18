@@ -347,7 +347,10 @@ fn scan_tag(info: &str, tag: &str) -> Option<String> {
     }
 }
 
-fn scan_date_tag(info: &str, tag: &str) -> Option<String> {
+/// RTF `\yr\mo\dy\hr\min` date components (no seconds, no zone). Built
+/// directly into a UTC instant — RTF carries no offset, so the components are
+/// taken as UTC.
+fn scan_date_tag(info: &str, tag: &str) -> Option<std::time::SystemTime> {
     let needle = format!("{{\\{tag}");
     let start = info.find(&needle)? + needle.len();
     let rest = &info[start..];
@@ -361,7 +364,7 @@ fn scan_date_tag(info: &str, tag: &str) -> Option<String> {
     let dy = scan_int(body, "dy").unwrap_or(1);
     let hr = scan_int(body, "hr").unwrap_or(0);
     let mn = scan_int(body, "min").unwrap_or(0);
-    Some(format!("{yr:04}-{mo:02}-{dy:02} {hr:02}:{mn:02}"))
+    crate::info::timestamp_from_civil(yr as i64, mo as u32, dy as u32, hr as u32, mn as u32, 0, 0)
 }
 
 fn scan_int(body: &str, tag: &str) -> Option<i32> {

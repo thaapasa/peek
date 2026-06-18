@@ -51,10 +51,10 @@ struct PresentationView {
     application: Option<Muted>,
     #[info(label = "Created")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    created: Option<Muted>,
+    created: Option<Value>,
     #[info(label = "Modified")]
     #[serde(skip_serializing_if = "Option::is_none")]
-    modified: Option<Muted>,
+    modified: Option<Value>,
     #[info(label = "Slides", skip_if_zero)]
     slide_count: Value,
     #[info(label = "Words", skip_if_zero)]
@@ -86,8 +86,8 @@ impl From<&PresentationStats> for PresentationView {
             subject: m.subject.clone().map(Muted),
             keywords: m.keywords.clone().map(Muted),
             application: m.application.clone().map(Muted),
-            created: m.created.clone().map(Muted),
-            modified: m.modified.clone().map(Muted),
+            created: m.created.map(Value::timestamp),
+            modified: m.modified.map(Value::timestamp),
             slide_count: Value::count(s.slide_count as u64),
             word_count: Value::count(s.word_count as u64),
             image_count: Value::count(s.image_count as u64),
