@@ -4,6 +4,8 @@ Compiled Java classes — `.class` files — open in a dedicated viewer rather t
 fallback. Detection is by magic bytes, so a classfile is recognised even without the `.class`
 extension.
 
+![The Bytecode view: a javap-style disassembly with byte offsets, mnemonics, and resolved operands](../img/java-bytecode.svg)
+
 ## Views
 
 Tab cycles four views:

@@ -5,6 +5,8 @@ Executables, shared libraries, relocatable objects, and **WebAssembly** modules 
 fallback. Detection is by magic bytes, so an extensionless binary like `/bin/ls` is recognised
 without a `.elf` / `.exe` extension. WebAssembly functions surface in the Symbols view.
 
+![The Sections table: index, name, address, size, and kind under a pinned column header](../img/obj-sections.svg)
+
 ## Views
 
 Tab cycles three views:
@@ -22,6 +24,8 @@ Tab cycles three views:
   stripped, the dynamic symbol table is shown in place of the missing `.symtab`.
 
 ## Navigating sections and symbols
+
+![The Symbols listing: address, size, type, bind, and name, ready to jump into the Hex view](../img/obj-symbols.svg)
 
 - The **Sections** table keeps its column header pinned at the top while the body scrolls; column
   widths fit their content.

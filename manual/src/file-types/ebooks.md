@@ -4,6 +4,8 @@
 |--------|-----------|------|
 | EPUB   | `.epub`   | [EPUB 3](https://www.w3.org/TR/epub-33/) — a ZIP container with HTML chapters + OPF metadata |
 
+![An EPUB chapter rendered as flowed text through the shared HTML pipeline](../img/ebook-render.svg)
+
 ## EPUB
 
 Three views, cycled with Tab:

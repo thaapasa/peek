@@ -13,7 +13,7 @@ set -euo pipefail
 
 names=(image-render image-contour source-highlight markdown-render structured-data file-info \
        notebook csv-table sqlite-table archive-browser iso-browser dir-browser html-render \
-       email-render)
+       email-render ebook-render obj-symbols obj-sections java-bytecode)
 
 case "${1:-}" in
   -h|--help)
@@ -104,6 +104,10 @@ tshot email-render     svg 72 20 'Rendered' '' test-data/sample.eml      # email
 tshot structured-data  svg 80 26 'Content' '' test-data/settings.jsonc   # JSON with comments
 tshot csv-table        svg 130 20 'Table' '' test-data/books.csv         # aligned CSV table
 tshot sqlite-table     svg 100 28 'Rows' 'Down Enter' test-data/library.sqlite  # rows from sqlite table
+tshot ebook-render     svg 88 28 'Read' 'n n n' test-books/frankenstein.epub    # EPUB chapter
+tshot obj-sections     svg 64 18 'Sections' 'Tab' test-data/tiny.obj     # .obj sections
+tshot obj-symbols      svg 64 18 'Symbols' 'Tab Tab' test-data/tiny.obj  # .obj symbols
+tshot java-bytecode    svg 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class  # Java classfile bytecode
 
 # NB: pdf-render.webp (manual/src/img) is captured by hand, not here. The PDF Read view renders
 # half-block pixels that tmux/freeze can't reproduce faithfully, so no tshot line drives it —
