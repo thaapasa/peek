@@ -2,7 +2,7 @@
 
 Raster images render as ASCII art with 24-bit color, using glyph-matched character selection.
 
-![A photo rendered as glyph-matched color art in the default mode](../img/image-render.png)
+![A photo rendered as glyph-matched color art in the default mode](../img/image-render.webp)
 
 *The default `full` mode: every terminal cell picks the glyph and foreground/background colors
 that best match the pixels beneath it.*

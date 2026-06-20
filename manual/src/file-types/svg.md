@@ -3,6 +3,8 @@
 SVG (`.svg`) is vector; rasterized via [resvg](https://github.com/RazrFalcon/resvg) before
 ASCII rendering.
 
+![An SVG emoji rasterized and rendered as glyph-matched color art in the terminal](../img/svg-render.webp)
+
 Two viewing modes (cycle with Tab):
 
 - **Rendered preview** (default) — rasterized and run through the image pipeline.

@@ -2,7 +2,7 @@
 
 **peek** is a modern terminal file viewer — preview any file, any format.
 
-![A photograph rendered in the terminal as glyph-matched 24-bit color art](img/image-render.png)
+![A photograph rendered in the terminal as glyph-matched 24-bit color art](img/image-render.webp)
 
 *peek rendering a JPEG directly in the terminal — each cell is a character whose shape and
 24-bit color approximate the underlying pixels. Open any image file to get this view.*

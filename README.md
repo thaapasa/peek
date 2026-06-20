@@ -11,7 +11,7 @@
 Modern terminal file viewer — preview any file, any format.
 
 <p align="center">
-  <img src="manual/src/img/image-render.png" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="640"><br>
+  <img src="manual/src/img/image-render.webp" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="640"><br>
   <sub>Glyph-matched 24-bit image rendering — a real photo, drawn with characters.</sub>
 </p>
 
