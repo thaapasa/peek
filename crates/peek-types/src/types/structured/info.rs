@@ -7,7 +7,7 @@
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
-use crate::info::{Accent, Extras, InfoNode, paint_count, render_info};
+use crate::info::{Accent, Extras, InfoNode, paint_count};
 use peek_detect::StructuredFormat;
 use peek_theme::PeekTheme;
 
@@ -63,20 +63,7 @@ pub fn gather_extras(fmt: StructuredFormat, bytes: &[u8]) -> Extras {
     Box::new(StructuredInfo { format_name, stats })
 }
 
-/// Themed terminal Format section.
-pub fn render_section(lines: &mut Vec<String>, info: &StructuredInfo, theme: &PeekTheme) {
-    render_info(lines, &StructuredView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the Format section, nested under
-/// `"structured"`. Stats are present only when the document parsed; an
-/// unparseable file yields just `format`.
-pub fn json_section(info: &StructuredInfo) -> (&'static str, serde_json::Value) {
-    (
-        "structured",
-        serde_json::to_value(StructuredView::from(info)).expect("structured info view serializes"),
-    )
-}
+crate::info_section!(StructuredInfo, StructuredView, "structured");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title = "Format")]

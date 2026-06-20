@@ -7,25 +7,12 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value, render_info};
+use crate::info::{Muted, Value};
 use peek_detect::PresentationFormat;
-use peek_theme::PeekTheme;
 
 use super::info::PresentationStats;
 
-/// Themed terminal presentation section.
-pub fn render_section(lines: &mut Vec<String>, stats: &PresentationStats, theme: &PeekTheme) {
-    render_info(lines, &PresentationView::from(stats), theme);
-}
-
-/// Typed `--info --json` view, nested under `"presentation"`.
-pub fn json_section(stats: &PresentationStats) -> (&'static str, serde_json::Value) {
-    (
-        "presentation",
-        serde_json::to_value(PresentationView::from(stats))
-            .expect("presentation info view serializes"),
-    )
-}
+crate::info_section!(PresentationStats, PresentationView, "presentation");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

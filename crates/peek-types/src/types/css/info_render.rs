@@ -12,7 +12,7 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use syntect::highlighting::Color;
 
-use crate::info::{InfoNode, InfoValue, Value, paint_count, render_info};
+use crate::info::{InfoNode, InfoValue, Value, paint_count};
 use crate::types::css::info::{CssInfo, CssStats, SelectorKindCounts};
 use crate::types::text::info_render::TextView;
 use peek_theme::PeekTheme;
@@ -20,18 +20,7 @@ use peek_theme::PeekTheme;
 /// Swatches per row in the palette grid.
 const SWATCH_COLS: usize = 4;
 
-/// Themed terminal CSS sections.
-pub fn render_section(lines: &mut Vec<String>, info: &CssInfo, theme: &PeekTheme) {
-    render_info(lines, &CssView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the CSS sections, nested under `"css"`.
-pub fn json_section(info: &CssInfo) -> (&'static str, serde_json::Value) {
-    (
-        "css",
-        serde_json::to_value(CssView::from(info)).expect("css info view serializes"),
-    )
-}
+crate::info_section!(CssInfo, CssView, "css");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct CssView {

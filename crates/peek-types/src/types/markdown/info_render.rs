@@ -13,24 +13,12 @@ use serde::{Serialize, Serializer};
 
 use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
+use crate::info::{InfoNode, InfoValue, Role, Value, paint_count};
 use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
 use crate::types::text::info_render::TextView;
 use peek_theme::PeekTheme;
 
-/// Themed terminal Markdown section (Content + Markdown blocks).
-pub fn render_section(lines: &mut Vec<String>, info: &MarkdownInfo, theme: &PeekTheme) {
-    render_info(lines, &MarkdownView::from(info), theme);
-}
-
-/// Typed `--info --json` view, nested under `"markdown"`; the text stats nest
-/// under `text`.
-pub fn json_section(info: &MarkdownInfo) -> (&'static str, serde_json::Value) {
-    (
-        "markdown",
-        serde_json::to_value(MarkdownView::from(info)).expect("markdown info view serializes"),
-    )
-}
+crate::info_section!(MarkdownInfo, MarkdownView, "markdown");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct MarkdownView {

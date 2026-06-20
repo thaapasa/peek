@@ -14,22 +14,10 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use super::info::{BuildIdKind, ObjectInfo};
-use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
+use crate::info::{InfoNode, InfoValue, Role, Value, Warn, thousands_sep};
 use peek_theme::PeekTheme;
 
-/// Themed terminal object-file section.
-pub fn render_section(lines: &mut Vec<String>, info: &ObjectInfo, theme: &PeekTheme) {
-    render_info(lines, &ObjectView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the Object File section, nested under
-/// `"objfile"`.
-pub fn json_section(info: &ObjectInfo) -> (&'static str, serde_json::Value) {
-    (
-        "objfile",
-        serde_json::to_value(ObjectView::from(info)).expect("objfile info view serializes"),
-    )
-}
+crate::info_section!(ObjectInfo, ObjectView, "objfile");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title = "Object File")]

@@ -3,22 +3,10 @@
 //! print). [`EbookStats`] stays the gather struct; the view projects it.
 //! Metadata members render inline (and so flatten into the JSON object).
 
-use crate::info::{Muted, Value, render_info};
+use crate::info::{Muted, Value};
 use crate::types::ebook::EbookStats;
-use peek_theme::PeekTheme;
 
-/// Themed terminal EPUB section.
-pub fn render_section(lines: &mut Vec<String>, stats: &EbookStats, theme: &PeekTheme) {
-    render_info(lines, &EbookView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the EPUB section, nested under `"ebook"`.
-pub fn json_section(stats: &EbookStats) -> (&'static str, serde_json::Value) {
-    (
-        "ebook",
-        serde_json::to_value(EbookView::from(stats)).expect("ebook info view serializes"),
-    )
-}
+crate::info_section!(EbookStats, EbookView, "ebook");
 
 #[derive(serde::Serialize, crate::info::InfoView)]
 #[info(title = "EPUB")]

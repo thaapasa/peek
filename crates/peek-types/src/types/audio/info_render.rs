@@ -12,24 +12,13 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Role, Value, Warn, render_info, thousands_sep};
+use crate::info::{InfoNode, InfoValue, Role, Value, Warn, thousands_sep};
 use peek_theme::PeekTheme;
 
 use super::info::{AudioMetadata, AudioStats};
 use peek_detect::AudioFormat;
 
-/// Themed terminal audio section.
-pub fn render_section(lines: &mut Vec<String>, stats: &AudioStats, theme: &PeekTheme) {
-    render_info(lines, &AudioView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the audio section, nested under `"audio"`.
-pub fn json_section(stats: &AudioStats) -> (&'static str, serde_json::Value) {
-    (
-        "audio",
-        serde_json::to_value(AudioView::from(stats)).expect("audio info view serializes"),
-    )
-}
+crate::info_section!(AudioStats, AudioView, "audio");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct AudioView {

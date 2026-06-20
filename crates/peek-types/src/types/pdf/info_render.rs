@@ -10,24 +10,13 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoValue, Muted, Value, Warn, render_info};
+use crate::info::{InfoValue, Muted, Value, Warn};
 use crate::types::pdf::PdfFlavor;
 use peek_theme::PeekTheme;
 
 use super::info::PdfStats;
 
-/// Themed terminal PDF section.
-pub fn render_section(lines: &mut Vec<String>, stats: &PdfStats, theme: &PeekTheme) {
-    render_info(lines, &PdfView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the PDF section, nested under `"pdf"`.
-pub fn json_section(stats: &PdfStats) -> (&'static str, serde_json::Value) {
-    (
-        "pdf",
-        serde_json::to_value(PdfView::from(stats)).expect("pdf info view serializes"),
-    )
-}
+crate::info_section!(PdfStats, PdfView, "pdf");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

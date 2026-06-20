@@ -11,26 +11,12 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value, render_info};
-use peek_theme::PeekTheme;
+use crate::info::{Muted, Value};
 
 use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;
 
-/// Themed terminal workbook section.
-pub fn render_section(lines: &mut Vec<String>, info: &SpreadsheetInfo, theme: &PeekTheme) {
-    render_info(lines, &SpreadsheetView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the workbook section, nested under
-/// `"spreadsheet"`.
-pub fn json_section(info: &SpreadsheetInfo) -> (&'static str, serde_json::Value) {
-    (
-        "spreadsheet",
-        serde_json::to_value(SpreadsheetView::from(info))
-            .expect("spreadsheet info view serializes"),
-    )
-}
+crate::info_section!(SpreadsheetInfo, SpreadsheetView, "spreadsheet");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

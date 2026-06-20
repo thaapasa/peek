@@ -8,7 +8,7 @@ use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use super::reader::list_entries;
-use crate::info::{Extras, InfoNode, Role, Value, Warn, render_info, thousands_sep};
+use crate::info::{Extras, InfoNode, Role, Value, Warn, thousands_sep};
 use crate::viewer::listing::Stats;
 use peek_detect::ArchiveFormat;
 use peek_io::InputSource;
@@ -164,20 +164,7 @@ fn is_object_member(data: &[u8]) -> bool {
     )
 }
 
-/// Themed terminal Archive section.
-pub fn render_section(lines: &mut Vec<String>, stats: &ArchiveStats, theme: &PeekTheme) {
-    render_info(lines, &ArchiveView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the Archive section, nested under
-/// `"archive"`. On a listing error the count fields drop out (only `format`
-/// and `error` remain).
-pub fn json_section(stats: &ArchiveStats) -> (&'static str, serde_json::Value) {
-    (
-        "archive",
-        serde_json::to_value(ArchiveView::from(stats)).expect("archive info view serializes"),
-    )
-}
+crate::info_section!(ArchiveStats, ArchiveView, "archive");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct ArchiveView {

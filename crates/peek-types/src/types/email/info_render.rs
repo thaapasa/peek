@@ -13,24 +13,13 @@ use serde::{Serialize, Serializer};
 
 use serde_json::json;
 
-use crate::info::{InfoNode, Role, Value, format_size_human, paint_count, render_info};
+use crate::info::{InfoNode, Role, Value, format_size_human, paint_count};
 use peek_theme::PeekTheme;
 
 use super::EmailFormat;
 use super::info::EmailInfo;
 
-/// Themed terminal email section.
-pub fn render_section(lines: &mut Vec<String>, info: &EmailInfo, theme: &PeekTheme) {
-    render_info(lines, &EmailView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the email section, nested under `"email"`.
-pub fn json_section(info: &EmailInfo) -> (&'static str, serde_json::Value) {
-    (
-        "email",
-        serde_json::to_value(EmailView::from(info)).expect("email info view serializes"),
-    )
-}
+crate::info_section!(EmailInfo, EmailView, "email");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

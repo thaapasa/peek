@@ -7,21 +7,9 @@
 use serde::Serialize;
 
 use super::info::DsStoreInfo;
-use crate::info::{Value, Warn, render_info};
-use peek_theme::PeekTheme;
+use crate::info::{Value, Warn};
 
-/// Themed terminal `.DS_Store` section.
-pub fn render_section(lines: &mut Vec<String>, info: &DsStoreInfo, theme: &PeekTheme) {
-    render_info(lines, &DsStoreView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the section, nested under `"ds_store"`.
-pub fn json_section(info: &DsStoreInfo) -> (&'static str, serde_json::Value) {
-    (
-        "ds_store",
-        serde_json::to_value(DsStoreView::from(info)).expect("ds_store info view serializes"),
-    )
-}
+crate::info_section!(DsStoreInfo, DsStoreView, "ds_store");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title = "Desktop Services Store")]

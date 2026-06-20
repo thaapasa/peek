@@ -7,25 +7,12 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value, render_info};
+use crate::info::{Muted, Value};
 use peek_detect::DocumentFormat;
-use peek_theme::PeekTheme;
 
 use super::info::DocumentStats;
 
-/// Themed terminal document section.
-pub fn render_section(lines: &mut Vec<String>, stats: &DocumentStats, theme: &PeekTheme) {
-    render_info(lines, &DocumentView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the document section, nested under
-/// `"document"`.
-pub fn json_section(stats: &DocumentStats) -> (&'static str, serde_json::Value) {
-    (
-        "document",
-        serde_json::to_value(DocumentView::from(stats)).expect("document info view serializes"),
-    )
-}
+crate::info_section!(DocumentStats, DocumentView, "document");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

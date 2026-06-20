@@ -12,25 +12,14 @@ use serde::{Serialize, Serializer};
 
 use serde_json::json;
 
-use crate::info::{InfoValue, Muted, Role, Value, format_size_human, render_info};
+use crate::info::{InfoValue, Muted, Role, Value, format_size_human};
 use peek_theme::PeekTheme;
 
 use super::PostScriptFormat;
 use super::dos_eps::PreviewKind;
 use super::info::{EpsInfo, PreviewMeta};
 
-/// Themed terminal EPS / PostScript section.
-pub fn render_section(lines: &mut Vec<String>, info: &EpsInfo, theme: &PeekTheme) {
-    render_info(lines, &EpsView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the EPS section, nested under `"eps"`.
-pub fn json_section(info: &EpsInfo) -> (&'static str, serde_json::Value) {
-    (
-        "eps",
-        serde_json::to_value(EpsView::from(info)).expect("eps info view serializes"),
-    )
-}
+crate::info_section!(EpsInfo, EpsView, "eps");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]

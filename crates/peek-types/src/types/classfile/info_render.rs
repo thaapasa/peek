@@ -14,22 +14,10 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use super::info::ClassfileInfo;
-use crate::info::{InfoValue, Value, Warn, render_info};
+use crate::info::{InfoValue, Value, Warn};
 use peek_theme::PeekTheme;
 
-/// Themed terminal classfile section.
-pub fn render_section(lines: &mut Vec<String>, info: &ClassfileInfo, theme: &PeekTheme) {
-    render_info(lines, &ClassfileView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the classfile section, nested under
-/// `"classfile"`.
-pub fn json_section(info: &ClassfileInfo) -> (&'static str, serde_json::Value) {
-    (
-        "classfile",
-        serde_json::to_value(ClassfileView::from(info)).expect("classfile info view serializes"),
-    )
-}
+crate::info_section!(ClassfileInfo, ClassfileView, "classfile");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title = "Class File")]

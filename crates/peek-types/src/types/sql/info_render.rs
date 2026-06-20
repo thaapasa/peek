@@ -10,26 +10,14 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoNode, InfoValue, Value, paint_count, render_info};
+use crate::info::{InfoNode, InfoValue, Value, paint_count};
 use crate::types::sql::info::{SqlDialect, SqlInfo, SqlStats};
 use crate::types::text::info_render::TextView;
 use peek_theme::PeekTheme;
 
 const NAME_LIST_LIMIT: usize = 8;
 
-/// Themed terminal SQL section (Content + SQL blocks).
-pub fn render_section(lines: &mut Vec<String>, info: &SqlInfo, theme: &PeekTheme) {
-    render_info(lines, &SqlView::from(info), theme);
-}
-
-/// Typed `--info --json` view, nested under `"sql"`. Carries the SQL stats
-/// only — the shared text stats are a print concern.
-pub fn json_section(info: &SqlInfo) -> (&'static str, serde_json::Value) {
-    (
-        "sql",
-        serde_json::to_value(SqlView::from(info)).expect("sql info view serializes"),
-    )
-}
+crate::info_section!(SqlInfo, SqlView, "sql");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct SqlView {

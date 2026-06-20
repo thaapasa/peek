@@ -11,14 +11,11 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{InfoNode, InfoValue, InfoView, Value, push_field, render_info};
+use crate::info::{InfoNode, InfoValue, InfoView, Value, push_field};
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 use peek_theme::PeekTheme;
 
-/// Themed terminal Content section for plain text files.
-pub fn render_section(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekTheme) {
-    render_info(lines, &TextView::from(stats), theme);
-}
+crate::info_section!(TextStats, TextView, "text");
 
 /// Push the text-stat rows *without* the Content header — used by
 /// `types::svg`, which folds them under its own "Source" header. Pulls the
@@ -33,14 +30,6 @@ pub fn push_text_stats(lines: &mut Vec<String>, stats: &TextStats, theme: &PeekT
             }
         }
     }
-}
-
-/// Typed `--info --json` view of the Content section, nested under `"text"`.
-pub fn json_section(stats: &TextStats) -> (&'static str, serde_json::Value) {
-    (
-        "text",
-        serde_json::to_value(TextView::from(stats)).expect("text info view serializes"),
-    )
 }
 
 /// One struct, two outputs. Field order is the print order; JSON key order is

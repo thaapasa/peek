@@ -12,26 +12,13 @@ use serde::{Serialize, Serializer};
 
 use serde_json::json;
 
-use crate::info::{
-    Accent, InfoNode, InfoValue, Role, Value, paint_count, render_info, thousands_sep,
-};
+use crate::info::{Accent, InfoNode, InfoValue, Role, Value, paint_count, thousands_sep};
 use peek_theme::PeekTheme;
 
 use super::info::{ColumnStats, ColumnType, CsvStats, delimiter_label};
 use peek_detect::CsvFormat;
 
-/// Themed terminal CSV section (format + Columns blocks).
-pub fn render_section(lines: &mut Vec<String>, stats: &CsvStats, theme: &PeekTheme) {
-    render_info(lines, &CsvView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the CSV section, nested under `"csv"`.
-pub fn json_section(stats: &CsvStats) -> (&'static str, serde_json::Value) {
-    (
-        "csv",
-        serde_json::to_value(CsvView::from(stats)).expect("csv info view serializes"),
-    )
-}
+crate::info_section!(CsvStats, CsvView, "csv");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct CsvView {

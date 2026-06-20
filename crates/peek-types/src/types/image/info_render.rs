@@ -13,22 +13,11 @@ use serde::{Serialize, Serializer};
 
 use serde_json::json;
 
-use crate::info::{Accent, InfoNode, InfoValue, Role, Value, render_info};
+use crate::info::{Accent, InfoNode, InfoValue, Role, Value};
 use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
 use peek_theme::{PeekTheme, lerp_color};
 
-/// Themed terminal image sections.
-pub fn render_section(lines: &mut Vec<String>, stats: &ImageStats, theme: &PeekTheme) {
-    render_info(lines, &ImageView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the image sections, nested under `"image"`.
-pub fn json_section(stats: &ImageStats) -> (&'static str, serde_json::Value) {
-    (
-        "image",
-        serde_json::to_value(ImageView::from(stats)).expect("image info view serializes"),
-    )
-}
+crate::info_section!(ImageStats, ImageView, "image");
 
 #[derive(Serialize, crate::info::InfoView)]
 struct ImageView {

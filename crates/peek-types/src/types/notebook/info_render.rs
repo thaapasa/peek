@@ -11,24 +11,12 @@ use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Role, Value, paint_count, render_info};
+use crate::info::{InfoNode, InfoValue, Role, Value, paint_count};
 use peek_theme::PeekTheme;
 
 use super::info::NotebookInfo;
 
-/// Themed terminal notebook section.
-pub fn render_section(lines: &mut Vec<String>, info: &NotebookInfo, theme: &PeekTheme) {
-    render_info(lines, &NotebookView::from(info), theme);
-}
-
-/// Typed `--info --json` view of the Notebook section, nested under
-/// `"notebook"`.
-pub fn json_section(info: &NotebookInfo) -> (&'static str, serde_json::Value) {
-    (
-        "notebook",
-        serde_json::to_value(NotebookView::from(info)).expect("notebook info view serializes"),
-    )
-}
+crate::info_section!(NotebookInfo, NotebookView, "notebook");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title = "Notebook")]

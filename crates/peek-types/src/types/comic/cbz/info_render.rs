@@ -6,23 +6,11 @@
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
-use crate::info::{Role, Value, render_info, thousands_sep};
+use crate::info::{Role, Value, thousands_sep};
 use crate::types::comic::ComicStats;
 use peek_detect::ComicFormat;
-use peek_theme::PeekTheme;
 
-/// Themed terminal comic section.
-pub fn render_section(lines: &mut Vec<String>, stats: &ComicStats, theme: &PeekTheme) {
-    render_info(lines, &ComicView::from(stats), theme);
-}
-
-/// Typed `--info --json` view of the comic section, nested under `"comic"`.
-pub fn json_section(stats: &ComicStats) -> (&'static str, serde_json::Value) {
-    (
-        "comic",
-        serde_json::to_value(ComicView::from(stats)).expect("comic info view serializes"),
-    )
-}
+crate::info_section!(ComicStats, ComicView, "comic");
 
 #[derive(Serialize, crate::info::InfoView)]
 #[info(title_from = "section_title")]
