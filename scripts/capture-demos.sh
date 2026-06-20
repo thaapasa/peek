@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Capture demo stills into manual/src/img (needs `just setup`). Shared by the README and the
 # mdbook manual — mdbook only bundles files under src/, so they live there. freeze keeps bg
-# colors, so every mode renders faithfully; SVG for text/line-art (font.family=monospace → no
-# 366KB font embed), PNG for the photo render (raster is honest for half-block pixels).
+# colors, so every mode renders faithfully; all shots are SVG (font.family=monospace → no
+# 366KB font embed). Image/SVG/PDF renders are hand-captured — half-block pixels don't survive
+# tmux+freeze — so no shot drives them here.
 #
 # Usage: capture-demos.sh [-s|--system] [shot-name ...]
 #   No args   → capture every shot.
@@ -51,20 +52,15 @@ else
 fi
 out=manual/src/img; mkdir -p "$out"
 
-shot() { # name format width rows(0=full) peek-args...
-  local name=$1 fmt=$2 width=$3 rows=$4; shift 4
+shot() { # name width rows(0=full) peek-args...
+  local name=$1 width=$2 rows=$3; shift 3
   want "$name" || return 0
-  # PNG = half-block pixel render: Menlo has true full-width block glyphs (the freeze default
-  # font doesn't — see charmbracelet/freeze#211, glyphs drift → vertical seams), and
-  # --line-height 0.95 closes freeze's inter-row gap that otherwise bleeds the dark bg as
-  # horizontal seams. SVG = text/line-art, plain monospace at default line-height.
-  local font=(--font.family Menlo --line-height 0.95); [ "$fmt" = svg ] && font=(--font.family monospace)
   # awk (not head) so the stream is fully drained — head closing early would SIGPIPE
   # peek and trip `set -o pipefail`.
   local cap=(cat); [ "$rows" -gt 0 ] && cap=(awk -v n="$rows" 'NR<=n')
   "$peek" "$@" -p --color truecolor -w "$width" | "${cap[@]}" \
-    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}" -c full
-  echo "  $out/$name.$fmt"
+    | freeze --output "$out/$name.svg" --padding 20 --border.radius 8 --font.family monospace -c full
+  echo "  $out/$name.svg"
 }
 # tshot captures an *interactive* peek screen (the browsers/viewers, not print mode): drive
 # peek inside a tmux pane sized to the still, let it draw, dump the live screen as ANSI, and
@@ -72,13 +68,9 @@ shot() { # name format width rows(0=full) peek-args...
 # ready = regex unique to the TARGET screen (poll waits for it); keys = tmux send-keys
 # sequence to drive a non-landing mode (empty for the landing view). q:quit is in every
 # interactive status bar, so it's the universal "peek is up" signal before keys are sent.
-tshot() { # name fmt width height ready_regex keys peek-args...
-  local name=$1 fmt=$2 w=$3 h=$4 ready=$5 keys=$6; shift 6
+tshot() { # name width height ready_regex keys peek-args...
+  local name=$1 w=$2 h=$3 ready=$4 keys=$5; shift 5
   want "$name" || return 0
-  # Raster (png) for pixel-cell renders (pdf/image half-blocks); svg for text/
-  # line-art (monospace → no font embed). Mirrors shot(): Menlo + tight line-height so
-  # freeze tiles the block glyphs (freeze#211) without inter-row bg bleed.
-  local font=(--font.family Menlo); [ "$fmt" = svg ] && font=(--font.family monospace)
   tmux kill-server 2>/dev/null || true
   tmux new-session -d -s pkdemo -x "$w" -y "$h"
   tmux set -g default-terminal tmux-256color
@@ -101,31 +93,31 @@ tshot() { # name fmt width height ready_regex keys peek-args...
     if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE "$ready"; then break; fi
   done
   tmux capture-pane -t pkdemo -e -p -J \
-    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}" -c full
+    | freeze --output "$out/$name.svg" --padding 20 --border.radius 8 --font.family monospace -c full
   tmux kill-server 2>/dev/null || true
-  echo "  $out/$name.$fmt"
+  echo "  $out/$name.svg"
 }
 
 # --cell-aspect 2.0 pins the render to freeze's font geometry; without it peek auto-detects
 # the *running* terminal's cell aspect and the still comes out stretched under freeze.
-shot image-contour    svg 80  0 test-images/heron.jpg -m contour --cell-aspect 2.0 # Sobel edge line-art
-shot file-info        svg 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
+shot image-contour 80  0 test-images/heron.jpg -m contour --cell-aspect 2.0 # Sobel edge line-art
+shot file-info 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
 
 # Interactive container browsers
-tshot archive-browser  svg 96 18 'TOC' '' test-data/archive.zip      # ZIP, nested tree + status bar
-tshot iso-browser      svg 90 14 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
-tshot source-highlight svg 92 30 'Source' '' test-data/theme.rs      # syntax highlight
-tshot markdown-render  svg 88 32 'Rendered' '' test-data/release-notes.md   # rich markdown render
-tshot notebook         svg 88 30 'Rendered' '' test-data/notebook.ipynb  # Jupyter notebook
-tshot html-render      svg 88 30 'Rendered' '' test-data/formatted.html  # HTML content
-tshot email-render     svg 72 20 'Rendered' '' test-data/sample.eml      # email render
-tshot structured-data  svg 80 26 'Content' '' test-data/settings.jsonc   # JSON with comments
-tshot csv-table        svg 130 20 'Table' '' test-data/books.csv         # aligned CSV table
-tshot sqlite-table     svg 100 28 'Rows' 'Down Enter' test-data/library.sqlite  # rows from sqlite table
-tshot ebook-render     svg 88 28 'Read' 'n n n' test-books/frankenstein.epub    # EPUB chapter
-tshot obj-sections     svg 64 18 'Sections' 'Tab' test-data/tiny.obj     # .obj sections
-tshot obj-symbols      svg 64 18 'Symbols' 'Tab Tab' test-data/tiny.obj  # .obj symbols
-tshot java-bytecode    svg 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class  # Java classfile bytecode
+tshot archive-browser 96 18 'TOC' '' test-data/archive.zip      # ZIP, nested tree + status bar
+tshot iso-browser 90 14 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
+tshot source-highlight 92 30 'Source' '' test-data/theme.rs      # syntax highlight
+tshot markdown-render 88 32 'Rendered' '' test-data/release-notes.md   # rich markdown render
+tshot notebook 88 30 'Rendered' '' test-data/notebook.ipynb  # Jupyter notebook
+tshot html-render 88 30 'Rendered' '' test-data/formatted.html  # HTML content
+tshot email-render 72 20 'Rendered' '' test-data/sample.eml      # email render
+tshot structured-data 80 26 'Content' '' test-data/settings.jsonc   # JSON with comments
+tshot csv-table 130 20 'Table' '' test-data/books.csv         # aligned CSV table
+tshot sqlite-table 100 28 'Rows' 'Down Enter' test-data/library.sqlite  # rows from sqlite table
+tshot ebook-render 88 28 'Read' 'n n n' test-books/frankenstein.epub    # EPUB chapter
+tshot obj-sections 64 18 'Sections' 'Tab' test-data/tiny.obj     # .obj sections
+tshot obj-symbols 64 18 'Symbols' 'Tab Tab' test-data/tiny.obj  # .obj symbols
+tshot java-bytecode 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class  # Java classfile bytecode
 
 # NB: pdf-render.webp (manual/src/img) is captured by hand, not here. The PDF Read view renders
 # half-block pixels that tmux/freeze can't reproduce faithfully, so no tshot line drives it —
@@ -136,6 +128,6 @@ tshot java-bytecode    svg 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class
 # the fixture shots this one changes each run.
 if want dir-browser; then
   tmp=$(mktemp -d); work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
-  tshot dir-browser svg 92 26 'Listing' '' "$work"
+  tshot dir-browser 92 26 'Listing' '' "$work"
   git worktree remove --force "$work"; rm -rf "$tmp"
 fi
