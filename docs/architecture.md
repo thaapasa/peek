@@ -645,8 +645,15 @@ wiring-sites checklist. Quick summary:
       / `Count` / `Timestamp` / `Text` / …, `info/value.rs`) painted by role; `Muted` / `Accent` /
       `Warn` are the off-colour string newtypes. When a leaf's print text + JSON value **diverge**
       (prints `ELF`, serializes `"elf"`; or a join-string serializing as an array), use
-      `Value::split(text, Role, json)` / `Value::labelled(label, token)`, not a bespoke newtype. Wire
-      with `impl_info_extras!(<View>, json = "<key>")`.
+      `Value::split(text, Role, json)` / `Value::labelled(label, token)`, not a bespoke newtype. Two
+      wiring sub-cases:
+        - **Stats struct derives directly** (`InfoView` + `Serialize` on the gathered struct, no
+          separate view): `impl_info_extras!(<Stats>, json = "<key>")` — one row, no free functions.
+        - **Separate view via `From<&Stats>`** (gathered struct projects into a private view struct):
+          `crate::info_section!(<Stats>, <View>, "<key>")` in `info_render.rs` generates the canonical
+          `render_section` / `json_section` pair (view-private), wired by the 3-arg
+          `impl_info_extras!(<Stats>, ...::render_section, ...::json_section)`. The 22 migrated types
+          (svg, css, image, …) use this form.
     - **`InfoRow` (irregular but row-shaped — enum-variant dispatch, one print row → several JSON
       keys).** The derive walks struct *fields*, so it can't express a `Vec<enum>` whose variants lay
       out differently. Build a `Vec<InfoRow>` per entry (`info/rows.rs`): each row carries an optional
@@ -659,8 +666,9 @@ wiring-sites checklist. Quick summary:
       partition tables) wraps its gathered struct + hand-implements `InfoView::info_nodes` (the
       `InfoNode` tree, capturing `lines`-based renderers as `Line` nodes) + `serde::Serialize`.
 
-   The `InfoRow` + bespoke modes wire through the free `render_section` / `json_section` form of
-   `impl_info_extras!`.
+   The `InfoRow` + bespoke modes — and the `From`-projection derive case above — wire through the
+   free `render_section` / `json_section` form of `impl_info_extras!`; only the projection case
+   generates that pair via `info_section!` rather than hand-writing it.
 5. Container type: add `types/<x>/extract.rs` (returning `peek_foundation::extract`'s `Extracted` /
    `ExtractError`) + **one arm in `src/extract/extract.rs`**.
 
