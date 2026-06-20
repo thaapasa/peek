@@ -10,6 +10,9 @@
 
 Modern terminal file viewer — preview any file, any format.
 
+📖 **[Browse the manual →](https://thaapasa.github.io/peek/)** — per-format details, keyboard
+shortcuts, extraction, themes, and the full CLI reference.
+
 <p align="center">
   <img src="manual/src/img/image-render.webp" alt="A photo rendered in the terminal as glyph-matched 24-bit color art" width="1011"><br>
   <sub>Glyph-matched 24-bit image rendering — a real photo, drawn with characters.</sub>
@@ -18,7 +21,7 @@ Modern terminal file viewer — preview any file, any format.
 <p align="center">
   <img src="manual/src/img/source-highlight.svg" alt="Rust source with syntax highlighting" width="270">
   <img src="manual/src/img/markdown-render.svg" alt="Markdown rendered with headings, callouts, tables" width="270">
-  <img src="manual/src/img/image-contour.svg" alt="The same photo as Sobel edge line-art" width="270">
+  <img src="manual/src/img/structured-data.svg" alt="A JSON-with-comments file syntax-highlighted, comments and all" width="270">
 </p>
 
 - **Syntax highlighting** for 100+ languages via syntect
@@ -82,26 +85,49 @@ peek book.epub                      # paged read with TOC + metadata
 peek server.pem                     # certificate — subject, validity, SANs, fingerprints
 ```
 
-But the file types are only half the tool. The same binary does **operations** on those files:
+But the file types are only half the tool. The same binary does **operations** on those files.
+
+**Inspect metadata** — human-readable, or JSON for pipelines:
 
 ```sh
-# Inspect metadata — human-readable, or JSON for pipelines
 peek server.pem --info              # subject, issuer, validity, key type, SANs
 peek photo.jpg --info --json | jq .image.width
+```
 
-# Render an image as Sobel edge line-art (other modes: full / block / geo / ascii)
+<p align="center">
+  <img src="manual/src/img/file-info.svg" alt="The Info view for a JPEG, with File, Image, and a detailed EXIF section" width="420"><br>
+  <sub><code>peek photo.jpg --info</code> — File, Image, and a detailed EXIF section.</sub>
+</p>
+
+**Re-render images** — Sobel edge line-art (other modes: full / block / geo / ascii):
+
+```sh
 peek diagram.png -m contour
 peek photo.jpg -m contour --edge-density 0.1   # denser edges
+```
 
-# List a container's entries — the keys you feed back to --extract
-peek archive.tar.gz --list
+<p align="center">
+  <img src="manual/src/img/image-contour.svg" alt="The same photo rendered as Sobel edge line-art" width="420"><br>
+  <sub><code>peek photo.jpg -m contour</code> — the photo as glyph edge line-art.</sub>
+</p>
+
+**Browse and extract containers** — list the entries, then pull one out:
+
+```sh
+peek archive.tar.gz --list                      # entry keys you feed back to --extract
 peek book.epub --list
-
-# Extract a sub-item out of a container, optionally renaming it
 peek archive.tar.gz -x src/main.rs -o main.rs   # pull one entry, rename on the way out
 peek archive.tar.gz -x logo.png -o -            # raw bytes straight to stdout
+```
 
-# Force print mode (no interactive viewer) — pipe-friendly
+<p align="center">
+  <img src="manual/src/img/archive-browser.svg" alt="The interactive archive browser showing a nested entry tree with a selection cursor" width="600"><br>
+  <sub>The interactive archive browser — a nested entry tree you can drill into.</sub>
+</p>
+
+**Force print mode** (no interactive viewer) — pipe-friendly:
+
+```sh
 peek config.json -p | grep version
 echo '{"a":1}' | peek               # stdin auto-detected
 ```
