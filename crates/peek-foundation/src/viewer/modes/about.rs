@@ -5,6 +5,7 @@ use crossterm::terminal;
 
 use super::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::{DESCRIPTION, paint_logo};
+use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::logo_anim::LogoAnimation;
 use crate::viewer::ui::{Action, HelpEntry};
 use peek_theme::PeekTheme;
@@ -107,6 +108,11 @@ impl Mode for AboutMode {
             pt,
             "Terminal",
             &format!("{term_cols} × {term_rows}"),
+        ));
+        lines.push(kv_line(
+            pt,
+            "Cell aspect",
+            &format!("{:.2} h/w", cell_aspect_h_over_w()),
         ));
         if let Some(rss) = peak_rss_bytes() {
             lines.push(kv_line(pt, "Peak memory", &format_bytes(rss)));
