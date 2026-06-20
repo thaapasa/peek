@@ -4,22 +4,29 @@
 # colors, so every mode renders faithfully; SVG for text/line-art (font.family=monospace → no
 # 366KB font embed), PNG for the photo render (raster is honest for half-block pixels).
 #
-# Usage: capture-demos.sh [shot-name ...]
+# Usage: capture-demos.sh [-s|--system] [shot-name ...]
 #   No args   → capture every shot.
 #   Shot names→ capture only those (e.g. `capture-demos.sh markdown-render csv-table`), so you can
 #               re-render one still while iterating instead of rebuilding the whole set.
+#   -s|--system → use `peek` from PATH (skip cargo build) when available. Fast iteration.
 #   -h|--help → list shot names.
 set -euo pipefail
 
-names=(image-render image-contour source-highlight markdown-render structured-data file-info \
+names=(image-contour source-highlight markdown-render structured-data file-info \
        notebook csv-table sqlite-table archive-browser iso-browser dir-browser html-render \
        email-render ebook-render obj-symbols obj-sections java-bytecode)
 
-case "${1:-}" in
-  -h|--help)
-    printf 'shots: %s\n' "${names[*]}"
-    exit 0 ;;
-esac
+use_system=
+while [ "${1:-}" ]; do
+  case "$1" in
+    -h|--help)
+      printf 'shots: %s\n' "${names[*]}"
+      exit 0 ;;
+    -s|--system)
+      use_system=1; shift ;;
+    *) break ;;
+  esac
+done
 
 # want NAME → true when no selection was given (capture all) or NAME was named on the command line.
 # Gating both the helpers and the prep-heavy blocks on this keeps a single source of truth for
@@ -32,25 +39,36 @@ want() {
 }
 
 cd "$(dirname "$0")/.."
-cargo build
-peek=target/debug/peek
+# --system: use installed `peek` from PATH, skip the build. Falls back to a debug build when
+# none is installed. abspeek (tshot drives peek by name inside tmux) is the bare command then,
+# so the pane resolves it off PATH.
+if [ "$use_system" ] && command -v peek >/dev/null 2>&1; then
+  peek=$(command -v peek); abspeek=peek
+  echo "using system peek: $peek"
+else
+  cargo build
+  peek=target/debug/peek; abspeek="$PWD/$peek"
+fi
 out=manual/src/img; mkdir -p "$out"
 
 shot() { # name format width rows(0=full) peek-args...
   local name=$1 fmt=$2 width=$3 rows=$4; shift 4
   want "$name" || return 0
-  local font=(); [ "$fmt" = svg ] && font=(--font.family monospace)
+  # PNG = half-block pixel render: Menlo has true full-width block glyphs (the freeze default
+  # font doesn't — see charmbracelet/freeze#211, glyphs drift → vertical seams), and
+  # --line-height 0.95 closes freeze's inter-row gap that otherwise bleeds the dark bg as
+  # horizontal seams. SVG = text/line-art, plain monospace at default line-height.
+  local font=(--font.family Menlo --line-height 0.95); [ "$fmt" = svg ] && font=(--font.family monospace)
   # awk (not head) so the stream is fully drained — head closing early would SIGPIPE
   # peek and trip `set -o pipefail`.
   local cap=(cat); [ "$rows" -gt 0 ] && cap=(awk -v n="$rows" 'NR<=n')
   "$peek" "$@" -p --color truecolor -w "$width" | "${cap[@]}" \
-    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
+    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}" -c full
   echo "  $out/$name.$fmt"
 }
 # tshot captures an *interactive* peek screen (the browsers/viewers, not print mode): drive
 # peek inside a tmux pane sized to the still, let it draw, dump the live screen as ANSI, and
 # pipe to freeze. RGB terminal-feature keeps peek's 24-bit color through the capture.
-abspeek="$PWD/$peek"
 # ready = regex unique to the TARGET screen (poll waits for it); keys = tmux send-keys
 # sequence to drive a non-landing mode (empty for the landing view). q:quit is in every
 # interactive status bar, so it's the universal "peek is up" signal before keys are sent.
@@ -58,8 +76,9 @@ tshot() { # name fmt width height ready_regex keys peek-args...
   local name=$1 fmt=$2 w=$3 h=$4 ready=$5 keys=$6; shift 6
   want "$name" || return 0
   # Raster (png) for pixel-cell renders (pdf/image half-blocks); svg for text/
-  # line-art (monospace → no font embed). Mirrors shot().
-  local font=(); [ "$fmt" = svg ] && font=(--font.family monospace)
+  # line-art (monospace → no font embed). Mirrors shot(): Menlo + tight line-height so
+  # freeze tiles the block glyphs (freeze#211) without inter-row bg bleed.
+  local font=(--font.family Menlo); [ "$fmt" = svg ] && font=(--font.family monospace)
   tmux kill-server 2>/dev/null || true
   tmux new-session -d -s pkdemo -x "$w" -y "$h"
   tmux set -g default-terminal tmux-256color
@@ -67,7 +86,7 @@ tshot() { # name fmt width height ready_regex keys peek-args...
   for _ in $(seq 1 300); do
     if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qE '[$%#] *$|➜|❯'; then break; fi
   done
-  tmux send-keys -t pkdemo "$abspeek $* --color truecolor" Enter
+  tmux send-keys -t pkdemo "$abspeek $* --color truecolor --cell-aspect 1.7" Enter
   for _ in $(seq 1 600); do
     if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -q 'q:quit'; then break; fi
   done
@@ -82,20 +101,19 @@ tshot() { # name fmt width height ready_regex keys peek-args...
     if tmux capture-pane -t pkdemo -p 2>/dev/null | grep -qiE "$ready"; then break; fi
   done
   tmux capture-pane -t pkdemo -e -p -J \
-    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}"
+    | freeze --output "$out/$name.$fmt" --padding 20 --border.radius 8 "${font[@]}" -c full
   tmux kill-server 2>/dev/null || true
   echo "  $out/$name.$fmt"
 }
 
 # --cell-aspect 2.0 pins the render to freeze's font geometry; without it peek auto-detects
 # the *running* terminal's cell aspect and the still comes out stretched under freeze.
-shot image-render     png 80  0 test-images/heron.jpg --cell-aspect 2.0            # glyph photo render
 shot image-contour    svg 80  0 test-images/heron.jpg -m contour --cell-aspect 2.0 # Sobel edge line-art
 shot file-info        svg 78 36 test-images/river-woods-hdr.jpg --info  # info screen (cap before GPS rows)
 
 # Interactive container browsers
 tshot archive-browser  svg 96 18 'TOC' '' test-data/archive.zip      # ZIP, nested tree + status bar
-tshot iso-browser      svg 90  9 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
+tshot iso-browser      svg 90 14 'TOC' '' test-data/sample.iso       # ISO 9660, multi-level nesting
 tshot source-highlight svg 92 30 'Source' '' test-data/theme.rs      # syntax highlight
 tshot markdown-render  svg 88 32 'Rendered' '' test-data/release-notes.md   # rich markdown render
 tshot notebook         svg 88 30 'Rendered' '' test-data/notebook.ipynb  # Jupyter notebook
@@ -117,7 +135,7 @@ tshot java-bytecode    svg 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class
 # fresh clone sees, no local target/ / editor dirs. NB: mtimes are checkout-time, so unlike
 # the fixture shots this one changes each run.
 if want dir-browser; then
-  work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
+  tmp=$(mktemp -d); work="$tmp/peek"; git worktree add -q --detach "$work" HEAD
   tshot dir-browser svg 92 26 'Listing' '' "$work"
-  git worktree remove --force "$work"
+  git worktree remove --force "$work"; rm -rf "$tmp"
 fi
