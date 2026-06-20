@@ -16,7 +16,8 @@ use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
 use crate::viewer::modes::{
-    Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, slice_window, step_search,
+    Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window, apply_search, slice_window,
+    step_search,
 };
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
@@ -231,23 +232,12 @@ impl<R: TextRenderer> Mode for RenderedTextMode<R> {
     }
 
     fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
-        match query {
-            Some(q) => {
-                let lines = self
-                    .cache
-                    .as_ref()
-                    .map(|c| c.lines.as_slice())
-                    .unwrap_or(&[]);
-                let state = SearchState::scan(lines.iter(), q);
-                let first = state.first_line();
-                self.search = Some(state);
-                first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
-            }
-            None => {
-                self.search = None;
-                SearchTarget::Owned
-            }
-        }
+        let lines = self
+            .cache
+            .as_ref()
+            .map(|c| c.lines.as_slice())
+            .unwrap_or(&[]);
+        apply_search(&mut self.search, lines.iter(), query)
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

@@ -16,7 +16,7 @@ use syntect::highlighting::Color;
 
 use crate::info::{FileInfo, RenderOptions};
 use crate::output::PrintOutput;
-use crate::viewer::search::SearchState;
+use crate::viewer::search::{SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName};
@@ -171,6 +171,32 @@ pub fn step_search(search: &mut Option<SearchState>, delta: isize) -> Handled {
     match search.as_mut().and_then(|s| s.step(delta)) {
         Some(line) => Handled::YesScrollTo(line),
         None => Handled::Yes,
+    }
+}
+
+/// `set_search` helper for caller-scrolled searchable modes: scan the
+/// given lines, store the resulting state in `slot`, and ask the caller
+/// to scroll to the first match. Clearing the query (`None`) drops the
+/// state and leaves the viewport put. Sibling to [`step_search`]; the
+/// two cover the whole caller-scrolled search lifecycle. Self-scrolling
+/// table modes stay bespoke — they return `Owned` and reveal matches
+/// themselves.
+pub fn apply_search<S: AsRef<str>>(
+    slot: &mut Option<SearchState>,
+    lines: impl Iterator<Item = S>,
+    query: Option<&SearchQuery>,
+) -> SearchTarget {
+    match query {
+        Some(q) => {
+            let state = SearchState::scan(lines, q);
+            let first = state.first_line();
+            *slot = Some(state);
+            first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
+        }
+        None => {
+            *slot = None;
+            SearchTarget::Owned
+        }
     }
 }
 

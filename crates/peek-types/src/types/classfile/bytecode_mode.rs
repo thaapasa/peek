@@ -10,7 +10,9 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use super::bytecode::{Disassembly, MethodAsm};
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
+use crate::viewer::modes::{
+    Handled, Mode, ModeId, RenderCtx, Window, apply_search, slice_window, step_search,
+};
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, strip_ansi_width, wrap_styled};
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
@@ -158,23 +160,12 @@ impl Mode for BytecodeMode {
     }
 
     fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
-        match query {
-            Some(q) => {
-                let lines = self
-                    .cache
-                    .as_ref()
-                    .map(|c| c.lines.as_slice())
-                    .unwrap_or(&[]);
-                let state = SearchState::scan(lines.iter(), q);
-                let first = state.first_line();
-                self.search = Some(state);
-                first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
-            }
-            None => {
-                self.search = None;
-                SearchTarget::Owned
-            }
-        }
+        let lines = self
+            .cache
+            .as_ref()
+            .map(|c| c.lines.as_slice())
+            .unwrap_or(&[]);
+        apply_search(&mut self.search, lines.iter(), query)
     }
 
     fn status_segments(&self, theme: &PeekTheme) -> Vec<(String, Color)> {

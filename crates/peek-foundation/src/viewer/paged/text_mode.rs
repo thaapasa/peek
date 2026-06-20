@@ -21,7 +21,9 @@ use anyhow::Result;
 use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
-use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window, slice_window, step_search};
+use crate::viewer::modes::{
+    Handled, Mode, ModeId, RenderCtx, Window, apply_search, slice_window, step_search,
+};
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use peek_theme::PeekTheme;
@@ -115,16 +117,6 @@ impl<R: PagedText> PagedTextReadMode<R> {
             self.cache[idx] = Some(PageCache { key, lines });
         }
         Ok(&self.cache[idx].as_ref().expect("cache populated").lines)
-    }
-
-    /// Current page's rendered lines if already cached, else `&[]`. Used
-    /// by `total_lines` and `set_search`, which must not trigger a render.
-    fn cached_lines(&self) -> &[String] {
-        self.cache
-            .get(self.current)
-            .and_then(|c| c.as_ref())
-            .map(|c| c.lines.as_slice())
-            .unwrap_or(&[])
     }
 }
 
@@ -244,20 +236,17 @@ impl<R: PagedText> Mode for PagedTextReadMode<R> {
     }
 
     fn set_search(&mut self, query: Option<&SearchQuery>) -> SearchTarget {
-        match query {
-            Some(q) => {
-                // Scan the current page's rendered lines. The prompt only
-                // opens while viewing, so the cache is populated.
-                let state = SearchState::scan(self.cached_lines().iter(), q);
-                let first = state.first_line();
-                self.search = Some(state);
-                first.map_or(SearchTarget::Owned, SearchTarget::ScrollTo)
-            }
-            None => {
-                self.search = None;
-                SearchTarget::Owned
-            }
-        }
+        // Scan the current page's rendered lines. The prompt only opens
+        // while viewing, so the cache is populated. Borrow `self.cache`
+        // directly (not via `cached_lines`, which borrows all of `self`)
+        // so it stays disjoint from the `&mut self.search`.
+        let lines = self
+            .cache
+            .get(self.current)
+            .and_then(|c| c.as_ref())
+            .map(|c| c.lines.as_slice())
+            .unwrap_or(&[]);
+        apply_search(&mut self.search, lines.iter(), query)
     }
 
     fn take_warnings(&mut self) -> Vec<String> {
