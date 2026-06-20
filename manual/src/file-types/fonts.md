@@ -29,6 +29,8 @@ The default open lands on a rasterised sample sentence. The current sampler is a
 ASCII pangram plus digits, common punctuation, and a mixed-case alphabet line — enough to
 show baseline / x-height / cap height / descender shapes.
 
+![Specimen view of the Great Vibes TrueType font rendered through peek's ASCII image pipeline](../img/font-render.webp)
+
 Every image-mode key works on the specimen:
 
 | Key | Action                                                              |

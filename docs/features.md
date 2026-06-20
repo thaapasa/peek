@@ -1302,7 +1302,7 @@ Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 
 press (`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because
 content is already fully visible. The gutter does not pan; it stays anchored to the left edge.
 
-### Text Search ◐
+### Text Search ✅
 
 `/` opens a search prompt over the status line; type a query and Enter runs it. Matching defaults
 to **exact substring**; `Ctrl-R` inside the prompt toggles **regex** (linear-time `regex` engine —
@@ -1338,8 +1338,9 @@ first, then falls through to the normal back / quit behaviour on a second press)
 when the scanned line set changes underneath it — the `ContentMode` raw/pretty toggle, an EPUB
 chapter step, or a terminal resize (the read-mode views key match indices to wrapped lines).
 
-Incremental (search-as-you-type) is still planned — see
-[planned.md](planned.md#viewer-features-).
+**Planned improvements** (not blockers — the shipped scope above is the supported feature):
+incremental search-as-you-type, reach into the file-info and hex views, and a lazy / bounded
+"search from here" pass for multi-GB files. See [planned.md](planned.md#text-search).
 
 ### Help Screen ✅
 

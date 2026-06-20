@@ -24,12 +24,17 @@ features — the marketing claim not yet fully holding.
 - **Large File Safeguards** ◐ — one optional idea (generalized info-default landing)
   open. See [§ Large File Safeguards](#large-file-safeguards-).
 
-### 1.0 — the last user-facing must-haves ☐
+### 1.0 — the last user-facing must-haves ✅
 
-- **Text Search** ◐ — incremental re-scan, wider reach (info view + hex dump), and a
-  lazy/bounded scan remain. See [§ Text Search](#text-search-).
+No remaining blockers. Feature breadth, the streaming guards, and robustness are at the 1.0 bar;
+the shipped Text Search scope is accepted as the 1.0 feature. Its further refinements moved to
+post-1.0 deepening below.
 
 ### Post-1.0 / 1.x — deepening ☐
+
+- **Text Search refinements** — incremental re-scan, wider reach (info view + hex dump), and a
+  lazy/bounded scan. Quality-of-life on an already-shipped feature. See
+  [§ Text Search](#text-search).
 
 - **Block Collapsing / Folding** — the biggest single new capability and the natural
   1.1 headline; big lift (line-metadata layer). See
@@ -99,9 +104,12 @@ whole-file-slurp leaks it flagged are closed; one remains:
 
 ---
 
-## 1.0
+## Post-1.0 / 1.x
 
-### Text Search ◐
+### Text Search
+
+The shipped scope (literal + regex, smart-case, `n`/`p`, cross-view reach, budgeted scan) is the
+accepted 1.0 feature. Refinements, none blocking:
 
 - **Incremental search** — re-scan + re-highlight on every keystroke instead of
   confirm-on-Enter.
@@ -109,12 +117,6 @@ whole-file-slurp leaks it flagged are closed; one remains:
 - **Lazy / bounded scan** — the current scan is one full pass over the active view,
   capped at 100,000 matches; a multi-GB file pays that pass up front. A lazy "search
   from here" would scale better.
-
-These are quality-of-life, not 1.0 blockers.
-
----
-
-## Post-1.0 / 1.x
 
 ### Block Collapsing / Folding ❓
 
