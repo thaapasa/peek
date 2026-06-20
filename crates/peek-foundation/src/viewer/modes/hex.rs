@@ -46,7 +46,7 @@ impl HexMode {
             bs,
             total_len,
             top_offset,
-            label: "hex".to_string(),
+            label: "Hex".to_string(),
             cached_cols: cols,
             cached_rows,
             marked: None,

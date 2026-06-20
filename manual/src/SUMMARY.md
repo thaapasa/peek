@@ -44,6 +44,7 @@
 # Viewer
 
 - [File info](./viewer/info-screen.md)
+- [Hex dump](./viewer/hex-dump.md)
 - [Themes](./viewer/themes.md)
 - [Color modes](./viewer/colors.md)
 - [Line numbers & wrap](./viewer/line-numbers-wrap.md)

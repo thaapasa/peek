@@ -118,6 +118,7 @@ tshot ebook-render 88 28 'Read' 'n n n' test-books/frankenstein.epub    # EPUB c
 tshot obj-sections 64 18 'Sections' 'Tab' test-data/tiny.obj     # .obj sections
 tshot obj-symbols 64 18 'Symbols' 'Tab Tab' test-data/tiny.obj  # .obj symbols
 tshot java-bytecode 80 32 'Bytecode' 'Tab Tab Tab' test-data/Sample.class  # Java classfile bytecode
+tshot hex-dump 86 32 'Hex' 'x' test-data/Sample.class  # Hex dump
 
 # NB: pdf-render.webp (manual/src/img) is captured by hand, not here. The PDF Read view renders
 # half-block pixels that tmux/freeze can't reproduce faithfully, so no tshot line drives it —
