@@ -20,7 +20,7 @@ directories stays put where you were.
 | `Backspace` | Up to the parent directory (cursor lands on the directory you came from)     |
 | `Esc`       | At a directory listing, exits peek                                           |
 
-Hidden entries are included. Symlinks are followed for kind classification; broken links show
-as `?`.
+Hidden entries are included. Symlinks are followed for kind classification; broken symlinks
+still show as `l`, and other special files (sockets, FIFOs, devices) show as `?`.
 
 `--print` and `--list` both render the listing.

@@ -38,7 +38,7 @@ On by default. Toggle with `w`. When off, `Left` / `Right` pan the viewport hori
 
 `.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as highlighted source. The Info view
 adds an SQL section: dialect guess (PostgreSQL / MySQL / SQLite / T-SQL / generic), statement
-count broken down by category (DDL / DML / DQL / TCL), inventories of created objects (tables,
+count broken down by category (DDL / DML / DQL / TCL / Other), inventories of created objects (tables,
 views, indexes, functions, triggers), comment-line count, and a flag when an inline `$$ … $$`
 PL/pgSQL block is present.
 

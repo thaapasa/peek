@@ -185,6 +185,10 @@ regression risk, and the one piece that would actually justify `lightningcss`'s 
 everything the Info view needs). Revisit as its own task; if picked up, weigh swapping
 the CSS dep then.
 
+The separate SVG-animation **render perf** queue (measurements + proposed optimizations,
+not a shipped-behaviour description) lives in [svg-anim-perf.md](svg-anim-perf.md). Folded
+to this roadmap as a future-work pointer; not active right now.
+
 ### PDFium Distribution ◐
 
 - **install.sh**: detect an already-installed system Pdfium (homebrew etc.) and skip

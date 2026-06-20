@@ -154,6 +154,8 @@ Keep in sync with code:
 - **docs/architecture.md** — design, data flow, abstractions, how to extend.
 - **docs/memory-streaming.md** — size/streaming guard: threat model, budget classes, mechanisms,
   the rule every whole-file read follows.
+- **docs/image-rendering.md** — image render algorithm + glyph-atlas regeneration.
+- **docs/theme-conversion.md** — porting external themes into `.tmTheme`.
 - **CLAUDE.md file map + `//!` headers** — per-file breakdown. Add/move/remove a file → update
   tree + the file's `//!` header.
 - **docs/features.md** — shipped features (✅ ◐). Superset of manual.

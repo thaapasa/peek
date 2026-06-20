@@ -9,7 +9,7 @@ binary file, no primary mode exists, so `x` is a no-op there.
 `hexdump -C` style: 8-digit offset, two hex columns of N/2 bytes separated by an extra space,
 then a printable-ASCII column between `|`s. Bytes-per-row scales with terminal width:
 `14 + 4*bpr` columns, rounded down to a multiple of 8, minimum 8. Pipe mode honors `$COLUMNS`
-(≥ 24) or falls back to 16.
+(≥ 24) or falls back to 80 columns (16 bytes/row).
 
 Reads from disk on demand — no full-file slurp, no problem with multi-GB inputs.
 

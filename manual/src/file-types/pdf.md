@@ -39,8 +39,8 @@ Cycled with Tab:
   `Enter` / `e` extracts the selected entry as a memory-backed source that re-enters peek (an
   attached CSV opens in a CSV view, an inline image renders as ASCII art, …). Hidden when the
   PDF has neither attachments nor inline images.
-- **Info** — PDF version, title, author, subject, keywords, creation / modification dates, page
-  count, attachment count, inline-image count.
+- **Info** — PDF version, title, author, subject, keywords, description, creation / modification
+  dates, page count, attachment count, inline-image count, and an encrypted flag when set.
 
 Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
 detects the `%PDF-` magic and routes through the PDF mode stack.

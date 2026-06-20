@@ -34,14 +34,14 @@ for `p` everywhere `n` / `p` step (search matches, pages, chapters, frames).
 
 ## Text views
 
-| Key       | Action                                |
-|-----------|---------------------------------------|
-| `l`       | Toggle line numbers                   |
-| `w`       | Toggle soft line wrap                 |
-| `r`       | Toggle pretty / raw (structured data) |
-| `/`        | Open the search prompt                |
-| `Ctrl-R`   | Toggle literal / regex (in the prompt) |
-| `n` / `p`  | Next / previous search match          |
+| Key       | Action                                 |
+|-----------|----------------------------------------|
+| `l`       | Toggle line numbers                    |
+| `w`       | Toggle soft line wrap                  |
+| `r`       | Toggle pretty / raw (structured data)  |
+| `/`       | Open the search prompt                 |
+| `Ctrl-R`  | Toggle literal / regex (in the prompt) |
+| `n` / `p` | Next / previous search match           |
 
 Search defaults to exact-substring; press `Ctrl-R` in the prompt to switch to a regular
 expression (the prompt title shows `Search (literal)` or `Search (regex)`). Either way matching
@@ -63,14 +63,14 @@ navigate matches instead, and `Esc` clears the search to get chapter stepping ba
 
 ## Image views
 
-| Key            | Action                                                   |
-|----------------|----------------------------------------------------------|
-| `m` / `M`      | Cycle render mode (full / block / geo / ascii / contour) |
-| `b` / `B`      | Cycle background (auto / black / white / checkerboard)   |
-| `f`            | Cycle fit mode (Contain / FitWidth / FitHeight)          |
-| `+`, `=` / `-` | Zoom in / out (1.25× per step, capped at 16×)            |
-| `0`            | Reset zoom to 1× and pan to origin                       |
-| `1`..`9`       | Jump to whole-number zoom (1× .. 9×)                     |
+| Key            | Action                                                                                 |
+|----------------|----------------------------------------------------------------------------------------|
+| `m` / `M`      | Cycle render mode (full / block / geo / ascii / contour)                               |
+| `b` / `B`      | Cycle background (auto / black / white / checkerboard; `checker` aliases checkerboard) |
+| `f`            | Cycle fit mode (Contain / FitWidth / FitHeight)                                        |
+| `+`, `=` / `-` | Zoom in / out (1.25× per step, capped at 16×)                                          |
+| `0`            | Reset zoom to 1× and pan to origin                                                     |
+| `1`..`9`       | Jump to whole-number zoom (1× .. 9×)                                                   |
 
 Zoom anchors on the viewport centre — the pixel under the centre
 stays put across `+` / `-`. The same zoom keys work in animation,

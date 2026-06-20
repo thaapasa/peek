@@ -17,8 +17,8 @@ Cycled with Tab:
   subprocess only runs when you switch to this tab, so opening a file is never blocked on it.
 - **Source** — the PostScript program text. For a binary DOS-EPS, the PostScript section is
   shown rather than the raw binary wrapper.
-- **Info** — DSC header metadata (title, creator, creation date, bounding box, language level,
-  page count), the embedded preview's format and dimensions, and whether Ghostscript is
+- **Info** — DSC header metadata (title, creator, for, creation date, bounding box, language
+  level, page count), the embedded preview's format and dimensions, and whether Ghostscript is
   available.
 
 A file with no embedded preview and no `gs` on your `PATH` opens straight to **Source** + Info.

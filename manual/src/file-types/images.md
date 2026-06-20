@@ -29,13 +29,13 @@ Decoded via the [image](https://crates.io/crates/image) crate.
 
 Cycle with `m` (or `--image-mode <mode>`):
 
-| Mode      | Description                                                         |
-|-----------|---------------------------------------------------------------------|
-| `full`    | All glyphs (block, quadrant, extended) — default                    |
-| `block`   | Block / quadrant elements + ASCII subset                            |
-| `geo`     | Block / quadrant elements + line segments only                      |
-| `ascii`   | Legacy luminance-based density ramp (for terminals without blocks)  |
-| `contour` | Sobel edge detection rendered as line-art                           |
+| Mode      | Description                                                        |
+|-----------|--------------------------------------------------------------------|
+| `full`    | All glyphs (block, quadrant, extended) — default                   |
+| `block`   | Block / quadrant elements + ASCII subset                           |
+| `geo`     | Block / quadrant elements + line segments only                     |
+| `ascii`   | Legacy luminance-based density ramp (for terminals without blocks) |
+| `contour` | Sobel edge detection rendered as line-art                          |
 
 `--edge-density` tunes the `contour` line count.
 
@@ -51,22 +51,22 @@ transparent regions default to black, making dark content invisible on dark term
 
 Cycle with `b` (or `--background <mode>`):
 
-| Background     | Description                                       |
-|----------------|---------------------------------------------------|
-| `auto`         | Pick black/white based on image content (default) |
-| `black`        | Solid black                                       |
-| `white`        | Solid white                                       |
-| `checkerboard` | 8×8 gray Photoshop-style pattern                  |
+| Background     | Description                                              |
+|----------------|----------------------------------------------------------|
+| `auto`         | Dark content → white bg, light content → black (default) |
+| `black`        | Solid black                                              |
+| `white`        | Solid white                                              |
+| `checkerboard` | 8×8 gray Photoshop-style pattern                         |
 
 ## Fit modes
 
 Cycle with `f`:
 
-| Mode        | Behavior                                                              |
-|-------------|-----------------------------------------------------------------------|
-| `Contain`   | Fit within both axes — whole image shown (default)                    |
-| `FitWidth`  | Width fills the terminal; height grows freely → vertical scroll       |
-| `FitHeight` | Height fills the terminal; width grows freely → horizontal scroll     |
+| Mode        | Behavior                                                          |
+|-------------|-------------------------------------------------------------------|
+| `Contain`   | Fit within both axes — whole image shown (default)                |
+| `FitWidth`  | Width fills the terminal; height grows freely → vertical scroll   |
+| `FitHeight` | Height fills the terminal; width grows freely → horizontal scroll |
 
 Pipe / `--print` output always uses `Contain`. The regular
 [scroll keys](../keyboard-shortcuts.md#navigation) move the overflowing axis: vertical under

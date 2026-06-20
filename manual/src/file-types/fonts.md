@@ -35,7 +35,7 @@ Every image-mode key works on the specimen:
 
 | Key | Action                                                              |
 |-----|---------------------------------------------------------------------|
-| `m` | Cycle image mode (full-color / block / geo / ascii / contour)       |
+| `m` | Cycle image mode (full / block / geo / ascii / contour)             |
 | `b` | Cycle background (auto / black / white / checkerboard)              |
 | `f` | Cycle fit mode (contain / fit width / fit height)                   |
 
