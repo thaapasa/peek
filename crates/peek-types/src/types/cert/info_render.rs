@@ -13,7 +13,8 @@
 use serde_json::json;
 
 use crate::info::{
-    InfoNode, InfoRow, Role, Value, paint_count, push_rows, render_info, rows_to_json,
+    InfoNode, InfoRow, Role, Value, paint_count, push_entry, push_parse_errors, render_info,
+    rows_to_json,
 };
 use crate::types::cert::info::{
     CertEntry, CertInfo, CertificateEntry, CrlEntry, CsrEntry, JwkEntry, KeyEntry, KeyType,
@@ -56,27 +57,17 @@ impl crate::info::InfoView for CertView<'_> {
         });
 
         for (i, entry) in info.entries.iter().enumerate() {
-            nodes.push(InfoNode::Line(String::new()));
-            let title = entry_title(entry, i + 1);
-            nodes.push(InfoNode::Line(format!(
-                "{} {}",
-                theme.paint_muted("\u{2500}\u{2500}"),
-                theme.paint_heading(&title),
-            )));
             // One row list drives the print body here and the JSON in
-            // `json_section`; `push_rows` emits the print rows as `Line`s.
-            let mut body = Vec::new();
-            push_rows(&mut body, &entry_rows(entry), theme);
-            nodes.extend(body.into_iter().map(InfoNode::Line));
+            // `json_section`.
+            push_entry(
+                &mut nodes,
+                theme,
+                &entry_title(entry, i + 1),
+                &entry_rows(entry),
+            );
         }
 
-        for err in &info.parse_errors {
-            nodes.push(InfoNode::Line(String::new()));
-            nodes.push(InfoNode::Row {
-                label: "Parse error".into(),
-                value: theme.paint(err, theme.warning),
-            });
-        }
+        push_parse_errors(&mut nodes, theme, &info.parse_errors);
         nodes
     }
 }
@@ -131,7 +122,7 @@ fn cert_rows(c: &CertificateEntry) -> Vec<InfoRow> {
     let mut r = vec![
         InfoRow::json_only("kind", Value::token("certificate")),
         InfoRow::muted("Label", "label", c.label.clone()),
-        InfoRow::new("Version", "version", int_row(c.version as i64)),
+        InfoRow::new("Version", "version", Value::int_plain(c.version as i64)),
         InfoRow::text("Subject", "subject", c.subject.clone()),
         InfoRow::text("Issuer", "issuer", c.issuer.clone()),
         InfoRow::muted("Serial", "serial_hex", c.serial_hex.clone()),
@@ -266,7 +257,11 @@ fn key_rows(k: &KeyEntry, kind: &'static str) -> Vec<InfoRow> {
         r.push(InfoRow::json_text("curve", curve.clone()));
     }
     if let Some(bits) = k.key_size_bits {
-        r.push(InfoRow::new("Bits", "key_size_bits", int_row(bits as i64)));
+        r.push(InfoRow::new(
+            "Bits",
+            "key_size_bits",
+            Value::int_plain(bits as i64),
+        ));
     }
     r
 }
@@ -277,7 +272,7 @@ fn ssh_rows(k: &SshPubKeyEntry) -> Vec<InfoRow> {
         InfoRow::text("Algorithm", "algorithm", k.algorithm.clone()),
     ];
     if let Some(bits) = k.bits {
-        r.push(InfoRow::new("Bits", "bits", int_row(bits as i64)));
+        r.push(InfoRow::new("Bits", "bits", Value::int_plain(bits as i64)));
     }
     if !k.comment.is_empty() {
         r.push(InfoRow::muted("Comment", "comment", k.comment.clone()));
@@ -304,7 +299,11 @@ fn jwk_rows(k: &JwkEntry) -> Vec<InfoRow> {
         r.push(InfoRow::json_text("crv", crv.clone()));
     }
     if let Some(bits) = k.key_size_bits {
-        r.push(InfoRow::new("Bits", "key_size_bits", int_row(bits as i64)));
+        r.push(InfoRow::new(
+            "Bits",
+            "key_size_bits",
+            Value::int_plain(bits as i64),
+        ));
     }
     if let Some(alg) = &k.alg {
         r.push(InfoRow::text("Algorithm", "alg", alg.clone()));
@@ -342,13 +341,6 @@ fn key_algo_label(algorithm: &str, bits: Option<usize>) -> String {
         Some(b) => format!("{algorithm} ({b} bit)"),
         None => algorithm.to_string(),
     }
-}
-
-/// A raw-printed integer (no thousands separator) that serializes as a number —
-/// e.g. a version or bit size. Distinct from [`Value::count`], whose print form
-/// is grouped and colour-graded.
-fn int_row(n: i64) -> Value {
-    Value::split(n.to_string(), Role::Value, json!(n))
 }
 
 /// A list field: print the comma-joined names, serialize the array, omit both

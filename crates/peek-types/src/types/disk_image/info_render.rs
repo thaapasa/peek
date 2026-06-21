@@ -227,7 +227,7 @@ fn dmg_main_rows(dmg: &DmgMeta) -> Vec<InfoRow> {
         InfoRow::new(
             "UDIF version",
             "udif_version",
-            int_row(dmg.udif_version as i64),
+            Value::int_plain(dmg.udif_version as i64),
         ),
         InfoRow::new(
             "Variant",
@@ -650,13 +650,6 @@ fn checksum_token(kind: DmgChecksumKind) -> &'static str {
         DmgChecksumKind::Sha512 => "sha512",
         DmgChecksumKind::Other(_) => "other",
     }
-}
-
-/// A raw-printed integer (no thousands separator) that serializes as a
-/// number — e.g. the UDIF version. Distinct from [`Value::count`], whose
-/// print form is grouped and colour-graded.
-fn int_row(n: i64) -> Value {
-    Value::split(n.to_string(), Role::Value, json!(n))
 }
 
 /// A JSON-only cell carrying a composite (array/object) value verbatim. The

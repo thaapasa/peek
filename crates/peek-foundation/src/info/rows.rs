@@ -20,7 +20,7 @@ use std::borrow::Cow;
 
 use peek_theme::PeekTheme;
 
-use super::{InfoValue, Value, push_field};
+use super::{InfoNode, InfoValue, Value, push_field};
 
 /// One row of a hand-built section. See the [module docs](self).
 pub struct InfoRow {
@@ -126,6 +126,34 @@ pub fn push_rows(lines: &mut Vec<String>, rows: &[InfoRow], theme: &PeekTheme) {
         if let Some(label) = &row.print_label {
             push_field(lines, label, &row.value.render_value(theme), theme);
         }
+    }
+}
+
+/// Emit one per-item entry in an InfoRow-mode section: a blank separator line,
+/// a `── Title` heading, then `rows` as print [`Line`](InfoNode::Line)s. The
+/// shape every hand-built per-item section repeats (a cert entry, a font face).
+pub fn push_entry(nodes: &mut Vec<InfoNode>, theme: &PeekTheme, title: &str, rows: &[InfoRow]) {
+    nodes.push(InfoNode::Line(String::new()));
+    nodes.push(InfoNode::Line(format!(
+        "{} {}",
+        theme.paint_muted("\u{2500}\u{2500}"),
+        theme.paint_heading(title),
+    )));
+    let mut body = Vec::new();
+    push_rows(&mut body, rows, theme);
+    nodes.extend(body.into_iter().map(InfoNode::Line));
+}
+
+/// Emit the trailing `Parse error` rows an InfoRow-mode section shows for each
+/// recovered parse failure: a blank line then a warning-painted `Row`. No-op
+/// when `errors` is empty.
+pub fn push_parse_errors(nodes: &mut Vec<InfoNode>, theme: &PeekTheme, errors: &[String]) {
+    for err in errors {
+        nodes.push(InfoNode::Line(String::new()));
+        nodes.push(InfoNode::Row {
+            label: "Parse error".into(),
+            value: theme.paint(err, theme.warning),
+        });
     }
 }
 

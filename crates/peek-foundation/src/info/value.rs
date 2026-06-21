@@ -105,6 +105,16 @@ impl Value {
     pub fn int(n: i64) -> Self {
         Value::Int(n)
     }
+    /// A raw-printed integer (no thousands separator) that serializes as a
+    /// number — e.g. a version or bit size. Distinct from [`int`](Value::int) /
+    /// [`count`](Value::count), whose print form is grouped and colour-graded.
+    pub fn int_plain(n: i64) -> Self {
+        Value::split(
+            n.to_string(),
+            Role::Value,
+            serde_json::Value::Number(n.into()),
+        )
+    }
     pub fn ratio(r: f64) -> Self {
         Value::Ratio(r)
     }

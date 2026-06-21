@@ -9,7 +9,8 @@
 use serde_json::json;
 
 use crate::info::{
-    InfoNode, InfoRow, Role, Value, paint_count, push_rows, render_info, rows_to_json,
+    InfoNode, InfoRow, Role, Value, paint_count, push_entry, push_parse_errors, render_info,
+    rows_to_json,
 };
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
@@ -60,27 +61,13 @@ impl crate::info::InfoView for FontView<'_> {
         });
 
         for face in &info.faces {
-            nodes.push(InfoNode::Line(String::new()));
-            let title = face_title(face, info.face_count);
-            nodes.push(InfoNode::Line(format!(
-                "{} {}",
-                theme.paint_muted("\u{2500}\u{2500}"),
-                theme.paint_heading(&title),
-            )));
             // One row list drives the print body here and the JSON in
-            // `json_section`; `push_rows` emits the print rows as `Line`s.
-            let mut body = Vec::new();
-            push_rows(&mut body, &face_rows(face), theme);
-            nodes.extend(body.into_iter().map(InfoNode::Line));
+            // `json_section`.
+            let title = face_title(face, info.face_count);
+            push_entry(&mut nodes, theme, &title, &face_rows(face));
         }
 
-        for err in &info.parse_errors {
-            nodes.push(InfoNode::Line(String::new()));
-            nodes.push(InfoNode::Row {
-                label: "Parse error".into(),
-                value: theme.paint(err, theme.warning),
-            });
-        }
+        push_parse_errors(&mut nodes, theme, &info.parse_errors);
         nodes
     }
 }
