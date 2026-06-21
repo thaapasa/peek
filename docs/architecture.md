@@ -652,7 +652,7 @@ wiring-sites checklist. Quick summary:
         - **Separate view via `From<&Stats>`** (gathered struct projects into a private view struct):
           `crate::info_section!(<Stats>, <View>, "<key>")` in `info_render.rs` generates the canonical
           `render_section` / `json_section` pair (view-private), wired by the 3-arg
-          `impl_info_extras!(<Stats>, ...::render_section, ...::json_section)`. The 22 migrated types
+          `impl_info_extras!(<Stats>, ...::render_section, ...::json_section)`. The 23 migrated types
           (svg, css, image, …) use this form.
     - **`InfoRow` (irregular but row-shaped — enum-variant dispatch, one print row → several JSON
       keys).** The derive walks struct *fields*, so it can't express a `Vec<enum>` whose variants lay

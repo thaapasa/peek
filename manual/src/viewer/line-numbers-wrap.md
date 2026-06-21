@@ -21,7 +21,8 @@ their wrapped rows.
 The line-number gutter shows the real (logical) line number on the first segment; continuation
 rows have a blank gutter of the same width so wrapped content aligns under its first row.
 
-Status bar shows `Wrap` only when wrap is on (default-on convention; absence means "off").
+Status bar shows `Wrap` whenever soft wrap is on (a deliberate always-on reminder — most status
+segments surface only non-default state, but wrap shows even though on is the default).
 
 ## Horizontal scrolling
 

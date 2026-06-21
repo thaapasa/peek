@@ -133,3 +133,9 @@ match's cell into view.
 |-----------|---------------------------------------------------|
 | `n` / `p` | Next / previous page (or chapter)                 |
 | `o`       | Toggle reconstructed-text overlay (PDF read view) |
+
+## Font specimen (multi-face `.ttc` / `.otc`)
+
+| Key       | Action                       |
+|-----------|------------------------------|
+| `n` / `p` | Next / previous face         |

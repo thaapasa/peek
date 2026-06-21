@@ -8,9 +8,9 @@ use crate::mime;
 use peek_io::InputSource;
 use peek_io::limits::WHOLE_DOC_BYTES;
 
-// Per-type format enums live in `types/<x>/format.rs`. Re-export them
-// here so consumers keep importing them through `input::detect` — the
-// path that's been stable across the codebase.
+// Per-type format enums live in `types/<x>.rs`. Re-export them here so
+// they surface at the `peek_detect` crate root — the path consumers
+// import (`peek_detect::ArchiveFormat`).
 pub use crate::types::archive::ArchiveFormat;
 pub use crate::types::audio::AudioFormat;
 pub use crate::types::cert::CertFormat;

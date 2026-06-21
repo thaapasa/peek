@@ -369,9 +369,9 @@ impl Mode for ContentMode {
             };
             segs.push((label.to_string(), theme.label));
         }
-        // Surface wrap state only when on (default-on convention: the
-        // segment's absence means "off"; matches color-mode segment
-        // which only appears when changed off the default).
+        // Wrap defaults on; surface the segment whenever it's on as an
+        // explicit reminder (deliberate exception to the
+        // non-default-only segment convention).
         if self.wrap.soft_wrap() {
             segs.push(("Wrap".to_string(), theme.muted));
         }
