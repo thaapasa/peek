@@ -30,6 +30,13 @@ boilerplate around it. Assume a sharp reader who wants the point, not 10 sentenc
 - Semantic roles (`heading`, `label`, `value`, `accent`, `muted`, `warning`). Shades via
   `lerp_color()`. No hardcoded RGB.
 - Target truecolor; degrade gracefully.
+- **Sanitise file-controlled text before painting it.** Any string sourced from file bytes (content
+  lines, metadata, entry/file names, rendered prose) must pass through
+  `peek_io::sanitize_terminal_controls` *before* peek wraps it in its own SGR — otherwise raw
+  ESC/OSC in the file reaches the terminal (clipboard writes, title spoofing, hyperlink injection).
+  There is no single global choke: peek's own escapes and content escapes are indistinguishable once
+  mixed, so sanitise at each producer's input (e.g. line decode, the InfoValue text path,
+  `emit_styled`, each listing `flat_line`). A new renderer that paints file text must do the same.
 
 ## Themes
 
