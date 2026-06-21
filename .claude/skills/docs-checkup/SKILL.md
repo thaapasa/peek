@@ -19,6 +19,15 @@ nothing fails to compile when a manual chapter is wrong. A review that
 concludes "all good" almost certainly didn't cross-check against the
 source.
 
+**Output is a findings list, nothing else.** This skill reviews and
+reports — it does **not** edit docs, apply fixes, or ask the user how to
+resolve a finding. The orchestrating agent surfaces the numbered list
+from Step 5 and stops. The human reads it and decides what (if anything)
+to change in a separate, explicitly-requested follow-up. Do not edit
+files, do not run `cargo fmt`, do not open `AskUserQuestion` to pick a
+fix — even for findings that look trivial or that the forks flagged as
+"clear drift". Reporting is the whole job.
+
 ## Step 1: Load context
 
 Read these to understand what the docs are *supposed* to look like and
@@ -204,5 +213,8 @@ Rules:
 - Don't manufacture issues. But docs in a project the size of peek
   always carry drift — if a section is empty, you under-looked.
 - Omit a severity group only if it's genuinely empty after a real look.
-- This skill does not edit docs. It reports; the human (or a follow-up
-  pass) makes the changes.
+- This skill does not edit docs and does not decide fixes. Present the
+  numbered findings list and stop — no edits, no `cargo fmt`, no
+  `AskUserQuestion`. The human reads the list and requests changes
+  separately if they want them. A "clear drift" finding is still just a
+  finding; reporting it is the end of the job.
