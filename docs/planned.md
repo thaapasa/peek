@@ -23,6 +23,12 @@ features — the marketing claim not yet fully holding.
   deferred). See [§ Memory / Streaming](#memory--streaming-).
 - **Large File Safeguards** ◐ — one optional idea (generalized info-default landing)
   open. See [§ Large File Safeguards](#large-file-safeguards-).
+- **Install / supply-chain hardening** ☐ — from the 2026-06-21 security review: no
+  release signatures, unverified Pdfium fetch, `install.sh` pulled from `main`. See
+  [§ Install / supply-chain hardening](#install--supply-chain-hardening-).
+- **Parser fuzzing backlog** ☐ — fuzzing reaches only `detect()` today; the per-type
+  binary/text parsers are untested by coverage-guided fuzzing. See
+  [§ Parser fuzzing backlog](#parser-fuzzing-backlog-).
 
 ### 1.0 — the last user-facing must-haves ✅
 
@@ -87,6 +93,88 @@ that plan's "Follow-up backlog" section. Remaining:
 - ☐ **[1.x] Tighten loose heuristics.** YAML `---` prefix over-matches; extension-
   routed binary types and `.br` aren't magic-verified.
 
+### Parser fuzzing backlog ☐
+
+Today the only fuzz coverage is `detect()` — `fuzz/fuzz_targets/detect_bytes.rs`
+(libFuzzer) plus the stable proptest floor `crates/peek-detect/tests/fuzz_detect.rs`.
+Every **per-type** parser in `crates/peek-types` is untested by coverage-guided fuzzing;
+they have unit tests (ds_store notably has hostile-input tests) but no fuzzer. These
+parse the most attacker-controlled binary structure in the project, so this is the
+highest-value defense-in-depth follow-up from the 2026-06-21 security review (finding
+L4). The parser layer reviewed *clean* — no reachable panic was found by hand — so this
+is about keeping it that way as the parsers change, not chasing a known bug.
+
+**Infra blocker (do first):** the fuzz crate is workspace-excluded (libfuzzer-sys needs
+nightly) and depends **only on `peek-detect` + `peek-io`**. To fuzz any `peek-types`
+parser you must first add `peek-types = { path = "../crates/peek-types" }` (and
+`peek-foundation` for the base64/xml helpers) to `fuzz/Cargo.toml`. Once that's in,
+adding a target is a `[[bin]]` block + a one-line `fuzz_target!(|data: &[u8]| { … })`,
+run via `just fuzz target=<name> secs=<n>`. There is **no** `#[cfg(fuzzing)]`
+infrastructure today and most candidates below are already `pub`, so no harness
+plumbing is needed — except the few `pub(super)` fns (e.g. `mbr::parse`), which would
+need a `pub` bump or a `testing`-style feature to expose.
+
+One target needs **no new deps** and can land immediately: `peek_io::LineSource` (drive
+`open` + `window` over `InputSource::memory(data, "f")`) — exercises the anchor-index
+scan and the UTF-8 + terminal-sanitize decode in `crates/peek-io/src/lines.rs`.
+
+**Tier 1 — trivial wiring, high value** (hand-written, take `&[u8]`/`&str` directly; one-line targets once `peek-types` is a dep):
+
+- `ds_store::reader::parse(&[u8])` — `ds_store/reader.rs` — Bud1 buddy-allocator: offset
+  table + block-address math, UTF-16 name lengths, recursive B-tree walk (already
+  depth+visited guarded). The richest bespoke binary parser in the tree.
+- `disk_image::mish::…::parse(&[u8])` — `disk_image/mish.rs` — BLKX chunk table; declared
+  count clamped to available, fixed-offset `read_u32`/`read_u64` with no internal bounds
+  check (relies on the caller clamp — exactly what a fuzzer should probe).
+- `disk_image::iso_pvd::parse` / `parse_root_extents(&[u8])` — `disk_image/iso_pvd.rs` —
+  ISO9660 PVD both-endian reads, datetime/ascii-uint fields, returns extents later used
+  to seek.
+- `disk_image::dmg_trailer::parse(&[u8])` and `mbr::parse(&[u8])` (the latter is
+  `pub(super)`) — fixed-offset koly trailer / partition-table reads.
+- `eps::dos_eps::parse(&[u8])` — `eps/dos_eps.rs` — 30-byte DOS-EPS header, section
+  offset/len clamping; result is sliced downstream.
+- `structured::info::json5_nesting_too_deep(&str)` **paired with**
+  `structured::pretty::pretty_print(&str, fmt)` — `structured/{info.rs,pretty.rs}` — the
+  hand-written depth-bomb guard that fronts `json5` (whose recursive descent has no depth
+  limit). A gap here re-exposes an **uncatchable SIGABRT** stack overflow, so this pair
+  is the single most consequential text target.
+- `image::exif::exif_fields_from_bytes(&[u8])` / `image::xmp::xmp_fields_from_bytes(&[u8])`
+  — `image/{exif.rs,xmp.rs}` — TIFF/IFD parse + hand-written XMP substring scraper, run
+  on head bytes.
+- `sql::info_gather::gather(&str)` and `css::info_gather::gather(&str)` — bespoke
+  statement/dollar-quote/comment scanners (SQL) and custom cssparser visitor math (CSS).
+- `peek_foundation::base64::{decode, decoded_len}(&str)` — differential target: assert
+  `decoded_len(s) == decode(s).map(|v| v.len())`; the listing layer trusts `decoded_len`
+  as a size.
+
+**Tier 2 — easy wiring** (build `InputSource::memory` or `&str` in 1–2 lines):
+
+- `peek_io::LineSource::open` (no new deps — land first; see above).
+- `csv::parse::…::open(InputSource, fmt)` — encoding/UTF-16/delimiter sniff + cell
+  classify over a sliding window; drive `window`/`ensure_all`.
+- `vobject::line::parse_components(&str)`, `vobject::datetime::format_datetime(&str)`,
+  `vobject::{calendar,contact}::summarize(&str)` — vCard/iCal line unfolding, quoted-param
+  scans, fixed-range datetime substring slicing, RRULE humanizer. All byte-index string
+  math, cheap, high panic-surface.
+- `disk_image::iso_listing::list_iso(InputSource)` — recursive directory-tree walk from
+  PVD extents; good for offset-loop / record-bounds bugs.
+- `classfile::info_gather::gather_extras(InputSource)` — input is just
+  `InputSource::memory`, but the value is in peek's own `descriptor`/`bytecode`
+  formatters running over attacker-controlled (cafebabe-parsed) descriptors.
+
+**Tier 3 — harder / container** (need a valid-enough container or a `Read`/`ReadSeek` wrapper):
+
+- `archive::backends::cpio` header walk (`list_from_read` / `find_entry` /
+  `next_header`) — bespoke newc/odc/old-binary header parsers: hex/octal field decode,
+  4-byte alignment, name-length caps. Classic header-confusion + integer-length surface.
+- `archive::backends::ar::ArReader` (`next` / `list`) — 60-byte ASCII header, decimal/
+  octal decode, BSD `#1/<len>` long-name length; `parse_static_lib` sits on top.
+
+**Suggested order:** (1) add the deps + land the no-dep `LineSource` target; (2) the
+Tier-1 binary `&[u8]` parsers; (3) the `json5_nesting_too_deep` + `pretty_print` pair;
+(4) the vobject/sql/csv text targets; (5) Tier 3 archive headers if time allows. Seed
+corpora from the existing fixtures under `test-data/` for each type.
+
 ### Memory / Streaming ◐
 
 North star #2 from CLAUDE.md: *stream, don't load*. Sites where view-mode caches grow
@@ -101,6 +189,67 @@ whole-file-slurp leaks it flagged are closed; one remains:
   tempfile past a threshold (mirroring the archive-extract / decompress spill paths)
   stays a future option if huge-stdin pressure ever shows up; for now, route huge inputs
   through a file path.
+
+- ◐ **ODS sparse-dimension allocation (upstream-bounded).** A spreadsheet sheet
+  materialises into calamine's *dense* `Range` — a `width × height` buffer over the
+  bounding rectangle of populated cells. Two cells at opposite corners force a
+  full-grid allocation from a tiny file. **XLSX is fully guarded**
+  (`spreadsheet/workbook.rs` `bounded_xlsx_range` streams cells via
+  `worksheet_cells_reader` and bails before the dense build once the box crosses
+  `MAX_SHEET_CELLS` = 16M). **ODS is only partly guarded:** calamine 0.35 has no
+  streaming reader for ODS (`worksheet_range_ref` is `unimplemented!()`), so the dense
+  `vec![Data::default(); len]` runs *inside* `worksheet_range` before peek sees the
+  `Range`. The post-read `get_size()` cap in `materialize` catches every ODS bomb
+  calamine can allocate without aborting (e.g. ~1M×100 ≈ 2.4 GB → rejected before
+  peek mirrors it); the extreme case (ODS caps at 1M×16K ≈ 16e9 cells ≈ ~400 GB)
+  aborts the process inside calamine — a clean-ish DoS, but an alloc-failure abort skips
+  `Drop`, so `TerminalGuard` would not restore the terminal. Found in the 2026-06-21
+  security review (finding H2). Options, in order of preference:
+  - **Upstream a max-cell cap into calamine's ODS reader** — cleanest, helps everyone.
+  - **Port an ODS extent pre-scan into peek** — ~50–80 lines, ODS-only. Awkward because
+    the extent is implicit in `number-rows-repeated`/`number-columns-repeated` and
+    calamine *trims trailing empty repeats*; a naive repeat-sum over-counts the padded
+    grids real ODS files carry and would reject legitimate files. Correctness requires
+    mirroring calamine's trimming.
+  - **Accept it** — moderate ODS bombs already rejected; the extreme one is a crash.
+
+### Install / supply-chain hardening ☐
+
+From the 2026-06-21 security review. The download paths are otherwise well-built — all
+HTTPS with cert validation, `install.sh` verifies a SHA-256 before running, `gs` is
+invoked via an arg vector under `-dSAFER`, no shell interpolation, secure `tempfile`
+temps. The residual gaps all reduce to *"trust GitHub Releases of two repos"* — closing
+them means adding cryptographic provenance, not fixing a leak.
+
+- ☐ **Sign releases.** `install.sh` verifies a `.sha256`, but the checksum ships from
+  the *same* release as the artifact — it catches transit corruption, not a malicious or
+  compromised release. Anyone with release-publish rights (or a GitHub account takeover)
+  can swap both binary and checksum together. Add a minisign / cosign signature, embed
+  the public key in `install.sh` and the binary, and verify the signature rather than a
+  self-consistent hash. *(Review ID: M1.)*
+
+- ☐ **Verify the Pdfium fetch.** `scripts/fetch-pdfium.sh` and `release.yml` download the
+  dylib from `bblanchon/pdfium-binaries` over HTTPS with **no** checksum or signature
+  check (`.pdfium/VERSION` is display-only, not an integrity control). A compromise there
+  trojans every peek release. Pin and verify a known-good SHA-256 of each Pdfium asset.
+  Weakest link in the chain. *(Review ID: M3.)*
+
+- ☐ **Verify the Pdfium dylib at load (or refuse a world-writable dir).** peek loads
+  Pdfium from the executable's own directory first. peek's own lookup isn't
+  cwd-hijackable (full-path bind, no `$LD_LIBRARY_PATH` use), but a dylib planted next to
+  the binary in a writable install dir loads with no integrity check at load time.
+  Consider a checksum at load, or refusing to load from a world-writable directory.
+  *(Review ID: M2.)*
+
+- ☐ **Pin `install.sh` to the release tag.** `--update` fetches `install.sh` from the
+  mutable `main` branch while installing the binary from a resolved release tag — script
+  and binary come from decoupled refs, and a bad `main` script reaches every existing
+  user running `--update`. Fetch the script from the same immutable tag. *(Review ID:
+  L1.)*
+
+Same trust root throughout (repo release-write access), so none introduces a *new*
+attacker class — but signing (M1) + pinned Pdfium (M3) move provenance from "trust the
+platform" to "verify cryptographically," and are the meaningful follow-ups.
 
 ---
 
