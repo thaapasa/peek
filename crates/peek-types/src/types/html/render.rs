@@ -10,6 +10,7 @@ use anyhow::Result;
 use html2text::render::RichAnnotation;
 use syntect::highlighting::Color;
 
+use peek_io::sanitize_terminal_controls;
 use peek_theme::{Attr, StyleMode};
 
 /// Drive `html2text` to ANSI-styled lines. In `Plain` mode emits no
@@ -24,7 +25,11 @@ pub(crate) fn render(bytes: &[u8], width: usize, style_mode: StyleMode) -> Resul
         let s = html2text::config::plain()
             .use_doc_css()
             .string_from_read(Cursor::new(bytes), width)?;
-        return Ok(s.lines().map(String::from).collect());
+        // Plain mode carries no peek escapes — sanitize the finished lines.
+        return Ok(s
+            .lines()
+            .map(|l| sanitize_terminal_controls(l).into_owned())
+            .collect());
     }
     let s = html2text::config::rich().use_doc_css().coloured(
         Cursor::new(bytes),
@@ -39,6 +44,9 @@ pub(crate) fn render(bytes: &[u8], width: usize, style_mode: StyleMode) -> Resul
 /// formatting wraps them; the closing sequence is built in reverse so
 /// escapes nest cleanly.
 fn annotate(mode: StyleMode, annotations: &[RichAnnotation], text: &str) -> String {
+    // Strip control codes from the leaf text *before* SGR-wrapping, so a raw
+    // ESC/OSC in an HTML text node can't ride out through peek's own escapes.
+    let text = sanitize_terminal_controls(text);
     let mut prefix = String::new();
     let mut suffix = String::new();
     for ann in annotations {
@@ -74,13 +82,40 @@ fn annotate(mode: StyleMode, annotations: &[RichAnnotation], text: &str) -> Stri
         suffix.insert_str(0, &close);
     }
     if prefix.is_empty() {
-        return text.to_string();
+        return text.into_owned();
     }
     let mut out = String::with_capacity(prefix.len() + text.len() + suffix.len());
     out.push_str(&prefix);
-    out.push_str(text);
+    out.push_str(&text);
     out.push_str(&suffix);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // OSC 52 clipboard write + OSC 0 title spoof embedded in HTML text. BEL
+    // (`\x07`) is the OSC terminator; peek never emits it, so its survival
+    // would prove the injected sequence reached the terminal intact.
+    const EVIL: &[u8] = b"x\x1b]52;c;cHduZWQ=\x07<b>\x1b]0;PWNED\x07bold</b>";
+
+    #[test]
+    fn plain_mode_strips_injected_controls() {
+        let out = render(EVIL, 80, StyleMode::Plain).unwrap().join("\n");
+        assert!(!out.contains('\x1b'), "ESC must not survive: {out:?}");
+        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
+    }
+
+    #[test]
+    fn styled_mode_strips_injected_controls() {
+        // TrueColor wraps spans in peek's own SGR (which contains ESC), so
+        // we can't assert ESC-free — but peek's escapes never use BEL, so a
+        // surviving BEL means the OSC payload leaked through annotate().
+        let out = render(EVIL, 80, StyleMode::TrueColor).unwrap().join("\n");
+        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
+        assert!(out.contains("bold"), "text must still render: {out:?}");
+    }
 }
 
 fn attr(mode: StyleMode, a: Attr) -> (String, String) {
