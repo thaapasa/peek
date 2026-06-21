@@ -16,7 +16,17 @@ Live tracker for `/checkup` findings. Keeping it up to date:
 
 ## Low
 
-_(none open)_
+### L14. Fuzzing covers only `peek-detect`; hand-rolled `peek-types` parsers are unfuzzed
+
+Surfaced by the 2026-06-21 security audit. The stable fuzz floor
+(`peek-detect/tests/fuzz_detect.rs`) + nightly libFuzzer target exercise only the detection layer.
+The hand-rolled binary parsers in `peek-types` (ds_store buddy-allocator, WOFF, the disk-image
+`mish`/`mbr`/`iso_pvd`/`dmg` readers, `ar`/`cpio` headers) are reached only *after* detection
+routes to them and have no fuzz coverage — they rely on hand-written unit tests (audited clean, and
+each file-controlled length is bounds-checked before allocation, so no reachable panic/OOB was
+found). Future item: add a libFuzzer target per high-value parser to harden the floor against
+future edits. Not urgent — no live bug; this is regression insurance. Reopen as a real finding only
+if a parser change lands without matching adversarial tests.
 
 ## Wontfix records
 

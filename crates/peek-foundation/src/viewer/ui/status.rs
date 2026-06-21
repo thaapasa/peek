@@ -5,6 +5,7 @@
 use crossterm::terminal;
 use syntect::highlighting::Color;
 
+use peek_io::sanitize_terminal_controls;
 use peek_theme::PeekTheme;
 
 use super::styled::{strip_ansi_width, truncate_ansi};
@@ -21,16 +22,19 @@ pub fn render_themed_status_line(
 ) -> String {
     let sep = theme.paint_fg("\u{2502}", theme.muted);
 
+    // Segments can carry an untrusted file name (or file-derived label),
+    // so strip terminal-control sequences before painting — a name must not
+    // drive the terminal (title set / clipboard write) via the status line.
     let left = segments
         .iter()
-        .map(|(text, color)| theme.paint_fg(text, *color))
+        .map(|(text, color)| theme.paint_fg(&sanitize_terminal_controls(text), *color))
         .collect::<Vec<_>>()
         .join(&format!(" {sep} "));
     let left = format!(" {left}");
 
     let hints = hints
         .iter()
-        .map(|h| theme.paint_fg(h, theme.muted))
+        .map(|h| theme.paint_fg(&sanitize_terminal_controls(h), theme.muted))
         .collect::<Vec<_>>()
         .join("  ");
     let hints = format!("{hints} ");

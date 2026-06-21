@@ -332,7 +332,74 @@ pub fn strip_json_comments(src: &str) -> String {
 // JSON5
 // ---------------------------------------------------------------------------
 
+/// Structural-nesting ceiling peek will hand to the JSON5 parser. The
+/// `json5` crate recurses once per `[`/`{` with no internal bound (unlike
+/// `serde_json`, which caps at 128), so a deeply-nested document overflows
+/// the thread stack and *aborts the process* (`SIGABRT`, uncatchable). We
+/// pre-scan and refuse past this bound — matched to serde_json's limit so
+/// JSON and JSON5 reject the same depth bomb identically.
+pub const JSON5_MAX_DEPTH: usize = 128;
+
+/// Whether `src` nests `[`/`{` deeper than [`JSON5_MAX_DEPTH`]. Scans
+/// outside string literals (single- or double-quoted, JSON5-style) and
+/// `//` / `/* … */` comments so brackets inside those don't inflate the
+/// count. The stack-overflow guard every `json5::from_str` call runs first.
+pub fn json5_nesting_too_deep(src: &str) -> bool {
+    let bytes = src.as_bytes();
+    let mut i = 0;
+    let mut depth = 0usize;
+    let mut in_str: Option<u8> = None; // Some(quote byte) while inside a string
+    let mut esc = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if let Some(q) = in_str {
+            if esc {
+                esc = false;
+            } else if b == b'\\' {
+                esc = true;
+            } else if b == q {
+                in_str = None;
+            }
+            i += 1;
+            continue;
+        }
+        match b {
+            b'"' | b'\'' => in_str = Some(b),
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                i += 2;
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'*' => {
+                i += 2;
+                while i + 1 < bytes.len() && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                i += 2;
+                continue;
+            }
+            b'[' | b'{' => {
+                depth += 1;
+                if depth > JSON5_MAX_DEPTH {
+                    return true;
+                }
+            }
+            b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        i += 1;
+    }
+    false
+}
+
 fn json5_stats(s: &str) -> Option<StructuredStats> {
+    // Guard the process before json5's unbounded recursion (see
+    // `json5_nesting_too_deep`); over-deep input degrades to "no stats".
+    if json5_nesting_too_deep(s) {
+        return None;
+    }
     let value: serde_json::Value = json5::from_str(s).ok()?;
     let (kind, count) = match &value {
         serde_json::Value::Object(o) => (TopLevelKind::Object, o.len()),

@@ -8,7 +8,7 @@
 
 use anyhow::anyhow;
 
-use crate::extract::{ExtractError, ExtractOptions, Extracted};
+use crate::extract::{ExtractError, ExtractOptions, Extracted, sanitize_entry_path};
 use peek_detect::{ArchiveFormat, SpreadsheetFormat};
 use peek_io::InputSource;
 
@@ -49,9 +49,56 @@ fn extract_sheet_csv(wb: &mut Workbook, sheet: &str) -> Result<Extracted, Extrac
             .map_err(|e| ExtractError::Other(anyhow!("flushing CSV: {e}")))?;
     }
 
-    let suggested_name = format!("{sheet}{SHEET_SUFFIX}");
+    let suggested_name = format!("{}{SHEET_SUFFIX}", safe_sheet_filename(sheet));
     Ok(Extracted {
         source: InputSource::temp_file(tmp, suggested_name.clone()),
         suggested_name,
     })
+}
+
+/// Reduce a workbook-declared sheet name to a safe download basename.
+///
+/// Sheet names are unsanitized — a hand-built file can put `../` or an
+/// absolute path in one. The TOC lookup keys on the raw name (calamine
+/// needs the exact string), but the suggested *filename* must carry no
+/// path separators, or a no-`-o` extract would let the name steer the
+/// write outside the cwd (`write::Output::resolve` uses it verbatim).
+/// Mirrors the email / pdf extractors. Falls back to `sheet` for names
+/// that don't survive sanitisation (pure traversal, empty).
+fn safe_sheet_filename(sheet: &str) -> String {
+    sanitize_entry_path(sheet)
+        .ok()
+        .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+        .unwrap_or_else(|| "sheet".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::safe_sheet_filename;
+
+    #[test]
+    fn traversal_names_reduce_to_safe_basename() {
+        // No result may carry a path separator or escape the cwd.
+        for evil in [
+            "../../../../tmp/PWNED",
+            "/etc/cron.d/x",
+            "..",
+            "../..",
+            "a/b/../../c",
+        ] {
+            let out = safe_sheet_filename(evil);
+            assert!(!out.contains('/'), "{evil:?} → {out:?} leaked a separator");
+            assert_ne!(out, "..", "{evil:?} → {out:?}");
+        }
+    }
+
+    #[test]
+    fn nested_name_keeps_only_basename() {
+        assert_eq!(safe_sheet_filename("dir/Sheet1"), "Sheet1");
+    }
+
+    #[test]
+    fn ordinary_name_passes_through() {
+        assert_eq!(safe_sheet_filename("Sheet1"), "Sheet1");
+    }
 }

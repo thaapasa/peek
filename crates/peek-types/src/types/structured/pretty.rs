@@ -37,6 +37,14 @@ fn pretty_jsonc(raw: &str) -> Result<String> {
 /// strict JSON output. Single quotes / unquoted keys / trailing commas /
 /// hex literals all collapse — by design; raw view preserves the source.
 fn pretty_json5(raw: &str) -> Result<String> {
+    // json5's recursive descent has no depth limit and a deep document
+    // aborts the process on stack overflow; refuse before parsing.
+    if super::info::json5_nesting_too_deep(raw) {
+        anyhow::bail!(
+            "JSON5 nesting exceeds {} levels (possible depth bomb)",
+            super::info::JSON5_MAX_DEPTH
+        );
+    }
     let value: serde_json::Value = json5::from_str(raw)?;
     Ok(serde_json::to_string_pretty(&value)?)
 }

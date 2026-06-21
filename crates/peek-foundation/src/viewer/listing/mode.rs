@@ -13,10 +13,13 @@
 //! The viewport runs off a cached [`RowMetaCell`] list (parent + selectable
 //! per row) so it never re-queries the source mid-scroll.
 
+use std::borrow::Cow;
 use std::ops::Range;
 
 use anyhow::Result;
 use syntect::highlighting::Color;
+
+use peek_io::sanitize_terminal_controls;
 
 use super::entry::Entry;
 use super::row;
@@ -169,7 +172,14 @@ impl ListingMode {
     /// with it.
     fn compose_line(&self, idx: usize, ctx: &RenderCtx, selected: bool) -> String {
         let theme = ctx.peek_theme;
-        let cells = self.source.row_cells(idx, ctx);
+        let mut cells = self.source.row_cells(idx, ctx);
+        // Entry names are untrusted (archive member, TOC label): strip
+        // terminal-control sequences before painting. The search scan below
+        // sanitizes the same source name, so byte-offset match ranges stay
+        // aligned with this text.
+        if let Cow::Owned(clean) = sanitize_terminal_controls(&cells.name.text) {
+            cells.name.text = clean;
+        }
         let (ranges, current) = self.name_match_ranges(idx);
         let name = paint_name(&cells.name, theme, selected, &ranges, current);
         let prefix = theme.paint(&cells.prefix, theme.muted);
@@ -386,7 +396,12 @@ impl Mode for ListingMode {
                 return SearchTarget::Owned;
             }
         };
-        let search = SearchState::scan((0..self.source.len()).map(|i| self.source.name(i)), query);
+        // Sanitize names to match `compose_line`'s painted text, so search
+        // match offsets land on the same bytes the row renders.
+        let search = SearchState::scan(
+            (0..self.source.len()).map(|i| sanitize_terminal_controls(self.source.name(i))),
+            query,
+        );
         let first = search.first_line();
         self.search = Some(search);
         if let Some(idx) = first {

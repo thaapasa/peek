@@ -168,7 +168,14 @@ impl PrettyView {
             }
         };
         self.parsed = Some(match (self.pretty_print)(&raw) {
-            Ok(text) => Parsed::Text(text),
+            // Pretty-printers can echo string values verbatim (e.g. a YAML
+            // scalar holding an ESC byte), so neutralise terminal controls
+            // before the text reaches the display / pipe path. Reuse the
+            // owned string when already clean.
+            Ok(text) => Parsed::Text(match peek_io::sanitize_terminal_controls(&text) {
+                std::borrow::Cow::Borrowed(_) => text,
+                std::borrow::Cow::Owned(clean) => clean,
+            }),
             Err(e) => {
                 warnings.push(format!(
                     "{} parse failed ({e}); showing raw source",

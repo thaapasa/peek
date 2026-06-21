@@ -9,12 +9,14 @@
 pub mod compression;
 pub mod limits;
 pub mod lines;
+pub mod sanitize;
 pub mod source;
 pub mod stdin;
 pub mod stream;
 pub mod term_query;
 
 pub use lines::LineSource;
+pub use sanitize::sanitize_terminal_controls;
 pub use source::{ByteSource, InputSource};
 pub use stream::ByteStream;
 pub use term_query::{Rgb, query_background_color};

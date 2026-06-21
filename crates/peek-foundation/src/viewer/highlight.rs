@@ -14,6 +14,12 @@ use peek_detect::{FileType, StructuredFormat};
 use peek_io::InputSource;
 use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
+/// Per-line length ceiling (bytes) for syntax highlighting. Beyond this a
+/// line renders verbatim (unstyled) instead of going through syntect, whose
+/// parse cost grows steeply with line length — bounding the worst-case cost
+/// of any single pathological line. See `LineStreamHighlighter::feed`.
+const MAX_HIGHLIGHT_LINE_BYTES: usize = 64 * 1024;
+
 /// Highlight text content as colored terminal lines.
 ///
 /// Drives `LineStreamHighlighter` line-by-line so the output is byte-for-byte
@@ -117,6 +123,16 @@ impl LineStreamHighlighter {
     /// Feed the next line and return its escaped form. The line must be
     /// the highlighter's current `at()` line; the caller drives sequence.
     pub fn feed(&mut self, line: &str, style_mode: StyleMode) -> Result<String> {
+        // syntect's regex parse cost climbs steeply with line length, so a
+        // single pathological line (a minified blob, or the raw fallback
+        // after a structured parse fails on a deep-nesting bomb) can stall
+        // the render loop for seconds. Past the cap, skip highlighting and
+        // emit the line verbatim — it still displays, just unstyled, and
+        // the parse state carries forward unchanged for following lines.
+        if line.len() > MAX_HIGHLIGHT_LINE_BYTES {
+            self.next_line += 1;
+            return Ok(line.to_string());
+        }
         let theme = self.tm.theme_for(self.active_theme);
         let highlighter = Highlighter::new(theme);
         // syntect expects the trailing newline as part of the line for

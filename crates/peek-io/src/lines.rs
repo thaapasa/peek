@@ -236,7 +236,14 @@ impl Iterator for LineReader<'_> {
 }
 
 fn decode(bytes: Vec<u8>) -> Result<String> {
-    String::from_utf8(bytes).context("input is not valid UTF-8")
+    let s = String::from_utf8(bytes).context("input is not valid UTF-8")?;
+    // Neutralise terminal-control sequences before this line reaches any
+    // display / pipe path — content must never drive the terminal. Reuse
+    // the owned `s` when already clean so the common path doesn't allocate.
+    Ok(match crate::sanitize::sanitize_terminal_controls(&s) {
+        std::borrow::Cow::Borrowed(_) => s,
+        std::borrow::Cow::Owned(clean) => clean,
+    })
 }
 
 /// One streaming pass: count newlines, capture an anchor every

@@ -63,6 +63,13 @@ pub fn extract(
 /// scale them; literal-intrinsic raster would make extracts useless.
 const SVG_EXTRACT_MIN_DIM: u32 = 512;
 
+/// Ceiling (longest axis, px) on file-declared intrinsic dimensions. An
+/// SVG can declare `width="60000"`; rasterizing that verbatim allocates a
+/// multi-GB pixmap. Clamp to the same bound the live render path uses
+/// (`render::SVG_RASTER_CAP_PX`). Explicit `--extract-size` overrides are
+/// the user's own choice and stay uncapped.
+const SVG_EXTRACT_MAX_DIM: u32 = 4096;
+
 /// Resolution priority: explicit `size_override` (longest-axis pin) →
 /// `view_cols` (match what live render at that char width would
 /// produce) → intrinsic when above floor → upscale to floor.
@@ -85,7 +92,9 @@ fn target_dimensions(
         return raster_for_view_cols(w, h, cols);
     }
     let longest = w.max(h);
-    if longest >= SVG_EXTRACT_MIN_DIM {
+    if longest > SVG_EXTRACT_MAX_DIM {
+        scale_to_longest_axis(w, h, SVG_EXTRACT_MAX_DIM)
+    } else if longest >= SVG_EXTRACT_MIN_DIM {
         (w, h)
     } else {
         scale_to_longest_axis(w, h, SVG_EXTRACT_MIN_DIM)
@@ -246,6 +255,17 @@ mod tests {
         let (w, h) = target_dimensions(800, 600, None, None);
         assert_eq!(w, 800);
         assert_eq!(h, 600);
+    }
+
+    #[test]
+    fn target_dimensions_clamps_oversized_intrinsic() {
+        // A file declaring 60000×60000 must not drive a multi-GB pixmap;
+        // clamp the longest axis to the ceiling, preserving aspect.
+        let (w, h) = target_dimensions(60000, 60000, None, None);
+        assert_eq!(w.max(h), SVG_EXTRACT_MAX_DIM);
+        let (w, h) = target_dimensions(60000, 30000, None, None);
+        assert_eq!(w, SVG_EXTRACT_MAX_DIM);
+        assert_eq!(h, SVG_EXTRACT_MAX_DIM / 2);
     }
 
     #[test]
