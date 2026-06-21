@@ -20,7 +20,7 @@ exclude = ["fuzz"]
 # = true` to inherit). One version line for the whole workspace — the release
 # pipeline bumps this; see docs/release.md.
 [workspace.package]
-version = "0.3.3"
+version = "0.4.0"
 edition = "2024"
 # Honest floor: the tree already calls stdlib items stabilized in 1.87
 # (lines.rs, csv/parse.rs, font, glyph_atlas const ctx). The Info-view
