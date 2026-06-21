@@ -127,8 +127,11 @@ impl LineStreamHighlighter {
         // single pathological line (a minified blob, or the raw fallback
         // after a structured parse fails on a deep-nesting bomb) can stall
         // the render loop for seconds. Past the cap, skip highlighting and
-        // emit the line verbatim — it still displays, just unstyled, and
-        // the parse state carries forward unchanged for following lines.
+        // emit the line verbatim — it still displays, just unstyled.
+        // The parse state is left unchanged (following lines may
+        // mis-highlight if the skipped line opened a multi-line construct —
+        // an unterminated block comment or string — but that's the accepted
+        // bounded-cost tradeoff).
         if line.len() > MAX_HIGHLIGHT_LINE_BYTES {
             self.next_line += 1;
             return Ok(line.to_string());

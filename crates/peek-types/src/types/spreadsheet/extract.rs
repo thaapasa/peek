@@ -21,10 +21,20 @@ pub fn extract(
     fmt: SpreadsheetFormat,
     opts: &ExtractOptions,
 ) -> Result<Extracted, ExtractError> {
-    if let Some(sheet) = key.strip_suffix(SHEET_SUFFIX) {
+    if let Some(stripped) = key.strip_suffix(SHEET_SUFFIX) {
         let mut wb = Workbook::open(source, fmt).map_err(ExtractError::Other)?;
-        if wb.sheet_names().iter().any(|n| n == sheet) {
-            return extract_sheet_csv(&mut wb, sheet);
+        // Two callers key this differently: the `--list` pipe carries the
+        // *sanitized* sheet name (`flat_line` sanitises before painting),
+        // while the interactive descend/extract path carries the raw name.
+        // Accept either form, then materialise with the raw name calamine
+        // indexes by — keeps the list-key → extract-key round-trip intact
+        // for control-char sheet names.
+        let raw = wb
+            .sheet_names()
+            .into_iter()
+            .find(|n| n == stripped || peek_io::sanitize_terminal_controls(n) == stripped);
+        if let Some(raw) = raw {
+            return extract_sheet_csv(&mut wb, &raw);
         }
     }
     // Not a sheet row → a raw zip-container entry.

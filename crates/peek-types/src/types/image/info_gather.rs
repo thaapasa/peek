@@ -24,9 +24,12 @@ pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> Extras {
         InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
         // The File arm reads from the path; a non-File source must buffer whole,
         // so skip anim stats for over-cap sources (a spill TempFile / archive
-        // entry can be GB) rather than slurp them.
-        _ if crate::viewer::modes::render_cap_exceeded(source.byte_len().unwrap_or(0), "image")
-            .is_some() =>
+        // entry can be GB) rather than slurp them. A length-unknown source
+        // (byte_len errors) bails too, matching the sibling decoder arms —
+        // never fall through to an unbounded read.
+        _ if source.byte_len().ok().is_none_or(|len| {
+            crate::viewer::modes::render_cap_exceeded(len, "image").is_some()
+        }) =>
         {
             None
         }

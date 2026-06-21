@@ -20,9 +20,12 @@ use std::borrow::Cow;
 
 /// Map terminal-control codepoints to width-stable visible glyphs.
 ///
-/// Substitution is **1-for-1** (one `char` in, one `char` out), so char
-/// offsets are preserved — search ranges, wrap geometry, and line anchors
-/// computed over the sanitized text stay aligned.
+/// Substitution is **1-for-1** (one `char` in, one `char` out), so the
+/// codepoint count is preserved — wrap geometry and line anchors computed
+/// over the sanitized text stay aligned. Note this does *not* preserve byte
+/// offsets (`ESC` → `␛` grows 1→3 bytes): the byte-offset search path stays
+/// aligned only because it scans and paints the *same* sanitized string
+/// (sanitized-vs-sanitized), not because byte positions are stable.
 ///
 /// Preserved: TAB (`0x09`) and LF (`0x0A`), the line structure the render
 /// layer owns (TAB via `expand_tabs`, LF via the line splitter). Replaced:
