@@ -6,6 +6,7 @@ use super::super::time::format_time;
 use super::super::{CompressionInfo, FileInfo};
 use super::{LABEL_WIDTH, push_field, push_section_header};
 use peek_detect::mime::{MimeCategory, MimeInfo};
+use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, lerp_color};
 
 pub(super) fn render_section(
@@ -107,6 +108,11 @@ fn paint_mime(info: &MimeInfo, theme: &PeekTheme) -> String {
 
 /// Paint filename with extension highlighted in accent.
 fn paint_filename(name: &str, theme: &PeekTheme) -> String {
+    // A nested/extracted item's name is file-controlled (archive entry,
+    // embedded-file name); strip terminal controls before painting it into
+    // the --info text output.
+    let name = sanitize_terminal_controls(name);
+    let name = name.as_ref();
     if let Some(pos) = name.rfind('.') {
         let base = &name[..pos];
         let ext = &name[pos..];
@@ -122,6 +128,8 @@ fn paint_filename(name: &str, theme: &PeekTheme) -> String {
 
 /// Paint path with directory components muted and final name highlighted.
 fn paint_path(path: &str, theme: &PeekTheme) -> String {
+    let path = sanitize_terminal_controls(path);
+    let path = path.as_ref();
     if let Some(pos) = path.rfind('/') {
         let dir = &path[..=pos];
         let name = &path[pos + 1..];

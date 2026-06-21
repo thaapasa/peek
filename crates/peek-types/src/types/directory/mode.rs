@@ -137,7 +137,8 @@ impl ListSource for DirListSource {
         // `--list` pipe output stays exact bytes (the toggle is interactive).
         let size = format_size(entry, false);
         let suffix = if is_dir { "/" } else { "" };
-        let painted_name = theme.paint(&format!("{}{}", entry.name, suffix), theme.foreground);
+        let safe_name = peek_io::sanitize_terminal_controls(&entry.name);
+        let painted_name = theme.paint(&format!("{safe_name}{suffix}"), theme.foreground);
         Some(row::compose_row(
             &row::paint_perms(&perms, theme),
             &row::paint_size(&size, entry.size, is_dir, theme),

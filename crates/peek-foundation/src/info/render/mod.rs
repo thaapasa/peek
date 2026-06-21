@@ -2,6 +2,7 @@ use syntect::highlighting::Color;
 
 use super::time::format_time;
 use super::{FileInfo, InfoValue, Value};
+use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, lerp_color};
 
 mod file;
@@ -112,11 +113,17 @@ impl InfoValue for Value {
             // the whole `render_value` chain.
             Value::Timestamp(t) => theme.paint_muted(&format_time(*t, false)),
             Value::DurationMs(ms) => theme.paint_value(&format!("{} ms", thousands_sep(*ms))),
-            Value::Text(s) | Value::Token(s) => theme.paint_value(s),
+            // Text / Token / Split carry file-controlled metadata (titles,
+            // tags, subjects); strip terminal controls before painting.
+            Value::Text(s) | Value::Token(s) => {
+                theme.paint_value(sanitize_terminal_controls(s).as_ref())
+            }
             Value::Bool(b) => theme.paint_value(if *b { "yes" } else { "no" }),
             // Pre-formatted: just paint the text in its role; JSON came from the
             // stored `json` (see `Value::Split`).
-            Value::Split { text, role, .. } => role.paint(theme, text),
+            Value::Split { text, role, .. } => {
+                role.paint(theme, sanitize_terminal_controls(text).as_ref())
+            }
         }
     }
 }

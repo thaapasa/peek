@@ -145,11 +145,12 @@ impl ListSource for TreeListSource {
         let perms = row::format_perms('-', row.mode, false);
         // `--list` pipe output stays exact bytes (the toggle is interactive).
         let size = row::format_size(SizeCell::Bytes(row.size), false);
+        let safe_path = peek_io::sanitize_terminal_controls(path);
         Some(row::compose_row(
             &row::paint_perms(&perms, theme),
             &row::paint_size(&size, row.size, false, theme),
             None,
-            &theme.paint(path, theme.foreground),
+            &theme.paint(&safe_path, theme.foreground),
         ))
     }
 }

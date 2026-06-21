@@ -174,7 +174,8 @@ impl ListSource for SymbolListSource {
 
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String> {
         let cols = self.columns(idx, theme);
-        let name = theme.paint(&self.rows[idx].name, theme.foreground);
+        let safe = peek_io::sanitize_terminal_controls(&self.rows[idx].name);
+        let name = theme.paint(&safe, theme.foreground);
         Some(format!("{}  {}", cols.join("  "), name))
     }
 }

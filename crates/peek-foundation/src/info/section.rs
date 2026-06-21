@@ -22,6 +22,7 @@
 
 use std::borrow::Cow;
 
+use peek_io::sanitize_terminal_controls;
 use peek_theme::PeekTheme;
 
 use super::{push_field, push_section_header};
@@ -124,15 +125,18 @@ fn render_node(lines: &mut Vec<String>, node: &InfoNode, theme: &PeekTheme) {
 // inner value (the empty case is handled by skip, not here); `Vec` joins with
 // commas.
 
+// Free-text values are often file-controlled metadata (titles, authors,
+// tags, subjects), so strip terminal-control sequences before painting —
+// the generic choke for every derived InfoView string field.
 impl InfoValue for String {
     fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(self)
+        theme.paint_value(sanitize_terminal_controls(self).as_ref())
     }
 }
 
 impl InfoValue for &str {
     fn render_value(&self, theme: &PeekTheme) -> String {
-        theme.paint_value(self)
+        theme.paint_value(sanitize_terminal_controls(self).as_ref())
     }
 }
 

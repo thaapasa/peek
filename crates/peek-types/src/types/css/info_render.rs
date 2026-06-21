@@ -178,10 +178,12 @@ impl crate::info::InfoView for Imports {
             value: paint_count(self.0.len(), theme),
         }];
         for (url, external) in &self.0 {
+            // `@import` URLs are file-controlled; strip terminal controls.
+            let url = peek_io::sanitize_terminal_controls(url);
             let value = if *external {
                 theme.paint(&format!(" {url}  (external)"), theme.warning)
             } else {
-                theme.paint_muted(url)
+                theme.paint_muted(&url)
             };
             nodes.push(InfoNode::Row {
                 label: "  URL".into(),

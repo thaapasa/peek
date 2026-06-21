@@ -28,6 +28,12 @@ pub(crate) fn emit_styled(text: &str, style: SgrStyle, mode: StyleMode, out: &mu
     if text.is_empty() {
         return;
     }
+    // `text` is file-controlled prose for every renderer routing through
+    // here (DOCX / ODT, RTF, and PPTX / ODP via document::render); strip
+    // terminal-control sequences so a hostile document can't drive the
+    // terminal from its rendered view.
+    let text = peek_io::sanitize_terminal_controls(text);
+    let text = text.as_ref();
     if style.bold {
         out.push_str(mode.attr_open(Attr::Bold));
     }

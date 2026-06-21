@@ -79,10 +79,8 @@ impl ListSource for SheetListSource {
     /// `--list` emits the extract key (with suffix) so it pipes straight
     /// into `--extract`.
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String> {
-        Some(theme.paint(
-            &format!("{}{SHEET_SUFFIX}", self.names[idx]),
-            theme.foreground,
-        ))
+        let name = peek_io::sanitize_terminal_controls(&self.names[idx]);
+        Some(theme.paint(&format!("{name}{SHEET_SUFFIX}"), theme.foreground))
     }
 }
 

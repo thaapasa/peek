@@ -119,7 +119,8 @@ impl ListSource for AttachmentListSource {
     }
 
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String> {
-        let name = theme.paint(&self.rows[idx].key, theme.foreground);
+        let safe = peek_io::sanitize_terminal_controls(&self.rows[idx].key);
+        let name = theme.paint(&safe, theme.foreground);
         Some(format!(
             "{}  {}  {}",
             self.content_type_cell(idx, theme),

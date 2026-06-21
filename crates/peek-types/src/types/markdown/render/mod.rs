@@ -18,6 +18,7 @@ use std::rc::Rc;
 use anyhow::Result;
 use pulldown_cmark::{Options, Parser};
 
+use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
 /// Render `text` as styled markdown wrapped to `width` columns.
@@ -26,6 +27,9 @@ use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 /// shared cache key handles invalidation so we don't need to track
 /// width changes here. `theme_manager` + `theme_name` feed fenced
 /// code blocks through syntect using the active syntax theme.
+///
+/// Also the shared entry for the notebook renderer (`render_markdown`),
+/// so the control-char strip here covers both markdown and notebook text.
 pub fn render(
     text: &str,
     width: usize,
@@ -34,7 +38,11 @@ pub fn render(
     theme_manager: &Rc<ThemeManager>,
     theme_name: PeekThemeName,
 ) -> Result<Vec<String>> {
-    let (frontmatter, body) = split_frontmatter(text);
+    // The walker paints text spans straight from the source, so strip
+    // terminal-control sequences here — before parsing — or a hostile `.md`
+    // / `.ipynb` could drive the terminal from its rendered view.
+    let text = sanitize_terminal_controls(text);
+    let (frontmatter, body) = split_frontmatter(&text);
     let parser = Parser::new_ext(body, gfm_options());
     let mut w = walker::Walker::new(width.max(20), theme, style_mode, theme_manager, theme_name);
     if let Some(fm) = frontmatter {
