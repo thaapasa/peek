@@ -87,7 +87,18 @@ pub fn sanitize_entry_path(raw: &str) -> Result<PathBuf, ExtractError> {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {
-            Component::Normal(seg) => out.push(seg),
+            Component::Normal(seg) => {
+                // Reject control characters (NUL, C0/C1, DEL) in a segment.
+                // They never appear in a legitimate name, make File::create
+                // fail confusingly (interior NUL) and — if echoed into an
+                // error or prefilled into the save prompt — could smuggle a
+                // terminal escape. Traversal is handled by the arms below;
+                // this closes the remaining clean-error gap.
+                if seg.to_string_lossy().chars().any(|c| c.is_control()) {
+                    return Err(ExtractError::UnsafePath(raw.to_string()));
+                }
+                out.push(seg);
+            }
             Component::CurDir => continue,
             Component::ParentDir | Component::Prefix(_) | Component::RootDir => {
                 return Err(ExtractError::UnsafePath(raw.to_string()));
@@ -156,6 +167,17 @@ mod tests {
     fn sanitize_allows_dotted_segment() {
         let p = sanitize_entry_path("./foo/bar.txt").unwrap();
         assert_eq!(p, PathBuf::from("foo/bar.txt"));
+    }
+
+    #[test]
+    fn sanitize_rejects_control_chars() {
+        // NUL, an embedded ESC, and a DEL each disqualify the segment.
+        for raw in ["foo\0bar", "e\x1b]0;PWN\x07.txt", "name\x7f"] {
+            assert!(
+                matches!(sanitize_entry_path(raw), Err(ExtractError::UnsafePath(_))),
+                "must reject control char in {raw:?}"
+            );
+        }
     }
 
     #[test]

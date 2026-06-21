@@ -108,8 +108,12 @@ fn open_audio_stream(source: &InputSource) -> Result<(Box<dyn MediaSource>, u64)
             (Box::new(Cursor::new(bytes.clone())), len)
         }
         InputSource::FileRange { .. } => {
+            // A range only arises from an extracted archive entry / recursive
+            // peek — bounded data, but slurped (symphonia needs Read + Seek
+            // and there's no streaming adapter over a range yet). Cap it with
+            // the archive-entry budget class rather than reading unbounded.
             let bytes =
-                source.read_bytes(peek_io::limits::Budget::Unbounded("FileRange bounded"))?;
+                source.read_bytes(peek_io::limits::Budget::BulkWalk("audio FileRange entry"))?;
             let len = bytes.len() as u64;
             (Box::new(Cursor::new(bytes)), len)
         }

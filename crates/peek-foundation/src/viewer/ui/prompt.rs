@@ -5,6 +5,7 @@
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
+use peek_io::sanitize_terminal_controls;
 use peek_theme::PeekTheme;
 
 pub struct Prompt {
@@ -189,8 +190,15 @@ impl Prompt {
     /// Render as a status-line replacement. Caret is drawn inline
     /// (no real cursor move needed).
     pub fn render_status_line(&self, theme: &PeekTheme) -> String {
+        // Title and input are untrusted: an extract prompt prefills `input`
+        // with a container-derived name (archive entry / attachment), and a
+        // title may carry a file-derived label. Strip terminal controls
+        // before painting so an entry like `e\x1b]0;PWN\x07.txt` can't fire
+        // an OSC/CSI sequence — the same sanitise-before-paint rule the
+        // status bar and listings follow.
+        let title = sanitize_terminal_controls(&self.title);
         if self.confirm {
-            let painted_title = theme.paint(&self.title, theme.label);
+            let painted_title = theme.paint(&title, theme.label);
             let hint = theme.paint("  y:yes  n/Esc:no", theme.muted);
             return format!("{painted_title}{hint}");
         }
@@ -201,12 +209,13 @@ impl Prompt {
             Some(false) => (" (literal)", "  ^R:regex  Esc:cancel  Enter:search"),
             None => ("", "  Esc:cancel  Enter:save"),
         };
-        let title = format!("{}{mode}: ", self.title);
+        let title = format!("{title}{mode}: ");
         let painted_title = theme.paint(&title, theme.label);
         let (left, right) = self.input.split_at(self.cursor);
-        let painted_left = theme.paint(left, theme.foreground);
+        let painted_left = theme.paint(sanitize_terminal_controls(left).as_ref(), theme.foreground);
         let painted_caret = theme.paint("\u{2581}", theme.accent);
-        let painted_right = theme.paint(right, theme.foreground);
+        let painted_right =
+            theme.paint(sanitize_terminal_controls(right).as_ref(), theme.foreground);
         let hint = theme.paint(hint_text, theme.muted);
         format!("{painted_title}{painted_left}{painted_caret}{painted_right}{hint}")
     }

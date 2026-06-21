@@ -34,6 +34,7 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use anyhow::Result;
+use peek_io::sanitize::control_replacement;
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
@@ -637,10 +638,21 @@ fn paint_content_with_markers(out: &mut String, content: &str, base: Color, them
 /// * `\r` → drop (terminal would interpret as cursor-to-column-0)
 /// * `\t` → space (tab stops aren't aligned across cells)
 ///
-/// Returns `Cow::Borrowed` when the cell carries none of these — the
+/// Every other terminal-control codepoint (ESC, the rest of C0, C1, DEL,
+/// bidi overrides) is mapped to its visible picture via
+/// [`control_replacement`] — cell text is untrusted (CSV / spreadsheet /
+/// SQLite values), so a raw `ESC]52` OSC must not reach the terminal. This
+/// is the table view's sanitise-before-paint choke; the cell-search scan
+/// matches against this same display form, so the 1-for-1 substitution
+/// keeps overlay offsets aligned.
+///
+/// Returns `Cow::Borrowed` when the cell carries nothing to rewrite — the
 /// common case — so the hot path doesn't allocate.
 pub fn display_cell(s: &str) -> Cow<'_, str> {
-    if !s.contains(['\n', '\r', '\t']) {
+    if !s
+        .chars()
+        .any(|c| matches!(c, '\n' | '\r' | '\t') || control_replacement(c).is_some())
+    {
         return Cow::Borrowed(s);
     }
     let mut out = String::with_capacity(s.len());
@@ -649,7 +661,7 @@ pub fn display_cell(s: &str) -> Cow<'_, str> {
             '\n' => out.push('\u{21B5}'),
             '\r' => {}
             '\t' => out.push(' '),
-            _ => out.push(c),
+            _ => out.push(control_replacement(c).unwrap_or(c)),
         }
     }
     Cow::Owned(out)
@@ -1038,6 +1050,21 @@ mod tests {
             compression: None,
             extras: Box::new(NoExtras),
         }
+    }
+
+    #[test]
+    fn display_cell_neutralises_terminal_escapes() {
+        // Untrusted cell carrying an OSC 52 clipboard-write + a CSI: no raw
+        // ESC / BEL may survive into the painted (or piped) output.
+        let evil = "x\x1b]52;c;cHduZWQ=\x07\x1b[31mred";
+        let out = display_cell(evil);
+        assert!(!out.contains('\x1b'), "ESC must not survive: {out:?}");
+        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
+        assert!(out.contains('\u{241b}'), "ESC → ␛ picture: {out:?}");
+        // Clean text still borrows (no alloc on the hot path).
+        assert!(matches!(display_cell("plain value"), Cow::Borrowed(_)));
+        // The table's own line-structure substitutions are preserved.
+        assert_eq!(display_cell("a\nb\tc\rd").as_ref(), "a\u{21b5}b cd");
     }
 
     #[test]

@@ -52,6 +52,16 @@ pub fn sanitize_terminal_controls(s: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// The width-stable replacement glyph for a terminal-control codepoint, or
+/// `None` when `c` is safe to emit verbatim. Same classification as
+/// [`sanitize_terminal_controls`] (TAB/LF treated as safe). Callers that
+/// already substitute some controls themselves — e.g. the table view maps
+/// `\n`/`\r`/`\t` to its own markers — route the *remaining* chars through
+/// this so every producer shares one control-stripping definition.
+pub fn control_replacement(c: char) -> Option<char> {
+    needs_sanitizing(c).then(|| replacement(c))
+}
+
 fn needs_sanitizing(c: char) -> bool {
     match c {
         '\t' | '\n' => false,

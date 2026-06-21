@@ -35,6 +35,7 @@ use crate::viewer::search::{
     SearchQuery, SearchState, SearchTarget, overlay_matches, reveal_h_scroll,
 };
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
+use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, lerp_color};
 
 /// Sticky rows at the top of the viewport — the header and its rule.
@@ -315,6 +316,12 @@ fn clip(line: &str, h_scroll: usize, cols: usize) -> String {
 /// Format a cell / header value into its column: truncate-and-pad for a
 /// fixed column, verbatim for the flexible last column (`width == 0`).
 fn fmt_plain(text: &str, col: &Column, is_last: bool) -> String {
+    // Cell text is untrusted; strip terminal controls before it reaches the
+    // painter. This is the TableMode sanitise-before-paint choke, shared by
+    // the search scan (which formats rows the same way), so escapes can't
+    // survive in either the plain or painted form.
+    let text = sanitize_terminal_controls(text);
+    let text = text.as_ref();
     if is_last || col.width == 0 {
         return text.to_string();
     }

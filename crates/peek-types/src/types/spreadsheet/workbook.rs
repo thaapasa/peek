@@ -13,7 +13,7 @@ use std::io::Cursor;
 
 use anyhow::{Result, anyhow};
 use bytes::Bytes;
-use calamine::{Data, Ods, Reader, Sheets, Xlsx};
+use calamine::{Cell, Data, DataRef, Ods, Range, Reader, Sheets, Xlsx};
 
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
@@ -52,12 +52,77 @@ impl Workbook {
 
     /// Materialise one sheet into a [`Sheet`] row source.
     pub fn materialize(&mut self, name: &str) -> Result<Sheet> {
-        let range = self
-            .sheets
-            .worksheet_range(name)
-            .map_err(|e| anyhow!("reading sheet {name}: {e:?}"))?;
+        let range = self.sheet_range(name)?;
+        // Defence-in-depth for the ODS path (which can't be guarded before
+        // calamine's dense build) and against peek's own mirror into owned
+        // strings: reject a sheet whose used rectangle exceeds the cap.
+        let (rows, cols) = range.get_size();
+        if rows.saturating_mul(cols) > MAX_SHEET_CELLS {
+            return Err(anyhow!(
+                "sheet {name} too large to display ({rows}×{cols} cells)"
+            ));
+        }
         Ok(Sheet::from_range(&range))
     }
+
+    /// Read a sheet's cells into a dense [`Range`], rejecting one whose used
+    /// bounding box exceeds [`MAX_SHEET_CELLS`].
+    ///
+    /// calamine's `Range::from_sparse` allocates a *dense* `width × height`
+    /// buffer over the bounding rectangle of populated cells, so a few-cell
+    /// file with two cells at opposite corners of the grid (e.g. `A1` and
+    /// `XFD1048576`) demands ~16 billion `Data` slots and aborts the
+    /// process before any of peek's own caps run. For XLSX we stream cells
+    /// through the cell reader and bail the moment the box crosses the cap,
+    /// *before* the dense allocation. ODS has no streaming reader; it falls
+    /// back to calamine's whole-sheet read (bounded by calamine's own
+    /// 1M-row × 16K-col caps) and is caught by the `get_size` check in
+    /// [`Self::materialize`].
+    fn sheet_range(&mut self, name: &str) -> Result<Range<Data>> {
+        match &mut self.sheets {
+            Sheets::Xlsx(xlsx) => bounded_xlsx_range(xlsx, name),
+            other => other
+                .worksheet_range(name)
+                .map_err(|e| anyhow!("reading sheet {name}: {e:?}")),
+        }
+    }
+}
+
+/// Cap on a materialised sheet's used-rectangle cell count. 16M ≈ a single
+/// fully-populated Excel column (1,048,576 rows × 16 cols), comfortably
+/// above any real sheet a terminal can display yet far below the billions
+/// a sparse-corner bomb would force.
+const MAX_SHEET_CELLS: usize = 16 * 1024 * 1024;
+
+/// Stream an XLSX sheet's cells, refusing it before the dense build if the
+/// populated bounding box exceeds [`MAX_SHEET_CELLS`]. See
+/// [`Workbook::sheet_range`] for why this can't go through
+/// `worksheet_range`.
+fn bounded_xlsx_range(xlsx: &mut Xlsx<Cursor<Bytes>>, name: &str) -> Result<Range<Data>> {
+    let mut reader = xlsx
+        .worksheet_cells_reader(name)
+        .map_err(|e| anyhow!("reading sheet {name}: {e:?}"))?;
+    let mut cells: Vec<Cell<Data>> = Vec::new();
+    let (mut r_min, mut r_max, mut c_min, mut c_max) = (u32::MAX, 0u32, u32::MAX, 0u32);
+    while let Some(cell) = reader
+        .next_cell()
+        .map_err(|e| anyhow!("reading sheet {name}: {e:?}"))?
+    {
+        if matches!(cell.get_value(), DataRef::Empty) {
+            continue;
+        }
+        let (r, c) = cell.get_position();
+        r_min = r_min.min(r);
+        r_max = r_max.max(r);
+        c_min = c_min.min(c);
+        c_max = c_max.max(c);
+        let box_cells = ((r_max - r_min + 1) as usize).saturating_mul((c_max - c_min + 1) as usize);
+        if box_cells > MAX_SHEET_CELLS {
+            return Err(anyhow!("sheet {name} too large to display"));
+        }
+        cells.push(Cell::new((r, c), cell.get_value().clone().into()));
+    }
+    Ok(Range::from_sparse(cells))
 }
 
 /// One materialised sheet, ready to drive a `RowsTableMode`.
