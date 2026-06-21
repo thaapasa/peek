@@ -91,33 +91,6 @@ fn annotate(mode: StyleMode, annotations: &[RichAnnotation], text: &str) -> Stri
     out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // OSC 52 clipboard write + OSC 0 title spoof embedded in HTML text. BEL
-    // (`\x07`) is the OSC terminator; peek never emits it, so its survival
-    // would prove the injected sequence reached the terminal intact.
-    const EVIL: &[u8] = b"x\x1b]52;c;cHduZWQ=\x07<b>\x1b]0;PWNED\x07bold</b>";
-
-    #[test]
-    fn plain_mode_strips_injected_controls() {
-        let out = render(EVIL, 80, StyleMode::Plain).unwrap().join("\n");
-        assert!(!out.contains('\x1b'), "ESC must not survive: {out:?}");
-        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
-    }
-
-    #[test]
-    fn styled_mode_strips_injected_controls() {
-        // TrueColor wraps spans in peek's own SGR (which contains ESC), so
-        // we can't assert ESC-free — but peek's escapes never use BEL, so a
-        // surviving BEL means the OSC payload leaked through annotate().
-        let out = render(EVIL, 80, StyleMode::TrueColor).unwrap().join("\n");
-        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
-        assert!(out.contains("bold"), "text must still render: {out:?}");
-    }
-}
-
 fn attr(mode: StyleMode, a: Attr) -> (String, String) {
     (
         mode.attr_open(a).to_string(),
@@ -143,4 +116,31 @@ fn is_grayscale(c: &html2text::Colour) -> bool {
     let max = c.r.max(c.g).max(c.b);
     let min = c.r.min(c.g).min(c.b);
     max.saturating_sub(min) < 24
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // OSC 52 clipboard write + OSC 0 title spoof embedded in HTML text. BEL
+    // (`\x07`) is the OSC terminator; peek never emits it, so its survival
+    // would prove the injected sequence reached the terminal intact.
+    const EVIL: &[u8] = b"x\x1b]52;c;cHduZWQ=\x07<b>\x1b]0;PWNED\x07bold</b>";
+
+    #[test]
+    fn plain_mode_strips_injected_controls() {
+        let out = render(EVIL, 80, StyleMode::Plain).unwrap().join("\n");
+        assert!(!out.contains('\x1b'), "ESC must not survive: {out:?}");
+        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
+    }
+
+    #[test]
+    fn styled_mode_strips_injected_controls() {
+        // TrueColor wraps spans in peek's own SGR (which contains ESC), so
+        // we can't assert ESC-free — but peek's escapes never use BEL, so a
+        // surviving BEL means the OSC payload leaked through annotate().
+        let out = render(EVIL, 80, StyleMode::TrueColor).unwrap().join("\n");
+        assert!(!out.contains('\x07'), "BEL must not survive: {out:?}");
+        assert!(out.contains("bold"), "text must still render: {out:?}");
+    }
 }
