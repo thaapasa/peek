@@ -62,8 +62,9 @@ view adds a Compression row showing the codec plus before / after sizes.
 | lz4    | `.lz4`    |
 | brotli | `.br`     |
 
-Decompressed output is capped at 256 MiB. Larger streams surface a warning and the viewer falls
-back to a hex view of the raw compressed bytes.
+There is no fixed decompressed-size cap; output over 16 MiB spills to a tempfile to bound RAM. A
+decompression bomb above 8 GiB — or any corrupt or truncated stream — surfaces a warning and the
+viewer falls back to a hex view of the raw compressed bytes.
 
 Brotli is the one exception to magic-byte detection: a raw brotli stream carries no signature,
 so `.br` / `.tar.br` are recognised by extension only — a brotli stream piped through stdin

@@ -98,110 +98,58 @@ pub enum FileType {
     Structured(StructuredFormat),
     /// Raster image
     Image,
-    /// SVG vector image (rasterized for preview, XML source for raw view)
+    /// SVG vector image
     Svg,
-    /// HTML document (rendered text view via html2text, XML source for raw view)
+    /// HTML document
     Html,
-    /// Markdown document. Renders to width-wrapped, ANSI-styled text via
-    /// `pulldown-cmark` (headings / lists / blockquotes / tables / fenced
-    /// code with syntect highlight), paired with a syntax-highlighted
-    /// source view.
+    /// Markdown document
     Markdown,
-    /// Jupyter notebook (`.ipynb` — JSON document of cells). Renders the
-    /// cells (markdown prose + syntax-highlighted code + textual output)
-    /// as a styled read view, paired with the raw notebook JSON source.
+    /// Jupyter notebook (`.ipynb`)
     Notebook,
-    /// Email message (`.eml` single RFC822/MIME message) or mailbox
-    /// (`.mbox` concatenation of messages). `.eml` drives a rendered
-    /// header+body read view, the raw source, and an attachments
-    /// listing; `.mbox` drives a message-list TOC that descends into a
-    /// single message.
+    /// Email message (`.eml`) or mailbox (`.mbox`)
     Email(EmailFormat),
-    /// E-book (EPUB = ZIP container with HTML chapters + OPF
-    /// metadata). Drives a per-chapter rendered read mode plus the
-    /// container's listing TOC.
+    /// E-book (EPUB)
     Ebook(EbookFormat),
-    /// Comic-archive (one image per page in a ZIP / RAR / 7z / tar
-    /// container). Drives the paged-image read mode.
+    /// Comic-archive (page images in a ZIP / RAR / 7z / tar container)
     Comic(ComicFormat),
-    /// Word-style document (DOCX = ZIP of XML, RTF = control-word
-    /// markup). Drives a styled-text read view; DOCX additionally
-    /// exposes the ZIP listing TOC and per-entry extract.
+    /// Word-style document (DOCX / RTF)
     Document(DocumentFormat),
-    /// PDF document. Drives a paged-image render mode + text-extraction
-    /// view + embedded-files listing. The flavour distinguishes plain
-    /// PDF from PDF-compatible Adobe Illustrator (`.ai`) — same render
-    /// path, different Info label.
+    /// PDF document (plain, or PDF-compatible Illustrator `.ai`)
     Pdf(PdfFlavor),
-    /// EPS / PostScript (`.eps` / `.ps`). Drives an embedded-preview
-    /// image view (binary DOS-EPS), an optional Ghostscript render view
-    /// (when `gs` is on PATH), the PostScript source, and a DSC-metadata
-    /// Info section.
+    /// EPS / PostScript (`.eps` / `.ps`)
     PostScript(PostScriptFormat),
-    /// Spreadsheet workbook (`.xlsx` / `.xlsm` / `.ods`). Drives a sheet
-    /// listing whose rows drill into a streaming table view, a raw
-    /// ZIP-entry listing, and a workbook Info section.
+    /// Spreadsheet workbook (`.xlsx` / `.xlsm` / `.ods`)
     Spreadsheet(SpreadsheetFormat),
-    /// Presentation (`.pptx` / `.pptm` / `.ppsx` / `.odp` / `.key`).
-    /// PPTX / ODP drive a slide-by-slide rendered read view + raw
-    /// ZIP-entry listing; Keynote drives the embedded preview image +
-    /// listing. All carry a presentation Info section.
+    /// Presentation (`.pptx` / `.pptm` / `.ppsx` / `.odp` / `.key`)
     Presentation(PresentationFormat),
-    /// Container archive (zip / tar / compressed tar). Drives the
-    /// listing-only TOC viewer — no payload decompression.
+    /// Container archive (zip / tar / compressed tar) — listing only
     Archive(ArchiveFormat),
     /// Bare single-stream compressed file (`.gz` / `.bz2` / `.xz` /
-    /// `.zst` / `.lz4` / `.br`). Transparently decompressed by `compose_modes`
-    /// — the user sees the inner content rendered as its real type,
-    /// and the info section surfaces a Compression row.
+    /// `.zst` / `.lz4` / `.br`), transparently decompressed to its inner
+    /// type by `compose_modes`.
     Compressed(CompressionFormat),
-    /// Disk image (ISO / DMG / etc). ISO drives a directory-tree
-    /// listing view; DMG / raw images drive a metadata-only info view —
-    /// volume descriptor / trailer parsing, no filesystem walk.
+    /// Disk image (ISO / DMG / raw)
     DiskImage(DiskImageFormat),
-    /// Object file — ELF / Mach-O / PE / COFF executable, shared
-    /// library, or relocatable object. Drives a metadata Info view plus
-    /// streamed Sections / Symbols tables (no extract).
+    /// Object file — ELF / Mach-O / PE / COFF
     ObjectFile,
-    /// Java classfile (`.class` — JVM bytecode container). Drives a
-    /// metadata Info view plus Fields / Methods tables (no extract).
+    /// Java classfile (`.class` — JVM bytecode)
     Classfile,
-    /// Filesystem directory. One-level listing view. Selecting a child
-    /// file descends into peek; selecting a child directory re-targets
-    /// the current frame (no stack of directories).
+    /// Filesystem directory
     Directory,
-    /// Sound / music file. Drives a metadata-only info view —
-    /// container / codec / channels / bit depth / sample rate + tag
-    /// fields (title / artist / album / etc). No playback.
+    /// Sound / music file
     Audio(AudioFormat),
-    /// Tabular data (`.csv` / `.tsv`). Drives an aligned table view
-    /// over a streaming record reader, paired with a raw Source view.
+    /// Tabular data (`.csv` / `.tsv`)
     Csv(CsvFormat),
-    /// SQLite 3 database (`.sqlite` / `.sqlite3` / `.db` / `.db3`).
-    /// Drives a schema listing (tables / views / indexes / triggers)
-    /// plus a streaming contents view per table. Read-only — peek
-    /// never writes to a user database.
+    /// SQLite 3 database (`.sqlite` / `.sqlite3` / `.db` / `.db3`) —
+    /// read-only, peek never writes to a user database
     Sqlite(SqliteFormat),
-    /// PEM-encoded certificate / key file (X.509 cert, CSR, CRL,
-    /// RSA / EC / Ed25519 private or public key, OpenSSH public
-    /// key). Source view shows the PEM text; Info decodes per-block
-    /// fields (subject, validity, fingerprints, key usage, …).
+    /// PEM certificate / key (X.509 cert, CSR, CRL, private / public key)
     Cert(CertFormat),
-    /// TrueType / OpenType font or font collection (`.ttf` / `.otf` /
-    /// `.ttc` / `.otc`). Drives a metadata-only info view in the first
-    /// cut: family / subfamily / weight / glyph + codepoint counts /
-    /// supported scripts. No source view (binary container).
+    /// TrueType / OpenType font or collection (`.ttf` / `.otf` / `.ttc` / `.otc`)
     Font(FontFormat),
-    /// vObject text document — iCalendar calendar (`.ics`) or vCard
-    /// address book (`.vcf`). Drives a rendered read view (agenda /
-    /// contact cards) plus the raw source, and an Info summary
-    /// (counts / date range / version).
+    /// vObject — iCalendar (`.ics`) or vCard (`.vcf`)
     VObject(VObjectFormat),
-    /// Apple Finder `.DS_Store` — per-folder Desktop Services Store
-    /// (the "Bud1" Buddy-allocator container). Drives a records table
-    /// (one row per stored property: icon position, window geometry,
-    /// view style, …) plus a metadata Info summary. No source view
-    /// (opaque binary), no extract (the records aren't files).
+    /// Apple Finder `.DS_Store` (Desktop Services Store)
     DsStore,
     /// Binary / unknown
     Binary,

@@ -40,7 +40,7 @@ crates/
                     (gz/bz2/xz/zst/lz4/br); stdin + /dev/tty reopen; limits (memory budget
                     classes). Depends on nothing in-tree.
   peek-detect/      file-type detection. FileType + per-type format enums + magic/extension/
-                    content-sniff (detect/) + mime + transparent decompress-redetect. One
+                    content-sniff (detect.rs) + mime + transparent decompress-redetect. One
                     types/<type>.rs per type. Depends on peek-io only — NOT readers.
   peek-theme/       theming leaf. PeekTheme roles + paint; PeekThemeName + embedded .tmTheme
                     (themes/); StyleMode + SGR encode/tokenize + ActiveStyle; ThemeManager.
@@ -50,7 +50,7 @@ crates/
                     only so `#[derive(InfoView)]` paths resolve. `testing` feature exposes test
                     helpers (off in release).
     viewer/         Mode trait + ModeId + RenderCtx + ExtractTarget; modes/ (shared modes: content/
-                    pretty_view/gutter/hex/info/about/rendered_text<R>); listing/ (ListingMode over
+                    pretty_view/gutter/hex/info/about/help/rendered_text<R>); listing/ (ListingMode over
                     ListSource — TreeListSource for TOCs, directory listing); table/ (TableMode +
                     RowsTableMode via RowSource); ui/ (Action/ScreenBuffer/Prompt/styled/status/
                     term); image_render (ImageConfig/ImageMode/zoom/scroll/ZoomPanState); paged

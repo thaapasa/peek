@@ -1077,7 +1077,8 @@ directories, comic archives, and the EPUB / DOCX / ODT ZIP TOC.
 | cpio         | `.cpio`                        | ✅         |
 | cpio + gzip  | `.cpio.gz`                     | ✅         |
 | ar / Debian  | `.ar`, `.deb`, `.a`            | ✅         |
-| RAR          | `.rar`                         | ☐ planned |
+
+RAR (`.rar`) is not yet supported — see [planned.md](planned.md).
 
 Info view shows entry / file / directory counts and total uncompressed size. Listing failures
 (corrupt archive, unsupported variant) surface as a warning row and the TOC view is empty. When an
