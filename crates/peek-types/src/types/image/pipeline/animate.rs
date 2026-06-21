@@ -45,9 +45,16 @@ fn detect_format(source: &InputSource, magic_mime: Option<&str>) -> Option<AnimF
             }
         }
         _ => {
+            // The File arm sniffs by extension; a non-File source must buffer
+            // whole to sniff, so skip over-cap sources (a spill TempFile or
+            // archive entry can be GB) rather than slurp them.
+            if crate::viewer::modes::render_cap_exceeded(source.byte_len().ok()?, "image").is_some()
+            {
+                return None;
+            }
             let buf = source
                 .read_bytes(peek_io::limits::Budget::Unbounded(
-                    "non-File source already bounded (File arm sniffs by extension)",
+                    "gated by render cap above",
                 ))
                 .ok()?;
             sniff_anim_format(&buf)
@@ -153,9 +160,14 @@ pub fn decode_anim_frames(
             )?
         }
         (other, AnimFormat::Gif) => {
+            // The File arm streams from the path; a non-File source must buffer
+            // whole, so gate its size (a spill TempFile / archive entry can be
+            // GB). A known `magic_mime` reaches here without `detect_format`'s
+            // sniff gate, so this is not redundant.
+            crate::viewer::modes::ensure_under_render_cap(other.byte_len()?, "image")?;
             let buf = other
                 .read_bytes(peek_io::limits::Budget::Unbounded(
-                    "non-File source already bounded (File arm streams from path)",
+                    "gated by render cap above",
                 ))
                 .context("failed to read animated GIF source")?;
             collect_frames(
@@ -164,9 +176,12 @@ pub fn decode_anim_frames(
             )?
         }
         (other, AnimFormat::Webp) => {
+            // Same size gate as the GIF arm above — a known `magic_mime`
+            // bypasses `detect_format`'s sniff gate.
+            crate::viewer::modes::ensure_under_render_cap(other.byte_len()?, "image")?;
             let buf = other
                 .read_bytes(peek_io::limits::Budget::Unbounded(
-                    "non-File source already bounded (File arm streams from path)",
+                    "gated by render cap above",
                 ))
                 .context("failed to read animated WebP source")?;
             collect_frames(

@@ -708,8 +708,12 @@ fn load_image(source: &InputSource) -> Result<DynamicImage> {
             .decode()
             .context("failed to decode image"),
         _ => {
+            // The File arm streams from the path (decode bounded by the image
+            // crate); a non-File source must buffer whole, so gate its size —
+            // a TempFile from a decompression spill or archive entry can be GB.
+            crate::viewer::modes::ensure_under_render_cap(source.byte_len()?, "image")?;
             let buf = source.read_bytes(peek_io::limits::Budget::Unbounded(
-                "non-File source already bounded (File arm streams from path)",
+                "gated by render cap above",
             ))?;
             image::load_from_memory(&buf).context("failed to decode image")
         }

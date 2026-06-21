@@ -126,6 +126,11 @@ hard-refusing capped read — it degrades the **view**, not the whole frame:
   for sidecar parsers.
 - `SearchState::scan_capped` (`viewer/search.rs`) — byte-budgeted scan over
   a streaming source.
+- Image decode/sniff non-File arms (`image/pipeline/`, `image/info_gather.rs`)
+  — `ensure_under_render_cap` / `render_cap_exceeded` on `byte_len` before the
+  buffer read. The File arm streams from the path (uncapped); a non-File source
+  must buffer whole to decode, and a spill `TempFile` or archive entry can be
+  GB, so the render cap gates it. Asymmetric by design.
 
 ## The decision rule
 

@@ -22,10 +22,18 @@ pub fn gather_extras(source: &InputSource, magic_mime: Option<&str>) -> Extras {
     let head = read_source_head(source, IMAGE_HEAD_SCAN);
     let anim = match source {
         InputSource::File(path) => animation_stats::animation_stats_path(path, magic_mime),
+        // The File arm reads from the path; a non-File source must buffer whole,
+        // so skip anim stats for over-cap sources (a spill TempFile / archive
+        // entry can be GB) rather than slurp them.
+        _ if crate::viewer::modes::render_cap_exceeded(source.byte_len().unwrap_or(0), "image")
+            .is_some() =>
+        {
+            None
+        }
         _ => {
             let buf = source
                 .read_bytes(peek_io::limits::Budget::Unbounded(
-                    "non-File source already bounded (File arm uses path)",
+                    "gated by render cap above",
                 ))
                 .unwrap_or_default();
             animation_stats::animation_stats_bytes(&buf, magic_mime)
@@ -45,10 +53,15 @@ fn image_decoder_for(source: &InputSource) -> Option<Box<dyn ImageDecoder>> {
             // Memory-backed source uses its `Bytes` directly; range-backed
             // sources read their bytes eagerly (small images dominate this
             // path — extracted ISO entries / archive entries pointed at an
-            // image during recursive peek).
+            // image during recursive peek). Gate the size, though: a spill
+            // TempFile or archive entry can be GB, and only the File arm streams.
+            if crate::viewer::modes::render_cap_exceeded(source.byte_len().ok()?, "image").is_some()
+            {
+                return None;
+            }
             let buf = source
                 .read_bytes(peek_io::limits::Budget::Unbounded(
-                    "non-File source already bounded (File arm uses path)",
+                    "gated by render cap above",
                 ))
                 .ok()?;
             ::image::ImageReader::new(std::io::Cursor::new(buf))
