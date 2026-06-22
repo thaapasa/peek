@@ -93,7 +93,7 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
             },
             Ok(Event::Text(t)) => {
                 if scalar.is_some()
-                    && let Ok(s) = t.xml_content()
+                    && let Ok(s) = t.xml10_content()
                 {
                     text.push_str(&s);
                 }

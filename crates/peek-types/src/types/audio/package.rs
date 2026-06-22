@@ -21,14 +21,15 @@ use std::io::Cursor;
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use symphonia::core::codecs::CodecType;
-use symphonia::core::formats::FormatOptions;
+use symphonia::core::codecs::CodecParameters;
+use symphonia::core::codecs::audio::AudioCodecId;
+use symphonia::core::formats::probe::Hint;
+use symphonia::core::formats::{FormatOptions, TrackType};
 use symphonia::core::io::{MediaSource, MediaSourceStream};
 use symphonia::core::meta::{
-    MetadataOptions, MetadataRevision, StandardTagKey, StandardVisualKey, Tag, Value,
+    MetadataOptions, MetadataRevision, RawValue, StandardTag, StandardVisualKey, Tag,
     Visual as SymVisual,
 };
-use symphonia::core::probe::Hint;
 use symphonia::default::get_probe;
 
 use crate::types::audio::info::{AudioMetadata, AudioStats};
@@ -132,11 +133,11 @@ pub fn probe(source: &InputSource, format: AudioFormat) -> Result<Probed> {
         hint.mime_type(mime);
     }
 
-    let mut probed = get_probe().format(
+    let mut reader = get_probe().probe(
         &hint,
         mss,
-        &FormatOptions::default(),
-        &MetadataOptions::default(),
+        FormatOptions::default(),
+        MetadataOptions::default(),
     )?;
 
     let mut out = Probed {
@@ -153,33 +154,29 @@ pub fn probe(source: &InputSource, format: AudioFormat) -> Result<Probed> {
         lyrics: None,
     };
 
-    if let Some(track) = probed.format.default_track() {
-        let params = &track.codec_params;
-        out.codec = codec_label(params.codec);
-        out.sample_rate = params.sample_rate;
-        if let Some(channels) = params.channels {
-            out.channels = Some(channels.count() as u16);
-            out.channel_layout = Some(channel_layout_label(channels.count()));
+    if let Some(track) = reader.default_track(TrackType::Audio) {
+        if let Some(CodecParameters::Audio(params)) = &track.codec_params {
+            out.codec = codec_label(params.codec);
+            out.sample_rate = params.sample_rate;
+            if let Some(channels) = &params.channels {
+                out.channels = Some(channels.count() as u16);
+                out.channel_layout = Some(channel_layout_label(channels.count()));
+            }
+            out.bits_per_sample = params.bits_per_sample;
         }
-        out.bits_per_sample = params.bits_per_sample;
-        if let (Some(n_frames), Some(tb)) = (params.n_frames, params.time_base) {
-            let secs = n_frames as f64 * tb.numer as f64 / tb.denom as f64;
+        // Duration moved off the codec params onto the track in 0.6:
+        // playable-frame count plus the track timebase.
+        if let (Some(n_frames), Some(tb)) = (track.num_frames, track.time_base) {
+            let secs = n_frames as f64 * tb.numer.get() as f64 / tb.denom.get() as f64;
             out.duration_secs = Some(secs);
         }
         out.bitrate = derive_bitrate(file_size, out.duration_secs);
     }
 
-    // Walk every metadata revision the probe surfaced. Vorbis containers
-    // (Ogg / FLAC) carry tags on `probed.format.metadata()`; ID3v2-only
-    // files (MP3 / AIFF) land them on `probed.metadata` instead. Some
-    // files split tags + visuals across both — read both.
-    let fmt_md = probed.format.metadata();
-    if let Some(rev) = fmt_md.current() {
-        ingest_revision(rev, &mut out);
-    }
-    if let Some(md) = probed.metadata.get().as_ref()
-        && let Some(rev) = md.current()
-    {
+    // 0.6 consolidates all metadata the probe surfaced (container tags +
+    // any ID3v2 block read ahead of the format) into the reader's single
+    // metadata log — no separate pre-format revision to merge anymore.
+    if let Some(rev) = reader.metadata().current() {
         ingest_revision(rev, &mut out);
     }
 
@@ -290,10 +287,10 @@ pub fn read_embed(probed: &Probed, key: &str) -> Option<(Bytes, String)> {
 }
 
 fn ingest_revision(rev: &MetadataRevision, out: &mut Probed) {
-    for tag in rev.tags() {
+    for tag in &rev.media.tags {
         ingest_tag(tag, out);
     }
-    for visual in rev.visuals() {
+    for visual in &rev.media.visuals {
         if let Some(converted) = convert_visual(visual) {
             out.visuals.push(converted);
         }
@@ -308,7 +305,7 @@ fn convert_visual(v: &SymVisual) -> Option<EmbedVisual> {
         return None;
     }
     Some(EmbedVisual {
-        media_type: v.media_type.clone(),
+        media_type: v.media_type.clone().unwrap_or_default(),
         usage_root: v.usage.map(visual_usage_root).unwrap_or("picture"),
         data: Bytes::copy_from_slice(&v.data),
     })
@@ -339,6 +336,9 @@ fn visual_usage_root(key: StandardVisualKey) -> &'static str {
         StandardVisualKey::PublisherStudioLogo => "publisher_logo",
         StandardVisualKey::FileIcon => "file_icon",
         StandardVisualKey::OtherIcon => "icon",
+        // `Other` + the enum's `#[non_exhaustive]` tail collapse to the
+        // generic root, matching the old `unwrap_or("picture")` fallback.
+        _ => "picture",
     }
 }
 
@@ -360,39 +360,42 @@ fn extension_for_mime(mime: &str) -> &'static str {
 }
 
 fn ingest_tag(tag: &Tag, out: &mut Probed) {
-    let v = tag_value_string(&tag.value);
-    let m = &mut out.metadata;
-
-    if let Some(key) = tag.std_key {
-        if matches!(key, StandardTagKey::Lyrics) {
-            if !v.is_empty() {
-                append_lyrics(&mut out.lyrics, &v);
+    // 0.6 replaced the `(std_key, value)` pair with a parsed `StandardTag`
+    // enum carrying the value inline (string fields as `Arc<String>`,
+    // numeric fields as integers). Unrecognised tags carry `std == None`.
+    if let Some(std) = &tag.std {
+        let m = &mut out.metadata;
+        match std {
+            StandardTag::Lyrics(s) => append_lyrics_str(&mut out.lyrics, s),
+            StandardTag::TrackTitle(s) => set_once_str(&mut m.title, s),
+            StandardTag::Artist(s) => set_once_str(&mut m.artist, s),
+            StandardTag::Album(s) => set_once_str(&mut m.album, s),
+            StandardTag::AlbumArtist(s) => set_once_str(&mut m.album_artist, s),
+            StandardTag::TrackNumber(n) => set_once(&mut m.track_number, n.to_string()),
+            StandardTag::DiscNumber(n) => set_once(&mut m.disc_number, n.to_string()),
+            StandardTag::Genre(s) => set_once_str(&mut m.genre, s),
+            StandardTag::Composer(s) => set_once_str(&mut m.composer, s),
+            StandardTag::Comment(s) => set_once_str(&mut m.comment, s),
+            // 0.6 split the old generic `Date` into recording/release
+            // variants; fold the date-ish set onto our single `date`
+            // field, first one seen wins. Year-only frames (ID3v2 TYER)
+            // arrive as the integer variants.
+            StandardTag::RecordingDate(s) | StandardTag::ReleaseDate(s) => {
+                set_once_str(&mut m.date, s)
             }
-            return;
-        }
-        if v.is_empty() {
-            return;
-        }
-        match key {
-            StandardTagKey::TrackTitle => set_once(&mut m.title, v),
-            StandardTagKey::Artist => set_once(&mut m.artist, v),
-            StandardTagKey::Album => set_once(&mut m.album, v),
-            StandardTagKey::AlbumArtist => set_once(&mut m.album_artist, v),
-            StandardTagKey::TrackNumber => set_once(&mut m.track_number, v),
-            StandardTagKey::DiscNumber => set_once(&mut m.disc_number, v),
-            StandardTagKey::Date | StandardTagKey::ReleaseDate => set_once(&mut m.date, v),
-            StandardTagKey::Genre => set_once(&mut m.genre, v),
-            StandardTagKey::Composer => set_once(&mut m.composer, v),
-            StandardTagKey::Comment => set_once(&mut m.comment, v),
+            StandardTag::RecordingYear(y)
+            | StandardTag::ReleaseYear(y)
+            | StandardTag::OriginalReleaseYear(y) => set_once(&mut m.date, y.to_string()),
             _ => {}
         }
         return;
     }
 
-    // Non-standard tag. Catch `LYRICS=` Vorbis comments (which
-    // symphonia doesn't always map to StandardTagKey::Lyrics) on the
-    // raw key name so they still feed the lyrics body.
-    if !v.is_empty() && tag.key.eq_ignore_ascii_case("lyrics") {
+    // Non-standard tag. Catch `LYRICS=` Vorbis comments (which symphonia
+    // doesn't always map to a standard tag) on the raw key name so they
+    // still feed the lyrics body.
+    let v = tag_value_string(&tag.raw.value);
+    if !v.is_empty() && tag.raw.key.eq_ignore_ascii_case("lyrics") {
         append_lyrics(&mut out.lyrics, &v);
     }
 }
@@ -407,21 +410,43 @@ fn append_lyrics(slot: &mut Option<String>, text: &str) {
     }
 }
 
+/// Trim + append, skipping empty — the standard-tag path hands us raw
+/// `Arc<String>` bodies that may be whitespace-only.
+fn append_lyrics_str(slot: &mut Option<String>, text: &str) {
+    let v = text.trim();
+    if !v.is_empty() {
+        append_lyrics(slot, v);
+    }
+}
+
 fn set_once(slot: &mut Option<String>, value: String) {
     if slot.is_none() {
         *slot = Some(value);
     }
 }
 
-fn tag_value_string(value: &Value) -> String {
+/// `set_once` over a trimmed string, skipping empty values — mirrors the
+/// old `v.is_empty()` guard now that standard-tag values arrive untrimmed.
+fn set_once_str(slot: &mut Option<String>, value: &str) {
+    let v = value.trim();
+    if !v.is_empty() {
+        set_once(slot, v.to_string());
+    }
+}
+
+fn tag_value_string(value: &RawValue) -> String {
     match value {
-        Value::String(s) => s.trim().to_string(),
-        Value::Binary(_) => String::new(),
-        Value::Boolean(b) => b.to_string(),
-        Value::Flag => String::new(),
-        Value::Float(f) => f.to_string(),
-        Value::SignedInt(i) => i.to_string(),
-        Value::UnsignedInt(u) => u.to_string(),
+        RawValue::String(s) => s.trim().to_string(),
+        RawValue::StringList(list) => list.join("\n").trim().to_string(),
+        RawValue::Binary(_) => String::new(),
+        RawValue::Boolean(b) => b.to_string(),
+        RawValue::Flag => String::new(),
+        RawValue::Float(f) => f.to_string(),
+        RawValue::SignedInt(i) => i.to_string(),
+        RawValue::UnsignedInt(u) => u.to_string(),
+        // `RawValue` is `#[non_exhaustive]`; unknown future kinds yield no
+        // usable text (matches the empty-string treatment of Binary/Flag).
+        _ => String::new(),
     }
 }
 
@@ -483,34 +508,36 @@ fn mime_hint(format: AudioFormat) -> Option<&'static str> {
     })
 }
 
-fn codec_label(codec: CodecType) -> Option<&'static str> {
+fn codec_label(codec: AudioCodecId) -> Option<&'static str> {
     // Symphonia exposes a registry-based descriptor lookup, but the
     // long-form names are clearer if we pin them here. Unknown codec
     // (WMA, anything symphonia doesn't bundle) → None and the
-    // renderer skips the row.
-    use symphonia::core::codecs as c;
+    // renderer skips the row. 0.6 moved the codec constants into the
+    // per-kind `audio::well_known` module and renamed `CODEC_TYPE_*` to
+    // `CODEC_ID_*`.
+    use symphonia::core::codecs::audio::well_known as c;
     Some(match codec {
-        c::CODEC_TYPE_MP1 => "MPEG-1 Audio Layer 1",
-        c::CODEC_TYPE_MP2 => "MPEG-1 Audio Layer 2",
-        c::CODEC_TYPE_MP3 => "MP3 (MPEG-1 Audio Layer 3)",
-        c::CODEC_TYPE_AAC => "AAC (Advanced Audio Coding)",
-        c::CODEC_TYPE_FLAC => "FLAC (Free Lossless Audio Codec)",
-        c::CODEC_TYPE_ALAC => "ALAC (Apple Lossless Audio Codec)",
-        c::CODEC_TYPE_VORBIS => "Vorbis",
-        c::CODEC_TYPE_OPUS => "Opus",
-        c::CODEC_TYPE_PCM_S16LE
-        | c::CODEC_TYPE_PCM_S16BE
-        | c::CODEC_TYPE_PCM_S24LE
-        | c::CODEC_TYPE_PCM_S24BE
-        | c::CODEC_TYPE_PCM_S32LE
-        | c::CODEC_TYPE_PCM_S32BE
-        | c::CODEC_TYPE_PCM_F32LE
-        | c::CODEC_TYPE_PCM_F32BE
-        | c::CODEC_TYPE_PCM_F64LE
-        | c::CODEC_TYPE_PCM_F64BE
-        | c::CODEC_TYPE_PCM_U8
-        | c::CODEC_TYPE_PCM_S8 => "PCM",
-        c::CODEC_TYPE_ADPCM_MS | c::CODEC_TYPE_ADPCM_IMA_WAV => "ADPCM",
+        c::CODEC_ID_MP1 => "MPEG-1 Audio Layer 1",
+        c::CODEC_ID_MP2 => "MPEG-1 Audio Layer 2",
+        c::CODEC_ID_MP3 => "MP3 (MPEG-1 Audio Layer 3)",
+        c::CODEC_ID_AAC => "AAC (Advanced Audio Coding)",
+        c::CODEC_ID_FLAC => "FLAC (Free Lossless Audio Codec)",
+        c::CODEC_ID_ALAC => "ALAC (Apple Lossless Audio Codec)",
+        c::CODEC_ID_VORBIS => "Vorbis",
+        c::CODEC_ID_OPUS => "Opus",
+        c::CODEC_ID_PCM_S16LE
+        | c::CODEC_ID_PCM_S16BE
+        | c::CODEC_ID_PCM_S24LE
+        | c::CODEC_ID_PCM_S24BE
+        | c::CODEC_ID_PCM_S32LE
+        | c::CODEC_ID_PCM_S32BE
+        | c::CODEC_ID_PCM_F32LE
+        | c::CODEC_ID_PCM_F32BE
+        | c::CODEC_ID_PCM_F64LE
+        | c::CODEC_ID_PCM_F64BE
+        | c::CODEC_ID_PCM_U8
+        | c::CODEC_ID_PCM_S8 => "PCM",
+        c::CODEC_ID_ADPCM_MS | c::CODEC_ID_ADPCM_IMA_WAV => "ADPCM",
         _ => return None,
     })
 }

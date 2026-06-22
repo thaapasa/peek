@@ -164,7 +164,7 @@ fn parse_slide(xml: &str, image_rels: &HashMap<String, String>) -> Doc {
                 if s.in_txbody
                     && s.collecting_text
                     && let Some(run) = s.cur_run.as_mut()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     run.text.push_str(&decoded);
                 }
@@ -370,7 +370,7 @@ fn parse_core_xml(xml: &str) -> PresentationMetadata {
             }
             Ok(Event::Text(t)) => {
                 if field.is_some()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     text.push_str(&decoded);
                 }
@@ -442,7 +442,7 @@ fn parse_app_application(xml: &str) -> Option<String> {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(e)) if local_name(e.name()) == b"Application" => capturing = true,
             Ok(Event::Text(t)) if capturing => {
-                if let Ok(decoded) = t.xml_content() {
+                if let Ok(decoded) = t.xml10_content() {
                     text.push_str(&decoded);
                 }
             }

@@ -6,16 +6,24 @@
 //!
 //! Output layout:
 //!   ID3v2.4 tag (TIT2 / TPE1 / TALB / APIC front + back / USLT)
-//!   one MPEG-1 Layer 3 silent frame (417 bytes, all-zero main data)
+//!   a short run of identical MPEG-1 Layer 3 silent frames (417 bytes
+//!   each, all-zero main data)
 //!
-//! The MP3 frame doesn't decode meaningfully — symphonia identifies
-//! the file as MP3 from the sync word + header bits, which is all the
-//! info / listing / extract paths need.
+//! The MP3 frames don't decode meaningfully — symphonia identifies the
+//! file as MP3 from the sync word + header bits, which is all the info /
+//! listing / extract paths need. Symphonia 0.6's format probe confirms
+//! MPEG audio by parsing one frame then checking the *next* sync word,
+//! so the fixture carries several consecutive frames rather than one.
 
 use std::io::Write;
 
 use id3::frame::{Lyrics, Picture, PictureType};
 use id3::{Tag, TagLike, Version};
+
+/// Consecutive silent frames to emit. Symphonia 0.6's MPEG probe parses
+/// the first frame then looks for a second valid sync word to gain full
+/// confidence; more than two keeps the reader fed past the probe.
+const FRAME_COUNT: usize = 8;
 
 fn main() {
     let mp3_frame = silent_mp3_frame();
@@ -54,7 +62,9 @@ fn main() {
         .expect("failed to create fixture file; run from repo root");
     tag.write_to(&mut out, Version::Id3v24)
         .expect("ID3 write failed");
-    out.write_all(&mp3_frame).expect("frame write failed");
+    for _ in 0..FRAME_COUNT {
+        out.write_all(&mp3_frame).expect("frame write failed");
+    }
     drop(out);
     let size = std::fs::metadata(&out_path).expect("stat").len();
     eprintln!("wrote {} ({} bytes)", out_path.display(), size);

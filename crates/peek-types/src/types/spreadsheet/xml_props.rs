@@ -73,7 +73,7 @@ fn parse_props(xml: &str) -> DocumentMetadata {
                 text.clear();
             }
             Ok(Event::Text(t)) if current.is_some() => {
-                if let Ok(decoded) = t.xml_content() {
+                if let Ok(decoded) = t.xml10_content() {
                     text.push_str(&decoded);
                 }
             }

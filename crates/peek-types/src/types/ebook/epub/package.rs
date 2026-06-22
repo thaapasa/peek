@@ -147,7 +147,7 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
             Event::Text(t)
                 if in_metadata
                     && current_dc_field.is_some()
-                    && let Ok(decoded) = t.xml_content() =>
+                    && let Ok(decoded) = t.xml10_content() =>
             {
                 current_text.push_str(&decoded);
             }

@@ -284,7 +284,7 @@ fn parse_document(
                     && ps.drawing_depth == 0
                 {
                     let s = t
-                        .xml_content()
+                        .xml10_content()
                         .map_err(|e| anyhow!("DOCX text decode: {e}"))?
                         .into_owned();
                     rs.runs.push(Run {
@@ -549,7 +549,7 @@ fn parse_core_xml(xml: &str) -> DocumentMetadata {
             }
             Ok(Event::Text(t)) => {
                 if current_field.is_some()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     current_text.push_str(&decoded);
                 }

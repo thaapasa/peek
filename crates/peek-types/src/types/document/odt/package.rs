@@ -160,7 +160,7 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                     && ps.drawing_depth == 0
                 {
                     let s = t
-                        .xml_content()
+                        .xml10_content()
                         .map_err(|e| anyhow!("ODT text decode: {e}"))?
                         .into_owned();
                     push_text(ps, &s);
@@ -618,7 +618,7 @@ fn parse_meta(xml: &str) -> DocumentMetadata {
             }
             Ok(Event::Text(t)) => {
                 if current_field.is_some()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     current_text.push_str(&decoded);
                 }

@@ -65,7 +65,7 @@ fn build_version(xml: &str) -> Option<String> {
                 text.clear();
             }
             Ok(Event::Text(t)) if capturing => {
-                if let Ok(decoded) = t.xml_content() {
+                if let Ok(decoded) = t.xml10_content() {
                     text.push_str(&decoded);
                 }
             }

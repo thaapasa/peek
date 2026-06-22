@@ -90,7 +90,7 @@ fn parse_content(xml: &str) -> Vec<Doc> {
             },
             Event::Text(t) => {
                 if let Some(p) = para.as_mut()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     p.text.push_str(&decoded);
                 }
@@ -179,7 +179,7 @@ fn parse_meta(xml: &str) -> PresentationMetadata {
             }
             Ok(Event::Text(t)) => {
                 if field.is_some()
-                    && let Ok(decoded) = t.xml_content()
+                    && let Ok(decoded) = t.xml10_content()
                 {
                     text.push_str(&decoded);
                 }
