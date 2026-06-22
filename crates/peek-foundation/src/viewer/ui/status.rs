@@ -12,10 +12,16 @@ use super::styled::{strip_ansi_width, truncate_ansi};
 
 /// Build a themed status line from labeled segments and hint strings.
 ///
+/// `lead`, when present, is painted in its own color and glued before the
+/// first segment with a single space and *no* separator — for a warning `!`
+/// marker that hugs the breadcrumb. It must be plain text: the caller passes
+/// `(text, color)`, not a pre-styled string, so styling can't survive the
+/// sanitizer (see below).
 /// `segments` are shown on the left, joined by muted `│` separators.
 /// `hints` are shown on the right, all in the muted color.
 /// The whole line gets the theme's `selection` background.
 pub fn render_themed_status_line(
+    lead: Option<(&str, Color)>,
     segments: &[(&str, Color)],
     hints: &[&str],
     theme: &PeekTheme,
@@ -25,11 +31,21 @@ pub fn render_themed_status_line(
     // Segments can carry an untrusted file name (or file-derived label),
     // so strip terminal-control sequences before painting — a name must not
     // drive the terminal (title set / clipboard write) via the status line.
-    let left = segments
+    // Each (text, color) pair is plain text painted with one color here, so a
+    // caller must never pre-embed SGR escapes in `text`: the sanitizer would
+    // neutralize them into visible `␛` glyphs. Multi-color needs `lead` or
+    // separate segments.
+    let mut left = segments
         .iter()
         .map(|(text, color)| theme.paint_fg(&sanitize_terminal_controls(text), *color))
         .collect::<Vec<_>>()
         .join(&format!(" {sep} "));
+    if let Some((text, color)) = lead {
+        left = format!(
+            "{} {left}",
+            theme.paint_fg(&sanitize_terminal_controls(text), color)
+        );
+    }
     let left = format!(" {left}");
 
     let hints = hints
@@ -66,6 +82,26 @@ fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use peek_theme::{PeekThemeName, StyleMode, make_peek_theme};
+
+    // Regression: a warning marker must paint as a real colored `!`, not the
+    // sanitizer's `␛` (U+241B) glyph. The old code pre-embedded SGR into the
+    // breadcrumb segment, which render_themed_status_line then sanitized into
+    // literal `␛[…m` text — visible only when the active frame had warnings
+    // (e.g. an ELF with `.symtab` stripped, viewed in the Symbols mode).
+    #[test]
+    fn warning_lead_paints_marker_not_escape_glyph() {
+        let theme = make_peek_theme(PeekThemeName::default(), StyleMode::TrueColor);
+        let out = render_themed_status_line(
+            Some(("!", theme.warning)),
+            &[("file.elf", theme.accent)],
+            &["q:quit"],
+            &theme,
+        );
+        assert!(!out.contains('\u{241b}'), "leaked sanitized escape glyph");
+        assert!(out.contains('!'), "warning marker missing");
+        assert!(out.contains("file.elf"), "breadcrumb missing");
+    }
 
     #[test]
     fn status_line_fits_pads_between_left_and_hints() {

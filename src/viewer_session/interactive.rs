@@ -214,25 +214,15 @@ fn render_status_line(state: &mut ViewerState) -> String {
     let show_human_sizes = state.active_mode_id() == ModeId::Listing && state.human_sizes();
     let theme = &state.peek_theme;
 
-    // Prefix breadcrumb with a yellow `!` when the active frame's
-    // info section has surfaced warnings (e.g. extension/MIME
-    // mismatch). The trailing accent-color escape restores the
-    // breadcrumb's own colour for the filename that follows; the
-    // outer `paint_fg(theme.accent)` over this segment paints the
-    // initial state, which the warning escape overrides for the `!`.
-    let breadcrumb_with_mark = if has_warnings {
-        format!(
-            "{}{} {}",
-            theme.paint_fg("!", theme.warning),
-            theme.paint_fg("", theme.accent),
-            breadcrumb,
-        )
-    } else {
-        breadcrumb.clone()
-    };
+    // Prefix the breadcrumb with a warning `!` when the active frame's info
+    // section has surfaced warnings (e.g. extension/MIME mismatch). Passed as
+    // a plain `lead` marker, not pre-painted into the segment text — the status
+    // renderer sanitizes every segment, so embedded SGR would show as literal
+    // `␛[…m` glyphs.
+    let warn_lead = has_warnings.then_some(("!", theme.warning));
 
     let mut segs: Vec<(&str, syntect::highlighting::Color)> = vec![
-        (breadcrumb_with_mark.as_str(), theme.accent),
+        (breadcrumb.as_str(), theme.accent),
         (mode_label.as_str(), theme.label),
     ];
     for (s, c) in &mode_segs {
@@ -259,5 +249,5 @@ fn render_status_line(state: &mut ViewerState) -> String {
     let mut hints: Vec<&str> = hints_owned;
     hints.extend_from_slice(&["h:help", "Tab:cycle", "t:theme", "q:quit"]);
 
-    render_themed_status_line(&segs, &hints, theme)
+    render_themed_status_line(warn_lead, &segs, &hints, theme)
 }
