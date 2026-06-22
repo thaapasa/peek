@@ -290,3 +290,10 @@ opt-level = 2
 opt-level = 3
 lto = true
 strip = true
+
+# pdfium-render 0.9.2 hardcodes `as *const i8` in its font provider, which
+# fails to compile on targets where `c_char` is unsigned (ARM/aarch64 Linux,
+# musl) — our aarch64-unknown-linux-gnu release target. Upstream master fixed
+# it (cast → `*const c_char`); pin to that commit until a release > 0.9.2 ships.
+[patch.crates-io]
+pdfium-render = { git = "https://github.com/ajrcarey/pdfium-render", rev = "095024c9a448abecfd4926d48a45be5868eacf20" }

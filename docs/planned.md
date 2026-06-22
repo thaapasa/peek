@@ -388,6 +388,11 @@ to this roadmap as a future-work pointer; not active right now.
   the lib if the user has set it; document install steps in the README.
 - **Feature flag**: optional Cargo feature `pdf` so a no-PDF build keeps binary size
   down for embedded targets.
+- **Drop the pdfium-render git patch.** `Cargo.toml` has a `[patch.crates-io]` pin to
+  upstream commit `095024c` (version 0.9.3) — it fixes a `*const i8` cast that fails to
+  compile where `c_char` is unsigned (our `aarch64-unknown-linux-gnu` release target).
+  0.9.2 is the latest crates.io release. Remove the patch and bump the `pdfium-render`
+  requirement once a release > 0.9.2 ships the fix.
 
 ### Vector / PostScript Files ◐
 
