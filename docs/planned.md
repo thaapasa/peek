@@ -251,6 +251,12 @@ Same trust root throughout (repo release-write access), so none introduces a *ne
 attacker class — but signing (M1) + pinned Pdfium (M3) move provenance from "trust the
 platform" to "verify cryptographically," and are the meaningful follow-ups.
 
+- ☐ **Drop the `cargo audit` ignores when upstream catches up.** `just audit` is clean
+  except 3 *unmaintained* advisories (no known vulnerability), all transitive and
+  upstream-owned, suppressed in `.cargo/audit.toml`: `bincode` + `yaml-rust` via
+  `syntect`, `paste` (build-time proc-macro) via `image`→`ravif`→`rav1e`. Re-check on
+  each dep bump; remove an ignore once the chain stops pulling it in.
+
 ---
 
 ## Post-1.0 / 1.x

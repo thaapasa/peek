@@ -1,0 +1,15 @@
+# cargo-audit config (see `just audit`).
+# Ignored advisories are reviewed, accepted, transitive-only — no fix in our control.
+# Re-check on each dep bump; drop an ID once the upstream chain stops pulling it in.
+[advisories]
+ignore = [
+    # bincode 1.x — unmaintained, not vulnerable. Via syntect (syntax-highlight cache
+    # dumps). Upstream-owned; no runtime exploit surface.
+    "RUSTSEC-2025-0141",
+    # yaml-rust — unmaintained, not vulnerable. Via syntect (.sublime-syntax loading).
+    # Upstream-owned.
+    "RUSTSEC-2024-0320",
+    # paste — unmaintained proc-macro, build-time only. Via image -> ravif -> rav1e
+    # (AVIF encode). No runtime surface.
+    "RUSTSEC-2024-0436",
+]

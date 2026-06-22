@@ -9,6 +9,8 @@ setup:
     set -euo pipefail
     # Rust fuzzing (see `just fuzz`)
     command -v cargo-fuzz >/dev/null || cargo install --locked cargo-fuzz
+    # Vulnerability scan of the dependency tree (see `just audit`)
+    command -v cargo-audit >/dev/null || cargo install --locked cargo-audit
     # Stills: charmbracelet/freeze — ANSI -> SVG/PNG, keeps fg AND bg truecolor (see `just demos`)
     command -v freeze    >/dev/null || brew install charmbracelet/tap/freeze
     # Interactive-screen capture for `just demos` (drives peek in a pane, dumps the live screen)
@@ -32,6 +34,10 @@ lint:
 # Run all tests
 test:
     cargo test --workspace
+
+# Scan dependency tree for known vulnerabilities (needs `just setup` or `cargo install cargo-audit`)
+audit:
+    cargo audit
 
 # Capture manual demo stills (needs `just setup`); pass shot names to re-render some, none for all
 demos *shots:
