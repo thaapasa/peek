@@ -273,6 +273,40 @@ accepted 1.0 feature. Refinements, none blocking:
   capped at 100,000 matches; a multi-GB file pays that pass up front. A lazy "search
   from here" would scale better.
 
+### Styled-text IR (structured spans) ❓
+
+Replace the in-band-ANSI pipeline with a typed span tree — `Line(Vec<Span>)`, `Span { text,
+style }` (think HTML spans, or ratatui's `Span`/`Line`/`Style`). Content is **always** plain,
+sanitized text; SGR escapes get generated once, at the leaf, when `peek_theme` flushes a line to
+the terminal under the active `StyleMode`.
+
+**Why it earns its place:**
+
+- **Kills the escape-leak bug class by construction.** Today style is carried as in-band escapes
+  in `String`s, and `render_themed_status_line` / listings / prompt sanitize segment *text* before
+  paint — so any caller that pre-embeds SGR gets it neutralized into visible `␛[…m` (the
+  2026-06-22 status-bar warning-marker bug). With a span IR, text and style never share a string
+  until render, so this can't happen. The current `(String, Color)` segment type can't enforce
+  this; an `escapes-can't-exist-here` newtype is the smaller version of the same idea.
+- **Removes the structure → escapes → re-parse round-trip.** syntect already hands us
+  `Vec<(Style, &str)>` spans; we flatten to escapes early, then `viewer/ui/styled.rs` (the whole
+  "SGR-aware string family") re-derives structure via `scan`/`Sgr`/`ActiveStyle` to count width,
+  wrap, slice, and truncate — re-arming styles across every cut. Operating on spans makes
+  width/wrap/slice trivial and drops the re-parse machinery.
+- **Centralizes style-mode degradation.** truecolor→256→16→plain mapping lives in one leaf
+  renderer instead of being baked into strings at construction time.
+- **Unblocks folding.** [Block Collapsing](#block-collapsing--folding-) already wants a line
+  metadata layer "replacing bare `String` lines" — a `Line` type is where fold level / block
+  boundaries / visibility naturally hang.
+
+**Cost / scope:** large, cross-cutting — every mode's render produces spans, `styled.rs` and
+`ScreenBuffer` (`prev_lines: Vec<String>`) get rebuilt against the IR. Keep an escape-hatch
+variant (`Raw`) for the half-block image renderer, which emits dense per-cell SGR and shouldn't be
+forced through. Viewport-bounded rendering means per-line span allocation is cheap (only visible
+lines), and dropping the repeated escape re-parse on every scroll/wrap is likely a net win.
+
+Prerequisite-shaped: do this before, or together with, folding rather than after.
+
 ### Block Collapsing / Folding ❓
 
 Collapse blocks (objects, arrays, nested structures) in the interactive viewer. Mainly
@@ -283,7 +317,8 @@ functions, blocks). The natural 1.1 headline capability.
 lines with no structural metadata. Folding would require:
 
 - Line metadata layer (fold level, block boundaries, visibility state) replacing bare
-  `String` lines
+  `String` lines — see [§ Styled-text IR](#styled-text-ir-structured-spans-), the natural
+  home for this
 - Virtual line mapping so scroll offsets work with collapsed regions
 - Preserving fold state across re-renders (theme toggle, raw/pretty toggle)
 - For structured data: retaining parsed structure or using indentation heuristics
