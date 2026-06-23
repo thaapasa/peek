@@ -20,7 +20,7 @@ exclude = ["fuzz"]
 # = true` to inherit). One version line for the whole workspace — the release
 # pipeline bumps this; see docs/release.md.
 [workspace.package]
-version = "0.4.3"
+version = "1.0.0"
 edition = "2024"
 # Honest floor: dep-driven. image/tiff/time/plist (post 2026-06 update)
 # require 1.88; our own code needs only 1.87 (stdlib items in lines.rs,
