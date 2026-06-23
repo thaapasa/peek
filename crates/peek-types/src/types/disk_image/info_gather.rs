@@ -189,12 +189,13 @@ fn build_partition(entry: dmg_plist::BlkxEntry) -> Option<DmgPartition> {
 
 /// Pull the Apple partition-type token out of a blkx name like
 /// `"disk image (Apple_HFS : 4)"` → `"Apple_HFS"`. Returns `None` when
-/// the name carries no parenthesised `type : index` form.
+/// the name carries no parenthesised `type : index` form. Accepts both
+/// ASCII `( : )` and the fullwidth `（ ： ）` localized builders emit.
 fn parse_fs_type(name: &str) -> Option<String> {
-    let open = name.rfind('(')?;
-    let inner = &name[open + 1..];
-    let close = inner.find(')')?;
-    let token = inner[..close].split(':').next()?.trim();
+    let open = name.rfind(['(', '（'])?;
+    let inner = &name[open + name[open..].chars().next()?.len_utf8()..];
+    let close = inner.find([')', '）'])?;
+    let token = inner[..close].split([':', '：']).next()?.trim();
     (!token.is_empty()).then(|| token.to_string())
 }
 
@@ -348,6 +349,15 @@ mod tests {
         assert_eq!(
             parse_fs_type("GPT Header (Primary GPT Header : 1)").as_deref(),
             Some("Primary GPT Header")
+        );
+        // Fullwidth punctuation from localized builders (（：）) parses too.
+        assert_eq!(
+            parse_fs_type("disk image（Apple_HFS：4）").as_deref(),
+            Some("Apple_HFS")
+        );
+        assert_eq!(
+            parse_fs_type("（Apple_Free：3）").as_deref(),
+            Some("Apple_Free")
         );
     }
 

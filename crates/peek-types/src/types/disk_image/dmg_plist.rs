@@ -3,13 +3,14 @@
 //! A flat DMG carries an XML property list (pointed at by the koly
 //! trailer's `plist_offset` / `plist_length`) whose `resource-fork`
 //! dict holds a `blkx` array — one entry per partition. Each entry is a
-//! dict with a human `Name` (e.g. `"disk image (Apple_HFS : 4)"`) and a
-//! base64 `Data` blob that decodes to a "mish" block table (see
+//! dict with a human name (`CFName`, e.g. `"disk image (Apple_HFS : 4)"`,
+//! preferred over the legacy `Name` which builders may double-encode) and
+//! a base64 `Data` blob that decodes to a "mish" block table (see
 //! [`super::mish`]).
 //!
 //! This is *not* a general plist parser. It hand-walks the XML with
 //! `quick-xml` (already a crate dep, used the same way for DOCX / ODT)
-//! and pulls only the blkx array's `Name` + `Data` pairs — the minimum
+//! and pulls only the blkx array's name + `Data` pairs — the minimum
 //! the partition view needs. Anything else in the plist (`plst`, `nsiz`,
 //! size resources) is ignored.
 
@@ -109,11 +110,15 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                 b"string" => {
                     if let Some(acc) = entry.as_mut() {
                         match cur_key.as_str() {
-                            // `Name` wins over `CFName`; the array emits
-                            // CFName first, so unconditional assignment on
-                            // Name lands the preferred label.
-                            "Name" => acc.name = Some(text.trim().to_string()),
-                            "CFName" if acc.name.is_none() => {
+                            // `CFName` wins over `Name`. CFName is the
+                            // CoreFoundation canonical string — always proper
+                            // UTF-8; some builders write `Name` double-encoded
+                            // (UTF-8→Mac Roman→UTF-8), mojibaking non-ASCII
+                            // names. CFName is emitted first, so assign it
+                            // unconditionally and only fall back to Name when
+                            // no CFName is present.
+                            "CFName" => acc.name = Some(text.trim().to_string()),
+                            "Name" if acc.name.is_none() => {
                                 acc.name = Some(text.trim().to_string());
                             }
                             _ => {}
@@ -186,9 +191,10 @@ mod tests {
       </dict>
       <dict>
         <key>Attributes</key><string>0x0050</string>
+        <key>CFName</key><string>disk image（Apple_HFS：4）</string>
         <key>Data</key><data>aGVsbG8=</data>
         <key>ID</key><string>4</string>
-        <key>Name</key><string>disk image (Apple_HFS : 4)</string>
+        <key>Name</key><string>disk imageÔºàApple_HFSÔºö4Ôºâ</string>
       </dict>
     </array>
     <key>plst</key>
@@ -205,7 +211,8 @@ mod tests {
         assert_eq!(entries.len(), 2, "only blkx array entries, not plst");
         assert_eq!(entries[0].name, "Protective Master Boot Record (MBR : 0)");
         assert_eq!(entries[0].data, b"mish");
-        assert_eq!(entries[1].name, "disk image (Apple_HFS : 4)");
+        // CFName wins over the double-encoded Name (mojibake guard).
+        assert_eq!(entries[1].name, "disk image（Apple_HFS：4）");
         assert_eq!(entries[1].data, b"hello");
     }
 
