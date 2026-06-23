@@ -176,7 +176,14 @@ pub fn probe(source: &InputSource, format: AudioFormat) -> Result<Probed> {
     // 0.6 consolidates all metadata the probe surfaced (container tags +
     // any ID3v2 block read ahead of the format) into the reader's single
     // metadata log — no separate pre-format revision to merge anymore.
-    if let Some(rev) = reader.metadata().current() {
+    // MP3 commonly carries two metadata revisions: the rich ID3v2 tag at
+    // the head plus a legacy 128-byte ID3v1 trailer. Symphonia logs them
+    // oldest-first, so `current()` (the front) is the stripped ID3v1 —
+    // it lacks USLT lyrics and the APIC picture. Ingest every revision,
+    // newest first, so the fuller ID3v2 values win the `set_once` fields
+    // and ID3v1 only fills gaps.
+    let revisions = drain_revisions(reader.metadata());
+    for rev in revisions.iter().rev() {
         ingest_revision(rev, &mut out);
     }
 
@@ -284,6 +291,20 @@ pub fn read_embed(probed: &Probed, key: &str) -> Option<(Bytes, String)> {
         EmbedKind::Lyrics => Bytes::copy_from_slice(probed.lyrics.as_ref()?.as_bytes()),
     };
     Some((bytes, suggested))
+}
+
+/// Drain every revision from the metadata log in oldest-first order.
+/// `pop()` returns the discarded front and never empties the log, so the
+/// final revision is recovered via `current()`.
+fn drain_revisions(mut md: symphonia::core::meta::Metadata<'_>) -> Vec<MetadataRevision> {
+    let mut revs = Vec::new();
+    while let Some(rev) = md.pop() {
+        revs.push(rev);
+    }
+    if let Some(last) = md.current() {
+        revs.push(last.clone());
+    }
+    revs
 }
 
 fn ingest_revision(rev: &MetadataRevision, out: &mut Probed) {
@@ -715,5 +736,34 @@ mod tests {
             &cover_bytes[..8],
             &[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
         );
+    }
+
+    /// Regression: an MP3 with both a rich ID3v2 head and a stripped
+    /// ID3v1 trailer. Symphonia logs ID3v1 as the `current()` (front)
+    /// revision, so a probe that only reads `current()` loses the ID3v2
+    /// lyrics + cover and reports the truncated ID3v1 title/artist. The
+    /// `dual-tag.mp3` fixture sets deliberately different ID3v2 / ID3v1
+    /// values so this guards the newest-first multi-revision merge.
+    #[test]
+    fn dual_tag_prefers_id3v2_over_id3v1() {
+        let path = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))
+            .join("test-audio")
+            .join("dual-tag.mp3");
+        let source = InputSource::File(path);
+        let probed = probe(&source, AudioFormat::Mp3).expect("probe must succeed on fixture");
+
+        // ID3v2 values win the set_once fields, not the ID3v1 trailer.
+        let m = &probed.metadata;
+        assert_eq!(m.title.as_deref(), Some("V2 Title"));
+        assert_eq!(m.artist.as_deref(), Some("V2 Artist"));
+        assert_eq!(m.album.as_deref(), Some("V2 Album"));
+
+        // Lyrics + cover live only in the ID3v2 revision; both survive.
+        assert!(
+            probed.lyrics.as_deref().unwrap_or("").contains("id3v2"),
+            "lyrics lost: {:?}",
+            probed.lyrics
+        );
+        assert_eq!(probed.visuals.len(), 1, "cover art lost");
     }
 }
