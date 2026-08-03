@@ -97,9 +97,23 @@ fn mode_from_meta(meta: &fs::Metadata) -> Option<u32> {
     Some(meta.permissions().mode())
 }
 
+// Windows has no unix mode — synthesize one from the readonly attribute so
+// the listing paints `-r--r--r--` for read-only files instead of the default
+// `-rw-r--r--`. Base defaults match `listing::row::format_perms` fallbacks
+// (0o755 for dirs, 0o644 for files); readonly drops the write bits.
 #[cfg(not(unix))]
-fn mode_from_meta(_meta: &fs::Metadata) -> Option<u32> {
-    None
+fn mode_from_meta(meta: &fs::Metadata) -> Option<u32> {
+    let base = if meta.file_type().is_dir() {
+        0o755
+    } else {
+        0o644
+    };
+    let mode = if meta.permissions().readonly() {
+        base & !0o222
+    } else {
+        base
+    };
+    Some(mode)
 }
 
 fn compare_entries(a: &DirEntry, b: &DirEntry) -> Ordering {
@@ -112,4 +126,46 @@ fn compare_entries(a: &DirEntry, b: &DirEntry) -> Ordering {
         .cmp(&kind_rank(b.kind))
         .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
         .then_with(|| a.name.cmp(&b.name))
+}
+
+#[cfg(test)]
+#[cfg(windows)]
+mod windows_tests {
+    use super::mode_from_meta;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn writable_file_gets_default_mode() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("writable.txt");
+        fs::write(&path, b"x").unwrap();
+        let meta = fs::metadata(&path).unwrap();
+        assert_eq!(mode_from_meta(&meta), Some(0o644));
+    }
+
+    #[test]
+    fn readonly_file_drops_write_bits() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("readonly.txt");
+        fs::write(&path, b"x").unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&path, perms).unwrap();
+        let meta = fs::metadata(&path).unwrap();
+        let got = mode_from_meta(&meta);
+        // Restore writable so tempdir cleanup can remove the file.
+        let mut perms = meta.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(&path, perms).unwrap();
+        assert_eq!(got, Some(0o444));
+    }
+
+    #[test]
+    fn directory_gets_dir_default() {
+        let dir = tempdir().unwrap();
+        let meta = fs::metadata(dir.path()).unwrap();
+        assert_eq!(mode_from_meta(&meta), Some(0o755));
+    }
 }

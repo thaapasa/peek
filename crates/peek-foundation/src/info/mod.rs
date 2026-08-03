@@ -232,14 +232,27 @@ pub fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     ))
 }
 
+// Windows exposes only a readonly bit, not a full unix mode. Synthesize an
+// rwx string so the permissions column paints/aligns the same as the listing
+// modes (which also fake unix defaults when mode is absent). Base defaults
+// match `listing::row::format_perms`: 0o755 for dirs, 0o644 for files; with
+// the readonly attribute we drop all write bits.
 #[cfg(not(unix))]
 pub fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
-    let perms = meta.permissions();
-    Some(if perms.readonly() {
-        "read-only".to_string()
+    let ft = meta.file_type();
+    let (type_char, base_mode) = if ft.is_dir() {
+        ('d', 0o755)
+    } else if ft.is_symlink() {
+        ('l', 0o777)
     } else {
-        "read-write".to_string()
-    })
+        ('-', 0o644)
+    };
+    let mode = if meta.permissions().readonly() {
+        base_mode & !0o222
+    } else {
+        base_mode
+    };
+    Some(format_unix_permissions(type_char, mode))
 }
 
 #[cfg(unix)]
@@ -262,7 +275,6 @@ fn unix_type_char(ft: &fs::FileType) -> char {
     }
 }
 
-#[cfg(unix)]
 fn format_unix_permissions(type_char: char, mode: u32) -> String {
     let mut s = String::with_capacity(10);
     s.push(type_char);
@@ -289,6 +301,54 @@ fn format_unix_permissions(type_char: char, mode: u32) -> String {
         });
     }
     s
+}
+
+#[cfg(test)]
+#[cfg(windows)]
+mod windows_tests {
+    use super::format_permissions_from_meta;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn writable_file_renders_rwx_form() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("writable.txt");
+        fs::write(&path, b"x").unwrap();
+        let meta = fs::metadata(&path).unwrap();
+        assert_eq!(
+            format_permissions_from_meta(&meta).as_deref(),
+            Some("-rw-r--r--")
+        );
+    }
+
+    #[test]
+    fn readonly_file_drops_write_bits() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("readonly.txt");
+        fs::write(&path, b"x").unwrap();
+        let mut perms = fs::metadata(&path).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&path, perms).unwrap();
+        let meta = fs::metadata(&path).unwrap();
+        let got = format_permissions_from_meta(&meta);
+        // Restore writable so tempdir cleanup can remove the file.
+        let mut perms = meta.permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perms.set_readonly(false);
+        fs::set_permissions(&path, perms).unwrap();
+        assert_eq!(got.as_deref(), Some("-r--r--r--"));
+    }
+
+    #[test]
+    fn directory_gets_dir_prefix() {
+        let dir = tempdir().unwrap();
+        let meta = fs::metadata(dir.path()).unwrap();
+        assert_eq!(
+            format_permissions_from_meta(&meta).as_deref(),
+            Some("drwxr-xr-x")
+        );
+    }
 }
 
 #[cfg(test)]

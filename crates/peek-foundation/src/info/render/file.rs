@@ -239,8 +239,9 @@ fn age_blend_factor(age_secs: u64) -> f32 {
 }
 
 /// Paint permissions with per-character coloring. Handles both the
-/// 10-char `ls -l` form (`drwxr-xr-x`) and the 9-char rwx-only form, plus
-/// the Windows fallback strings (which don't get rwx separators).
+/// 10-char `ls -l` form (`drwxr-xr-x`) and the 9-char rwx-only form.
+/// Windows also feeds a 10-char string here — mode bits are synthesized
+/// from the readonly attribute in [`super::super::format_permissions_from_meta`].
 fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
     // Group separators sit *after* the listed indices (e.g. 3 and 6 for
     // a 10-char string puts a divider after each rwx triplet).
