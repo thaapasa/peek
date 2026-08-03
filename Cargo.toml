@@ -77,7 +77,7 @@ serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml = "0.9"
 json5 = "1"
 toml = { version = "1.1.2", features = ["preserve_order"] }
-quick-xml = { version = "0.40.1", features = ["serialize"] }
+quick-xml = { version = "0.41", features = ["serialize"] }
 
 # Image handling
 image = "0.25"
@@ -208,7 +208,7 @@ fontdue = "0.9"
 # on the in-tree flate2 (see types/font/woff.rs). Handles the brotli
 # stream + the glyf/loca table transform that bare decompression can't.
 wuff = { version = "0.2", default-features = false, features = ["brotli"] }
-calamine = "0.35.0"
+calamine = "0.36"
 
 # Email (.eml / .mbox) parsing. Pure Rust, no system deps. Parses one
 # RFC822/MIME message: headers, decoded text/HTML bodies, nested parts +
