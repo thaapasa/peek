@@ -580,7 +580,7 @@ fn transcode_utf16(bytes: &[u8], enc: Encoding) -> Result<String> {
 /// contain many more of a non-default candidate than the default.
 fn sniff_delimiter(head: &[u8], fmt: CsvFormat) -> u8 {
     let default = fmt.default_delimiter();
-    let candidates: [u8; 4] = [b',', b'\t', b';', b'|'];
+    let candidates: [u8; 4] = *b",\t;|";
 
     let mut counts = [0usize; 4];
     let mut in_quote = false;

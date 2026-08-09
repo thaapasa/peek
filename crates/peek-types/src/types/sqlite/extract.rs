@@ -156,12 +156,9 @@ struct ParsedKey<'a> {
 
 fn parse_key(key: &str) -> Option<ParsedKey<'_>> {
     let (kind_dir, rest) = key.split_once('/')?;
-    let (leaf, name) = if let Some(n) = rest.strip_suffix(SCHEMA_SUFFIX) {
-        (LeafKind::Schema, n)
-    } else if let Some(n) = rest.strip_suffix(CONTENTS_SUFFIX) {
-        (LeafKind::Contents, n)
-    } else {
-        return None;
+    let (leaf, name) = match rest.strip_suffix(SCHEMA_SUFFIX) {
+        Some(n) => (LeafKind::Schema, n),
+        None => (LeafKind::Contents, rest.strip_suffix(CONTENTS_SUFFIX)?),
     };
     if name.is_empty() || name.contains('/') {
         return None;

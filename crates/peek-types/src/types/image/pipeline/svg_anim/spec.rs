@@ -156,12 +156,9 @@ fn parse_animation_shorthand(value: &str) -> Option<AnimationShorthand> {
 
 fn parse_time(value: &str) -> Option<Duration> {
     let v = value.trim();
-    let (num_str, scale) = if let Some(n) = v.strip_suffix("ms") {
-        (n, 0.001)
-    } else if let Some(n) = v.strip_suffix('s') {
-        (n, 1.0)
-    } else {
-        return None;
+    let (num_str, scale) = match v.strip_suffix("ms") {
+        Some(n) => (n, 0.001),
+        None => (v.strip_suffix('s')?, 1.0),
     };
     let n: f64 = num_str.trim().parse().ok()?;
     // Reject non-finite (`inf`/`NaN`): `Duration::from_secs_f64(inf)`
