@@ -17,8 +17,7 @@ use peek_foundation::viewer::ui::keys::{self, Action, Outcome};
 use peek_foundation::viewer::ui::prompt::Prompt;
 use peek_foundation::viewer::ui::screen::ScreenBuffer;
 use peek_io::InputSource;
-use peek_theme::make_peek_theme;
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, make_peek_theme};
 
 use super::frame::{SessionFrame, capture_position, restore_position};
 use super::prompt::PromptKind;

@@ -7,9 +7,8 @@ use peek_io::InputSource;
 
 use crate::types::image::{ImageKind, ImageRenderMode};
 use crate::types::svg::SvgAnimationMode;
-use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
-use crate::viewer::{ComposeCtx, image_config};
+use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
 
 pub fn compose(
     source: &InputSource,

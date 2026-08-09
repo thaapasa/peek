@@ -2,9 +2,8 @@
 
 use std::time::Duration;
 
-use super::Frame;
-use super::ResolvedTarget;
 use super::keyframes::{PropChange, PropValue, TransformValue};
+use super::{Frame, ResolvedTarget};
 
 /// Per-target render state at a single sampled time. Carried inside
 /// [`Frame::targets`]; coalescing in [`build_frames`] uses full-equality

@@ -8,8 +8,7 @@ use std::borrow::Cow;
 
 use anyhow::{Result, anyhow};
 
-use crate::types::font::FontFormat;
-use crate::types::font::woff;
+use crate::types::font::{FontFormat, woff};
 
 /// Return the sfnt bytes for a font of the given container `format`,
 /// decompressing the WOFF / WOFF2 wrapper when present. Borrows for the

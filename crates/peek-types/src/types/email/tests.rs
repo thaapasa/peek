@@ -5,8 +5,7 @@ use peek_detect::types::email as detect;
 use peek_detect::{Detected, FileType};
 use peek_io::InputSource;
 
-use super::EmailFormat;
-use super::{compose, extract, info, mbox, message};
+use super::{EmailFormat, compose, extract, info, mbox, message};
 use crate::viewer::modes::ModeId;
 
 const EML: &[u8] = include_bytes!("../../../../../test-data/sample.eml");

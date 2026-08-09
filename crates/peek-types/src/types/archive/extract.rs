@@ -756,9 +756,8 @@ mod tests {
     fn extract_stored_zip_over_file_range_source() {
         use std::io::Write;
 
-        use zip::CompressionMethod;
-        use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipWriter};
 
         let payload = b"range-backed stored zip entry";
         let cursor = std::io::Cursor::new(Vec::<u8>::new());
@@ -820,9 +819,8 @@ mod tests {
     fn extract_stored_zip_returns_file_range() {
         use std::io::Write;
 
-        use zip::CompressionMethod;
-        use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipWriter};
 
         let payload = b"stored entry contents, verbatim on disk";
         let cursor = std::io::Cursor::new(Vec::<u8>::new());
@@ -959,9 +957,8 @@ mod tests {
     #[test]
     fn extract_recurses_through_tempfile_source() {
         use bytes::Bytes;
-        use zip::CompressionMethod;
-        use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
+        use zip::{CompressionMethod, ZipWriter};
 
         fn build_zip(entries: &[(&str, &[u8])], method: CompressionMethod) -> Vec<u8> {
             let cursor = std::io::Cursor::new(Vec::<u8>::new());

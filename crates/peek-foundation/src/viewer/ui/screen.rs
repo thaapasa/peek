@@ -1,10 +1,8 @@
 use std::io::{self, Write};
 
 use anyhow::Result;
-use crossterm::{
-    cursor, execute,
-    terminal::{self, ClearType},
-};
+use crossterm::terminal::{self, ClearType};
+use crossterm::{cursor, execute};
 
 /// Frame buffer for the viewer's terminal output.
 ///

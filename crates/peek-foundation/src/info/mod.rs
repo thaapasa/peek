@@ -15,8 +15,10 @@ pub use json::to_json;
 /// `#[derive(InfoView)]` — the print-tree generator. Shares the trait's name
 /// (macro vs. type namespace) the way serde's `Serialize` does.
 pub use peek_foundation_derive::InfoView;
-pub use render::{RenderOptions, render, thousands_sep};
-pub use render::{format_size_human, paint_count, push_field, push_section_header};
+pub use render::{
+    RenderOptions, format_size_human, paint_count, push_field, push_section_header, render,
+    thousands_sep,
+};
 pub use rows::{InfoRow, push_entry, push_parse_errors, push_rows, rows_to_json};
 pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
 pub use time::{format_archive_mtime_zoned, parse_iso8601, parse_utc_offset, timestamp_from_civil};

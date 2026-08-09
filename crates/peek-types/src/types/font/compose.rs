@@ -15,12 +15,10 @@ use bytes::Bytes;
 use peek_detect::{Detected, FileType};
 use peek_io::InputSource;
 
-use crate::types::font::info_gather;
-use crate::types::font::specimen;
 use crate::types::font::specimen_mode::SpecimenMode;
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
+use crate::types::font::{info_gather, specimen};
 use crate::viewer::modes::Mode;
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 /// Vertical pixel budget for the rendered specimen canvas. Chosen so
 /// the image pipeline downsamples to a reasonable terminal height

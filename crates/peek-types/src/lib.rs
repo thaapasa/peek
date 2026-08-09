@@ -21,11 +21,11 @@
 // type modules use.
 // `impl_info_extras!` is `#[macro_export]`ed at the foundation crate root;
 // re-export so `crate::impl_info_extras!` resolves in the type modules.
-pub use peek_foundation::impl_info_extras;
 // Same for `info_section!`, which generates the per-type `render_section`
 // / `json_section` pair that `impl_info_extras!`'s three-arg form wires.
-pub use peek_foundation::info_section;
-pub use peek_foundation::{base64, extract, info, output, viewer, xml};
+pub use peek_foundation::{
+    base64, extract, impl_info_extras, info, info_section, output, viewer, xml,
+};
 
 pub mod types;
 

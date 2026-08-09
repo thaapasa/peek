@@ -21,8 +21,11 @@ setup:
     command -v asciinema >/dev/null || brew install asciinema
     echo "dev tools ready"
 
-# Format codebase
+# Format codebase. Twice: with imports_granularity, a merge that pushes a line
+# past max_width doesn't get wrapped until the following pass, so one run can
+# leave the tree failing `--check` (which is all CI runs). Cheap enough.
 format:
+    cargo +nightly fmt
     cargo +nightly fmt
 
 # Check formatting, cargo check + clippy

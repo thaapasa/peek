@@ -5,10 +5,9 @@ use peek_detect::Detected;
 use peek_io::InputSource;
 
 use crate::types::directory::{DirListSource, read};
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 pub fn compose(
     source: &InputSource,

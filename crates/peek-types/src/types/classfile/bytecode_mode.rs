@@ -248,8 +248,7 @@ mod tests {
     use std::path::PathBuf;
 
     use peek_io::InputSource;
-    use peek_theme::PeekThemeName;
-    use peek_theme::make_peek_theme;
+    use peek_theme::{PeekThemeName, make_peek_theme};
 
     fn disasm() -> Disassembly {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

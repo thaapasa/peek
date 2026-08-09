@@ -6,10 +6,9 @@ use peek_io::InputSource;
 
 use crate::types::archive;
 use crate::types::comic::{CbzPageRenderer, cbz};
-use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
-use crate::viewer::{ComposeCtx, image_config};
+use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
 
 pub fn compose(
     source: &InputSource,

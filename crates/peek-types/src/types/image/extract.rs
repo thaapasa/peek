@@ -6,7 +6,8 @@
 use std::io::Cursor;
 
 use bytes::Bytes;
-use image::{ImageEncoder, codecs::png::PngEncoder};
+use image::ImageEncoder;
+use image::codecs::png::PngEncoder;
 use peek_io::InputSource;
 
 use crate::extract::{ExtractError, Extracted};

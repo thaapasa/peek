@@ -17,13 +17,11 @@ use anyhow::Result;
 use peek_detect::{Detected, FileType, PostScriptFormat};
 use peek_io::InputSource;
 
-use super::dos_eps;
-use super::gs;
 use super::image_renderer::{EpsImageRenderer, EpsImageSource};
-use crate::viewer::ComposeOpts;
+use super::{dos_eps, gs};
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
-use crate::viewer::{ComposeCtx, image_config};
+use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
 
 pub fn compose(
     source: &InputSource,

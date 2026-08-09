@@ -14,9 +14,8 @@ use peek_detect::{Detected, FileType};
 use peek_io::InputSource;
 
 use crate::types::markdown::MarkdownRenderer;
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 pub fn compose(
     source: &InputSource,

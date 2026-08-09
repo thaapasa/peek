@@ -3,10 +3,9 @@
 
 use peek_io::InputSource;
 
-use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;
 use super::workbook::Workbook;
-use super::xml_props;
+use super::{SpreadsheetFormat, xml_props};
 use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, fmt: SpreadsheetFormat) -> Extras {

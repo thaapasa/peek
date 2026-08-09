@@ -7,44 +7,34 @@ use peek_io::InputSource;
 use peek_io::limits::WHOLE_DOC_BYTES;
 
 use crate::mime;
-use crate::types::archive as archive_detect;
 // Per-type format enums live in `types/<x>.rs`. Re-export them here so
 // they surface at the `peek_detect` crate root — the path consumers
 // import (`peek_detect::ArchiveFormat`).
 pub use crate::types::archive::ArchiveFormat;
-use crate::types::audio as audio_detect;
 pub use crate::types::audio::AudioFormat;
-use crate::types::cert as cert_detect;
 pub use crate::types::cert::CertFormat;
-use crate::types::comic as comic_detect;
 pub use crate::types::comic::ComicFormat;
-use crate::types::csv as csv_detect;
 pub use crate::types::csv::CsvFormat;
-use crate::types::disk_image as disk_image_detect;
 pub use crate::types::disk_image::DiskImageFormat;
-use crate::types::document as document_detect;
 pub use crate::types::document::DocumentFormat;
-use crate::types::ds_store as ds_store_detect;
-use crate::types::ebook as ebook_detect;
 pub use crate::types::ebook::EbookFormat;
-use crate::types::email as email_detect;
 pub use crate::types::email::EmailFormat;
-use crate::types::eps as eps_detect;
 pub use crate::types::eps::PostScriptFormat;
-use crate::types::font as font_detect;
 pub use crate::types::font::FontFormat;
-use crate::types::objfile as objfile_detect;
 pub use crate::types::pdf::PdfFlavor;
-use crate::types::presentation as presentation_detect;
 pub use crate::types::presentation::PresentationFormat;
-use crate::types::spreadsheet as spreadsheet_detect;
 pub use crate::types::spreadsheet::SpreadsheetFormat;
-use crate::types::sqlite as sqlite_detect;
 pub use crate::types::sqlite::SqliteFormat;
-use crate::types::structured as structured_detect;
 pub use crate::types::structured::StructuredFormat;
-use crate::types::vobject as vobject_detect;
 pub use crate::types::vobject::VObjectFormat;
+use crate::types::{
+    archive as archive_detect, audio as audio_detect, cert as cert_detect, comic as comic_detect,
+    csv as csv_detect, disk_image as disk_image_detect, document as document_detect,
+    ds_store as ds_store_detect, ebook as ebook_detect, email as email_detect, eps as eps_detect,
+    font as font_detect, objfile as objfile_detect, presentation as presentation_detect,
+    spreadsheet as spreadsheet_detect, sqlite as sqlite_detect, structured as structured_detect,
+    vobject as vobject_detect,
+};
 
 /// Bytes read from the head of a file for magic-byte detection and the
 /// content-sniff string. Every consumer is satisfied by a small prefix:

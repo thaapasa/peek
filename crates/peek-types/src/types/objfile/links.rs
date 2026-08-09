@@ -6,10 +6,9 @@
 //! ELF `DT_NEEDED` entries, Mach-O dylib load commands, and — where the
 //! unified API does carry library names — the PE/COFF import table.
 
-use object::elf;
 use object::read::elf::{Dyn, FileHeader};
 use object::read::macho::MachHeader;
-use object::{Endianness, FileKind, Object};
+use object::{Endianness, FileKind, Object, elf};
 
 /// Shared libraries this object links against, in file order. Empty for
 /// statically-linked or relocatable inputs, and for any container whose

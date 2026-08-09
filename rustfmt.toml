@@ -1,5 +1,9 @@
-# group_imports is nightly-only, hence `cargo +nightly fmt` (`just format`)
-# and a nightly fmt step in CI. The pinned stable rustfmt warns and skips it,
-# but never un-groups already-grouped code — a plain `cargo fmt` degrades to
+# Both options are nightly-only, hence `cargo +nightly fmt` (`just format`)
+# and a nightly fmt step in CI. The pinned stable rustfmt warns and skips
+# them, but never undoes what nightly wrote — a plain `cargo fmt` degrades to
 # sort-only rather than fighting the nightly one.
+#
+# Module, not Crate: one `use` per module path, so braces stay one level
+# deep. Crate collapses a whole crate into a single nested tree.
 group_imports = "StdExternalCrate"
+imports_granularity = "Module"

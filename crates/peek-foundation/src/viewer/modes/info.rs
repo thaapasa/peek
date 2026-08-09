@@ -96,8 +96,7 @@ fn wrap_info_lines(rendered: &[String], width: usize) -> Vec<String> {
 mod tests {
     use peek_theme::ThemeManager;
 
-    use super::wrap_info_lines;
-    use super::*;
+    use super::{wrap_info_lines, *};
     use crate::info::{FileInfo, NoExtras, RenderOptions};
 
     fn synthetic_file_info() -> FileInfo {

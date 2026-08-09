@@ -17,8 +17,7 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use anyhow::Result;
-use peek_io::InputSource;
-use peek_io::sanitize_terminal_controls;
+use peek_io::{InputSource, sanitize_terminal_controls};
 use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 

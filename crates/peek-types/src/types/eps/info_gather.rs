@@ -4,11 +4,9 @@
 
 use peek_io::InputSource;
 
-use super::PostScriptFormat;
 use super::dos_eps::{self, PreviewKind};
-use super::dsc;
 use super::info::{EpsInfo, PreviewMeta};
-use super::{gs, postscript_text};
+use super::{PostScriptFormat, dsc, gs, postscript_text};
 use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, format: PostScriptFormat) -> Extras {

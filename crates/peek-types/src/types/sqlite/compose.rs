@@ -12,10 +12,9 @@ use crate::types::sqlite::SqliteFormat;
 use crate::types::sqlite::catalog::{self, Entity, SqliteCatalog};
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::table_mode::build as build_table_mode;
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::listing::{Entry, EntryKind, ListingMode};
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 /// File suffix used for schema-row inner_paths. Mirrors the SQL viewer
 /// the user opens when the row is Enter'd — keeps the listing's leaf

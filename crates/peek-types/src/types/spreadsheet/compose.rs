@@ -10,11 +10,10 @@ use peek_io::InputSource;
 use super::sheet_list::SheetListSource;
 use super::workbook::Workbook;
 use crate::types::archive;
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode};
 use crate::viewer::table::rows_mode::RowsTableMode;
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 /// Suffix on a sheet's listing row. Mirrors SQLite's contents rows:
 /// Enter drills into the table view, `e` extracts the sheet to a CSV

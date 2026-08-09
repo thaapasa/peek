@@ -14,10 +14,9 @@ use peek_detect::{Detected, FileType, StructuredFormat};
 use peek_io::InputSource;
 
 use crate::types::notebook::{NotebookRenderer, listing};
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{Mode, RenderedTextMode};
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 pub fn compose(
     source: &InputSource,

@@ -5,9 +5,8 @@ use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use super::anim_frame::AnimFrameState;
-use super::pipeline::ImageConfig;
 use super::pipeline::animate::AnimFrame;
-use super::pipeline::render;
+use super::pipeline::{ImageConfig, render};
 use super::scroll::ScrollBounds;
 use super::view::ImageView;
 use super::zoom_pan::ViewBounds;

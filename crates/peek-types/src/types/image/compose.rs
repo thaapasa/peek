@@ -5,9 +5,8 @@ use peek_detect::Detected;
 use peek_io::InputSource;
 
 use crate::types::image::{AnimationMode, ImageKind, ImageRenderMode};
-use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
-use crate::viewer::{ComposeCtx, image_config};
+use crate::viewer::{ComposeCtx, ComposeOpts, image_config};
 
 /// Push the image view modes onto `modes`. Animated GIF/WebP gets
 /// [`AnimationMode`] (driven by the Mode trait's tick contract);

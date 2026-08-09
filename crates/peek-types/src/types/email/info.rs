@@ -2,9 +2,8 @@
 
 use peek_io::InputSource;
 
-use super::EmailFormat;
 use super::message::ParsedEmail;
-use super::{mbox, message};
+use super::{EmailFormat, mbox, message};
 use crate::info::Extras;
 
 /// Per-email metadata for the Info section. Single-message (`.eml`)

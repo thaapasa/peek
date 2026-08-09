@@ -115,9 +115,9 @@ install.sh          POSIX installer for curl | sh.
   `Derive binary + directory info sections`, not `feat: …`. Capitalise first word.
 - **Don't push, open PRs, or trigger CI on own initiative.** Local commits only. User pushes/opens/
   merges so they can amend first. Open PR only on explicit ask.
-- **Run `cargo +nightly fmt` after editing Rust** (or `just format`). Keeps diffs focused. Nightly
-  because `rustfmt.toml`'s `group_imports` is nightly-only — plain `cargo fmt` warns and skips it,
-  and CI checks with `+nightly`.
+- **Run `just format` after editing Rust.** Keeps diffs focused. Not bare `cargo fmt`: the import
+  options in `rustfmt.toml` are nightly-only (stable warns and skips them), and a single pass
+  doesn't always converge — `just format` runs `cargo +nightly fmt` twice for that reason.
 - **Keep checkup-finding IDs (H4, M2, …) out of commit subjects.** Findings doc temporary — ID
   dangles once entry deleted. Body may cite ID when commit touches findings doc; subject reads by
   intent.

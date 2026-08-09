@@ -308,7 +308,8 @@ mod tests {
     fn gz_zeros(n: usize) -> Vec<u8> {
         use std::io::Write;
 
-        use flate2::{Compression, write::GzEncoder};
+        use flate2::Compression;
+        use flate2::write::GzEncoder;
         let mut enc = GzEncoder::new(Vec::new(), Compression::default());
         enc.write_all(&vec![0u8; n]).unwrap();
         enc.finish().unwrap()

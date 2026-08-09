@@ -23,8 +23,7 @@ pub mod table;
 pub mod ui;
 pub mod wrap_scroll;
 
-pub use highlight::highlight_lines;
-pub use highlight::{LineStreamHighlighter, syntax_token_for};
+pub use highlight::{LineStreamHighlighter, highlight_lines, syntax_token_for};
 
 /// Shared services threaded through each `types::<x>::compose::compose`
 /// call. Holds the `ThemeManager` plus the two helpers (image config,

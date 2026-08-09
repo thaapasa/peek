@@ -17,10 +17,9 @@ use peek_io::InputSource;
 
 use crate::types::csv::CsvFormat;
 use crate::types::csv::parse::{CellKind, CsvData, classify_cell};
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 use crate::viewer::table::rows_mode::{Alignment, RowsTableMode};
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 pub fn compose(
     source: &InputSource,

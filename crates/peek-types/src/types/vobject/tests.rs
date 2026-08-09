@@ -2,11 +2,9 @@
 
 use peek_detect::types::vobject as detect;
 
-use super::VObjectFormat;
-use super::calendar;
-use super::contact;
 use super::datetime::{date_key, format_datetime};
 use super::line::{parse_components, split_structured, unescape_text};
+use super::{VObjectFormat, calendar, contact};
 
 const ICAL: &str = "\
 BEGIN:VCALENDAR\r

@@ -6,10 +6,9 @@ use anyhow::Result;
 use peek_detect::{Detected, DiskImageFormat};
 use peek_io::InputSource;
 
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::{InfoMode, Mode};
+use crate::viewer::{ComposeCtx, ComposeOpts};
 
 pub fn compose(
     source: &InputSource,

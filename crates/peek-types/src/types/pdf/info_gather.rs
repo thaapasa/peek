@@ -6,9 +6,8 @@
 
 use peek_io::InputSource;
 
-use super::PdfFlavor;
 use super::info::PdfStats;
-use super::package;
+use super::{PdfFlavor, package};
 use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> Extras {
