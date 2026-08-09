@@ -159,10 +159,14 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.sha }}
 
+      # Bare `rustup toolchain install` resolves rust-toolchain.toml, so
+      # release binaries are built by the same pinned compiler CI tests with.
+      # Not dtolnay/rust-toolchain: it sets RUSTUP_TOOLCHAIN, overriding the
+      # file. `target add` applies to that active toolchain.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+        run: |
+          rustup toolchain install
+          rustup target add ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:

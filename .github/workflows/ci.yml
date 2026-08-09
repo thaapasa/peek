@@ -24,10 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Bare `rustup toolchain install` resolves rust-toolchain.toml (channel
+      # + components). Not dtolnay/rust-toolchain: it sets RUSTUP_TOOLCHAIN,
+      # which overrides the file and puts CI back on floating stable.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy, rustfmt
+        run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
 
