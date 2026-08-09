@@ -8,16 +8,14 @@
 //! count + size composite, serializing to `attachment_count` +
 //! `attachment_bytes`.
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
-
-use crate::info::{InfoNode, Role, Value, format_size_human, paint_count};
-use peek_theme::PeekTheme;
 
 use super::EmailFormat;
 use super::info::EmailInfo;
+use crate::info::{InfoNode, Role, Value, format_size_human, paint_count};
 
 crate::info_section!(EmailInfo, EmailView, "email");
 

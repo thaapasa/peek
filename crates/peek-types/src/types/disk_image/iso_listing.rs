@@ -15,10 +15,10 @@
 use std::path::Path;
 
 use anyhow::{Context, Result};
+use peek_io::InputSource;
 
 use super::iso_pvd::{self, PVD_OFFSET};
 use crate::viewer::listing::{Entry, EntryKind, EntryMtime, time_from_epoch_secs};
-use peek_io::InputSource;
 
 /// Cap on tree depth walked. Real ISOs respect ISO 9660's 8-level
 /// limit; this cap is loose enough for non-conformant images while
@@ -390,9 +390,10 @@ fn civil_to_unix_secs(y: i32, m: u32, d: u32, h: u32, mi: u32, s: u32) -> Option
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::viewer::listing::Stats;
-    use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

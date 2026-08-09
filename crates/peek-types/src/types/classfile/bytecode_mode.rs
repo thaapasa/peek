@@ -7,6 +7,7 @@
 //! [`Handled::YesScrollTo`].
 
 use anyhow::Result;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 use syntect::highlighting::Color;
 
 use super::bytecode::{Disassembly, MethodAsm};
@@ -15,7 +16,6 @@ use crate::viewer::modes::{
 };
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry, strip_ansi_width, wrap_styled};
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[
     (
@@ -245,10 +245,11 @@ mod tests {
     fn lit(q: &str) -> SearchQuery {
         SearchQuery::compile(q, false).unwrap()
     }
+    use std::path::PathBuf;
+
     use peek_io::InputSource;
     use peek_theme::PeekThemeName;
     use peek_theme::make_peek_theme;
-    use std::path::PathBuf;
 
     fn disasm() -> Disassembly {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

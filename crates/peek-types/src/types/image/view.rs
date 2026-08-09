@@ -22,6 +22,7 @@
 //! sequence applies regardless of where it came from.
 
 use anyhow::Result;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use super::pipeline::render::{self, GridWindow, PreparedImage, TermSize};
@@ -34,7 +35,6 @@ use crate::viewer::cell_size;
 use crate::viewer::modes::{Handled, RenderCtx, Window};
 use crate::viewer::paged::cycle_image_config;
 use crate::viewer::ui::Action;
-use peek_theme::PeekTheme;
 
 /// Image-grid view state: image config + zoom/pan apparatus. Embedded
 /// by every Mode that scrolls through a [`PreparedImage`].

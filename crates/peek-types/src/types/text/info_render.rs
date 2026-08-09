@@ -9,11 +9,11 @@
 //! it. The enums carry their own split formatting — `Serialize` emits the
 //! machine token, [`InfoValue`](crate::info::InfoValue) the human label.
 
+use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoNode, InfoValue, InfoView, Value, push_field};
 use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
-use peek_theme::PeekTheme;
 
 crate::info_section!(TextStats, TextView, "text");
 
@@ -186,8 +186,9 @@ fn encoding_token(enc: Encoding) -> &'static str {
 
 #[cfg(test)]
 mod print_tests {
-    use super::*;
     use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+
+    use super::*;
 
     fn plain_theme() -> PeekTheme {
         let mut t = PeekTheme::from_syntect(&load_embedded_theme(

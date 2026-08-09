@@ -96,8 +96,9 @@ fn pe_imports(data: &[u8]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn read(name: &str) -> Vec<u8> {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

@@ -10,12 +10,12 @@
 //! parse error only the `Status` row shows (JSON: an `error` key).
 
 use cafebabe::ClassAccessFlags;
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use super::info::ClassfileInfo;
 use crate::info::{InfoValue, Value, Warn};
-use peek_theme::PeekTheme;
 
 crate::info_section!(ClassfileInfo, ClassfileView, "classfile");
 

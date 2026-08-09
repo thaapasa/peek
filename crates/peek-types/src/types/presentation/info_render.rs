@@ -5,12 +5,11 @@
 //! The section title is the format name; metadata members render inline
 //! (so they flatten into the JSON object rather than nesting).
 
+use peek_detect::PresentationFormat;
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value};
-use peek_detect::PresentationFormat;
-
 use super::info::PresentationStats;
+use crate::info::{Muted, Value};
 
 crate::info_section!(PresentationStats, PresentationView, "presentation");
 

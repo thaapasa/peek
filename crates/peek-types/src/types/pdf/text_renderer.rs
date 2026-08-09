@@ -8,11 +8,10 @@
 //! [`RenderedTextMode`] supplies caching, search, and windowing.
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer};
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::package::Doc;
+use crate::viewer::modes::{ModeId, TextRenderer};
 
 pub(crate) struct PdfTextRenderer {
     doc: Doc,

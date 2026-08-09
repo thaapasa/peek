@@ -4,10 +4,10 @@
 
 use cafebabe::attributes::AttributeData;
 use cafebabe::{ParseOptions, parse_class_with_options};
+use peek_io::InputSource;
 
 use super::info::{ClassfileInfo, ClassfileMeta};
 use crate::info::Extras;
-use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))

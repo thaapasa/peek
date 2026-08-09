@@ -5,9 +5,8 @@
 //! stream) are real — but the per-word tokenizer, display-width helper,
 //! and SGR open/close bracketing are identical and live here.
 
-use syntect::highlighting::Color;
-
 use peek_theme::{Attr, StyleMode};
+use syntect::highlighting::Color;
 
 /// Run-style attributes shared by both AST shapes (DOCX run, RTF block
 /// painter). Built per emission by the caller and consumed by

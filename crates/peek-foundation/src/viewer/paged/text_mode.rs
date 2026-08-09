@@ -18,17 +18,16 @@
 //! image config) without one shell hardcoding the other's key.
 
 use anyhow::Result;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
+use super::{pipe_walk_pages, step_paged};
 use crate::output::PrintOutput;
 use crate::viewer::modes::{
     Handled, Mode, ModeId, RenderCtx, Window, apply_search, slice_window, step_search,
 };
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::PeekTheme;
-
-use super::{pipe_walk_pages, step_paged};
 
 /// The per-reader seam under [`PagedTextReadMode`]: turn a page index into
 /// rendered lines, plus the small bits of identity (cache key, status

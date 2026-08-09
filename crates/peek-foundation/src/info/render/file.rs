@@ -1,13 +1,13 @@
 use std::time::SystemTime;
 
+use peek_detect::mime::{MimeCategory, MimeInfo};
+use peek_io::sanitize_terminal_controls;
+use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
 
 use super::super::time::format_time;
 use super::super::{CompressionInfo, FileInfo};
 use super::{LABEL_WIDTH, push_field, push_section_header};
-use peek_detect::mime::{MimeCategory, MimeInfo};
-use peek_io::sanitize_terminal_controls;
-use peek_theme::{PeekTheme, lerp_color};
 
 pub(super) fn render_section(
     lines: &mut Vec<String>,

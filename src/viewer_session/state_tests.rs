@@ -3,11 +3,10 @@
 //! degrade — driven through the same `apply` / `handle` entry points
 //! the event loop uses.
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use std::rc::Rc;
 
 use clap::Parser;
-
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use peek_detect::Detected;
 use peek_foundation::info::RenderOptions;
 use peek_foundation::viewer::modes::{Mode, ModeId};

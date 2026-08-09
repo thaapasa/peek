@@ -1,6 +1,8 @@
 use std::rc::Rc;
 
 use anyhow::Result;
+use peek_io::{InputSource, LineSource};
+use peek_theme::{PeekTheme, PeekThemeName, ThemeManager};
 use syntect::highlighting::Color;
 
 use super::content_rendering::{RenderingMode, Showing};
@@ -13,8 +15,6 @@ use crate::viewer::LineStreamHighlighter;
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
 use crate::viewer::wrap_scroll::{LineView, PrettyLines, WrapScroll};
-use peek_io::{InputSource, LineSource};
-use peek_theme::{PeekTheme, PeekThemeName, ThemeManager};
 
 #[cfg(test)]
 #[path = "content_tests.rs"]

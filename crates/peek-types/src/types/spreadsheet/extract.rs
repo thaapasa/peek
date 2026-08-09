@@ -7,13 +7,12 @@
 //! extracts the workbook's internals like any other zip).
 
 use anyhow::anyhow;
-
-use crate::extract::{ExtractError, ExtractOptions, Extracted, sanitize_entry_path};
 use peek_detect::{ArchiveFormat, SpreadsheetFormat};
 use peek_io::InputSource;
 
 use super::compose::SHEET_SUFFIX;
 use super::workbook::Workbook;
+use crate::extract::{ExtractError, ExtractOptions, Extracted, sanitize_entry_path};
 
 pub fn extract(
     source: &InputSource,

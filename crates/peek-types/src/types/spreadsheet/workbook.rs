@@ -14,12 +14,11 @@ use std::io::Cursor;
 use anyhow::{Result, anyhow};
 use bytes::Bytes;
 use calamine::{Cell, Data, DataRef, Ods, Range, Reader, Sheets, Xlsx};
-
-use crate::viewer::table::row_source::RowSource;
-use crate::viewer::table::rows_mode::Alignment;
 use peek_io::InputSource;
 
 use super::SpreadsheetFormat;
+use crate::viewer::table::row_source::RowSource;
+use crate::viewer::table::rows_mode::Alignment;
 
 pub(crate) struct Workbook {
     sheets: Sheets<Cursor<Bytes>>,
@@ -251,8 +250,9 @@ fn cell_string(d: &Data) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(rel: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

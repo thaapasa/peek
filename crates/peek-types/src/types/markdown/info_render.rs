@@ -8,15 +8,14 @@
 //! count row plus indented detail rows (small sub-views) while serializing as
 //! their flat numeric fields.
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
 
 use crate::info::{InfoNode, InfoValue, Role, Value, paint_count};
 use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
 use crate::types::text::info_render::TextView;
-use peek_theme::PeekTheme;
 
 crate::info_section!(MarkdownInfo, MarkdownView, "markdown");
 

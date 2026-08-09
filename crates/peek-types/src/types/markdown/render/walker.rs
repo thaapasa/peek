@@ -10,13 +10,12 @@
 
 use std::rc::Rc;
 
-use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
-
-use crate::viewer::highlight_lines;
 use peek_theme::{Attr, PeekTheme, PeekThemeName, StyleMode, ThemeManager, display_width};
+use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, LinkType, Tag, TagEnd};
 
 use super::table;
 use super::wrap::wrap_with_prefix;
+use crate::viewer::highlight_lines;
 
 pub(super) struct Walker<'a> {
     out: Vec<String>,

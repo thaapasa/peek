@@ -3,13 +3,13 @@
 //! cycle steps through. No extract path.
 
 use anyhow::Result;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{InfoMode, Mode};
 use crate::viewer::table::TableMode;
-use peek_detect::Detected;
-use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

@@ -7,9 +7,8 @@ use std::sync::{Arc, OnceLock};
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-use resvg::usvg::fontdb;
-
 use peek_io::InputSource;
+use resvg::usvg::fontdb;
 
 /// Lazily-initialized font database shared across all SVG parses. Loading
 /// system fonts is slow (~100 ms — 1 s on macOS); we do it once. Without

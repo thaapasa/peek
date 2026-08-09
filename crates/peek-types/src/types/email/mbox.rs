@@ -16,7 +16,6 @@
 use std::io::BufRead;
 
 use anyhow::Result;
-
 use peek_io::InputSource;
 
 /// One message located inside an mbox file.

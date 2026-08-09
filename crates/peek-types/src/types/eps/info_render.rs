@@ -7,17 +7,15 @@
 //! `none`, the renderer to an availability hint), while in JSON the preview is
 //! a nested object present only when embedded.
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
-
-use crate::info::{InfoValue, Muted, Role, Value, format_size_human};
-use peek_theme::PeekTheme;
 
 use super::PostScriptFormat;
 use super::dos_eps::PreviewKind;
 use super::info::{EpsInfo, PreviewMeta};
+use crate::info::{InfoValue, Muted, Role, Value, format_size_human};
 
 crate::info_section!(EpsInfo, EpsView, "eps");
 

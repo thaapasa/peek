@@ -16,12 +16,12 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use anyhow::Result;
-
-use crate::viewer::highlight_lines;
-use crate::viewer::wrap_scroll::PrettyLines;
 use peek_io::InputSource;
 use peek_io::limits::Budget;
 use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+
+use crate::viewer::highlight_lines;
+use crate::viewer::wrap_scroll::PrettyLines;
 
 /// Pretty-printing holds the whole document in memory — no streaming
 /// pretty-printer exists. Above this size the branch refuses and the
@@ -268,8 +268,9 @@ impl PrettyView {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bytes::Bytes;
+
+    use super::*;
 
     fn source(text: &str) -> InputSource {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))

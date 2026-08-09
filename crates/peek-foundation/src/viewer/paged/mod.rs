@@ -26,6 +26,7 @@
 //! [`render_cached`] / [`cycle_image_config`] / [`PageCacheKey`]).
 
 use anyhow::Result;
+use peek_theme::StyleMode;
 
 use crate::output::PrintOutput;
 use crate::viewer::cell_size;
@@ -34,7 +35,6 @@ use crate::viewer::image_render::{
 };
 use crate::viewer::modes::Handled;
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::StyleMode;
 
 mod mode;
 mod text_mode;

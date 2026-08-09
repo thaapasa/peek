@@ -3,11 +3,12 @@
 
 use std::collections::HashSet;
 
+use peek_io::InputSource;
+
 use super::format::view_style_label;
 use super::info::{DsStoreInfo, DsStoreMeta};
 use super::reader::{self, DsValue};
 use crate::info::Extras;
-use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))

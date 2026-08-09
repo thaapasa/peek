@@ -2,9 +2,8 @@
 
 use std::path::Path;
 
-use crate::info::{Extras, Value};
-
 use super::read::{DirEntryKind, read_dir_entries};
+use crate::info::{Extras, Value};
 
 /// Directory section view — drives both `--info` print and `--info --json`.
 /// Counts use [`Value::Int`] (flat value colour + thousands separators), not

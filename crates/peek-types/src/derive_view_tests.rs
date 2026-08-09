@@ -10,10 +10,10 @@
 //! competing rules *disagree*, so the surviving row proves which one won —
 //! reordering the precedence checks in the macro breaks exactly one test.
 
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 use serde::Serialize;
 
 use crate::info::{InfoNode, InfoView, Value};
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
 fn plain_theme() -> PeekTheme {
     let mut t = PeekTheme::from_syntect(&load_embedded_theme(

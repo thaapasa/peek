@@ -3,10 +3,10 @@
 //! [`super::package::Doc::list_embeds`] — the same string the
 //! listing-mode surface uses.
 
-use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 use peek_io::InputSource;
 
 use super::package;
+use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let safe = sanitize_entry_path(key)?;

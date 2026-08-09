@@ -6,7 +6,6 @@
 //! mode switches.
 
 use anyhow::Result;
-
 use peek_detect::Detected;
 use peek_foundation::extract::Extracted;
 use peek_foundation::info::FileInfo;

@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::{self, Event, KeyEventKind};
-
 use peek_detect::Detected;
 use peek_foundation::info::RenderOptions;
 use peek_foundation::viewer::modes::{Mode, ModeId};

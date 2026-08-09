@@ -10,10 +10,11 @@
 //! run via `just fuzz`. This stable suite is the permanent CI gate; a
 //! crasher it finds is pinned under `proptest-regressions/`.
 
+use std::io::Write;
+
 use peek_detect::{FileType, detect, detect_ignore_name};
 use peek_io::InputSource;
 use proptest::prelude::*;
-use std::io::Write;
 
 /// Bytes the file path reads before consulting the body in full — mirrors
 /// the private `HEAD_BYTES`. At or below this size the file and in-memory

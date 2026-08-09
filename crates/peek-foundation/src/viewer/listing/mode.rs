@@ -17,9 +17,10 @@ use std::borrow::Cow;
 use std::ops::Range;
 
 use anyhow::Result;
-use syntect::highlighting::Color;
-
+use peek_io::InputSource;
 use peek_io::sanitize_terminal_controls;
+use peek_theme::PeekTheme;
+use syntect::highlighting::Color;
 
 use super::entry::Entry;
 use super::row;
@@ -33,8 +34,6 @@ use crate::viewer::modes::{
 };
 use crate::viewer::search::{SearchQuery, SearchState, SearchTarget, overlay_matches};
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, strip_ansi_width};
-use peek_io::InputSource;
-use peek_theme::PeekTheme;
 
 /// Columns moved per Left/Right keypress — matches `TableMode`'s pan step.
 const H_STEP: usize = 8;

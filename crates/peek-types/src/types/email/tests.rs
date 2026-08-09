@@ -1,15 +1,13 @@
 //! Unit tests for the email type: detection, parsing, mbox splitting,
 //! and attachment extraction. Fixtures live in `test-data/`.
 
-use peek_io::InputSource;
-
-use crate::viewer::modes::ModeId;
-use peek_detect::{Detected, FileType};
-
 use peek_detect::types::email as detect;
+use peek_detect::{Detected, FileType};
+use peek_io::InputSource;
 
 use super::EmailFormat;
 use super::{compose, extract, info, mbox, message};
+use crate::viewer::modes::ModeId;
 
 const EML: &[u8] = include_bytes!("../../../../../test-data/sample.eml");
 const MBOX: &[u8] = include_bytes!("../../../../../test-data/sample.mbox");

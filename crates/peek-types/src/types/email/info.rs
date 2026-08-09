@@ -1,11 +1,11 @@
 //! Email Info sidecar — header summary + attachment / message tallies.
 
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::EmailFormat;
 use super::message::ParsedEmail;
 use super::{mbox, message};
+use crate::info::Extras;
 
 /// Per-email metadata for the Info section. Single-message (`.eml`)
 /// populates the header fields; mailbox (`.mbox`) populates

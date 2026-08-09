@@ -13,15 +13,15 @@ use std::io::Read;
 use std::path::Path;
 
 use bytes::Bytes;
+use peek_detect::{ArchiveFormat, CompressionFormat};
+use peek_io::InputSource;
+use peek_io::compression::MAX_SPILL_BYTES;
 use tempfile::Builder as TempBuilder;
 
 use crate::extract::{
     ExtractError, ExtractOptions, Extracted, forward_slash_key, sanitize_entry_path,
 };
 use crate::types::archive::reader::open_seekable;
-use peek_detect::{ArchiveFormat, CompressionFormat};
-use peek_io::InputSource;
-use peek_io::compression::MAX_SPILL_BYTES;
 
 /// Hard cap on a single in-memory extracted entry. Only enforced on
 /// the `Vec<u8>` fallback path — the spool-to-tempfile path bypasses
@@ -433,9 +433,10 @@ fn extract_ar(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Cursor;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
@@ -754,6 +755,7 @@ mod tests {
     #[test]
     fn extract_stored_zip_over_file_range_source() {
         use std::io::Write;
+
         use zip::CompressionMethod;
         use zip::ZipWriter;
         use zip::write::SimpleFileOptions;
@@ -817,6 +819,7 @@ mod tests {
     #[test]
     fn extract_stored_zip_returns_file_range() {
         use std::io::Write;
+
         use zip::CompressionMethod;
         use zip::ZipWriter;
         use zip::write::SimpleFileOptions;

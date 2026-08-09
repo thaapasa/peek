@@ -1,11 +1,11 @@
 //! Build `CsvStats` from a `CsvData` seed scan.
 
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::CsvFormat;
 use super::info::{ColumnStats, ColumnType, CsvStats};
 use super::parse::{CellKind, CsvData, SEED_RECORD_LIMIT, classify_cell};
+use crate::info::Extras;
 
 /// Collect the CSV Info sidecar by opening a seed scan over the source.
 /// A source that won't open as CSV falls back to the generic binary view.

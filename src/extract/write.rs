@@ -6,7 +6,6 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-
 use peek_foundation::extract::Extracted;
 
 /// Where extracted bytes land. `Stdout` writes raw bytes (no
@@ -62,10 +61,11 @@ pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf>
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bytes::Bytes;
     use peek_foundation::extract::Extracted;
     use peek_io::InputSource;
+
+    use super::*;
 
     #[test]
     fn resolve_dash_means_stdout() {

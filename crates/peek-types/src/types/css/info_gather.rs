@@ -18,11 +18,11 @@ use cssparser::{
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser, Token,
 };
 use cssparser_color::{Color, hsl_to_rgb, hwb_to_rgb};
+use peek_io::InputSource;
 
 use crate::info::Extras;
 use crate::types::css::info::{ColorSwatch, CssImport, CssInfo, CssStats, SelectorKindCounts};
 use crate::types::text::info_gather::gather_capped_text;
-use peek_io::InputSource;
 
 /// Collect the CSS Info sidecar: streaming text stats plus a capped
 /// whole-file rule/declaration parse. Returns `None` when the source is

@@ -23,7 +23,6 @@ pub use styled::{
     count_wrap_segments, expand_tabs, slice_styled_h, strip_ansi_width, take_cols, truncate_ansi,
     wrap_styled, wrap_styled_words,
 };
-pub use term::{content_rows, terminal_cols, terminal_rows, with_alternate_screen};
-
 #[cfg(any(test, feature = "testing"))]
 pub use term::test_term_override;
+pub use term::{content_rows, terminal_cols, terminal_rows, with_alternate_screen};

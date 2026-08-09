@@ -21,8 +21,9 @@
 
 use std::borrow::Cow;
 
-use crate::viewer::ui::count_wrap_segments;
 use peek_io::LineSource;
+
+use crate::viewer::ui::count_wrap_segments;
 
 /// Horizontal-scroll step (columns) per Left/Right press when wrap is
 /// off. `less -S` feel: small enough to land naturally on indented

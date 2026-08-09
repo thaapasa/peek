@@ -2,11 +2,12 @@
 //! file but is loaded as a child module of `content` via `#[path]` so
 //! it can reach private fields.
 
+use bytes::Bytes;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
+
 use super::super::pretty_view::{PRETTY_MAX_BYTES, PrettyView};
 use super::*;
 use crate::info::{FileInfo, NoExtras, RenderOptions};
-use bytes::Bytes;
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 /// Compile a literal query for the search tests (the default engine).
 fn lit(q: &str) -> SearchQuery {

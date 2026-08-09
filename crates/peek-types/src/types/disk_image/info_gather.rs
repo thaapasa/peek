@@ -4,14 +4,14 @@
 //! cheap because no payload bytes are touched.
 
 use bytes::Bytes;
+use peek_detect::DiskImageFormat;
+use peek_io::InputSource;
 
 use super::{dmg_plist, dmg_trailer, iso_pvd, mbr, mish};
 use crate::info::Extras;
 use crate::types::disk_image::info::{
     DiskImageInfo, DiskImageMeta, DmgMeta, DmgPartition, RawImageMeta,
 };
-use peek_detect::DiskImageFormat;
-use peek_io::InputSource;
 
 /// Sectors of the descriptor area we pull on a single read for ISO.
 /// Eight 2 KiB sectors covers PVD + supplementary descriptors + boot

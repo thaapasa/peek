@@ -28,9 +28,9 @@ use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
 use image::DynamicImage;
 use pdfium_render::prelude::*;
+use peek_io::InputSource;
 
 use crate::viewer::listing::FlatEntry;
-use peek_io::InputSource;
 
 /// Process-wide Pdfium handle. Holds the C++ library bindings; a
 /// `PdfDocument` borrows from it for as long as the doc lives.

@@ -21,12 +21,12 @@
 //! [`Block`] AST with theme-friendly painter colors.
 
 use anyhow::{Context, Result, anyhow};
+use peek_io::InputSource;
 use rtf_parser::{Color as RtfColor, Painter, Paragraph as RtfParagraph, RtfDocument};
 
 use crate::types::document::DocumentMetadata;
 use crate::viewer::listing::{Entry, EntryKind};
 use crate::viewer::modes::ensure_under_render_cap;
-use peek_io::InputSource;
 
 pub(crate) struct Parsed {
     pub metadata: DocumentMetadata,

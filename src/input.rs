@@ -6,7 +6,6 @@
 //! lives here is the `Args`-dependent source selection below.
 
 use anyhow::Result;
-
 use peek_io::InputSource;
 
 use crate::Args;

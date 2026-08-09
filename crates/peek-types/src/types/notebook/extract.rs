@@ -8,11 +8,10 @@
 //! so no notebook-specific descend logic is needed.
 
 use anyhow::anyhow;
-
-use crate::extract::{ExtractError, Extracted};
 use peek_io::InputSource;
 
 use super::listing;
+use crate::extract::{ExtractError, Extracted};
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let text = source

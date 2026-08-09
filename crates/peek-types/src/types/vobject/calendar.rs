@@ -3,14 +3,13 @@
 //! calendar for the Info sidecar.
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer};
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::datetime::{date_key, format_datetime};
 use super::line::{Component, ContentLine, format_list, parse_components, unescape_text};
 use super::render::{push_field, push_prose};
+use crate::viewer::modes::{ModeId, TextRenderer};
 
 /// `TextRenderer` for an iCalendar document: a calendar header followed by
 /// one block per event / todo. Re-reads + re-parses on each render call;

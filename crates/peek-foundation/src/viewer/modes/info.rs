@@ -1,7 +1,7 @@
 use anyhow::Result;
+use peek_theme::{PeekThemeName, StyleMode};
 
 use super::{Mode, ModeId, RenderCtx, Window, slice_window};
-use peek_theme::{PeekThemeName, StyleMode};
 
 #[derive(Default)]
 pub struct InfoMode {
@@ -94,10 +94,11 @@ fn wrap_info_lines(rendered: &[String], width: usize) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::ThemeManager;
+
     use super::wrap_info_lines;
     use super::*;
     use crate::info::{FileInfo, NoExtras, RenderOptions};
-    use peek_theme::ThemeManager;
 
     fn synthetic_file_info() -> FileInfo {
         FileInfo {

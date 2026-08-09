@@ -4,12 +4,12 @@
 //! view can show why pdfium couldn't read the file (corrupt header,
 //! encrypted, missing library) without crashing.
 
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::PdfFlavor;
 use super::info::PdfStats;
 use super::package;
+use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, flavor: PdfFlavor) -> Extras {
     match package::open_doc(source) {

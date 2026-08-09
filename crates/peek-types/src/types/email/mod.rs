@@ -30,7 +30,6 @@ mod renderer;
 mod tests;
 
 pub use info::EmailInfo;
-
 /// Format enum, re-exported from `peek_detect` at the module root so
 /// reader code keeps a local `crate::types::email::EmailFormat` path.
 pub use peek_detect::types::email::EmailFormat;

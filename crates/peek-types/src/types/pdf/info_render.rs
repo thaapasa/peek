@@ -8,13 +8,12 @@
 //! (modelled as `Option<Value>`); `encrypted` is a JSON bool always but a
 //! print row only when set.
 
+use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
+use super::info::PdfStats;
 use crate::info::{InfoValue, Muted, Value, Warn};
 use crate::types::pdf::PdfFlavor;
-use peek_theme::PeekTheme;
-
-use super::info::PdfStats;
 
 crate::info_section!(PdfStats, PdfView, "pdf");
 

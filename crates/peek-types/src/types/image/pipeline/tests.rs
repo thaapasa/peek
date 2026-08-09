@@ -13,10 +13,11 @@
 
 use std::path::PathBuf;
 
-use super::render::{self, GridWindow, TermSize};
-use super::{Background, FitMode, ImageConfig, ImageMode};
 use peek_io::InputSource;
 use peek_theme::StyleMode;
+
+use super::render::{self, GridWindow, TermSize};
+use super::{Background, FitMode, ImageConfig, ImageMode};
 
 const TERM: TermSize = TermSize {
     cols: 40,

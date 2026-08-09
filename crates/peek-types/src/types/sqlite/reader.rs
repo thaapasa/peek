@@ -17,10 +17,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
+use peek_io::InputSource;
 use rusqlite::{Connection, OpenFlags};
 use tempfile::NamedTempFile;
-
-use peek_io::InputSource;
 
 /// Owns a read-only SQLite connection plus the spooled temp file (if
 /// any) that backs it. Drop order is connection → temp file, so the

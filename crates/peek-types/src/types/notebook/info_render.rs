@@ -7,14 +7,13 @@
 //! small sub-view printing a count plus indented breakdown rows, flattening to
 //! flat numeric JSON).
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Role, Value, paint_count};
-use peek_theme::PeekTheme;
-
 use super::info::NotebookInfo;
+use crate::info::{InfoNode, InfoValue, Role, Value, paint_count};
 
 crate::info_section!(NotebookInfo, NotebookView, "notebook");
 

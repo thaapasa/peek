@@ -306,9 +306,11 @@ fn format_unix_permissions(type_char: char, mode: u32) -> String {
 #[cfg(test)]
 #[cfg(windows)]
 mod windows_tests {
-    use super::format_permissions_from_meta;
     use std::fs;
+
     use tempfile::tempdir;
+
+    use super::format_permissions_from_meta;
 
     #[test]
     fn writable_file_renders_rwx_form() {

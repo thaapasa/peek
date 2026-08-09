@@ -2,17 +2,16 @@
 //! section. On listing failure the format name is preserved and the
 //! error is surfaced as a warning row.
 
+use peek_detect::ArchiveFormat;
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
 
 use super::reader::list_entries;
 use crate::info::{Extras, InfoNode, Role, Value, Warn, thousands_sep};
 use crate::viewer::listing::Stats;
-use peek_detect::ArchiveFormat;
-use peek_io::InputSource;
-use peek_theme::PeekTheme;
 
 pub struct ArchiveStats {
     pub format_name: &'static str,
@@ -295,8 +294,9 @@ impl Serialize for StaticLib {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

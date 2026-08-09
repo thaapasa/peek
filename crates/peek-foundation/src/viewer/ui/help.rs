@@ -1,5 +1,6 @@
-use super::keys::{Action, HelpEntry};
 use peek_theme::{PeekTheme, PeekThemeName};
+
+use super::keys::{Action, HelpEntry};
 
 /// One labelled block of the help screen — the global keys, or one
 /// mode's extras. The viewer composes a section per mode so the help

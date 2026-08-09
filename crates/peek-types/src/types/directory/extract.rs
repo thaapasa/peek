@@ -5,8 +5,9 @@
 //! onto the current one so the user doesn't accumulate a stack of
 //! directories.
 
-use crate::extract::{ExtractError, Extracted};
 use peek_io::InputSource;
+
+use crate::extract::{ExtractError, Extracted};
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parent = source

@@ -7,12 +7,11 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style};
-use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
-
 use peek_detect::{FileType, StructuredFormat};
 use peek_io::InputSource;
 use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+use syntect::highlighting::{HighlightIterator, HighlightState, Highlighter, Style};
+use syntect::parsing::{ParseState, ScopeStack, SyntaxReference};
 
 /// Per-line length ceiling (bytes) for syntax highlighting. Beyond this a
 /// line renders verbatim (unstyled) instead of going through syntect, whose

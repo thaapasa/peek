@@ -1,10 +1,10 @@
 //! Gather EPUB-specific extras for the Info section.
 
-use crate::info::Extras;
-use crate::types::ebook::EbookStats;
 use peek_io::InputSource;
 
 use super::package;
+use crate::info::Extras;
+use crate::types::ebook::EbookStats;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     match package::open(source) {

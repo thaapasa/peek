@@ -7,6 +7,7 @@
 //! mode reuses those without this Mode impl.
 
 use anyhow::Result;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use super::{
@@ -19,7 +20,6 @@ use crate::viewer::image_render::{
 };
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::PeekTheme;
 
 /// Mode-local help entries for [`PagedImageMode`]: page navigation plus
 /// the shared image-config block plus zoom.
@@ -308,10 +308,11 @@ impl<R: PageRenderer> Mode for PagedImageMode<R> {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::StyleMode;
+
     use super::super::PagedRender;
     use super::*;
     use crate::viewer::image_render::{Background, FitMode, ImageMode};
-    use peek_theme::StyleMode;
 
     /// Regression: PagedImageMode must advertise `ScrollLeft` /
     /// `ScrollRight` in its `EXTRA_ACTIONS` slice so the global key
@@ -341,9 +342,11 @@ mod tests {
     /// on the next call.
     #[test]
     fn paged_mode_horizontal_scroll_under_zoom() {
-        use crate::info::{FileInfo, NoExtras, RenderOptions};
-        use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
         use std::cell::Cell;
+
+        use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+
+        use crate::info::{FileInfo, NoExtras, RenderOptions};
 
         struct WideRenderer {
             last_scroll_x: Cell<u32>,

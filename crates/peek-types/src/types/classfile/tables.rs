@@ -5,10 +5,10 @@ use anyhow::{Result, anyhow};
 use cafebabe::{
     ClassFile, FieldAccessFlags, MethodAccessFlags, ParseOptions, parse_class_with_options,
 };
+use peek_io::InputSource;
 
 use super::descriptor;
 use crate::viewer::table::{Align, Cell, CellRole, Table, cell, cell_spans, fit_columns};
-use peek_io::InputSource;
 
 /// Both rendered tables for one classfile.
 pub struct ClassfileTables {
@@ -142,8 +142,9 @@ fn method_modifiers(f: MethodAccessFlags) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn sample() -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

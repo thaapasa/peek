@@ -6,6 +6,8 @@
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use peek_detect::CertFormat;
+use peek_io::InputSource;
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 use x509_parser::prelude::{
@@ -20,8 +22,6 @@ use crate::types::cert::info::{
 };
 use crate::types::text::info::TextStats;
 use crate::types::text::info_gather::{SIDECAR_TEXT_LIMIT, gather_text_stats};
-use peek_detect::CertFormat;
-use peek_io::InputSource;
 
 /// Collect the cert/key Info sidecar. PEM/JWK read the source text
 /// (falling back to text stats / binary if it isn't valid UTF-8 — that

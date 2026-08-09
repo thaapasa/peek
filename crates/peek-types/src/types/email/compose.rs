@@ -8,11 +8,6 @@
 //!   message), plus the raw mailbox source.
 
 use anyhow::Result;
-
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
-use crate::viewer::listing::{Entry, EntryKind, EntryMtime, ListingMode, time_from_epoch_secs};
-use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
 use peek_detect::{Detected, EmailFormat, FileType};
 use peek_io::InputSource;
 
@@ -20,6 +15,10 @@ use super::attachment_list::AttachmentListSource;
 use super::message;
 use super::renderer::EmailRenderer;
 use super::{EmailFormat as Fmt, mbox};
+use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
+use crate::viewer::listing::{Entry, EntryKind, EntryMtime, ListingMode, time_from_epoch_secs};
+use crate::viewer::modes::{DescendFrame, ExtractTarget, Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,

@@ -16,10 +16,9 @@ mod wrap;
 use std::rc::Rc;
 
 use anyhow::Result;
-use pulldown_cmark::{Options, Parser};
-
 use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
+use pulldown_cmark::{Options, Parser};
 
 /// Render `text` as styled markdown wrapped to `width` columns.
 ///
@@ -95,9 +94,11 @@ fn gfm_options() -> Options {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use peek_theme::{PeekThemeName, ThemeManager, strip_ansi};
     use std::rc::Rc;
+
+    use peek_theme::{PeekThemeName, ThemeManager, strip_ansi};
+
+    use super::*;
 
     fn render_plain(md: &str) -> Vec<String> {
         let tm = Rc::new(ThemeManager::new(

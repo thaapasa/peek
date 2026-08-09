@@ -9,6 +9,7 @@
 use anyhow::Result;
 use bytes::Bytes;
 use image::DynamicImage;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use crate::types::font::specimen;
@@ -22,7 +23,6 @@ use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::PeekTheme;
 
 /// Cache key for the prepared specimen — same shape as
 /// `ImageRenderMode::CacheKey` so the cycle behaviour (mode-cycle keeps

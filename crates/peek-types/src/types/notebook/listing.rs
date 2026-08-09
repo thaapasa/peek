@@ -16,10 +16,9 @@
 
 use serde_json::Value;
 
+use super::model::{cells, join_text, value_text};
 use crate::base64;
 use crate::viewer::listing::{Entry, EntryKind};
-
-use super::model::{cells, join_text, value_text};
 
 /// One extractable block, named in document order. `payload` borrows the
 /// parsed JSON so byte materialisation stays lazy until extract time.

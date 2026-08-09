@@ -7,7 +7,6 @@
 use std::io;
 
 use anyhow::Result;
-
 use peek_foundation::viewer::modes::{ModeId, RenderCtx};
 use peek_foundation::viewer::ui::{content_rows, terminal_cols};
 

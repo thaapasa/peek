@@ -1,6 +1,8 @@
 //! Per-type compose: CBZ read mode (paged image reader) + ZIP TOC.
 
 use anyhow::Result;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 use crate::types::archive;
 use crate::types::comic::{CbzPageRenderer, cbz};
@@ -8,8 +10,6 @@ use crate::viewer::ComposeOpts;
 use crate::viewer::modes::Mode;
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
-use peek_detect::Detected;
-use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

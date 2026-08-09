@@ -3,8 +3,9 @@
 //! word-aware wrapper so inline SGR survives line breaks and rows cut
 //! at word boundaries rather than mid-word.
 
-use crate::viewer::ui::wrap_styled_words;
 use peek_theme::display_width;
+
+use crate::viewer::ui::wrap_styled_words;
 
 /// Wrap an SGR-styled `body` at `width` columns, prepending `prefix` to
 /// each row. The prefix counts toward the width budget. Cuts at space

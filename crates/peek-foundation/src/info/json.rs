@@ -14,12 +14,12 @@
 //! now provides a typed encoder, so `details` is effectively a safety net
 //! rather than a normal output.
 
+use peek_detect::mime::{MimeCategory, MimeInfo};
+use peek_theme::{PeekTheme, StyleMode};
 use serde_json::{Map, Value, json};
 
 use super::time::format_time;
 use super::{CompressionInfo, FileInfo};
-use peek_detect::mime::{MimeCategory, MimeInfo};
-use peek_theme::{PeekTheme, StyleMode};
 
 /// Encode `info` as a single JSON object. `theme` is used only to render the
 /// per-type `details` section; the encoder forces it to [`StyleMode::Plain`]
@@ -128,9 +128,10 @@ fn extras_details(info: &FileInfo, theme: &PeekTheme) -> Vec<Value> {
 mod tests {
     use std::time::{Duration, SystemTime};
 
+    use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
+
     use super::*;
     use crate::info::{FileInfo, InfoExtras, push_field, push_section_header};
-    use peek_theme::{PeekTheme, PeekThemeName, load_embedded_theme};
 
     fn theme() -> PeekTheme {
         PeekTheme::from_syntect(&load_embedded_theme(

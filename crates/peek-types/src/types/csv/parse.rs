@@ -39,13 +39,12 @@ use std::io::Cursor;
 
 use anyhow::{Context, Result};
 use csv::{Position, ReaderBuilder};
-
-use crate::viewer::table::WINDOW_SIZE;
-use crate::viewer::table::row_source::RowSource;
 use peek_io::InputSource;
 use peek_io::stream::{ByteStream, ReadSeek};
 
 use super::CsvFormat;
+use crate::viewer::table::WINDOW_SIZE;
+use crate::viewer::table::row_source::RowSource;
 
 /// Seed scan record cap. First 1000 records build initial column widths,
 /// drive the header heuristic, and provide the type-inference sample.
@@ -716,8 +715,9 @@ fn looks_like_date(s: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bytes::Bytes;
+
+    use super::*;
 
     fn stdin(text: &str) -> InputSource {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))

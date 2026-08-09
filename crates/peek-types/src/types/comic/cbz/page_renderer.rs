@@ -14,13 +14,12 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use image::DynamicImage;
-
-use crate::types::image::paged_render::render_image_window;
-use crate::types::image::pipeline::ImageConfig;
-use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placeholder};
 use peek_io::InputSource;
 
 use super::package::{self, Page};
+use crate::types::image::paged_render::render_image_window;
+use crate::types::image::pipeline::ImageConfig;
+use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placeholder};
 
 /// How many decoded full-resolution pages to retain. A comic page is the
 /// only thing the cache holds, and the access pattern is sequential with
@@ -105,9 +104,10 @@ impl PageRenderer for CbzPageRenderer {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::StyleMode;
+
     use super::*;
     use crate::viewer::image_render::{Background, FitMode, ImageMode, TermSize, ZoomLevel};
-    use peek_theme::StyleMode;
 
     fn cbz_fixture() -> InputSource {
         let path = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))

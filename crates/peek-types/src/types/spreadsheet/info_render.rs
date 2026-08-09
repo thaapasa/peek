@@ -11,10 +11,9 @@
 
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value};
-
 use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;
+use crate::info::{Muted, Value};
 
 crate::info_section!(SpreadsheetInfo, SpreadsheetView, "spreadsheet");
 

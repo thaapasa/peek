@@ -9,13 +9,13 @@
 //! typed `Serialize` struct, so editing print can't desync their shape.
 
 use object::{Architecture, BinaryFormat, Endianness, ObjectKind};
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use super::info::{BuildIdKind, ObjectInfo};
 use crate::info::{InfoNode, InfoValue, Role, Value, Warn, thousands_sep};
-use peek_theme::PeekTheme;
 
 crate::info_section!(ObjectInfo, ObjectView, "objfile");
 

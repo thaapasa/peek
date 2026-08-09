@@ -1,10 +1,10 @@
 //! Build [`NotebookInfo`] from a notebook source for the Info section.
 
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::info::NotebookInfo;
 use super::model::Notebook;
+use crate::info::Extras;
 
 /// Parse the notebook and collect its info sidecar. Whole-file read:
 /// notebook structure needs a full JSON parse, and the same carve-out

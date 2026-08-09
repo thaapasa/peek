@@ -3,11 +3,11 @@
 //! per-run SGR, returns a `Vec<String>` for the read-mode cache.
 
 use anyhow::Result;
+use peek_theme::{PeekTheme, StyleMode};
 use syntect::highlighting::Color;
 
 use crate::types::document::rtf::parse::{BlockPainter, Parsed};
 use crate::types::document::wrap::{SgrStyle, emit_styled, split_words, visible_width};
-use peek_theme::{PeekTheme, StyleMode};
 
 pub(crate) fn render(
     parsed: &Parsed,

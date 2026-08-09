@@ -10,9 +10,9 @@ use anyhow::{Result, anyhow};
 use cafebabe::attributes::AttributeData;
 use cafebabe::bytecode::Opcode;
 use cafebabe::{MethodInfo, ParseOptions, parse_class_with_options};
+use peek_io::InputSource;
 
 use super::descriptor;
-use peek_io::InputSource;
 
 /// One disassembled class: its methods in declaration order.
 pub struct Disassembly {
@@ -198,8 +198,9 @@ fn loadable(l: &cafebabe::constant_pool::Loadable<'_>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn sample() -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

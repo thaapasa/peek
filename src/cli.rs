@@ -1,6 +1,6 @@
-use clap::{CommandFactory, FromArgMatches, Parser};
 use std::path::PathBuf;
 
+use clap::{CommandFactory, FromArgMatches, Parser};
 use peek_foundation::viewer::ComposeOpts;
 
 /// peek — a modern file viewer for the terminal.

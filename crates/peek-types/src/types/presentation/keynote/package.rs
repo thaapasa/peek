@@ -10,12 +10,12 @@
 
 use anyhow::{Result, bail};
 use bytes::Bytes;
+use peek_io::InputSource;
 use quick_xml::events::Event;
 use quick_xml::reader::Reader;
 
 use crate::types::archive::reader::{open_zip, read_zip_entry};
 use crate::types::presentation::PresentationMetadata;
-use peek_io::InputSource;
 
 /// Preview entries in descending quality order.
 const PREVIEW_CANDIDATES: &[&str] = &["preview.jpg", "preview-web.jpg", "preview-micro.jpg"];

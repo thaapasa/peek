@@ -2,12 +2,12 @@
 //! no rasterization, no glyph loading. Phase 1 surfaces face 0 of a
 //! collection only; per-face listing recursion is the Phase 3 path.
 
+use peek_io::InputSource;
 use ttf_parser::{Face, fonts_in_collection};
 
 use crate::info::Extras;
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
-use peek_io::InputSource;
 
 /// Cap on bytes read for font parsing. The largest fonts in the wild —
 /// Noto CJK supersets, Apple's San Francisco collection — sit around

@@ -22,14 +22,12 @@ pub(crate) mod state;
 #[cfg(test)]
 mod state_tests;
 
-pub(crate) use state::{ModeBuilder, ViewerState};
-
 use anyhow::Result;
-
 use peek_detect::{ArchiveFormat, CompressionFormat, Detected, FileType};
 use peek_foundation::viewer::append_universal_modes;
 use peek_foundation::viewer::modes::Mode;
 use peek_io::InputSource;
+pub(crate) use state::{ModeBuilder, ViewerState};
 
 /// Session-wide access tier. A fresh interactive session starts
 /// [`Default`](Access::Default); the first guarded op (a big transparent

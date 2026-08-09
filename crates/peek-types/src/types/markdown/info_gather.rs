@@ -6,10 +6,11 @@
 //! tracked so heading-like text inside ` ``` ` blocks isn't counted as a
 //! heading. Reading time uses 230 wpm — middle of common estimates.
 
+use peek_io::InputSource;
+
 use crate::info::Extras;
 use crate::types::markdown::info::{FrontmatterKind, MarkdownInfo, MarkdownStats};
 use crate::types::text::info_gather::gather_capped_text;
-use peek_io::InputSource;
 
 const READING_WPM: u32 = 230;
 

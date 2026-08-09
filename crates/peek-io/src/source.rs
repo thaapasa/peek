@@ -587,8 +587,9 @@ impl ByteSource for RangeByteSource {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
+
+    use super::*;
 
     fn write_temp(name: &str, data: &[u8]) -> PathBuf {
         let mut path = std::env::temp_dir();

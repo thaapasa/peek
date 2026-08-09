@@ -8,11 +8,10 @@
 //! payload classifies as `FileType::Image` on the next pass).
 
 use bytes::Bytes;
-
-use crate::extract::{ExtractError, Extracted};
 use peek_io::InputSource;
 
 use super::parse;
+use crate::extract::{ExtractError, Extracted};
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let parsed = parse::open_source(source).map_err(ExtractError::Other)?;

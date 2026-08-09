@@ -28,8 +28,9 @@
 
 use std::collections::HashMap;
 
-use crate::types::image::paged_render::GridMap;
 use peek_theme::{self as sgr, Sgr, SgrKind};
+
+use crate::types::image::paged_render::GridMap;
 
 /// One word from the page's text layer. Coordinates are page points
 /// with a top-left origin (y grows downward, matching raster space);

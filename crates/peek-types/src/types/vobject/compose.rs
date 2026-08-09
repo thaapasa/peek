@@ -6,15 +6,14 @@
 //! text is the first (print/pipe) mode.
 
 use anyhow::Result;
-
-use crate::viewer::ComposeCtx;
-use crate::viewer::ComposeOpts;
-use crate::viewer::modes::{Mode, RenderedTextMode};
 use peek_detect::{Detected, FileType, VObjectFormat};
 use peek_io::InputSource;
 
 use super::calendar::CalendarRenderer;
 use super::contact::ContactRenderer;
+use crate::viewer::ComposeCtx;
+use crate::viewer::ComposeOpts;
+use crate::viewer::modes::{Mode, RenderedTextMode};
 
 pub fn compose(
     source: &InputSource,

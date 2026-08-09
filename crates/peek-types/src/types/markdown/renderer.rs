@@ -12,12 +12,11 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode, ThemeManager};
 
 use super::render;
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 
 pub(crate) struct MarkdownRenderer {
     source: InputSource,

@@ -3,15 +3,14 @@
 //! Surfaces the at-a-glance metadata the plan calls for: event / contact
 //! counts, the calendar's date range, and the format version.
 
-use serde::{Serialize, Serializer};
-
-use crate::info::{Extras, InfoNode, paint_count, render_info};
 use peek_io::InputSource;
 use peek_theme::PeekTheme;
+use serde::{Serialize, Serializer};
 
 use super::VObjectFormat;
 use super::calendar::{self, CalendarSummary};
 use super::contact::{self, ContactSummary};
+use crate::info::{Extras, InfoNode, paint_count, render_info};
 
 /// Cap on bytes parsed for the Info summary. iCalendar / vCard are
 /// line-oriented text; a multi-GB file claiming the format would otherwise

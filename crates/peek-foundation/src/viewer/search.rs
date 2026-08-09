@@ -59,10 +59,9 @@
 
 use std::ops::Range;
 
+use peek_theme::{ActiveStyle, PeekTheme, Sgr, scan};
 use regex::Regex;
 use syntect::highlighting::Color;
-
-use peek_theme::{ActiveStyle, PeekTheme, Sgr, scan};
 
 /// Hard cap on collected search matches. A pathological query (a single
 /// common letter in a huge file) would otherwise build an unbounded
@@ -589,9 +588,10 @@ pub fn reveal_h_scroll(h_scroll: usize, cols: usize, start: usize, end: usize) -
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peek_theme::make_peek_theme;
     use peek_theme::{PeekThemeName, StyleMode};
+
+    use super::*;
 
     /// Compile a literal query for the scan tests (the default engine).
     fn lit(q: &str) -> SearchQuery {

@@ -35,6 +35,7 @@ use std::ops::Range;
 
 use anyhow::Result;
 use peek_io::sanitize::control_replacement;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
@@ -46,7 +47,6 @@ use crate::viewer::search::{
 };
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::ui::{Action, HelpEntry, take_cols, truncate_ansi};
-use peek_theme::PeekTheme;
 
 /// One space of padding on each side of the column separator and on the
 /// leading/trailing edges. Matches `column_sep` below.
@@ -973,10 +973,11 @@ fn build_separator_row(widths: &[usize], theme: &PeekTheme, start_col: usize) ->
 mod tests {
     use std::rc::Rc;
 
+    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+
     use super::*;
     use crate::info::{FileInfo, NoExtras, RenderOptions};
     use crate::viewer::ui::strip_ansi_width;
-    use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
 
     /// In-memory [`RowSource`] for the table-mode mechanics tests. The CSV
     /// reader's own behaviour (quoting, delimiter sniff, header heuristic,

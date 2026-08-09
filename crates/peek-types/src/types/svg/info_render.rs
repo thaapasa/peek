@@ -8,13 +8,13 @@
 //! animation prints one composite row but serializes as an `animation` object
 //! or an `animation_warning` string.
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoNode, InfoValue, Value};
 use crate::types::svg::info::SvgStats;
 use crate::types::text::info_render::TextView;
-use peek_theme::PeekTheme;
 
 crate::info_section!(SvgStats, SvgView, "svg");
 

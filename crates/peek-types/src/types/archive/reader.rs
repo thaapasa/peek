@@ -13,21 +13,20 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use tempfile::NamedTempFile;
-use zip::ZipArchive;
-
-use super::backends::CappedList;
-use crate::viewer::listing::{Entry, ListingMode, from_flat_paths};
-use crate::viewer::modes::{Mode, RENDER_MAX_BYTES, ensure_under_render_cap};
 use peek_detect::ArchiveFormat;
 use peek_io::InputSource;
-
 /// The seekable-reader trait the backends hand to the zip layer. tar only
 /// needs `Read`, but using one helper for both keeps the call sites
 /// uniform. Re-exported from `peek-io` rather than redefined — it is the
 /// same `Read + Seek` alias the csv reader uses, and one definition keeps
 /// the two call sites from drifting.
 pub(crate) use peek_io::stream::ReadSeek;
+use tempfile::NamedTempFile;
+use zip::ZipArchive;
+
+use super::backends::CappedList;
+use crate::viewer::listing::{Entry, ListingMode, from_flat_paths};
+use crate::viewer::modes::{Mode, RENDER_MAX_BYTES, ensure_under_render_cap};
 
 /// Open a `Read + Seek` over the source. File-backed sources open the
 /// underlying path (and seek to the range start when needed); in-memory
@@ -225,9 +224,10 @@ fn list_flat(source: &InputSource, format: ArchiveFormat) -> Result<CappedList> 
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::viewer::listing::Stats;
-    use std::path::PathBuf;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

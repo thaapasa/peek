@@ -6,12 +6,11 @@
 //! [`RenderedTextMode`].
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer};
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::parse::Parsed;
 use super::render;
+use crate::viewer::modes::{ModeId, TextRenderer};
 
 pub(crate) struct RtfRenderer {
     parsed: Parsed,

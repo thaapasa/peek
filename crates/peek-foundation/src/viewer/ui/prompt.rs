@@ -4,7 +4,6 @@
 //! plumbing.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
 use peek_io::sanitize_terminal_controls;
 use peek_theme::PeekTheme;
 
@@ -246,8 +245,9 @@ fn next_char_boundary(s: &str, pos: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crossterm::event::{KeyEventKind, KeyEventState};
+
+    use super::*;
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent {

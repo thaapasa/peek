@@ -93,6 +93,7 @@ pub(crate) fn resolve_tty_path() -> Option<String> {
 #[cfg(windows)]
 pub fn reopen_stdin_from_tty() {
     use std::os::windows::ffi::OsStrExt;
+
     use windows_sys::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::Storage::FileSystem::{
         CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,

@@ -128,10 +128,12 @@ impl io::Read for ByteStream {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
+    use bytes::Bytes;
+
     use super::*;
     use crate::source::BytesByteSource;
-    use bytes::Bytes;
-    use std::io::Read;
 
     fn source(data: &'static [u8]) -> Box<dyn ByteSource> {
         Box::new(BytesByteSource::new(Bytes::from_static(data)))

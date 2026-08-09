@@ -2,8 +2,6 @@
 //! contact card and summarise the address book for the Info sidecar.
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer};
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
@@ -12,6 +10,7 @@ use super::line::{
     Component, ContentLine, format_list, parse_components, split_structured, unescape_text,
 };
 use super::render::{push_field, push_prose};
+use crate::viewer::modes::{ModeId, TextRenderer};
 
 /// `TextRenderer` for a vCard document: one grouped block per contact.
 pub(crate) struct ContactRenderer {

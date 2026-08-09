@@ -4,12 +4,12 @@
 //! the generic listing engine. Rows extract through the standard `e`
 //! pipeline (`email::extract`), keyed by the attachment's stable name.
 
-use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
-use crate::viewer::modes::{ExtractTarget, RenderCtx};
 use peek_theme::PeekTheme;
 
 use super::message::ParsedEmail;
+use crate::viewer::listing::row::{self, SizeCell};
+use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 /// Upper bound on the content-type column so a pathological MIME type can't
 /// crowd out the name. Real types sit well under this.

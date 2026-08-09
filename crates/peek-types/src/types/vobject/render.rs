@@ -5,8 +5,9 @@
 //! the same way the email renderer themes its header block — so an `.ics`,
 //! a `.vcf`, and an `.eml` all read with one visual grammar.
 
-use crate::viewer::ui::wrap_styled_words;
 use peek_theme::{PeekTheme, display_width};
+
+use crate::viewer::ui::wrap_styled_words;
 
 /// Emit a `Label: value` row, wrapping a long value with a hanging indent
 /// aligned under the value column. A `None` / empty value emits nothing.

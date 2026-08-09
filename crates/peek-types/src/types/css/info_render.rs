@@ -8,6 +8,7 @@
 //! each print specially (a composite row, count + URL rows, a swatch grid of
 //! `Line`s) while serializing as their structured JSON.
 
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use syntect::highlighting::Color;
@@ -15,7 +16,6 @@ use syntect::highlighting::Color;
 use crate::info::{InfoNode, InfoValue, Value, paint_count};
 use crate::types::css::info::{CssInfo, CssStats, SelectorKindCounts};
 use crate::types::text::info_render::TextView;
-use peek_theme::PeekTheme;
 
 /// Swatches per row in the palette grid.
 const SWATCH_COLS: usize = 4;

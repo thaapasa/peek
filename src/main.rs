@@ -1,12 +1,11 @@
-use anyhow::{Context, Result};
 use std::io::IsTerminal;
 
+use anyhow::{Context, Result};
+pub use cli::Args;
 use peek_foundation::extract::ExtractOptions;
 use peek_foundation::output::PrintOutput;
 use peek_foundation::{info, viewer};
 use peek_io::InputSource;
-
-pub use cli::Args;
 
 mod cli;
 mod compose;

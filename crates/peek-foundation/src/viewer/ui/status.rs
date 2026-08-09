@@ -3,10 +3,9 @@
 //! left side clips).
 
 use crossterm::terminal;
-use syntect::highlighting::Color;
-
 use peek_io::sanitize_terminal_controls;
 use peek_theme::PeekTheme;
+use syntect::highlighting::Color;
 
 use super::styled::{strip_ansi_width, truncate_ansi};
 
@@ -81,8 +80,9 @@ fn compose_status_line(left: &str, hints: &str, cols: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peek_theme::{PeekThemeName, StyleMode, make_peek_theme};
+
+    use super::*;
 
     // Regression: a warning marker must paint as a real colored `!`, not the
     // sanitizer's `␛` (U+241B) glyph. The old code pre-embedded SGR into the

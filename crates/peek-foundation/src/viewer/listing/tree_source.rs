@@ -11,11 +11,12 @@
 //! the cursor can rest on a parent for `Backspace` / future folding); only
 //! files carry an extract key, so extraction stays file-only.
 
+use peek_theme::PeekTheme;
+
 use super::entry::{Entry, EntryKind, EntryMtime};
 use super::row::{self, SizeCell};
 use super::source::{ListSource, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
-use peek_theme::PeekTheme;
 
 pub struct TreeListSource {
     format_name: String,

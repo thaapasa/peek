@@ -12,6 +12,8 @@
 use std::rc::Rc;
 
 use anyhow::Result;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 use crate::types::csv::CsvFormat;
 use crate::types::csv::parse::{CellKind, CsvData, classify_cell};
@@ -19,8 +21,6 @@ use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::modes::{ContentMode, ContentModeConfig, Mode};
 use crate::viewer::table::rows_mode::{Alignment, RowsTableMode};
-use peek_detect::Detected;
-use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,
@@ -102,10 +102,10 @@ pub fn infer_alignments(data: &CsvData, body_start: usize) -> Vec<Alignment> {
 #[cfg(test)]
 mod tests {
     use bytes::Bytes;
-
-    use super::*;
     use peek_detect::FileType;
     use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    use super::*;
 
     /// A CSV whose table view refuses to open (here: an over-cap UTF-16
     /// file whose transcode the memory budget rejects) must degrade to

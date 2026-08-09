@@ -5,7 +5,6 @@
 
 use anyhow::Result;
 use crossterm::event::KeyEvent;
-
 use peek_foundation::extract::Extracted;
 use peek_foundation::viewer::search::{SearchQuery, SearchTarget};
 use peek_foundation::viewer::ui::prompt::{Prompt, PromptOutcome};

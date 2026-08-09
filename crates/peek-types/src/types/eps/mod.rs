@@ -24,9 +24,8 @@ pub mod info;
 pub mod info_gather;
 pub mod info_render;
 
-pub use info::EpsInfo;
-
 use dos_eps::DosEps;
+pub use info::EpsInfo;
 
 /// The PostScript program text for DSC parsing / source view. For a
 /// binary DOS-EPS that's the PostScript section; otherwise the whole

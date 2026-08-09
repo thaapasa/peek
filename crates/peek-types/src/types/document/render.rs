@@ -5,11 +5,11 @@
 //! do.
 
 use anyhow::Result;
+use peek_theme::{PeekTheme, StyleMode};
 use syntect::highlighting::Color;
 
 use crate::types::document::ast::{Block, Doc, Paragraph, Run};
 use crate::types::document::wrap::{SgrStyle, emit_styled, split_words, visible_width};
-use peek_theme::{PeekTheme, StyleMode};
 
 /// Render an in-memory document AST to ANSI-styled lines.
 pub fn render(

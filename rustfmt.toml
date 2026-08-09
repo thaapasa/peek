@@ -1,0 +1,5 @@
+# group_imports is nightly-only, hence `cargo +nightly fmt` (`just format`)
+# and a nightly fmt step in CI. The pinned stable rustfmt warns and skips it,
+# but never un-groups already-grouped code — a plain `cargo fmt` degrades to
+# sort-only rather than fighting the nightly one.
+group_imports = "StdExternalCrate"

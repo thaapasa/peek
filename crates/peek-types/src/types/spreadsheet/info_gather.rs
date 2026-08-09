@@ -1,13 +1,13 @@
 //! Populate [`SpreadsheetInfo`]: sheet list (cheap, container metadata)
 //! plus core document properties.
 
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::SpreadsheetFormat;
 use super::info::SpreadsheetInfo;
 use super::workbook::Workbook;
 use super::xml_props;
+use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, fmt: SpreadsheetFormat) -> Extras {
     let (sheets, error) = match Workbook::open(source, fmt) {

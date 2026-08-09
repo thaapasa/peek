@@ -5,9 +5,10 @@
 
 use std::path::Path;
 
-use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
 use peek_detect::DiskImageFormat;
 use peek_io::InputSource;
+
+use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
 
 pub fn extract(
     source: &InputSource,
@@ -52,8 +53,9 @@ fn suggested_name(target: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

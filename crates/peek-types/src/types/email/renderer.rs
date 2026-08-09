@@ -9,14 +9,13 @@
 //! cycles pay the parse again.
 
 use anyhow::Result;
-
-use crate::types::html;
-use crate::viewer::modes::{ModeId, TextRenderer};
-use crate::viewer::ui::wrap_styled_words;
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode, display_width};
 
 use super::message::{self, Body};
+use crate::types::html;
+use crate::viewer::modes::{ModeId, TextRenderer};
+use crate::viewer::ui::wrap_styled_words;
 
 pub(crate) struct EmailRenderer {
     source: InputSource,

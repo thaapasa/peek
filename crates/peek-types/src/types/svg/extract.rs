@@ -8,12 +8,12 @@ use std::io::Cursor;
 
 use bytes::Bytes;
 use image::{ImageEncoder, codecs::png::PngEncoder};
+use peek_io::InputSource;
 
 use crate::extract::{ExtractError, Extracted};
 use crate::types::image::pipeline::glyph_atlas::CELL_W;
 use crate::types::image::pipeline::svg;
 use crate::types::image::pipeline::svg_anim;
-use peek_io::InputSource;
 
 pub fn extract(
     source: &InputSource,
@@ -145,8 +145,9 @@ fn suggest_name(source: &InputSource, frame_one_based: usize, total: usize) -> S
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

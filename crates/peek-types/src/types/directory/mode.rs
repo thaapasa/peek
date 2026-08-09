@@ -11,12 +11,12 @@
 //! the same `row::` primitives the tree source uses, so the two stay
 //! aligned by construction.
 
-use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
-use crate::viewer::modes::{ExtractTarget, RenderCtx};
 use peek_theme::PeekTheme;
 
 use super::read::{DirEntry, DirEntryKind};
+use crate::viewer::listing::row::{self, SizeCell};
+use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 /// Synthetic name for the parent-directory row. Selecting it descends to
 /// `Path::canonicalize(parent).parent()`, so the user can walk back up the

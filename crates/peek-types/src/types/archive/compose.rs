@@ -2,14 +2,14 @@
 //! and their compressed variants) — listing-only TOC view.
 
 use anyhow::Result;
+use peek_detect::{ArchiveFormat, Detected};
+use peek_io::InputSource;
 
 use crate::types::archive;
 use crate::viewer::ComposeCtx;
 use crate::viewer::ComposeOpts;
 use crate::viewer::listing::ListingMode;
 use crate::viewer::modes::Mode;
-use peek_detect::{ArchiveFormat, Detected};
-use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

@@ -68,9 +68,11 @@ pub fn extract(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use peek_detect as detect;
     use std::path::PathBuf;
+
+    use peek_detect as detect;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

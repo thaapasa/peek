@@ -7,9 +7,8 @@
 
 use std::borrow::Cow;
 
-use unicode_width::UnicodeWidthChar;
-
 use peek_theme::{ActiveStyle, RESET_ALL, Sgr, scan};
+use unicode_width::UnicodeWidthChar;
 
 /// Tab stop width, in columns. A TAB advances to the next multiple of this.
 /// 4, not the terminal default of 8 — finer indentation reads better for

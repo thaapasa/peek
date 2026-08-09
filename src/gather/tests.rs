@@ -5,7 +5,6 @@
 
 use std::path::PathBuf;
 
-use super::gather;
 use peek_detect as detect;
 use peek_detect::{EmailFormat, FileType, PdfFlavor, PostScriptFormat, SpreadsheetFormat};
 use peek_io::InputSource;
@@ -14,6 +13,8 @@ use peek_types::types::eps::gs;
 use peek_types::types::image::info::{AnimationStats, LoopCount};
 use peek_types::types::structured::info::TopLevelKind;
 use peek_types::types::text::info::{Encoding, IndentStyle, LineEndings};
+
+use super::gather;
 
 fn fixture(rel: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel)

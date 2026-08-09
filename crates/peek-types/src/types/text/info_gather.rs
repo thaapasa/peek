@@ -5,8 +5,9 @@
 //! whole-file path because the chunked UTF-8 path can't validate split
 //! 16-bit code units.
 
-use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 use peek_io::{ByteSource, InputSource};
+
+use crate::types::text::info::{Encoding, IndentStyle, LineEndings, TextStats};
 
 /// Chunk size for streaming text-extras counting.
 const TEXT_SCAN_CHUNK: usize = 64 * 1024;
@@ -428,8 +429,9 @@ fn classify_indent(tabs: usize, spaces: usize, widths: &[usize; 9]) -> Option<In
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use bytes::Bytes;
+
+    use super::*;
 
     fn stdin_source(text: &str) -> InputSource {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))

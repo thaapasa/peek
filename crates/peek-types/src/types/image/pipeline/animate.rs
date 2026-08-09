@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use image::DynamicImage;
-
 use peek_io::InputSource;
 
 /// A single decoded animation frame with its display duration.

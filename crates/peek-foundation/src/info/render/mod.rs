@@ -1,9 +1,9 @@
+use peek_io::sanitize_terminal_controls;
+use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
 
 use super::time::format_time;
 use super::{FileInfo, InfoValue, Value};
-use peek_io::sanitize_terminal_controls;
-use peek_theme::{PeekTheme, lerp_color};
 
 mod file;
 
@@ -151,9 +151,10 @@ pub fn thousands_sep(n: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::{PeekThemeName, StyleMode, load_embedded_theme};
+
     use super::thousands_sep;
     use crate::info::{InfoValue, Role, Value};
-    use peek_theme::{PeekThemeName, StyleMode, load_embedded_theme};
 
     #[test]
     fn split_paints_text_not_json() {

@@ -12,14 +12,14 @@
 use std::time::Duration;
 
 use anyhow::Result;
+use peek_io::InputSource;
+use peek_theme::{PeekTheme, PeekThemeName};
 use syntect::highlighting::Color;
 
 use crate::info::{FileInfo, RenderOptions};
 use crate::output::PrintOutput;
 use crate::viewer::search::{SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_io::InputSource;
-use peek_theme::{PeekTheme, PeekThemeName};
 
 mod about;
 mod content;

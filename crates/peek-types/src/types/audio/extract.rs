@@ -6,11 +6,11 @@
 //! re-detect as Image and route through the ASCII pipeline; lyrics
 //! re-detect as plain text).
 
-use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 use peek_detect::AudioFormat;
 use peek_io::InputSource;
 
 use super::package;
+use crate::extract::{ExtractError, Extracted, forward_slash_key, sanitize_entry_path};
 
 pub fn extract(
     source: &InputSource,

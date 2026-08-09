@@ -10,11 +10,11 @@
 //! (undefined, or sitting in `.bss`) keep their row but can't jump.
 
 use object::{Object, ObjectSection, ObjectSymbol};
+use peek_theme::PeekTheme;
 
 use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
 use crate::viewer::ui::Action;
-use peek_theme::PeekTheme;
 
 struct SymbolRow {
     address: u64,
@@ -222,8 +222,9 @@ fn symbol_kind_label(k: object::SymbolKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn fixture(name: &str) -> Vec<u8> {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

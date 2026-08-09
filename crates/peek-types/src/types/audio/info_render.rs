@@ -8,15 +8,14 @@
 //! serialize as raw numbers. `has_lyrics` / `has_album_art` print inside the
 //! Tags block but are top-level JSON bools.
 
+use peek_detect::AudioFormat;
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
-use crate::info::{InfoNode, InfoValue, Role, Value, Warn, thousands_sep};
-use peek_theme::PeekTheme;
-
 use super::info::{AudioMetadata, AudioStats};
-use peek_detect::AudioFormat;
+use crate::info::{InfoNode, InfoValue, Role, Value, Warn, thousands_sep};
 
 crate::info_section!(AudioStats, AudioView, "audio");
 

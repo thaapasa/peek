@@ -116,8 +116,9 @@ impl Gutter {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    use super::*;
 
     fn plain_theme() -> PeekTheme {
         ThemeManager::new(PeekThemeName::IdeaDark, StyleMode::Plain)

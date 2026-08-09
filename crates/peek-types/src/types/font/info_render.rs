@@ -6,6 +6,7 @@
 //! outputs — [`push_rows`] for the themed lines, [`rows_to_json`] for the
 //! object. The section frame (format / face_count / faces array) stays manual.
 
+use peek_theme::PeekTheme;
 use serde_json::json;
 
 use crate::info::{
@@ -14,7 +15,6 @@ use crate::info::{
 };
 use crate::types::font::FontFormat;
 use crate::types::font::info::{FaceInfo, FontInfo};
-use peek_theme::PeekTheme;
 
 /// Themed terminal Font section.
 pub fn render_section(lines: &mut Vec<String>, info: &FontInfo, theme: &PeekTheme) {

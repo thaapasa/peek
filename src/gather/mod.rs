@@ -10,7 +10,6 @@ use std::fs;
 use std::path::Path;
 
 use anyhow::Result;
-
 use peek_detect::mime;
 use peek_detect::{
     ComicFormat, DecompressionContext, Detected, DocumentFormat, EbookFormat, FileType,

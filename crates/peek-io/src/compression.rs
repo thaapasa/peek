@@ -306,8 +306,9 @@ mod tests {
     /// compressed input stays tiny while the output crosses the spool
     /// threshold).
     fn gz_zeros(n: usize) -> Vec<u8> {
-        use flate2::{Compression, write::GzEncoder};
         use std::io::Write;
+
+        use flate2::{Compression, write::GzEncoder};
         let mut enc = GzEncoder::new(Vec::new(), Compression::default());
         enc.write_all(&vec![0u8; n]).unwrap();
         enc.finish().unwrap()

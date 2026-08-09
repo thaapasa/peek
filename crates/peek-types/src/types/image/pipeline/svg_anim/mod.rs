@@ -64,7 +64,6 @@
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-
 use peek_io::InputSource;
 
 mod keyframes;
@@ -76,7 +75,6 @@ mod timeline;
 mod util;
 
 pub use marker::render_frame;
-
 use timeline::FrameTarget;
 
 /// Parsed animation model + a pre-marked SVG string ready for per-frame

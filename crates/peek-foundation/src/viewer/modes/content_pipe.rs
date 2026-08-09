@@ -15,13 +15,13 @@
 use std::rc::Rc;
 
 use anyhow::Result;
+use peek_io::LineSource;
+use peek_theme::ThemeManager;
 
 use super::super::{LineStreamHighlighter, highlight_lines};
 use super::RenderCtx;
 use super::gutter::Gutter;
 use crate::output::PrintOutput;
-use peek_io::LineSource;
-use peek_theme::ThemeManager;
 
 #[allow(clippy::too_many_arguments)]
 pub(super) fn render(

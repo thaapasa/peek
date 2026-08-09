@@ -7,10 +7,10 @@ use std::io::Cursor;
 
 use bytes::Bytes;
 use image::{ImageEncoder, codecs::png::PngEncoder};
+use peek_io::InputSource;
 
 use crate::extract::{ExtractError, Extracted};
 use crate::types::image::pipeline::animate::{AnimFrame, decode_anim_frames};
-use peek_io::InputSource;
 
 /// Extract frame `key` (1-based) as a Memory-backed PNG `InputSource`.
 pub fn extract(
@@ -87,9 +87,11 @@ fn source_stem(source: &InputSource) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use peek_io::InputSource;
     use std::path::PathBuf;
+
+    use peek_io::InputSource;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

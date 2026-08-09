@@ -1,8 +1,7 @@
 //! Spreadsheet workbook info shape.
 
-use crate::types::document::DocumentMetadata;
-
 use super::SpreadsheetFormat;
+use crate::types::document::DocumentMetadata;
 
 #[derive(Debug, Clone)]
 pub struct SpreadsheetInfo {

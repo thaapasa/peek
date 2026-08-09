@@ -6,7 +6,6 @@ use std::io::{self, Write};
 
 use anyhow::Result;
 use clap::CommandFactory;
-
 use peek_foundation::output::{DESCRIPTION, paint_logo};
 use peek_theme::{PeekThemeName, ThemeManager};
 

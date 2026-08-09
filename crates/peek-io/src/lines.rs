@@ -293,11 +293,13 @@ fn scan(bs: &dyn ByteSource) -> Result<(Vec<u64>, usize, u64, bool)> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use bytes::Bytes;
     use std::fs::File;
     use std::io::Write;
     use std::path::PathBuf;
+
+    use bytes::Bytes;
+
+    use super::*;
 
     fn stdin_source(text: &str) -> InputSource {
         InputSource::stdin(Bytes::copy_from_slice(text.as_bytes()))

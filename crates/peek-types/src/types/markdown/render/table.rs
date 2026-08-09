@@ -6,10 +6,10 @@
 //! width. Cells wrap at their column width with the active SGR style
 //! preserved across cuts.
 
+use peek_theme::{PeekTheme, display_width};
 use pulldown_cmark::Alignment;
 
 use crate::viewer::ui::wrap_styled;
-use peek_theme::{PeekTheme, display_width};
 
 const MIN_COL_WIDTH: usize = 3;
 const CELL_PAD: usize = 1;

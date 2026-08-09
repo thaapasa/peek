@@ -11,7 +11,6 @@
 use std::rc::Rc;
 
 use anyhow::Result;
-
 use peek_detect::{ComicFormat, Detected, EbookFormat, FileType};
 use peek_foundation::viewer::modes::Mode;
 use peek_foundation::viewer::{ComposeCtx, ComposeOpts, append_universal_modes};

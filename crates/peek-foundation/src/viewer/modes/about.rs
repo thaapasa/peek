@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::terminal;
+use peek_theme::PeekTheme;
 
 use super::{Handled, Mode, ModeId, RenderCtx, Window, slice_window};
 use crate::output::{DESCRIPTION, paint_logo};
 use crate::viewer::cell_size::cell_aspect_h_over_w;
 use crate::viewer::logo_anim::LogoAnimation;
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::PeekTheme;
 
 // Version / authors / license / repository inherit from the workspace
 // `[workspace.package]`, so this crate's values match the bin's. The

@@ -210,9 +210,10 @@ impl MaybeZero for super::Value {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
+
     use super::*;
     use crate::info::{Role, Value};
-    use peek_theme::{PeekTheme, PeekThemeName, StyleMode, load_embedded_theme};
 
     fn plain_theme() -> PeekTheme {
         let mut t = PeekTheme::from_syntect(&load_embedded_theme(

@@ -23,6 +23,9 @@
 //! fits the row model, so `raw_rows` (print) and `raw_json` (JSON) remain
 //! separate.
 
+use peek_theme::PeekTheme;
+use serde_json::json;
+
 use crate::info::{
     InfoNode, InfoRow, Role, Value, format_size_human, push_rows, render_info, rows_to_json,
     thousands_sep,
@@ -32,8 +35,6 @@ use crate::types::disk_image::info::{
     IsoVolumeMeta, MbrPartition, RawImageMeta,
 };
 use crate::types::disk_image::mbr;
-use peek_theme::PeekTheme;
-use serde_json::json;
 
 /// Convenience for a `label  value` row.
 fn row(label: &'static str, value: String) -> InfoNode {

@@ -1,11 +1,11 @@
 //! Gather CBZ-specific extras for the Info section.
 
-use crate::info::Extras;
-use crate::types::comic::ComicStats;
 use peek_detect::ComicFormat;
 use peek_io::InputSource;
 
 use super::package;
+use crate::info::Extras;
+use crate::types::comic::ComicStats;
 
 pub fn gather_extras(source: &InputSource, format: ComicFormat) -> Extras {
     match package::list_pages(source) {

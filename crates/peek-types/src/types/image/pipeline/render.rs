@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use image::{DynamicImage, GenericImageView};
+use peek_io::InputSource;
+use peek_theme::StyleMode;
 
 use super::clustering::fast_2_color;
 use super::glyph_atlas::{
     CELL_H, CELL_W, GlyphBitmap, atlas_for_mode, best_contour_glyph, best_glyph, dilate_bitmap,
 };
 use super::{Background, FitMode, ImageConfig, ImageMode};
-use peek_io::InputSource;
-use peek_theme::StyleMode;
 // TermSize moved to the foundation with the rest of the render vocab;
 // re-exported so engine-internal `render::TermSize` paths are unchanged.
 pub use crate::viewer::image_render::TermSize;

@@ -3,12 +3,12 @@
 //! sample rate / bit depth / duration); tag walking + visual + lyric
 //! extraction live in [`super::package`].
 
-use crate::info::Extras;
-use crate::types::audio::info::AudioStats;
 use peek_detect::AudioFormat;
 use peek_io::InputSource;
 
 use super::package;
+use crate::info::Extras;
+use crate::types::audio::info::AudioStats;
 
 pub fn gather_extras(source: &InputSource, format: AudioFormat) -> Extras {
     match package::probe(source, format) {

@@ -210,8 +210,9 @@ fn decode_octal(bytes: &[u8]) -> Option<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Cursor;
+
+    use super::*;
 
     /// Build a minimal in-memory ar archive with a single entry.
     fn synth_ar(entry_name: &str, payload: &[u8]) -> Vec<u8> {

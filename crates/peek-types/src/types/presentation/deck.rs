@@ -7,9 +7,8 @@
 //! parsers each emit a `Deck`; the Keynote path doesn't (its slide text
 //! isn't parsed).
 
-use crate::types::document::ast::Doc;
-
 use super::PresentationMetadata;
+use crate::types::document::ast::Doc;
 
 /// A fully parsed deck. `slides[i]` is the prose of slide `i + 1`,
 /// rendered through `crate::types::document::render::render`.

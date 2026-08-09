@@ -21,10 +21,10 @@
 
 use std::time::Duration;
 
+use peek_theme::{PeekTheme, lerp_color, rgb_to_luminance};
 use syntect::highlighting::Color;
 
 use crate::output::{LOGO, paint_logo_with};
-use peek_theme::{PeekTheme, lerp_color, rgb_to_luminance};
 
 /// Time between animation ticks (~20 fps, plenty for a 21-column glyph).
 const TICK: Duration = Duration::from_millis(50);

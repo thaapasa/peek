@@ -1,11 +1,11 @@
 //! Gather DOCX-specific extras for the Info section.
 
-use crate::info::Extras;
-use crate::types::document::DocumentStats;
 use peek_detect::DocumentFormat;
 use peek_io::InputSource;
 
 use super::package;
+use crate::info::Extras;
+use crate::types::document::DocumentStats;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     match package::open(source) {

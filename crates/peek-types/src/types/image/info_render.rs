@@ -8,14 +8,13 @@
 //! `height`; `Megapixels` is print-only; animation prints inline rows but
 //! serializes as a nested `animation` object.
 
+use peek_theme::{PeekTheme, lerp_color};
 use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
 
 use crate::info::{Accent, InfoNode, InfoValue, Role, Value};
 use crate::types::image::info::{AnimationStats, ImageStats, LoopCount};
-use peek_theme::{PeekTheme, lerp_color};
 
 crate::info_section!(ImageStats, ImageView, "image");
 

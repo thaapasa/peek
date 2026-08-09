@@ -12,6 +12,7 @@
 //! windowing, search, and the whole `Mode` impl.
 
 use anyhow::Result;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 use syntect::highlighting::Color;
 
 use crate::output::PrintOutput;
@@ -21,7 +22,6 @@ use crate::viewer::modes::{
 };
 use crate::viewer::search::{self, SearchQuery, SearchState, SearchTarget};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 const EXTRA_ACTIONS: &[HelpEntry] = &[(&[Action::OpenSearch], "Search"), NEXT_PREV_MATCH_HELP];
 

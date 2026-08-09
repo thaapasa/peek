@@ -5,12 +5,11 @@
 //! name; metadata members render inline (so they flatten into the JSON object
 //! too, rather than nesting under a separate `metadata` key).
 
+use peek_detect::DocumentFormat;
 use serde::{Serialize, Serializer};
 
-use crate::info::{Muted, Value};
-use peek_detect::DocumentFormat;
-
 use super::info::DocumentStats;
+use crate::info::{Muted, Value};
 
 crate::info_section!(DocumentStats, DocumentView, "document");
 

@@ -4,11 +4,11 @@
 //! row / `error` key shows; otherwise a SQLite block plus a short
 //! "Biggest tables" block.
 
+use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
 use super::info::SqliteInfo;
 use crate::info::{InfoNode, paint_count, render_info, thousands_sep};
-use peek_theme::PeekTheme;
 
 /// Themed terminal SQLite section.
 pub fn render_section(lines: &mut Vec<String>, info: &SqliteInfo, theme: &PeekTheme) {

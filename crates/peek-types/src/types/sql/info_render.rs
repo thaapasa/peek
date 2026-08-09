@@ -8,12 +8,12 @@
 //! object kind shows as a count row plus an indented muted `Names` row (an
 //! [`ObjectList`] sub-view) while serializing as a names array.
 
+use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
 use crate::info::{InfoNode, InfoValue, Value, paint_count};
 use crate::types::sql::info::{SqlDialect, SqlInfo, SqlStats};
 use crate::types::text::info_render::TextView;
-use peek_theme::PeekTheme;
 
 const NAME_LIST_LIMIT: usize = 8;
 

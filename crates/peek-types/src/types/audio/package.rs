@@ -21,6 +21,8 @@ use std::io::Cursor;
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
+use peek_detect::AudioFormat;
+use peek_io::InputSource;
 use symphonia::core::codecs::CodecParameters;
 use symphonia::core::codecs::audio::AudioCodecId;
 use symphonia::core::formats::probe::Hint;
@@ -34,8 +36,6 @@ use symphonia::default::get_probe;
 
 use crate::types::audio::info::{AudioMetadata, AudioStats};
 use crate::viewer::listing::FlatEntry;
-use peek_detect::AudioFormat;
-use peek_io::InputSource;
 
 /// Full probe result. Everything info-gather, listing, and extract need
 /// flows from this single struct.

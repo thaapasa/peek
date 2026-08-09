@@ -11,12 +11,11 @@
 //! everything else is a cache hit.
 
 use anyhow::Result;
-
-use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 use peek_io::InputSource;
 use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::render;
+use crate::viewer::modes::{ModeId, TextRenderer, render_cap_placeholder};
 
 pub(crate) struct HtmlRenderer {
     source: InputSource,
@@ -67,9 +66,10 @@ impl TextRenderer for HtmlRenderer {
 
 #[cfg(test)]
 mod tests {
+    use peek_theme::ThemeManager;
+
     use super::*;
     use crate::viewer::modes::RENDER_MAX_BYTES;
-    use peek_theme::ThemeManager;
 
     fn theme() -> PeekTheme {
         ThemeManager::new(PeekThemeName::default(), StyleMode::Plain)

@@ -13,6 +13,7 @@
 
 use anyhow::{Context, Result, anyhow};
 use bytes::Bytes;
+use peek_io::InputSource;
 use quick_xml::events::Event;
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
@@ -20,7 +21,6 @@ use zip::ZipArchive;
 
 use crate::types::archive::reader::{self, ReadSeek};
 use crate::types::ebook::Metadata;
-use peek_io::InputSource;
 
 /// Bookkeeping for one EPUB. Built once per file open; chapter bodies
 /// are still pulled lazily via [`read_entry`].

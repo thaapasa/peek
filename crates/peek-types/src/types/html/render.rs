@@ -8,10 +8,9 @@ use std::io::Cursor;
 
 use anyhow::Result;
 use html2text::render::RichAnnotation;
-use syntect::highlighting::Color;
-
 use peek_io::sanitize_terminal_controls;
 use peek_theme::{Attr, StyleMode};
+use syntect::highlighting::Color;
 
 /// Drive `html2text` to ANSI-styled lines. In `Plain` mode emits no
 /// escapes; otherwise wraps annotated spans in SGR sequences via

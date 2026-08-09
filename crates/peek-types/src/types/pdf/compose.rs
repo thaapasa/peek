@@ -2,6 +2,8 @@
 //! files listing.
 
 use anyhow::Result;
+use peek_detect::Detected;
+use peek_io::InputSource;
 
 use crate::types::image::pipeline::FitMode;
 use crate::types::pdf::{self, PdfPageRenderer, PdfTextRenderer};
@@ -10,8 +12,6 @@ use crate::viewer::listing::{ListingMode, from_flat_paths};
 use crate::viewer::modes::{Mode, RenderedTextMode};
 use crate::viewer::paged::PagedImageMode;
 use crate::viewer::{ComposeCtx, image_config};
-use peek_detect::Detected;
-use peek_io::InputSource;
 
 pub fn compose(
     source: &InputSource,

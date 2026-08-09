@@ -5,14 +5,13 @@
 //! vocabulary differences for keywords / dates, so one parser keyed on
 //! the full prefixed element names covers both.
 
+use peek_io::InputSource;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
+use super::SpreadsheetFormat;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
-use peek_io::InputSource;
-
-use super::SpreadsheetFormat;
 
 /// Read + parse the container's metadata XML. `None` on any failure
 /// (unreadable zip, missing entry) — metadata is best-effort.

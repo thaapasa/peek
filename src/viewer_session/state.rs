@@ -10,17 +10,15 @@ use std::time::Duration;
 
 use anyhow::Result;
 use crossterm::event::KeyEvent;
-
 use peek_detect::Detected;
 use peek_foundation::info::RenderOptions;
 use peek_foundation::viewer::modes::{Handled, Mode, ModeId, Position};
-use peek_io::InputSource;
-use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
-
 use peek_foundation::viewer::ui::keys::{self, Action, Outcome};
 use peek_foundation::viewer::ui::prompt::Prompt;
 use peek_foundation::viewer::ui::screen::ScreenBuffer;
+use peek_io::InputSource;
 use peek_theme::make_peek_theme;
+use peek_theme::{PeekTheme, PeekThemeName, StyleMode};
 
 use super::frame::{SessionFrame, capture_position, restore_position};
 use super::prompt::PromptKind;

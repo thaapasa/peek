@@ -3,50 +3,48 @@ use std::io::Read;
 use std::path::Path;
 
 use anyhow::{Result, bail};
-
-use crate::mime;
 use peek_io::InputSource;
 use peek_io::limits::WHOLE_DOC_BYTES;
 
+use crate::mime;
+use crate::types::archive as archive_detect;
 // Per-type format enums live in `types/<x>.rs`. Re-export them here so
 // they surface at the `peek_detect` crate root — the path consumers
 // import (`peek_detect::ArchiveFormat`).
 pub use crate::types::archive::ArchiveFormat;
-pub use crate::types::audio::AudioFormat;
-pub use crate::types::cert::CertFormat;
-pub use crate::types::comic::ComicFormat;
-pub use crate::types::csv::CsvFormat;
-pub use crate::types::disk_image::DiskImageFormat;
-pub use crate::types::document::DocumentFormat;
-pub use crate::types::ebook::EbookFormat;
-pub use crate::types::email::EmailFormat;
-pub use crate::types::eps::PostScriptFormat;
-pub use crate::types::font::FontFormat;
-pub use crate::types::pdf::PdfFlavor;
-pub use crate::types::presentation::PresentationFormat;
-pub use crate::types::spreadsheet::SpreadsheetFormat;
-pub use crate::types::sqlite::SqliteFormat;
-pub use crate::types::structured::StructuredFormat;
-pub use crate::types::vobject::VObjectFormat;
-
-use crate::types::archive as archive_detect;
 use crate::types::audio as audio_detect;
+pub use crate::types::audio::AudioFormat;
 use crate::types::cert as cert_detect;
+pub use crate::types::cert::CertFormat;
 use crate::types::comic as comic_detect;
+pub use crate::types::comic::ComicFormat;
 use crate::types::csv as csv_detect;
+pub use crate::types::csv::CsvFormat;
 use crate::types::disk_image as disk_image_detect;
+pub use crate::types::disk_image::DiskImageFormat;
 use crate::types::document as document_detect;
+pub use crate::types::document::DocumentFormat;
 use crate::types::ds_store as ds_store_detect;
 use crate::types::ebook as ebook_detect;
+pub use crate::types::ebook::EbookFormat;
 use crate::types::email as email_detect;
+pub use crate::types::email::EmailFormat;
 use crate::types::eps as eps_detect;
+pub use crate::types::eps::PostScriptFormat;
 use crate::types::font as font_detect;
+pub use crate::types::font::FontFormat;
 use crate::types::objfile as objfile_detect;
+pub use crate::types::pdf::PdfFlavor;
 use crate::types::presentation as presentation_detect;
+pub use crate::types::presentation::PresentationFormat;
 use crate::types::spreadsheet as spreadsheet_detect;
+pub use crate::types::spreadsheet::SpreadsheetFormat;
 use crate::types::sqlite as sqlite_detect;
+pub use crate::types::sqlite::SqliteFormat;
 use crate::types::structured as structured_detect;
+pub use crate::types::structured::StructuredFormat;
 use crate::types::vobject as vobject_detect;
+pub use crate::types::vobject::VObjectFormat;
 
 /// Bytes read from the head of a file for magic-byte detection and the
 /// content-sniff string. Every consumer is satisfied by a small prefix:

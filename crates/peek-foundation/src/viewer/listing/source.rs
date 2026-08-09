@@ -12,11 +12,11 @@
 //! listings (jump-to-hex via `jump_target`). New sources plug in here
 //! without touching the engine.
 
-use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
-use crate::viewer::ui::HelpEntry;
 use peek_theme::PeekTheme;
 
 use super::viewport::RowMeta;
+use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
+use crate::viewer::ui::HelpEntry;
 
 /// One list view's rows, columns, and select semantics. Row indices are
 /// stable for the source's lifetime; the engine caches navigation metadata

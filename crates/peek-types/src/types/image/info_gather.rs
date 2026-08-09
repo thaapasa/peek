@@ -6,11 +6,11 @@ use std::path::Path;
 
 use ::image::ImageDecoder;
 use bytes::Bytes;
+use peek_io::InputSource;
 
 use super::{animation_stats, exif, xmp};
 use crate::info::Extras;
 use crate::types::image::info::{AnimationStats, ImageStats};
-use peek_io::InputSource;
 
 /// How many bytes from the head of an image we'll scan for XMP / HDR markers.
 pub(crate) const IMAGE_HEAD_SCAN: usize = 256 * 1024;

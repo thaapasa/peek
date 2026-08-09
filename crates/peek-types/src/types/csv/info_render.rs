@@ -7,16 +7,14 @@
 //! prints as a `Columns` block with one dynamically-labelled row per column
 //! (` 1: header`) and serializes as a `columns` array.
 
+use peek_detect::CsvFormat;
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
-
 use serde_json::json;
 
-use crate::info::{Accent, InfoNode, InfoValue, Role, Value, paint_count, thousands_sep};
-use peek_theme::PeekTheme;
-
 use super::info::{ColumnStats, ColumnType, CsvStats, delimiter_label};
-use peek_detect::CsvFormat;
+use crate::info::{Accent, InfoNode, InfoValue, Role, Value, paint_count, thousands_sep};
 
 crate::info_section!(CsvStats, CsvView, "csv");
 

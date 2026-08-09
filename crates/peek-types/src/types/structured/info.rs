@@ -4,12 +4,12 @@
 //! additionally records the root element name and any namespaces
 //! declared on the root.
 
+use peek_detect::StructuredFormat;
+use peek_theme::PeekTheme;
 use serde::ser::SerializeStruct;
 use serde::{Serialize, Serializer};
 
 use crate::info::{Accent, Extras, InfoNode, paint_count};
-use peek_detect::StructuredFormat;
-use peek_theme::PeekTheme;
 
 pub struct StructuredInfo {
     pub format_name: &'static str,

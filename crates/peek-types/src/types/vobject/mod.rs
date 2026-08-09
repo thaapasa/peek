@@ -29,7 +29,6 @@ mod render;
 mod tests;
 
 pub use info::VObjectInfo;
-
 /// Format enum, re-exported from `peek_detect` at the module root so
 /// reader code keeps a local `crate::types::vobject::VObjectFormat` path.
 pub use peek_detect::types::vobject::VObjectFormat;

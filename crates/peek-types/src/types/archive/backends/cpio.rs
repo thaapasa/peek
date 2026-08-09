@@ -316,8 +316,9 @@ fn parse_oct(s: &[u8]) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Cursor;
+
+    use super::*;
 
     /// Build a single-entry newc cpio record. `claimed_size` goes in the
     /// `c_filesize` header field; `body` is the actual bytes that follow —

@@ -25,12 +25,11 @@ use std::sync::Arc;
 use anyhow::Result;
 use image::DynamicImage;
 
+use super::package::Doc;
+use super::text_overlay::{self, PageWords};
 use crate::types::image::paged_render::{render_image_window, render_image_window_mapped};
 use crate::types::image::pipeline::ImageConfig;
 use crate::viewer::paged::{PageRenderer, PagedRender, RenderArgs, image_placeholder};
-
-use super::package::Doc;
-use super::text_overlay::{self, PageWords};
 
 /// Pdfium's hard ceiling on render bitmap width / height. Pushing the
 /// source higher than this is rejected; staying at the cap is the
@@ -153,11 +152,12 @@ impl PageRenderer for PdfPageRenderer {
 
 #[cfg(test)]
 mod tests {
+    use peek_io::InputSource;
+    use peek_theme::StyleMode;
+
     use super::*;
     use crate::types::pdf::package;
     use crate::viewer::image_render::{Background, FitMode, ImageMode, TermSize, ZoomLevel};
-    use peek_io::InputSource;
-    use peek_theme::StyleMode;
 
     /// Open the text-heavy fixture, or `None` when Pdfium isn't
     /// available in this environment (CI runs without the dylib) —

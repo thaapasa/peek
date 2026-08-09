@@ -48,8 +48,9 @@ pub fn is_bare_coff(head: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::path::PathBuf;
+
+    use super::*;
 
     fn read(name: &str) -> Vec<u8> {
         // Fixtures live in the workspace-root `test-data/`.

@@ -4,11 +4,11 @@
 //! rather than bubbling up, so the Info view always renders.
 
 use object::Object;
+use peek_io::InputSource;
 
 use super::info::{BuildIdKind, ObjectInfo, ObjectMeta};
 use super::load;
 use crate::info::Extras;
-use peek_io::InputSource;
 
 pub fn gather_extras(source: &InputSource) -> Extras {
     Box::new(gather(source))
@@ -78,9 +78,11 @@ fn build_id(file: &object::File<'_>) -> Option<(BuildIdKind, Vec<u8>)> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use object::BinaryFormat;
     use std::path::PathBuf;
+
+    use object::BinaryFormat;
+
+    use super::*;
 
     fn fixture(name: &str) -> InputSource {
         let mut p = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));

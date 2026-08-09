@@ -109,6 +109,10 @@ file type only at a wiring site; the per-arm body lives in the type module.
 
 ## Crate imports
 
+Three blank-line-separated blocks: `std`, external crates, then `crate`/`super`/`self`. Sorted
+within each. Enforced by `rustfmt.toml` (`group_imports = "StdExternalCrate"`) — nightly-only, so
+format with `cargo +nightly fmt` / `just format`; CI checks the same way. Never hand-place a `use`.
+
 Name dependency crates directly — `peek_io::`, `peek_detect::`, `peek_theme::`,
 `peek_foundation::{viewer, info, …}`. No in-crate re-export façade or `use peek_x as y` alias to
 dodge the crate name. The path should say which crate an item comes from and agree with `Cargo.toml`.

@@ -25,6 +25,8 @@
 //! than the duplication.
 
 use anyhow::Result;
+use peek_io::sanitize_terminal_controls;
+use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
@@ -35,8 +37,6 @@ use crate::viewer::search::{
     SearchQuery, SearchState, SearchTarget, overlay_matches, reveal_h_scroll,
 };
 use crate::viewer::ui::{Action, HelpEntry, slice_styled_h, take_cols};
-use peek_io::sanitize_terminal_controls;
-use peek_theme::{PeekTheme, lerp_color};
 
 /// Sticky rows at the top of the viewport — the header and its rule.
 const STICKY_ROWS: usize = 2;
@@ -485,8 +485,9 @@ fn truncate(s: &str, max: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use peek_theme::{PeekThemeName, StyleMode, ThemeManager};
+
+    use super::*;
 
     fn plain_theme() -> PeekTheme {
         // Plain style mode: paint helpers emit no escapes, so painted

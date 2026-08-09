@@ -3,11 +3,10 @@
 //! only the cheap metadata (no slide-text parse).
 
 use anyhow::Result;
-
-use crate::info::Extras;
 use peek_io::InputSource;
 
 use super::{Deck, PresentationFormat, PresentationStats};
+use crate::info::Extras;
 
 pub fn gather_extras(source: &InputSource, fmt: PresentationFormat) -> Extras {
     match fmt {

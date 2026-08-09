@@ -5,7 +5,6 @@
 //! (or, in pipe mode, when the primary mode renders).
 
 use anyhow::Result;
-
 use peek_detect::StructuredFormat;
 
 /// Pretty-print a structured document.
@@ -79,10 +78,11 @@ fn pretty_toml(raw: &str) -> Result<String> {
 }
 
 fn pretty_xml(raw: &str) -> Result<String> {
+    use std::io::Cursor;
+
     use quick_xml::events::Event;
     use quick_xml::reader::Reader;
     use quick_xml::writer::Writer;
-    use std::io::Cursor;
 
     // Don't trim text content — for HTML/XHTML this would collapse <pre>
     // blocks and inline whitespace between tags. We keep the document

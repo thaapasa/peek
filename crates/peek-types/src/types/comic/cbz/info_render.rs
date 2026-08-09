@@ -3,12 +3,12 @@
 //! (themed print). [`ComicStats`] stays the gather struct; the view projects
 //! it.
 
+use peek_detect::ComicFormat;
 use serde::{Serialize, Serializer};
 use serde_json::json;
 
 use crate::info::{Role, Value, thousands_sep};
 use crate::types::comic::ComicStats;
-use peek_detect::ComicFormat;
 
 crate::info_section!(ComicStats, ComicView, "comic");
 

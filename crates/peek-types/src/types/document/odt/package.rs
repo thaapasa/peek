@@ -21,6 +21,7 @@
 use std::collections::HashMap;
 
 use anyhow::{Context, Result, anyhow};
+use peek_io::InputSource;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::name::QName;
 use quick_xml::reader::Reader;
@@ -28,7 +29,6 @@ use quick_xml::reader::Reader;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
-use peek_io::InputSource;
 
 pub fn open(source: &InputSource) -> Result<Doc> {
     let mut zip = open_zip(source, "ODT")?;
@@ -730,9 +730,10 @@ fn parse_hex_color(s: &str) -> Option<[u8; 3]> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
     use crate::types::document::ast::Block;
-    use std::path::PathBuf;
 
     fn fixture() -> InputSource {
         let path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."))

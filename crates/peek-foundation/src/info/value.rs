@@ -21,11 +21,11 @@
 
 use std::time::SystemTime;
 
+use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
 use super::InfoValue;
 use super::time::format_time;
-use peek_theme::PeekTheme;
 
 /// One info-field value tagged with its semantic kind. See the module docs.
 #[derive(Debug, Clone)]
@@ -238,8 +238,9 @@ painted_string!(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
+
+    use super::*;
 
     #[test]
     fn machine_forms() {

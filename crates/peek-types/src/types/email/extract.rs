@@ -4,11 +4,10 @@
 
 use bytes::Bytes;
 use mail_parser::MessageParser;
-
-use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
 use peek_io::InputSource;
 
 use super::message;
+use crate::extract::{ExtractError, Extracted, sanitize_entry_path};
 
 pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractError> {
     let bytes = source

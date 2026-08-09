@@ -7,10 +7,10 @@
 //! `SqliteRowSet::row(0)` renders as the table heading.
 
 use anyhow::Result;
+use peek_io::InputSource;
 
 use crate::types::sqlite::row_set::SqliteRowSet;
 use crate::viewer::table::rows_mode::RowsTableMode;
-use peek_io::InputSource;
 
 /// Fixed mode label for SQLite contents views. Matches what the
 /// generic table mode shows in the status bar — kept stable so users

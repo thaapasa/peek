@@ -10,6 +10,7 @@
 //! The per-entry headers aren't standard section rules, so the bodies are
 //! carried verbatim as `Line` nodes under a hand-built header.
 
+use peek_theme::PeekTheme;
 use serde_json::json;
 
 use crate::info::{
@@ -21,7 +22,6 @@ use crate::types::cert::info::{
     SshPubKeyEntry, UnknownEntry,
 };
 use crate::types::text::info_render::TextView;
-use peek_theme::PeekTheme;
 
 /// Render the cert section through the shared node tree. A Content block (text
 /// stats) leads when the source is text; the cert-specific block follows.

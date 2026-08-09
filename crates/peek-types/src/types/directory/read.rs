@@ -131,9 +131,11 @@ fn compare_entries(a: &DirEntry, b: &DirEntry) -> Ordering {
 #[cfg(test)]
 #[cfg(windows)]
 mod windows_tests {
-    use super::mode_from_meta;
     use std::fs;
+
     use tempfile::tempdir;
+
+    use super::mode_from_meta;
 
     #[test]
     fn writable_file_gets_default_mode() {

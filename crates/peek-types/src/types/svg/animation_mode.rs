@@ -22,6 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use crate::types::image::anim_frame::AnimFrameState;
@@ -35,7 +36,6 @@ use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{ExtractTarget, Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_theme::PeekTheme;
 
 /// Maximum number of (frame, grid) prepared images held in memory.
 const FRAME_CACHE: usize = 64;

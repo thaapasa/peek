@@ -1,4 +1,6 @@
 use anyhow::Result;
+use peek_io::InputSource;
+use peek_theme::PeekTheme;
 use syntect::highlighting::Color;
 
 use super::pipeline::render::{self, TermSize};
@@ -11,8 +13,6 @@ use crate::viewer::image_render::ZOOM_PRESET_HELP;
 use crate::viewer::modes::{Handled, Mode, ModeId, RenderCtx, Window};
 use crate::viewer::paged::{CYCLE_BACKGROUND_HELP, CYCLE_FIT_HELP, CYCLE_IMAGE_MODE_HELP};
 use crate::viewer::ui::{Action, HelpEntry};
-use peek_io::InputSource;
-use peek_theme::PeekTheme;
 
 #[derive(Copy, Clone)]
 pub(crate) enum ImageKind {
