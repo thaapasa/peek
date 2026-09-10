@@ -5,5 +5,5 @@
 # NB: dtolnay/rust-toolchain sets RUSTUP_TOOLCHAIN, which overrides this file.
 # CI therefore installs via bare `rustup toolchain install` instead.
 [toolchain]
-channel = "1.97.1"
+channel = "1.98.1"
 components = ["clippy", "rustfmt"]

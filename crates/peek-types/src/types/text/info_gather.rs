@@ -193,10 +193,12 @@ fn decode_utf16_stats(
     }
     let body = bs.read_range(offset, (total - offset) as usize).ok()?;
     let units: Vec<u16> = body
-        .chunks_exact(2)
-        .map(|c| match encoding {
-            Encoding::Utf16Le => u16::from_le_bytes([c[0], c[1]]),
-            Encoding::Utf16Be => u16::from_be_bytes([c[0], c[1]]),
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| match encoding {
+            Encoding::Utf16Le => u16::from_le_bytes(c),
+            Encoding::Utf16Be => u16::from_be_bytes(c),
             _ => 0,
         })
         .collect();

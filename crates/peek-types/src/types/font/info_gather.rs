@@ -181,8 +181,10 @@ fn decode_name(record: &ttf_parser::name::Name<'_>) -> Option<String> {
                 return None;
             }
             let words: Vec<u16> = bytes
-                .chunks_exact(2)
-                .map(|c| u16::from_be_bytes([c[0], c[1]]))
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&c| u16::from_be_bytes(c))
                 .collect();
             String::from_utf16(&words).ok()
         }

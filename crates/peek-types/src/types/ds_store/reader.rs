@@ -303,8 +303,10 @@ impl<'a> Cursor<'a> {
     fn utf16_be(&mut self, units: usize) -> Option<String> {
         let b = self.take(units.checked_mul(2)?)?;
         let u16s: Vec<u16> = b
-            .chunks_exact(2)
-            .map(|p| u16::from_be_bytes([p[0], p[1]]))
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|&p| u16::from_be_bytes(p))
             .collect();
         Some(
             String::from_utf16_lossy(&u16s)

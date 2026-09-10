@@ -313,8 +313,8 @@ fn parse_record(rec: &[u8], joliet: bool) -> Option<ParsedRecord> {
 fn decode_identifier(id: &[u8], joliet: bool, is_dir: bool) -> String {
     let raw = if joliet {
         let mut s = String::with_capacity(id.len() / 2);
-        for chunk in id.chunks_exact(2) {
-            let cp = u16::from_be_bytes([chunk[0], chunk[1]]);
+        for &chunk in id.as_chunks::<2>().0 {
+            let cp = u16::from_be_bytes(chunk);
             // Replace invalid scalar values with the replacement char
             // rather than dropping them — keeps display alignment.
             s.push(char::from_u32(cp as u32).unwrap_or('\u{FFFD}'));
