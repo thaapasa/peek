@@ -14,6 +14,8 @@ const THEME_GITHUB_LIGHT: &str = include_str!("../themes/github-light.tmTheme");
 const THEME_VSCODE_DARK_MODERN: &str = include_str!("../themes/vscode-dark-modern.tmTheme");
 const THEME_VSCODE_DARK_2026: &str = include_str!("../themes/vscode-dark-2026.tmTheme");
 const THEME_VSCODE_MONOKAI: &str = include_str!("../themes/vscode-monokai.tmTheme");
+const THEME_ICEBERG: &str = include_str!("../themes/iceberg.tmTheme");
+const THEME_ICEBERG_LIGHT: &str = include_str!("../themes/iceberg-light.tmTheme");
 const THEME_GRAVEYARD: &str = include_str!("../themes/graveyard.tmTheme");
 const THEME_CANDY_FLOSS: &str = include_str!("../themes/candy-floss.tmTheme");
 const THEME_VICTORIAN: &str = include_str!("../themes/victorian.tmTheme");
@@ -29,6 +31,8 @@ pub enum PeekThemeName {
     VscodeDarkModern,
     VscodeDark2026,
     VscodeMonokai,
+    Iceberg,
+    IcebergLight,
     Graveyard,
     CandyFloss,
     Victorian,
@@ -45,6 +49,8 @@ impl PeekThemeName {
             Self::VscodeDarkModern => "vscode-dark-modern",
             Self::VscodeDark2026 => "vscode-dark-2026",
             Self::VscodeMonokai => "vscode-monokai",
+            Self::Iceberg => "iceberg",
+            Self::IcebergLight => "iceberg-light",
             Self::Graveyard => "graveyard",
             Self::CandyFloss => "candy-floss",
             Self::Victorian => "victorian",
@@ -61,6 +67,8 @@ impl PeekThemeName {
             Self::VscodeDarkModern => THEME_VSCODE_DARK_MODERN,
             Self::VscodeDark2026 => THEME_VSCODE_DARK_2026,
             Self::VscodeMonokai => THEME_VSCODE_MONOKAI,
+            Self::Iceberg => THEME_ICEBERG,
+            Self::IcebergLight => THEME_ICEBERG_LIGHT,
             Self::Graveyard => THEME_GRAVEYARD,
             Self::CandyFloss => THEME_CANDY_FLOSS,
             Self::Victorian => THEME_VICTORIAN,
@@ -72,7 +80,7 @@ impl PeekThemeName {
     pub fn is_light(self) -> bool {
         matches!(
             self,
-            Self::IdeaLight | Self::SolarizedLight | Self::GithubLight
+            Self::IdeaLight | Self::SolarizedLight | Self::GithubLight | Self::IcebergLight
         )
     }
 
@@ -95,7 +103,9 @@ impl PeekThemeName {
             Self::GithubLight => Self::VscodeDarkModern,
             Self::VscodeDarkModern => Self::VscodeDark2026,
             Self::VscodeDark2026 => Self::VscodeMonokai,
-            Self::VscodeMonokai => Self::Graveyard,
+            Self::VscodeMonokai => Self::Iceberg,
+            Self::Iceberg => Self::IcebergLight,
+            Self::IcebergLight => Self::Graveyard,
             Self::Graveyard => Self::CandyFloss,
             Self::CandyFloss => Self::Victorian,
             Self::Victorian => Self::IdeaDark,
@@ -112,7 +122,9 @@ impl PeekThemeName {
             Self::VscodeDarkModern => Self::GithubLight,
             Self::VscodeDark2026 => Self::VscodeDarkModern,
             Self::VscodeMonokai => Self::VscodeDark2026,
-            Self::Graveyard => Self::VscodeMonokai,
+            Self::Iceberg => Self::VscodeMonokai,
+            Self::IcebergLight => Self::Iceberg,
+            Self::Graveyard => Self::IcebergLight,
             Self::CandyFloss => Self::Graveyard,
             Self::Victorian => Self::CandyFloss,
         }
@@ -127,6 +139,8 @@ impl PeekThemeName {
             Self::VscodeDarkModern => "VS Code Dark Modern theme",
             Self::VscodeDark2026 => "VS Code Dark 2026 theme",
             Self::VscodeMonokai => "VS Code Monokai theme",
+            Self::Iceberg => "Iceberg — cold bluish dark (iceberg.vim)",
+            Self::IcebergLight => "Iceberg Light — cold bluish light (iceberg.vim)",
             Self::Graveyard => "Graveyard — gothic moonlit night",
             Self::CandyFloss => "Candy Floss — pastel candy on dark plum",
             Self::Victorian => "Victorian — parlour parchment with oxblood",
@@ -150,6 +164,8 @@ impl clap::ValueEnum for PeekThemeName {
             Self::VscodeDarkModern,
             Self::VscodeDark2026,
             Self::VscodeMonokai,
+            Self::Iceberg,
+            Self::IcebergLight,
             Self::Graveyard,
             Self::CandyFloss,
             Self::Victorian,

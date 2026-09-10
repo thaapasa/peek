@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>name</key>
+  <string>Iceberg Light</string>
+  <key>settings</key>
+  <array>
+    <!-- Port of cocopon/iceberg.vim (light). Vim groups → scopes; palette verbatim.
+         Statement/Type/Function/Operator = blue, Constant = purple, String/Identifier = cyan,
+         Special/PreProc = green, Title = orange, Error = red. -->
+    <dict>
+      <key>settings</key>
+      <dict>
+        <key>background</key>    <string>#e8e9ec</string>
+        <key>foreground</key>    <string>#33374c</string>
+        <key>caret</key>         <string>#33374c</string>
+        <key>selection</key>     <string>#c9cdd7</string>
+        <key>lineHighlight</key> <string>#dcdfe7</string>
+        <key>gutterForeground</key> <string>#9fa7bd</string>
+        <key>findHighlight</key> <string>#eac6ad</string>
+        <key>accent</key>        <string>#2d539e</string>
+      </dict>
+    </dict>
+
+    <!-- Comment -->
+    <dict>
+      <key>name</key>  <string>Comment</string>
+      <key>scope</key> <string>comment, comment.line, comment.block, comment.block.documentation, comment.line.documentation</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#8389a3</string>
+      </dict>
+    </dict>
+
+    <!-- Statement / Type / Structure / Include: blue -->
+    <dict>
+      <key>name</key>  <string>Keyword</string>
+      <key>scope</key> <string>keyword, keyword.control, keyword.operator, storage, storage.type, storage.modifier</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#2d539e</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Type</string>
+      <key>scope</key> <string>entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, entity.name.union, entity.name.trait, support.type, support.class, storage.type.numeric, storage.type.boolean, storage.type.string, storage.type.char, storage.type.primitive, variable.parameter.type, entity.name.type.parameter, storage.type.generic</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#2d539e</string>
+      </dict>
+    </dict>
+
+    <!-- Function: blue -->
+    <dict>
+      <key>name</key>  <string>Function</string>
+      <key>scope</key> <string>entity.name.function, support.function, meta.function-call</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#2d539e</string>
+      </dict>
+    </dict>
+
+    <!-- String / Identifier: cyan -->
+    <dict>
+      <key>name</key>  <string>String</string>
+      <key>scope</key> <string>string, string.quoted</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#3f83a6</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Identifier</string>
+      <key>scope</key> <string>variable.other.member, variable.other.property, meta.field, variable.language, variable.language.self</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#3f83a6</string>
+      </dict>
+    </dict>
+
+    <!-- Constant: purple -->
+    <dict>
+      <key>name</key>  <string>Constant</string>
+      <key>scope</key> <string>constant, constant.numeric, constant.language, constant.other, support.constant, constant.other.enum, entity.name.enum-variant, variable.other.enummember</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#7759b4</string>
+      </dict>
+    </dict>
+
+    <!-- Special / PreProc: green -->
+    <dict>
+      <key>name</key>  <string>Special</string>
+      <key>scope</key> <string>constant.character.escape, entity.name.function.macro, support.function.macro, support.macro, meta.macro, storage.type.annotation, meta.annotation, meta.attribute, variable.annotation, punctuation.definition.annotation, keyword.control.import, keyword.control.directive, meta.preprocessor</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#668e3d</string>
+      </dict>
+    </dict>
+
+    <!-- Tags / attributes: vim links htmlTag → Statement, htmlArg → Type — both blue -->
+    <dict>
+      <key>name</key>  <string>Tag</string>
+      <key>scope</key> <string>entity.name.tag, entity.other.attribute-name</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#2d539e</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Section</string>
+      <key>scope</key> <string>entity.name.section</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#c57339</string>
+        <key>fontStyle</key>  <string>bold</string>
+      </dict>
+    </dict>
+
+    <!-- Variables: default fg -->
+    <dict>
+      <key>name</key>  <string>Variable</string>
+      <key>scope</key> <string>variable, variable.other, variable.parameter</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#33374c</string>
+      </dict>
+    </dict>
+
+    <!-- Markup: Title = orange -->
+    <dict>
+      <key>name</key>  <string>Markup Heading</string>
+      <key>scope</key> <string>markup.heading</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#c57339</string>
+        <key>fontStyle</key>  <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Markup Bold</string>
+      <key>scope</key> <string>markup.bold</string>
+      <key>settings</key>
+      <dict>
+        <key>fontStyle</key> <string>bold</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Markup Italic</string>
+      <key>scope</key> <string>markup.italic</string>
+      <key>settings</key>
+      <dict>
+        <key>fontStyle</key> <string>italic</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Markup Link</string>
+      <key>scope</key> <string>markup.underline.link, string.other.link</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#2d539e</string>
+        <key>fontStyle</key>  <string>underline</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Markup Raw</string>
+      <key>scope</key> <string>markup.raw, markup.inline.raw</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#3f83a6</string>
+      </dict>
+    </dict>
+
+    <!-- Error -->
+    <dict>
+      <key>name</key>  <string>Invalid</string>
+      <key>scope</key> <string>invalid, invalid.illegal</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#cc517a</string>
+      </dict>
+    </dict>
+    <dict>
+      <key>name</key>  <string>Deprecated</string>
+      <key>scope</key> <string>invalid.deprecated</string>
+      <key>settings</key>
+      <dict>
+        <key>foreground</key> <string>#c57339</string>
+      </dict>
+    </dict>
+  </array>
+</dict>
+</plist>

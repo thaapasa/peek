@@ -1508,7 +1508,7 @@ source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 
 ### Theme Selection ✅
 
-`--theme` / `PEEK_THEME`. Ten custom embedded `.tmTheme` themes:
+`--theme` / `PEEK_THEME`. Twelve custom embedded `.tmTheme` themes:
 
 - **idea-dark** — JetBrains IDEA default Dark
 - **idea-light** — JetBrains IntelliJ Light
@@ -1517,6 +1517,8 @@ source (`crates/peek-foundation/src/viewer/ui/keys.rs::Action::bindings`).
 - **vscode-dark-modern** — VS Code Dark Modern
 - **vscode-dark-2026** — VS Code Dark 2026
 - **vscode-monokai** — VS Code Monokai
+- **iceberg** — Iceberg (iceberg.vim), cold bluish dark
+- **iceberg-light** — Iceberg Light (iceberg.vim), cold bluish light
 - **graveyard** — gothic moonlit night
 - **candy-floss** — pastel candy on dark plum
 - **victorian** — parlour parchment with oxblood

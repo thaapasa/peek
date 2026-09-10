@@ -11,6 +11,8 @@ Selectable via `--theme <name>` or `PEEK_THEME`. Default `idea-dark`.
 | `vscode-dark-modern` | VS Code Dark Modern                   |
 | `vscode-dark-2026`   | VS Code Dark 2026                     |
 | `vscode-monokai`     | VS Code Monokai                       |
+| `iceberg`            | Iceberg — cold bluish dark            |
+| `iceberg-light`      | Iceberg Light — cold bluish light     |
 | `graveyard`          | Gothic moonlit night                  |
 | `candy-floss`        | Pastel candy on dark plum             |
 | `victorian`          | Parlour parchment with oxblood        |
