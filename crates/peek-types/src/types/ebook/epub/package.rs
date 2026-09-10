@@ -78,9 +78,9 @@ fn read_container_opf_path(zip: &mut ZipArchive<Box<dyn ReadSeek>>) -> Result<St
     let mut buf = Vec::new();
     loop {
         match reader.read_event_into(&mut buf)? {
-            Event::Empty(e) | Event::Start(e) if e.name() == QName(b"rootfile") => {
+            Event::Empty(e) | Event::Start(e) if e.name() == QName("rootfile") => {
                 for attr in e.attributes().flatten() {
-                    if attr.key == QName(b"full-path")
+                    if attr.key == QName("full-path")
                         && let Some(v) = crate::xml::unescape_attr_value(&attr)
                     {
                         return Ok(v);
@@ -122,10 +122,10 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
         match reader.read_event_into(&mut buf)? {
             Event::Start(e) => {
                 let local = local_name(e.name());
-                match local.as_slice() {
-                    b"metadata" => in_metadata = true,
+                match local {
+                    "metadata" => in_metadata = true,
                     _ if in_metadata => {
-                        current_dc_field = dc_field_from_local(&local);
+                        current_dc_field = dc_field_from_local(local);
                         current_text.clear();
                     }
                     _ => {}
@@ -133,8 +133,8 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
             }
             Event::End(e) => {
                 let local = local_name(e.name());
-                match local.as_slice() {
-                    b"metadata" => in_metadata = false,
+                match local {
+                    "metadata" => in_metadata = false,
                     _ if in_metadata => {
                         if let Some(f) = current_dc_field.take() {
                             assign_dc(&mut metadata, f, current_text.trim().to_string());
@@ -144,23 +144,19 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
                     _ => {}
                 }
             }
-            Event::Text(t)
-                if in_metadata
-                    && current_dc_field.is_some()
-                    && let Ok(decoded) = t.xml10_content() =>
-            {
-                current_text.push_str(&decoded);
+            Event::Text(t) if in_metadata && current_dc_field.is_some() => {
+                current_text.push_str(&t.xml10_content());
             }
             Event::Empty(e) => {
                 let local = local_name(e.name());
-                match local.as_slice() {
-                    b"item" => {
+                match local {
+                    "item" => {
                         let mut id = None;
                         let mut href = None;
                         for attr in e.attributes().flatten() {
                             match attr.key.local_name().as_ref() {
-                                b"id" => id = crate::xml::unescape_attr_value(&attr),
-                                b"href" => href = crate::xml::unescape_attr_value(&attr),
+                                "id" => id = crate::xml::unescape_attr_value(&attr),
+                                "href" => href = crate::xml::unescape_attr_value(&attr),
                                 _ => {}
                             }
                         }
@@ -168,9 +164,9 @@ fn parse_opf(bytes: &[u8]) -> Result<ParsedOpf> {
                             manifest.push((id, href));
                         }
                     }
-                    b"itemref" => {
+                    "itemref" => {
                         for attr in e.attributes().flatten() {
-                            if attr.key.local_name().as_ref() == b"idref"
+                            if attr.key.local_name().as_ref() == "idref"
                                 && let Some(v) = crate::xml::unescape_attr_value(&attr)
                             {
                                 spine.push(v);
@@ -204,15 +200,15 @@ enum DcField {
     Description,
 }
 
-fn dc_field_from_local(local: &[u8]) -> Option<DcField> {
+fn dc_field_from_local(local: &str) -> Option<DcField> {
     Some(match local {
-        b"title" => DcField::Title,
-        b"creator" => DcField::Creator,
-        b"language" => DcField::Language,
-        b"publisher" => DcField::Publisher,
-        b"date" => DcField::Date,
-        b"identifier" => DcField::Identifier,
-        b"description" => DcField::Description,
+        "title" => DcField::Title,
+        "creator" => DcField::Creator,
+        "language" => DcField::Language,
+        "publisher" => DcField::Publisher,
+        "date" => DcField::Date,
+        "identifier" => DcField::Identifier,
+        "description" => DcField::Description,
         _ => return None,
     })
 }
@@ -235,8 +231,8 @@ fn assign_dc(meta: &mut Metadata, field: DcField, value: String) {
     }
 }
 
-fn local_name(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local_name(name: QName<'_>) -> &str {
+    name.local_name().into_inner()
 }
 
 fn resolve_spine(parsed: &ParsedOpf, opf_dir: &str) -> Vec<Chapter> {

@@ -91,21 +91,21 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
             Event::Start(e) => {
                 let tag = local_name(e.name());
                 match state {
-                    WalkState::Top => match tag.as_slice() {
-                        b"automatic-styles" | b"styles" => {
+                    WalkState::Top => match tag {
+                        "automatic-styles" | "styles" => {
                             state = WalkState::Styles(StylesWalk::default());
                         }
-                        b"body" => state = WalkState::Body,
+                        "body" => state = WalkState::Body,
                         _ => {}
                     },
                     WalkState::Styles(_) => {
                         if let WalkState::Styles(sw) = &mut state {
-                            styles_handle_start(sw, &mut styles, &tag, &e);
+                            styles_handle_start(sw, &mut styles, tag, &e);
                         }
                     }
                     WalkState::Body => {
                         body_handle_start(
-                            &tag,
+                            tag,
                             &e,
                             &styles,
                             &mut blocks,
@@ -119,7 +119,7 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                     }
                     WalkState::Paragraph(_) => {
                         body_handle_start(
-                            &tag,
+                            tag,
                             &e,
                             &styles,
                             &mut blocks,
@@ -134,7 +134,7 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                 }
                 if let WalkState::Body = state {
                     body_after_start(
-                        &tag,
+                        tag,
                         &e,
                         &styles,
                         &mut state,
@@ -143,27 +143,23 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                         &mut pending_list_marker,
                     );
                 } else if let WalkState::Paragraph(_) = state {
-                    body_after_start_in_para(&tag, &e, &styles, &mut state);
+                    body_after_start_in_para(tag, &e, &styles, &mut state);
                 }
             }
             Event::Empty(e) => {
                 let tag = local_name(e.name());
                 if let WalkState::Styles(sw) = &mut state {
-                    styles_handle_start(sw, &mut styles, &tag, &e);
-                    styles_handle_end(sw, &mut styles, &tag);
+                    styles_handle_start(sw, &mut styles, tag, &e);
+                    styles_handle_end(sw, &mut styles, tag);
                 } else {
-                    handle_empty(&tag, &e, &mut state, &mut image_count);
+                    handle_empty(tag, &e, &mut state, &mut image_count);
                 }
             }
             Event::Text(t) => {
                 if let WalkState::Paragraph(ps) = &mut state
                     && ps.drawing_depth == 0
                 {
-                    let s = t
-                        .xml10_content()
-                        .map_err(|e| anyhow!("ODT text decode: {e}"))?
-                        .into_owned();
-                    push_text(ps, &s);
+                    push_text(ps, &t.xml10_content());
                 }
             }
             Event::End(e) => {
@@ -171,28 +167,28 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                 match state {
                     WalkState::Top => {}
                     WalkState::Styles(_) => {
-                        if matches!(tag.as_slice(), b"automatic-styles" | b"styles") {
+                        if matches!(tag, "automatic-styles" | "styles") {
                             state = WalkState::Top;
                         } else if let WalkState::Styles(sw) = &mut state {
-                            styles_handle_end(sw, &mut styles, &tag);
+                            styles_handle_end(sw, &mut styles, tag);
                         }
                     }
-                    WalkState::Body => match tag.as_slice() {
-                        b"body" => state = WalkState::Top,
-                        b"list" => list_depth = list_depth.saturating_sub(1),
-                        b"table" => {
+                    WalkState::Body => match tag {
+                        "body" => state = WalkState::Top,
+                        "list" => list_depth = list_depth.saturating_sub(1),
+                        "table" => {
                             if let Some(t) = tbl_stack.pop() {
                                 blocks.push(Block::Table(t.rows));
                             }
                         }
-                        b"table-row" => {
+                        "table-row" => {
                             if let Some(t) = tbl_stack.last_mut()
                                 && let Some(row) = t.current_row.take()
                             {
                                 t.rows.push(row);
                             }
                         }
-                        b"table-cell" => {
+                        "table-cell" => {
                             if let Some(t) = tbl_stack.last_mut() {
                                 t.in_cell = false;
                                 let cell_paragraphs = std::mem::take(&mut t.cell_paragraphs);
@@ -203,8 +199,8 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                         }
                         _ => {}
                     },
-                    WalkState::Paragraph(_) => match tag.as_slice() {
-                        b"p" | b"h" => {
+                    WalkState::Paragraph(_) => match tag {
+                        "p" | "h" => {
                             let WalkState::Paragraph(ps) =
                                 std::mem::replace(&mut state, WalkState::Body)
                             else {
@@ -222,12 +218,12 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                                 blocks.push(Block::Paragraph(para));
                             }
                         }
-                        b"span" => {
+                        "span" => {
                             if let WalkState::Paragraph(ps) = &mut state {
                                 ps.style_stack.pop();
                             }
                         }
-                        b"a" => {
+                        "a" => {
                             if let WalkState::Paragraph(ps) = &mut state {
                                 ps.hyperlink_depth = ps.hyperlink_depth.saturating_sub(1);
                                 // Mark trailing runs added under the link
@@ -235,7 +231,7 @@ fn parse_content(xml: &str, metadata: DocumentMetadata) -> Result<Doc> {
                                 // on each run as we add it (see push_text).
                             }
                         }
-                        b"frame" | b"object" => {
+                        "frame" | "object" => {
                             if let WalkState::Paragraph(ps) = &mut state {
                                 ps.drawing_depth = ps.drawing_depth.saturating_sub(1);
                                 if ps.drawing_depth == 0
@@ -324,33 +320,33 @@ struct TableState {
 fn styles_handle_start(
     sw: &mut StylesWalk,
     _table: &mut StyleTable,
-    tag: &[u8],
+    tag: &str,
     e: &BytesStart<'_>,
 ) {
     match tag {
-        b"style" => {
-            sw.current_name = attr_val_local(e, b"name");
-            sw.current_family = attr_val_local(e, b"family");
+        "style" => {
+            sw.current_name = attr_val_local(e, "name");
+            sw.current_family = attr_val_local(e, "family");
             sw.current_attrs = StyleAttrs::default();
             sw.current_para_heading = sw
                 .current_name
                 .as_deref()
                 .and_then(heading_level_from_style_name);
         }
-        b"text-properties" => {
-            if let Some(v) = attr_val_local(e, b"font-weight") {
+        "text-properties" => {
+            if let Some(v) = attr_val_local(e, "font-weight") {
                 sw.current_attrs.bold = Some(v == "bold");
             }
-            if let Some(v) = attr_val_local(e, b"font-style") {
+            if let Some(v) = attr_val_local(e, "font-style") {
                 sw.current_attrs.italic = Some(v == "italic" || v == "oblique");
             }
-            if let Some(v) = attr_val_local(e, b"text-underline-style") {
+            if let Some(v) = attr_val_local(e, "text-underline-style") {
                 sw.current_attrs.underline = Some(!matches!(v.as_str(), "none" | ""));
             }
-            if let Some(v) = attr_val_local(e, b"text-line-through-style") {
+            if let Some(v) = attr_val_local(e, "text-line-through-style") {
                 sw.current_attrs.strike = Some(!matches!(v.as_str(), "none" | ""));
             }
-            if let Some(v) = attr_val_local(e, b"color") {
+            if let Some(v) = attr_val_local(e, "color") {
                 sw.current_attrs.color = parse_hex_color(&v);
             }
         }
@@ -358,8 +354,8 @@ fn styles_handle_start(
     }
 }
 
-fn styles_handle_end(sw: &mut StylesWalk, table: &mut StyleTable, tag: &[u8]) {
-    if tag == b"style"
+fn styles_handle_end(sw: &mut StylesWalk, table: &mut StyleTable, tag: &str) {
+    if tag == "style"
         && let Some(name) = sw.current_name.take()
     {
         let family = sw.current_family.take();
@@ -388,7 +384,7 @@ fn styles_handle_end(sw: &mut StylesWalk, table: &mut StyleTable, tag: &[u8]) {
 
 #[allow(clippy::too_many_arguments)]
 fn body_handle_start(
-    tag: &[u8],
+    tag: &str,
     e: &BytesStart<'_>,
     styles: &StyleTable,
     _blocks: &mut [Block],
@@ -400,22 +396,22 @@ fn body_handle_start(
     _image_count: &mut usize,
 ) {
     match tag {
-        b"table" => tbl_stack.push(TableState::default()),
-        b"table-row" => {
+        "table" => tbl_stack.push(TableState::default()),
+        "table-row" => {
             if let Some(t) = tbl_stack.last_mut() {
                 t.current_row = Some(Vec::new());
             }
         }
-        b"table-cell" => {
+        "table-cell" => {
             if let Some(t) = tbl_stack.last_mut() {
                 t.in_cell = true;
                 t.cell_paragraphs.clear();
             }
         }
-        b"list" => {
+        "list" => {
             *list_depth = list_depth.saturating_add(1);
         }
-        b"list-item" => {
+        "list-item" => {
             *pending_list_marker = true;
         }
         _ => {
@@ -428,7 +424,7 @@ fn body_handle_start(
 /// Called after `body_handle_start`. Promotes the walk state to
 /// `Paragraph` when entering `<text:p>` / `<text:h>`.
 fn body_after_start(
-    tag: &[u8],
+    tag: &str,
     e: &BytesStart<'_>,
     styles: &StyleTable,
     state: &mut WalkState,
@@ -437,8 +433,8 @@ fn body_after_start(
     _pending_list_marker: &mut bool,
 ) {
     match tag {
-        b"p" => {
-            let style_name = attr_val_local(e, b"style-name");
+        "p" => {
+            let style_name = attr_val_local(e, "style-name");
             let mut ps = ParaState::default();
             if let Some(name) = &style_name {
                 if let Some(attrs) = styles.text.get(name) {
@@ -450,12 +446,12 @@ fn body_after_start(
             }
             *state = WalkState::Paragraph(ps);
         }
-        b"h" => {
-            let outline = attr_val_local(e, b"outline-level")
+        "h" => {
+            let outline = attr_val_local(e, "outline-level")
                 .and_then(|v| v.parse::<u8>().ok())
                 .filter(|n| (1..=6).contains(n))
                 .unwrap_or(1);
-            let style_name = attr_val_local(e, b"style-name");
+            let style_name = attr_val_local(e, "style-name");
             let mut ps = ParaState {
                 heading_level: Some(outline),
                 ..ParaState::default()
@@ -474,7 +470,7 @@ fn body_after_start(
 /// Called for elements opened while a paragraph is being built (spans,
 /// hyperlinks, drawings, line-breaks-as-empty handled elsewhere).
 fn body_after_start_in_para(
-    tag: &[u8],
+    tag: &str,
     e: &BytesStart<'_>,
     styles: &StyleTable,
     state: &mut WalkState,
@@ -483,16 +479,16 @@ fn body_after_start_in_para(
         return;
     };
     match tag {
-        b"span" => {
-            let attrs = attr_val_local(e, b"style-name")
+        "span" => {
+            let attrs = attr_val_local(e, "style-name")
                 .and_then(|n| styles.text.get(&n).cloned())
                 .unwrap_or_default();
             ps.style_stack.push(attrs);
         }
-        b"a" => {
+        "a" => {
             ps.hyperlink_depth = ps.hyperlink_depth.saturating_add(1);
         }
-        b"frame" | b"object" => {
+        "frame" | "object" => {
             ps.drawing_depth = ps.drawing_depth.saturating_add(1);
         }
         _ => {}
@@ -503,22 +499,22 @@ fn body_after_start_in_para(
 // Empty-element handling (line break, tab, spaces, image, etc.)
 // ---------------------------------------------------------------------------
 
-fn handle_empty(tag: &[u8], e: &BytesStart<'_>, state: &mut WalkState, _image_count: &mut usize) {
+fn handle_empty(tag: &str, e: &BytesStart<'_>, state: &mut WalkState, _image_count: &mut usize) {
     let WalkState::Paragraph(ps) = state else {
         return;
     };
     match tag {
-        b"line-break" => push_text(ps, "\n"),
-        b"tab" => push_text(ps, "    "),
-        b"s" => {
-            let n: usize = attr_val_local(e, b"c")
+        "line-break" => push_text(ps, "\n"),
+        "tab" => push_text(ps, "    "),
+        "s" => {
+            let n: usize = attr_val_local(e, "c")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(1);
             push_text(ps, &" ".repeat(n));
         }
-        b"image" => {
+        "image" => {
             if ps.drawing_depth > 0
-                && let Some(href) = attr_val_local(e, b"href")
+                && let Some(href) = attr_val_local(e, "href")
             {
                 let basename = href.rsplit('/').next().unwrap_or(&href).to_string();
                 ps.pending_image_name = Some(basename);
@@ -617,10 +613,8 @@ fn parse_meta(xml: &str) -> DocumentMetadata {
                 current_text.clear();
             }
             Ok(Event::Text(t)) => {
-                if current_field.is_some()
-                    && let Ok(decoded) = t.xml10_content()
-                {
-                    current_text.push_str(&decoded);
+                if current_field.is_some() {
+                    current_text.push_str(&t.xml10_content());
                 }
             }
             Ok(Event::End(_)) => {
@@ -661,13 +655,13 @@ enum MetaField {
 
 fn meta_field_from_qname(name: QName<'_>) -> Option<MetaField> {
     Some(match name.as_ref() {
-        b"dc:title" => MetaField::Title,
-        b"dc:creator" => MetaField::Creator,
-        b"dc:subject" => MetaField::Subject,
-        b"dc:description" => MetaField::Description,
-        b"meta:keyword" => MetaField::Keyword,
-        b"meta:creation-date" => MetaField::Created,
-        b"dc:date" => MetaField::Modified,
+        "dc:title" => MetaField::Title,
+        "dc:creator" => MetaField::Creator,
+        "dc:subject" => MetaField::Subject,
+        "dc:description" => MetaField::Description,
+        "meta:keyword" => MetaField::Keyword,
+        "meta:creation-date" => MetaField::Created,
+        "dc:date" => MetaField::Modified,
         _ => return None,
     })
 }
@@ -692,11 +686,11 @@ fn assign_meta(meta: &mut DocumentMetadata, field: MetaField, value: String) {
 // Small helpers
 // ---------------------------------------------------------------------------
 
-fn local_name(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local_name(name: QName<'_>) -> &str {
+    name.local_name().into_inner()
 }
 
-fn attr_val_local(e: &BytesStart<'_>, want_local: &[u8]) -> Option<String> {
+fn attr_val_local(e: &BytesStart<'_>, want_local: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
             return crate::xml::unescape_attr_value(&attr);

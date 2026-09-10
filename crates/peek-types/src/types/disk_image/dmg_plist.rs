@@ -63,20 +63,20 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => match local(e.name()).as_slice() {
-                b"key" => {
+            Ok(Event::Start(e)) => match local(e.name()) {
+                "key" => {
                     scalar = Some(Scalar::Key);
                     text.clear();
                 }
-                b"string" => {
+                "string" => {
                     scalar = Some(Scalar::Str);
                     text.clear();
                 }
-                b"data" => {
+                "data" => {
                     scalar = Some(Scalar::Data);
                     text.clear();
                 }
-                b"array" => {
+                "array" => {
                     if expect_blkx_array {
                         in_blkx = true;
                         blkx_depth = depth;
@@ -84,7 +84,7 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                     }
                     depth += 1;
                 }
-                b"dict" => {
+                "dict" => {
                     if in_blkx && depth == blkx_depth + 1 {
                         entry = Some(EntryAcc::default());
                     }
@@ -93,21 +93,19 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                 _ => {}
             },
             Ok(Event::Text(t)) => {
-                if scalar.is_some()
-                    && let Ok(s) = t.xml10_content()
-                {
-                    text.push_str(&s);
+                if scalar.is_some() {
+                    text.push_str(&t.xml10_content());
                 }
             }
-            Ok(Event::End(e)) => match local(e.name()).as_slice() {
-                b"key" => {
+            Ok(Event::End(e)) => match local(e.name()) {
+                "key" => {
                     cur_key = text.trim().to_string();
                     if cur_key == "blkx" {
                         expect_blkx_array = true;
                     }
                     scalar = None;
                 }
-                b"string" => {
+                "string" => {
                     if let Some(acc) = entry.as_mut() {
                         match cur_key.as_str() {
                             // `CFName` wins over `Name`. CFName is the
@@ -126,7 +124,7 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                     }
                     scalar = None;
                 }
-                b"data" => {
+                "data" => {
                     if let Some(acc) = entry.as_mut()
                         && cur_key == "Data"
                     {
@@ -134,14 +132,14 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                     }
                     scalar = None;
                 }
-                b"array" => {
+                "array" => {
                     depth -= 1;
                     if in_blkx && depth == blkx_depth {
                         in_blkx = false;
                         blkx_depth = -1;
                     }
                 }
-                b"dict" => {
+                "dict" => {
                     depth -= 1;
                     if in_blkx
                         && depth == blkx_depth + 1
@@ -162,8 +160,8 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
     out
 }
 
-fn local(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local<'a>(name: QName<'a>) -> &'a str {
+    name.local_name().into_inner()
 }
 
 #[cfg(test)]

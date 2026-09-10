@@ -60,16 +60,14 @@ fn build_version(xml: &str) -> Option<String> {
     let mut text = String::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) if e.name().as_ref() == b"string" => {
+            Ok(Event::Start(e)) if e.name().as_ref() == "string" => {
                 capturing = true;
                 text.clear();
             }
             Ok(Event::Text(t)) if capturing => {
-                if let Ok(decoded) = t.xml10_content() {
-                    text.push_str(&decoded);
-                }
+                text.push_str(&t.xml10_content());
             }
-            Ok(Event::End(e)) if e.name().as_ref() == b"string" => {
+            Ok(Event::End(e)) if e.name().as_ref() == "string" => {
                 capturing = false;
                 let v = text.trim().to_string();
                 if !v.is_empty() {

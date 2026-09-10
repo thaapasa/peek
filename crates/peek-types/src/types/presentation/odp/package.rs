@@ -49,32 +49,30 @@ fn parse_content(xml: &str) -> Vec<Doc> {
         match evt {
             // Empty elements (`<text:line-break/>`, `<draw:image/>`)
             // arrive as `Event::Empty`; fold both into one arm.
-            Event::Start(e) | Event::Empty(e) => match local_name(e.name()).as_slice() {
-                b"page" => page = Some(PageAcc::default()),
-                b"notes" => notes_depth += 1,
-                b"frame" if notes_depth == 0 => {
-                    frame_is_title = matches!(
-                        attr_val(&e, b"class").as_deref(),
-                        Some("title" | "subtitle")
-                    );
+            Event::Start(e) | Event::Empty(e) => match local_name(e.name()) {
+                "page" => page = Some(PageAcc::default()),
+                "notes" => notes_depth += 1,
+                "frame" if notes_depth == 0 => {
+                    frame_is_title =
+                        matches!(attr_val(&e, "class").as_deref(), Some("title" | "subtitle"));
                 }
-                b"p" | b"h" if page.is_some() && notes_depth == 0 => {
+                "p" | "h" if page.is_some() && notes_depth == 0 => {
                     para = Some(ParaAcc {
-                        heading: frame_is_title || local_name(e.name()).as_slice() == b"h",
+                        heading: frame_is_title || local_name(e.name()) == "h",
                         text: String::new(),
                     });
                 }
-                b"line-break" | b"tab" => {
+                "line-break" | "tab" => {
                     if let Some(p) = para.as_mut() {
-                        p.text.push(if local_name(e.name()).as_slice() == b"tab" {
+                        p.text.push(if local_name(e.name()) == "tab" {
                             '\t'
                         } else {
                             '\n'
                         });
                     }
                 }
-                b"image" if page.is_some() && notes_depth == 0 => {
-                    if let (Some(pg), Some(href)) = (page.as_mut(), attr_val(&e, b"href")) {
+                "image" if page.is_some() && notes_depth == 0 => {
+                    if let (Some(pg), Some(href)) = (page.as_mut(), attr_val(&e, "href")) {
                         pg.image_count += 1;
                         pg.blocks.push(Block::Paragraph(Paragraph {
                             runs: vec![Run {
@@ -89,16 +87,14 @@ fn parse_content(xml: &str) -> Vec<Doc> {
                 _ => {}
             },
             Event::Text(t) => {
-                if let Some(p) = para.as_mut()
-                    && let Ok(decoded) = t.xml10_content()
-                {
-                    p.text.push_str(&decoded);
+                if let Some(p) = para.as_mut() {
+                    p.text.push_str(&t.xml10_content());
                 }
             }
-            Event::End(e) => match local_name(e.name()).as_slice() {
-                b"notes" => notes_depth = notes_depth.saturating_sub(1),
-                b"frame" if notes_depth == 0 => frame_is_title = false,
-                b"p" | b"h" => {
+            Event::End(e) => match local_name(e.name()) {
+                "notes" => notes_depth = notes_depth.saturating_sub(1),
+                "frame" if notes_depth == 0 => frame_is_title = false,
+                "p" | "h" => {
                     if let (Some(pg), Some(p)) = (page.as_mut(), para.take())
                         && !p.text.trim().is_empty()
                     {
@@ -112,7 +108,7 @@ fn parse_content(xml: &str) -> Vec<Doc> {
                         }));
                     }
                 }
-                b"page" => {
+                "page" => {
                     if let Some(pg) = page.take() {
                         slides.push(pg.into_doc());
                     }
@@ -178,10 +174,8 @@ fn parse_meta(xml: &str) -> PresentationMetadata {
                 text.clear();
             }
             Ok(Event::Text(t)) => {
-                if field.is_some()
-                    && let Ok(decoded) = t.xml10_content()
-                {
-                    text.push_str(&decoded);
+                if field.is_some() {
+                    text.push_str(&t.xml10_content());
                 }
             }
             Ok(Event::End(_)) => {
@@ -215,13 +209,13 @@ enum MetaField {
 
 fn meta_field_from_qname(name: QName<'_>) -> Option<MetaField> {
     Some(match name.as_ref() {
-        b"dc:title" => MetaField::Title,
-        b"dc:creator" => MetaField::Creator,
-        b"dc:subject" => MetaField::Subject,
-        b"meta:keyword" => MetaField::Keyword,
-        b"meta:creation-date" => MetaField::Created,
-        b"dc:date" => MetaField::Modified,
-        b"meta:generator" => MetaField::Generator,
+        "dc:title" => MetaField::Title,
+        "dc:creator" => MetaField::Creator,
+        "dc:subject" => MetaField::Subject,
+        "meta:keyword" => MetaField::Keyword,
+        "meta:creation-date" => MetaField::Created,
+        "dc:date" => MetaField::Modified,
+        "meta:generator" => MetaField::Generator,
         _ => return None,
     })
 }
@@ -246,11 +240,11 @@ fn assign_meta(meta: &mut PresentationMetadata, field: MetaField, value: String)
 // Helpers
 // ---------------------------------------------------------------------------
 
-fn local_name(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local_name(name: QName<'_>) -> &str {
+    name.local_name().into_inner()
 }
 
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<String> {
+fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
             return crate::xml::unescape_attr_value(&attr);

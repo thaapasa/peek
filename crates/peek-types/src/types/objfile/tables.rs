@@ -50,7 +50,6 @@ fn section_kind_label(k: SectionKind) -> &'static str {
         SectionKind::ReadOnlyData => "rodata",
         SectionKind::ReadOnlyString => "strings",
         SectionKind::UninitializedData => "bss",
-        SectionKind::Common => "common",
         SectionKind::Tls | SectionKind::UninitializedTls | SectionKind::TlsVariables => "tls",
         SectionKind::Debug => "debug",
         SectionKind::Note => "note",

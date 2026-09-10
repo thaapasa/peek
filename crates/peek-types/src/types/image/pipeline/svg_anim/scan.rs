@@ -73,9 +73,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
         match event {
             Event::Start(e) => {
                 depth += 1;
-                let tag = std::str::from_utf8(e.local_name().as_ref())
-                    .unwrap_or("")
-                    .to_string();
+                let tag = e.local_name().as_ref().to_string();
                 if tag.eq_ignore_ascii_case("style") {
                     in_style_depth = depth;
                 }
@@ -93,9 +91,7 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                 }
             }
             Event::Empty(e) => {
-                let tag = std::str::from_utf8(e.local_name().as_ref())
-                    .unwrap_or("")
-                    .to_string();
+                let tag = e.local_name().as_ref().to_string();
                 let attrs = read_target_attrs(&e);
                 if attrs.is_candidate() {
                     elements.push(RawElement {
@@ -127,22 +123,18 @@ pub(super) fn scan_svg(text: &str) -> XmlScan {
                     }
                 }
                 let local = e.local_name();
-                if local.as_ref().eq_ignore_ascii_case(b"style") && depth == in_style_depth {
+                if local.as_ref().eq_ignore_ascii_case("style") && depth == in_style_depth {
                     in_style_depth = 0;
                 }
                 depth -= 1;
             }
             Event::Text(t) if in_style_depth > 0 => {
-                if let Ok(s) = t.decode() {
-                    style_text.push_str(&s);
-                    style_text.push('\n');
-                }
+                style_text.push_str(&t.xml10_content());
+                style_text.push('\n');
             }
             Event::CData(t) if in_style_depth > 0 => {
-                if let Ok(s) = std::str::from_utf8(t.as_ref()) {
-                    style_text.push_str(s);
-                    style_text.push('\n');
-                }
+                style_text.push_str(t.as_ref());
+                style_text.push('\n');
             }
             Event::Eof => break,
             _ => {}
@@ -175,15 +167,13 @@ fn read_target_attrs(e: &quick_xml::events::BytesStart<'_>) -> TargetAttrs {
     let mut style = None;
     for attr in e.attributes().with_checks(false).flatten() {
         let key = attr.key.local_name();
-        let key_bytes = key.as_ref();
-        let Ok(value) = std::str::from_utf8(&attr.value) else {
-            continue;
-        };
-        if key_bytes.eq_ignore_ascii_case(b"class") {
+        let key = key.as_ref();
+        let value: &str = &attr.value;
+        if key.eq_ignore_ascii_case("class") {
             classes = value.split_whitespace().map(|s| s.to_string()).collect();
-        } else if key_bytes.eq_ignore_ascii_case(b"id") {
+        } else if key.eq_ignore_ascii_case("id") {
             id = Some(value.to_string());
-        } else if key_bytes.eq_ignore_ascii_case(b"style") {
+        } else if key.eq_ignore_ascii_case("style") {
             style = Some(value.to_string());
         }
     }

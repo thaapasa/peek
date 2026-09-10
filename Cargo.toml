@@ -66,7 +66,7 @@ syntect = "5"
 two-face = "0.5.1"
 
 # File type detection via magic bytes
-infer = "0.19"
+infer = "0.22"
 
 # Extension-based MIME lookup (covers source-code conventional types)
 mime_guess = "2"
@@ -77,13 +77,13 @@ serde_json = { version = "1", features = ["preserve_order"] }
 serde_yaml = "0.9"
 json5 = "1"
 toml = { version = "1.1.2", features = ["preserve_order"] }
-quick-xml = { version = "0.41", features = ["serialize"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
 
 # Image handling
 image = "0.25"
 
 # SVG rasterization
-resvg = "0.47"
+resvg = "0.48"
 
 # EXIF metadata extraction
 kamadak-exif = "0.6.1"
@@ -119,17 +119,17 @@ bzip2 = "0.6"
 # crate's pregenerated bindings instead of requiring libclang — keeps
 # the cross-compile release matrix simple.
 liblzma = { version = "0.4", default-features = false, features = ["static"] }
-zstd = "0.13"
-lz4_flex = { version = "0.13.1", default-features = false, features = ["frame"] }
+zstd = "0.14"
+lz4_flex = { version = "0.14", default-features = false, features = ["frame"] }
 # Streaming brotli decode for `.br` / `.tar.br`. Pure Rust, decompress-
 # only (already pulled transitively by `wuff` for WOFF2; promoted to a
 # direct dep here so the compression layer can call it). Brotli has no
 # magic header, so `.br` is extension-only detection — unlike every
 # other codec it can't be sniffed from stdin.
-brotli-decompressor = "5"
+brotli-decompressor = "6"
 # Runtime: decode-only (default-features = false). The root bin's
 # dev-dependencies re-add the `compress` feature for the extract test.
-sevenz-rust2 = { version = "0.21", default-features = false }
+sevenz-rust2 = { version = "0.22", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 
 # Rich Text Format parser. Small lexer/parser; covers the common Word-export
@@ -168,13 +168,13 @@ symphonia = { version = "0.6.0", features = ["all-codecs", "all-formats", "opt-s
 # API across all formats, so the objfile viewer needs no per-format
 # parser. `write` feature dropped — peek never emits object files. The
 # `wasm` feature pulls `wasmparser` so `.wasm` modules parse too.
-object = { version = "0.39.1", default-features = false, features = ["read", "std", "wasm"] }
+object = { version = "0.40", default-features = false, features = ["read", "std", "wasm"] }
 
 # Java classfile parsing (.class — JVM bytecode container). Pure Rust,
 # parse-only: constant pool, fields, methods, attributes, version.
 cafebabe = "0.9"
-cssparser = "0.37"
-cssparser-color = "0.5"
+cssparser = "0.38"
+cssparser-color = "0.6"
 
 # PEM (certificates, keys) parsing. `pem` splits a file into labelled
 # base64 blocks; `x509-parser` decodes the DER body for X.509 certs,
@@ -182,7 +182,7 @@ cssparser-color = "0.5"
 # (`.pub` files). `sha1` / `sha2` produce certificate fingerprints.
 # `x509-parser` is also a `peek-detect` dependency: DER-cert detection
 # content-verifies the ASN.1 rather than trusting magic bytes.
-pem = "3"
+pem = "4"
 x509-parser = "0.18"
 ssh-key = { version = "0.6", default-features = false, features = ["alloc", "ecdsa"] }
 sha1 = "0.11.0"

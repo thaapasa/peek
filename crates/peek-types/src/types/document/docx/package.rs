@@ -72,53 +72,53 @@ fn parse_document(
         match evt {
             Event::Start(e) => {
                 let tag = local_name(e.name());
-                match tag.as_slice() {
-                    b"p" => state = ParseState::Paragraph(ParaState::default()),
-                    b"pPr" => {
+                match tag {
+                    "p" => state = ParseState::Paragraph(ParaState::default()),
+                    "pPr" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.in_pPr = true;
                         }
                     }
-                    b"pStyle" => {
+                    "pStyle" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                         {
                             ps.heading_level = heading_level_from_style(&val);
                         }
                     }
-                    b"numPr" => {
+                    "numPr" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
                         {
                             ps.list = true;
                         }
                     }
-                    b"ilvl" => {
+                    "ilvl" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                             && let Ok(n) = val.parse::<u8>()
                         {
                             ps.list_indent = n;
                         }
                     }
-                    b"r" => {
+                    "r" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.cur_run = Some(RunState::default());
                         }
                     }
-                    b"rPr" => {
+                    "rPr" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
                             rs.in_rPr = true;
                         }
                     }
-                    b"b" => set_run_flag(&mut state, &e, |rs, v| rs.style.bold = v),
-                    b"i" => set_run_flag(&mut state, &e, |rs, v| rs.style.italic = v),
-                    b"strike" => set_run_flag(&mut state, &e, |rs, v| rs.style.strike = v),
-                    b"u" => {
+                    "b" => set_run_flag(&mut state, &e, |rs, v| rs.style.bold = v),
+                    "i" => set_run_flag(&mut state, &e, |rs, v| rs.style.italic = v),
+                    "strike" => set_run_flag(&mut state, &e, |rs, v| rs.style.strike = v),
+                    "u" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
@@ -126,33 +126,33 @@ fn parse_document(
                             // `<w:u/>` with no val or `val="single"`
                             // both mean underlined; only `none` turns
                             // it off.
-                            let val = attr_val(&e, b"val");
+                            let val = attr_val(&e, "val");
                             rs.style.underline =
                                 !matches!(val.as_deref(), Some("none" | "false" | "0"));
                         }
                     }
-                    b"color" => {
+                    "color" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                         {
                             rs.style.color = parse_hex_rgb(&val);
                         }
                     }
-                    b"hyperlink" => {
+                    "hyperlink" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.in_hyperlink_depth += 1;
                         }
                     }
-                    b"t" => {
+                    "t" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
                             rs.collecting_text = true;
                         }
                     }
-                    b"drawing" | b"pict" | b"object" => {
+                    "drawing" | "pict" | "object" => {
                         // The whole drawing subtree hides text / refs
                         // we don't care about; toggle a guard so any
                         // `<w:t>` text inside (rare — usually alt) is
@@ -162,23 +162,23 @@ fn parse_document(
                             scan_drawing_open(&mut ps.pending_image_rid, &e);
                         }
                     }
-                    b"blip" => {
+                    "blip" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.drawing_depth > 0
-                            && let Some(rid) = attr_val_ns(&e, b"embed")
+                            && let Some(rid) = attr_val_ns(&e, "embed")
                         {
                             ps.pending_image_rid = Some(rid);
                         }
                     }
-                    b"tbl" => {
+                    "tbl" => {
                         tbl_stack.push(TableState::default());
                     }
-                    b"tr" => {
+                    "tr" => {
                         if let Some(t) = tbl_stack.last_mut() {
                             t.current_row = Some(Vec::new());
                         }
                     }
-                    b"tc" => {
+                    "tc" => {
                         if let Some(t) = tbl_stack.last_mut() {
                             t.in_cell = true;
                             t.cell_paragraphs.clear();
@@ -189,54 +189,54 @@ fn parse_document(
             }
             Event::Empty(e) => {
                 let tag = local_name(e.name());
-                match tag.as_slice() {
-                    b"pStyle" => {
+                match tag {
+                    "pStyle" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                         {
                             ps.heading_level = heading_level_from_style(&val);
                         }
                     }
-                    b"ilvl" => {
+                    "ilvl" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                             && let Ok(n) = val.parse::<u8>()
                         {
                             ps.list_indent = n;
                         }
                     }
-                    b"numPr" => {
+                    "numPr" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
                         {
                             ps.list = true;
                         }
                     }
-                    b"b" => set_run_flag(&mut state, &e, |rs, v| rs.style.bold = v),
-                    b"i" => set_run_flag(&mut state, &e, |rs, v| rs.style.italic = v),
-                    b"strike" => set_run_flag(&mut state, &e, |rs, v| rs.style.strike = v),
-                    b"u" => {
+                    "b" => set_run_flag(&mut state, &e, |rs, v| rs.style.bold = v),
+                    "i" => set_run_flag(&mut state, &e, |rs, v| rs.style.italic = v),
+                    "strike" => set_run_flag(&mut state, &e, |rs, v| rs.style.strike = v),
+                    "u" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
                         {
-                            let val = attr_val(&e, b"val");
+                            let val = attr_val(&e, "val");
                             rs.style.underline =
                                 !matches!(val.as_deref(), Some("none" | "false" | "0"));
                         }
                     }
-                    b"color" => {
+                    "color" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
-                            && let Some(val) = attr_val(&e, b"val")
+                            && let Some(val) = attr_val(&e, "val")
                         {
                             rs.style.color = parse_hex_rgb(&val);
                         }
                     }
-                    b"br" => {
+                    "br" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
@@ -246,7 +246,7 @@ fn parse_document(
                             });
                         }
                     }
-                    b"tab" => {
+                    "tab" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
@@ -256,7 +256,7 @@ fn parse_document(
                             });
                         }
                     }
-                    b"cr" => {
+                    "cr" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
@@ -266,10 +266,10 @@ fn parse_document(
                             });
                         }
                     }
-                    b"blip" => {
+                    "blip" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.drawing_depth > 0
-                            && let Some(rid) = attr_val_ns(&e, b"embed")
+                            && let Some(rid) = attr_val_ns(&e, "embed")
                         {
                             ps.pending_image_rid = Some(rid);
                         }
@@ -283,10 +283,7 @@ fn parse_document(
                     && rs.collecting_text
                     && ps.drawing_depth == 0
                 {
-                    let s = t
-                        .xml10_content()
-                        .map_err(|e| anyhow!("DOCX text decode: {e}"))?
-                        .into_owned();
+                    let s = t.xml10_content().into_owned();
                     rs.runs.push(Run {
                         text: s,
                         ..rs.style.clone()
@@ -295,27 +292,27 @@ fn parse_document(
             }
             Event::End(e) => {
                 let tag = local_name(e.name());
-                match tag.as_slice() {
-                    b"pPr" => {
+                match tag {
+                    "pPr" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.in_pPr = false;
                         }
                     }
-                    b"rPr" => {
+                    "rPr" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
                             rs.in_rPr = false;
                         }
                     }
-                    b"t" => {
+                    "t" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                         {
                             rs.collecting_text = false;
                         }
                     }
-                    b"r" => {
+                    "r" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(mut rs) = ps.cur_run.take()
                         {
@@ -329,12 +326,12 @@ fn parse_document(
                             ps.runs.extend(rs.runs);
                         }
                     }
-                    b"hyperlink" => {
+                    "hyperlink" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.in_hyperlink_depth = ps.in_hyperlink_depth.saturating_sub(1);
                         }
                     }
-                    b"drawing" | b"pict" | b"object" => {
+                    "drawing" | "pict" | "object" => {
                         if let ParseState::Paragraph(ps) = &mut state {
                             ps.drawing_depth = ps.drawing_depth.saturating_sub(1);
                             if ps.drawing_depth == 0
@@ -353,7 +350,7 @@ fn parse_document(
                             }
                         }
                     }
-                    b"p" => {
+                    "p" => {
                         let para = match std::mem::replace(&mut state, ParseState::Top) {
                             ParseState::Paragraph(ps) => finish_paragraph(ps),
                             other => {
@@ -371,7 +368,7 @@ fn parse_document(
                             blocks.push(Block::Paragraph(para));
                         }
                     }
-                    b"tc" => {
+                    "tc" => {
                         if let Some(t) = tbl_stack.last_mut() {
                             t.in_cell = false;
                             let cell_paragraphs = std::mem::take(&mut t.cell_paragraphs);
@@ -380,14 +377,14 @@ fn parse_document(
                             }
                         }
                     }
-                    b"tr" => {
+                    "tr" => {
                         if let Some(t) = tbl_stack.last_mut()
                             && let Some(row) = t.current_row.take()
                         {
                             t.rows.push(row);
                         }
                     }
-                    b"tbl" => {
+                    "tbl" => {
                         if let Some(t) = tbl_stack.pop() {
                             blocks.push(Block::Table(t.rows));
                         }
@@ -474,7 +471,7 @@ fn set_run_flag(
         && let Some(rs) = ps.cur_run.as_mut()
         && rs.in_rPr
     {
-        let val = attr_val(e, b"val");
+        let val = attr_val(e, "val");
         let on = match val.as_deref() {
             None => true,
             Some(v) => !matches!(v, "0" | "false" | "off"),
@@ -489,11 +486,11 @@ fn scan_drawing_open(_pending: &mut Option<String>, _e: &quick_xml::events::Byte
     // anchor/inline fallback scraping.
 }
 
-fn local_name(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local_name(name: QName<'_>) -> &str {
+    name.local_name().into_inner()
 }
 
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<String> {
+fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
             return crate::xml::unescape_attr_value(&attr);
@@ -505,7 +502,7 @@ fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<
 /// Like [`attr_val`], but checks the attribute's local name only —
 /// good for namespaced attributes like `r:embed` where the prefix
 /// differs across files.
-fn attr_val_ns(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<String> {
+fn attr_val_ns(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
     attr_val(e, want_local)
 }
 
@@ -548,10 +545,8 @@ fn parse_core_xml(xml: &str) -> DocumentMetadata {
                 current_text.clear();
             }
             Ok(Event::Text(t)) => {
-                if current_field.is_some()
-                    && let Ok(decoded) = t.xml10_content()
-                {
-                    current_text.push_str(&decoded);
+                if current_field.is_some() {
+                    current_text.push_str(&t.xml10_content());
                 }
             }
             Ok(Event::End(_)) => {
@@ -587,13 +582,13 @@ fn core_field_from_qname(name: QName<'_>) -> Option<CoreField> {
     // Match by full prefixed name so `dc:title` doesn't collide with
     // a hypothetical `cp:title`.
     Some(match name.as_ref() {
-        b"dc:title" => CoreField::Title,
-        b"dc:creator" => CoreField::Creator,
-        b"dc:subject" => CoreField::Subject,
-        b"dc:description" => CoreField::Description,
-        b"cp:keywords" => CoreField::Keywords,
-        b"dcterms:created" => CoreField::Created,
-        b"dcterms:modified" => CoreField::Modified,
+        "dc:title" => CoreField::Title,
+        "dc:creator" => CoreField::Creator,
+        "dc:subject" => CoreField::Subject,
+        "dc:description" => CoreField::Description,
+        "cp:keywords" => CoreField::Keywords,
+        "dcterms:created" => CoreField::Created,
+        "dcterms:modified" => CoreField::Modified,
         _ => return None,
     })
 }
@@ -626,17 +621,15 @@ fn parse_image_rels(xml: &str) -> HashMap<String, String> {
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(e)) | Ok(Event::Start(e))
-                if local_name(e.name()) == b"Relationship" =>
-            {
+            Ok(Event::Empty(e)) | Ok(Event::Start(e)) if local_name(e.name()) == "Relationship" => {
                 let mut id = None;
                 let mut target = None;
                 let mut ty = None;
                 for attr in e.attributes().flatten() {
                     match attr.key.as_ref() {
-                        b"Id" => id = crate::xml::unescape_attr_value(&attr),
-                        b"Target" => target = crate::xml::unescape_attr_value(&attr),
-                        b"Type" => ty = crate::xml::unescape_attr_value(&attr),
+                        "Id" => id = crate::xml::unescape_attr_value(&attr),
+                        "Target" => target = crate::xml::unescape_attr_value(&attr),
+                        "Type" => ty = crate::xml::unescape_attr_value(&attr),
                         _ => {}
                     }
                 }

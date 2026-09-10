@@ -43,9 +43,7 @@ fn elf_needed<Elf: FileHeader<Endian = Endianness>>(data: &[u8]) -> Vec<String> 
         .unwrap_or_default();
     entries
         .iter()
-        // object 0.39 widened the `DT_*` constants to `i64`; `tag32`
-        // still yields `Option<i32>`, so narrow the constant to compare.
-        .filter(|d| d.tag32(endian) == Some(elf::DT_NEEDED as i32))
+        .filter(|d| d.tag(endian) == elf::DT_NEEDED)
         .filter_map(|d| d.string(endian, strings).ok())
         .map(|name| String::from_utf8_lossy(name).into_owned())
         .collect()
@@ -84,7 +82,7 @@ fn pe_imports(data: &[u8]) -> Vec<String> {
         return Vec::new();
     };
     let mut out: Vec<String> = Vec::new();
-    for import in imports {
+    for import in imports.flatten() {
         let lib = String::from_utf8_lossy(import.library()).into_owned();
         if !lib.is_empty() && !out.contains(&lib) {
             out.push(lib);

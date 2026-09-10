@@ -74,15 +74,15 @@ fn parse_slide_order(xml: &str) -> Vec<String> {
     let mut in_list = false;
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) if local_name(e.name()) == b"sldIdLst" => in_list = true,
-            Ok(Event::End(e)) if local_name(e.name()) == b"sldIdLst" => in_list = false,
+            Ok(Event::Start(e)) if local_name(e.name()) == "sldIdLst" => in_list = true,
+            Ok(Event::End(e)) if local_name(e.name()) == "sldIdLst" => in_list = false,
             Ok(Event::Empty(e)) | Ok(Event::Start(e))
-                if in_list && local_name(e.name()) == b"sldId" =>
+                if in_list && local_name(e.name()) == "sldId" =>
             {
                 // `<p:sldId>` carries both a plain `id` (the slide number)
                 // and `r:id` (the relationship) — they share the local
                 // name "id", so match the full prefixed `r:id` key.
-                if let Some(rid) = attr_val_full(&e, b"r:id") {
+                if let Some(rid) = attr_val_full(&e, "r:id") {
                     order.push(rid);
                 }
             }
@@ -103,15 +103,13 @@ fn parse_rels(xml: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Empty(e)) | Ok(Event::Start(e))
-                if local_name(e.name()) == b"Relationship" =>
-            {
+            Ok(Event::Empty(e)) | Ok(Event::Start(e)) if local_name(e.name()) == "Relationship" => {
                 let mut id = None;
                 let mut target = None;
                 for attr in e.attributes().flatten() {
                     match attr.key.as_ref() {
-                        b"Id" => id = crate::xml::unescape_attr_value(&attr),
-                        b"Target" => target = crate::xml::unescape_attr_value(&attr),
+                        "Id" => id = crate::xml::unescape_attr_value(&attr),
+                        "Target" => target = crate::xml::unescape_attr_value(&attr),
                         _ => {}
                     }
                 }
@@ -164,9 +162,8 @@ fn parse_slide(xml: &str, image_rels: &HashMap<String, String>) -> Doc {
                 if s.in_txbody
                     && s.collecting_text
                     && let Some(run) = s.cur_run.as_mut()
-                    && let Ok(decoded) = t.xml10_content()
                 {
-                    run.text.push_str(&decoded);
+                    run.text.push_str(&t.xml10_content());
                 }
             }
             Event::End(e) => handle_close(&mut s, &e),
@@ -228,26 +225,26 @@ fn handle_open(
     image_rels: &HashMap<String, String>,
     empty: bool,
 ) {
-    match local_name(e.name()).as_slice() {
-        b"sp" => s.shape_is_title = false,
-        b"ph" => {
-            if matches!(attr_val(e, b"type").as_deref(), Some("title" | "ctrTitle")) {
+    match local_name(e.name()) {
+        "sp" => s.shape_is_title = false,
+        "ph" => {
+            if matches!(attr_val(e, "type").as_deref(), Some("title" | "ctrTitle")) {
                 s.shape_is_title = true;
             }
         }
-        b"txBody" => s.in_txbody = true,
-        b"p" if s.in_txbody => {
+        "txBody" => s.in_txbody = true,
+        "p" if s.in_txbody => {
             s.cur_para = Some(ParaAcc::default());
         }
-        b"pPr" if s.in_txbody => {
+        "pPr" if s.in_txbody => {
             if let Some(p) = s.cur_para.as_mut()
-                && let Some(lvl) = attr_val(e, b"lvl").and_then(|v| v.parse::<u8>().ok())
+                && let Some(lvl) = attr_val(e, "lvl").and_then(|v| v.parse::<u8>().ok())
             {
                 p.lvl = lvl;
             }
         }
-        b"r" if s.in_txbody => s.cur_run = Some(RunAcc::default()),
-        b"rPr" if s.in_txbody => {
+        "r" if s.in_txbody => s.cur_run = Some(RunAcc::default()),
+        "rPr" if s.in_txbody => {
             s.in_rpr = true;
             if let Some(run) = s.cur_run.as_mut() {
                 apply_run_props(&mut run.style, e);
@@ -256,8 +253,8 @@ fn handle_open(
                 s.in_rpr = false;
             }
         }
-        b"t" if s.in_txbody => s.collecting_text = true,
-        b"br" if s.in_txbody => {
+        "t" if s.in_txbody => s.collecting_text = true,
+        "br" if s.in_txbody => {
             if let Some(run) = s.cur_run.as_mut() {
                 run.text.push('\n');
             } else if let Some(p) = s.cur_para.as_mut() {
@@ -267,15 +264,15 @@ fn handle_open(
                 });
             }
         }
-        b"srgbClr" if s.in_rpr => {
+        "srgbClr" if s.in_rpr => {
             if let Some(run) = s.cur_run.as_mut()
-                && let Some(rgb) = attr_val(e, b"val").as_deref().and_then(parse_hex_rgb)
+                && let Some(rgb) = attr_val(e, "val").as_deref().and_then(parse_hex_rgb)
             {
                 run.style.color = Some(rgb);
             }
         }
-        b"blip" => {
-            if let Some(rid) = attr_val(e, b"embed") {
+        "blip" => {
+            if let Some(rid) = attr_val(e, "embed") {
                 let name = image_rels
                     .get(&rid)
                     .map(|t| basename(t).to_string())
@@ -296,11 +293,11 @@ fn handle_open(
 }
 
 fn handle_close(s: &mut SlideWalk, e: &quick_xml::events::BytesEnd<'_>) {
-    match local_name(e.name()).as_slice() {
-        b"txBody" => s.in_txbody = false,
-        b"rPr" => s.in_rpr = false,
-        b"t" => s.collecting_text = false,
-        b"r" => {
+    match local_name(e.name()) {
+        "txBody" => s.in_txbody = false,
+        "rPr" => s.in_rpr = false,
+        "t" => s.collecting_text = false,
+        "r" => {
             if let Some(run) = s.cur_run.take()
                 && let Some(p) = s.cur_para.as_mut()
                 && !run.text.is_empty()
@@ -311,7 +308,7 @@ fn handle_close(s: &mut SlideWalk, e: &quick_xml::events::BytesEnd<'_>) {
                 });
             }
         }
-        b"p" if s.in_txbody => {
+        "p" if s.in_txbody => {
             if let Some(p) = s.cur_para.take()
                 && !p.runs.is_empty()
             {
@@ -329,18 +326,18 @@ fn handle_close(s: &mut SlideWalk, e: &quick_xml::events::BytesEnd<'_>) {
 
 /// Read the bold / italic / underline attributes off an `<a:rPr>`.
 fn apply_run_props(style: &mut Run, e: &quick_xml::events::BytesStart<'_>) {
-    if let Some(v) = attr_val(e, b"b") {
+    if let Some(v) = attr_val(e, "b") {
         style.bold = is_truthy(&v);
     }
-    if let Some(v) = attr_val(e, b"i") {
+    if let Some(v) = attr_val(e, "i") {
         style.italic = is_truthy(&v);
     }
-    if let Some(v) = attr_val(e, b"u") {
+    if let Some(v) = attr_val(e, "u") {
         // `u` is an enum (sng / dbl / heavy / none / …); anything but
         // none means underlined.
         style.underline = !matches!(v.as_str(), "none");
     }
-    if let Some(v) = attr_val(e, b"strike") {
+    if let Some(v) = attr_val(e, "strike") {
         // `strike` is sngStrike / dblStrike / noStrike.
         style.strike = !matches!(v.as_str(), "noStrike");
     }
@@ -369,10 +366,8 @@ fn parse_core_xml(xml: &str) -> PresentationMetadata {
                 text.clear();
             }
             Ok(Event::Text(t)) => {
-                if field.is_some()
-                    && let Ok(decoded) = t.xml10_content()
-                {
-                    text.push_str(&decoded);
+                if field.is_some() {
+                    text.push_str(&t.xml10_content());
                 }
             }
             Ok(Event::End(_)) => {
@@ -405,12 +400,12 @@ enum CoreField {
 
 fn core_field_from_qname(name: QName<'_>) -> Option<CoreField> {
     Some(match name.as_ref() {
-        b"dc:title" => CoreField::Title,
-        b"dc:creator" => CoreField::Creator,
-        b"dc:subject" => CoreField::Subject,
-        b"cp:keywords" => CoreField::Keywords,
-        b"dcterms:created" => CoreField::Created,
-        b"dcterms:modified" => CoreField::Modified,
+        "dc:title" => CoreField::Title,
+        "dc:creator" => CoreField::Creator,
+        "dc:subject" => CoreField::Subject,
+        "cp:keywords" => CoreField::Keywords,
+        "dcterms:created" => CoreField::Created,
+        "dcterms:modified" => CoreField::Modified,
         _ => return None,
     })
 }
@@ -440,13 +435,11 @@ fn parse_app_application(xml: &str) -> Option<String> {
     let mut text = String::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) if local_name(e.name()) == b"Application" => capturing = true,
+            Ok(Event::Start(e)) if local_name(e.name()) == "Application" => capturing = true,
             Ok(Event::Text(t)) if capturing => {
-                if let Ok(decoded) = t.xml10_content() {
-                    text.push_str(&decoded);
-                }
+                text.push_str(&t.xml10_content());
             }
-            Ok(Event::End(e)) if local_name(e.name()) == b"Application" => break,
+            Ok(Event::End(e)) if local_name(e.name()) == "Application" => break,
             Ok(Event::Eof) => break,
             Err(_) => break,
             _ => {}
@@ -461,11 +454,11 @@ fn parse_app_application(xml: &str) -> Option<String> {
 // Small helpers
 // ---------------------------------------------------------------------------
 
-fn local_name(name: QName<'_>) -> Vec<u8> {
-    name.local_name().as_ref().to_vec()
+fn local_name(name: QName<'_>) -> &str {
+    name.local_name().into_inner()
 }
 
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<String> {
+fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.local_name().as_ref() == want_local {
             return crate::xml::unescape_attr_value(&attr);
@@ -476,7 +469,7 @@ fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &[u8]) -> Option<
 
 /// Like [`attr_val`] but matches the full prefixed key — for attributes
 /// whose local name collides (`r:id` vs the plain `id` on `<p:sldId>`).
-fn attr_val_full(e: &quick_xml::events::BytesStart<'_>, want_key: &[u8]) -> Option<String> {
+fn attr_val_full(e: &quick_xml::events::BytesStart<'_>, want_key: &str) -> Option<String> {
     for attr in e.attributes().flatten() {
         if attr.key.as_ref() == want_key {
             return crate::xml::unescape_attr_value(&attr);

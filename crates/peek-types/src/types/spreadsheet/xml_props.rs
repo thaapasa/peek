@@ -42,18 +42,18 @@ enum Field {
 
 /// Map a prefixed element name to the metadata field it feeds. Covers
 /// both the OOXML core-properties vocabulary and the ODS `meta.xml` one.
-fn field_for(name: &[u8]) -> Option<Field> {
+fn field_for(name: &str) -> Option<Field> {
     match name {
-        b"dc:title" => Some(Field::Title),
+        "dc:title" => Some(Field::Title),
         // OOXML uses `dc:creator`; ODS prefers `meta:initial-creator`
         // but also carries `dc:creator` — first non-empty wins.
-        b"dc:creator" | b"meta:initial-creator" => Some(Field::Creator),
-        b"dc:subject" => Some(Field::Subject),
-        b"dc:description" => Some(Field::Description),
-        b"cp:keywords" | b"meta:keyword" => Some(Field::Keywords),
-        b"dcterms:created" | b"meta:creation-date" => Some(Field::Created),
+        "dc:creator" | "meta:initial-creator" => Some(Field::Creator),
+        "dc:subject" => Some(Field::Subject),
+        "dc:description" => Some(Field::Description),
+        "cp:keywords" | "meta:keyword" => Some(Field::Keywords),
+        "dcterms:created" | "meta:creation-date" => Some(Field::Created),
         // OOXML modified = `dcterms:modified`; ODS = `dc:date`.
-        b"dcterms:modified" | b"dc:date" => Some(Field::Modified),
+        "dcterms:modified" | "dc:date" => Some(Field::Modified),
         _ => None,
     }
 }
@@ -72,9 +72,7 @@ fn parse_props(xml: &str) -> DocumentMetadata {
                 text.clear();
             }
             Ok(Event::Text(t)) if current.is_some() => {
-                if let Ok(decoded) = t.xml10_content() {
-                    text.push_str(&decoded);
-                }
+                text.push_str(&t.xml10_content());
             }
             Ok(Event::End(_)) => {
                 if let Some(field) = current.take() {

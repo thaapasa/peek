@@ -14,7 +14,7 @@
 use std::collections::{HashMap, HashSet};
 
 use cssparser::{
-    AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserInput, ParserState,
+    AtRuleParser, CowRcStr, DeclarationParser, ParseError, Parser, ParserState,
     QualifiedRuleParser, RuleBodyItemParser, RuleBodyParser, StyleSheetParser, Token,
 };
 use cssparser_color::{Color, hsl_to_rgb, hwb_to_rgb};
@@ -44,12 +44,11 @@ const MAX_SWATCHES: usize = 64;
 const MAX_DEPTH: usize = 64;
 
 /// cssparser's error payload — unused; the scanner accepts every rule.
-type E<'i> = ParseError<'i, ()>;
+type E = ParseError<()>;
 
 /// Parse `text` as CSS and collect [`CssStats`].
 pub fn gather(text: &str) -> CssStats {
-    let mut input = ParserInput::new(text);
-    let mut parser = Parser::new(&mut input);
+    let mut parser = Parser::new(text);
     let mut scanner = CssScanner::default();
     {
         let sheet = StyleSheetParser::new(&mut parser, &mut scanner);
@@ -137,12 +136,12 @@ impl<'i> DeclarationParser<'i> for CssScanner {
     type Declaration = ();
     type Error = ();
 
-    fn parse_value<'t>(
+    fn parse_value(
         &mut self,
         name: CowRcStr<'i>,
-        input: &mut Parser<'i, 't>,
+        input: &mut Parser<'i>,
         _start: &ParserState,
-    ) -> Result<(), E<'i>> {
+    ) -> Result<(), E> {
         if name.starts_with("--") {
             self.custom_props.insert(name.as_ref().to_string());
         }
@@ -195,17 +194,17 @@ impl<'i> QualifiedRuleParser<'i> for CssScanner {
     type QualifiedRule = ();
     type Error = ();
 
-    fn parse_prelude<'t>(&mut self, input: &mut Parser<'i, 't>) -> Result<SelectorSummary, E<'i>> {
+    fn parse_prelude(&mut self, input: &mut Parser<'i>) -> Result<SelectorSummary, E> {
         // `input` is delimited to the selector list (before `{`).
         Ok(parse_selectors(input))
     }
 
-    fn parse_block<'t>(
+    fn parse_block(
         &mut self,
         prelude: SelectorSummary,
         _start: &ParserState,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<(), E<'i>> {
+        input: &mut Parser<'i>,
+    ) -> Result<(), E> {
         // Inside `@keyframes`, the "qualified rules" are `0% { … }` stops,
         // not style rules — count nothing, but still scan their bodies.
         if !self.in_keyframes {
@@ -249,12 +248,8 @@ fn parse_selectors(input: &mut Parser) -> SelectorSummary {
     // Inside a run of consecutive colons (`::`), which counts once.
     let mut colon_run = false;
 
-    loop {
-        let token = match input.next() {
-            Ok(t) => t.clone(),
-            Err(_) => break,
-        };
-        match token {
+    while let Ok(token) = input.next() {
+        match token.clone() {
             Token::Comma => {
                 if started {
                     sum.selectors += 1;
@@ -334,11 +329,11 @@ impl<'i> AtRuleParser<'i> for CssScanner {
     type AtRule = ();
     type Error = ();
 
-    fn parse_prelude<'t>(
+    fn parse_prelude(
         &mut self,
         name: CowRcStr<'i>,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<AtPrelude, E<'i>> {
+        input: &mut Parser<'i>,
+    ) -> Result<AtPrelude, E> {
         let prelude = match strip_vendor(&name.to_ascii_lowercase()) {
             "import" => AtPrelude::Import(scan_first_url(input)),
             "media" => AtPrelude::Media,
@@ -367,12 +362,12 @@ impl<'i> AtRuleParser<'i> for CssScanner {
         Ok(())
     }
 
-    fn parse_block<'t>(
+    fn parse_block(
         &mut self,
         prelude: AtPrelude,
         _start: &ParserState,
-        input: &mut Parser<'i, 't>,
-    ) -> Result<(), E<'i>> {
+        input: &mut Parser<'i>,
+    ) -> Result<(), E> {
         match prelude {
             AtPrelude::Media => {
                 self.media_query_count += 1;
@@ -422,12 +417,8 @@ impl<'i> RuleBodyItemParser<'i, (), ()> for CssScanner {
 /// Find the first string / `url()` target in an `@import` prelude.
 fn scan_first_url(input: &mut Parser) -> Option<String> {
     let mut found: Option<String> = None;
-    loop {
-        let token = match input.next() {
-            Ok(t) => t.clone(),
-            Err(_) => break,
-        };
-        match token {
+    while let Ok(token) = input.next() {
+        match token.clone() {
             Token::QuotedString(s) | Token::UnquotedUrl(s) => {
                 found.get_or_insert_with(|| s.as_ref().to_string());
             }

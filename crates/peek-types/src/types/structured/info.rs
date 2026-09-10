@@ -605,13 +605,12 @@ fn xml_stats(s: &str) -> Option<StructuredStats> {
         if depth == 1
             && let Some(e) = &name_attrs
         {
-            let name_bytes = e.name().as_ref().to_vec();
-            let name = String::from_utf8_lossy(&name_bytes).into_owned();
+            let name = e.name().as_ref().to_string();
             if xml_root.is_none() {
                 xml_root = Some(name);
             }
             for attr in e.attributes().with_checks(false).flatten() {
-                let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+                let key = attr.key.as_ref().to_string();
                 if key == "xmlns" || key.starts_with("xmlns:") {
                     let val = crate::xml::unescape_attr_value(&attr).unwrap_or_default();
                     let entry = if key == "xmlns" {
