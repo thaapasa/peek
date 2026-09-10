@@ -19,6 +19,7 @@ use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words};
 use crate::types::presentation::{Deck, PresentationMetadata};
+use crate::xml::{attr_local, local_name};
 
 pub fn open(source: &InputSource) -> Result<Deck> {
     let mut zip = open_zip(source, "ODP")?;
@@ -53,8 +54,10 @@ fn parse_content(xml: &str) -> Vec<Doc> {
                 "page" => page = Some(PageAcc::default()),
                 "notes" => notes_depth += 1,
                 "frame" if notes_depth == 0 => {
-                    frame_is_title =
-                        matches!(attr_val(&e, "class").as_deref(), Some("title" | "subtitle"));
+                    frame_is_title = matches!(
+                        attr_local(&e, "class").as_deref(),
+                        Some("title" | "subtitle")
+                    );
                 }
                 "p" | "h" if page.is_some() && notes_depth == 0 => {
                     para = Some(ParaAcc {
@@ -72,7 +75,7 @@ fn parse_content(xml: &str) -> Vec<Doc> {
                     }
                 }
                 "image" if page.is_some() && notes_depth == 0 => {
-                    if let (Some(pg), Some(href)) = (page.as_mut(), attr_val(&e, "href")) {
+                    if let (Some(pg), Some(href)) = (page.as_mut(), attr_local(&e, "href")) {
                         pg.image_count += 1;
                         pg.blocks.push(Block::Paragraph(Paragraph {
                             runs: vec![Run {
@@ -239,19 +242,6 @@ fn assign_meta(meta: &mut PresentationMetadata, field: MetaField, value: String)
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-fn local_name(name: QName<'_>) -> &str {
-    name.local_name().into_inner()
-}
-
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if attr.key.local_name().as_ref() == want_local {
-            return crate::xml::unescape_attr_value(&attr);
-        }
-    }
-    None
-}
 
 fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)

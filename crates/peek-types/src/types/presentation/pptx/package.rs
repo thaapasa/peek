@@ -22,6 +22,7 @@ use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words};
 use crate::types::presentation::{Deck, PresentationMetadata};
+use crate::xml::{attr_full, attr_local, local_name};
 
 pub fn open(source: &InputSource) -> Result<Deck> {
     let mut zip = open_zip(source, "PPTX")?;
@@ -82,7 +83,7 @@ fn parse_slide_order(xml: &str) -> Vec<String> {
                 // `<p:sldId>` carries both a plain `id` (the slide number)
                 // and `r:id` (the relationship) — they share the local
                 // name "id", so match the full prefixed `r:id` key.
-                if let Some(rid) = attr_val_full(&e, "r:id") {
+                if let Some(rid) = attr_full(&e, "r:id") {
                     order.push(rid);
                 }
             }
@@ -228,7 +229,7 @@ fn handle_open(
     match local_name(e.name()) {
         "sp" => s.shape_is_title = false,
         "ph" => {
-            if matches!(attr_val(e, "type").as_deref(), Some("title" | "ctrTitle")) {
+            if matches!(attr_local(e, "type").as_deref(), Some("title" | "ctrTitle")) {
                 s.shape_is_title = true;
             }
         }
@@ -238,7 +239,7 @@ fn handle_open(
         }
         "pPr" if s.in_txbody => {
             if let Some(p) = s.cur_para.as_mut()
-                && let Some(lvl) = attr_val(e, "lvl").and_then(|v| v.parse::<u8>().ok())
+                && let Some(lvl) = attr_local(e, "lvl").and_then(|v| v.parse::<u8>().ok())
             {
                 p.lvl = lvl;
             }
@@ -266,13 +267,13 @@ fn handle_open(
         }
         "srgbClr" if s.in_rpr => {
             if let Some(run) = s.cur_run.as_mut()
-                && let Some(rgb) = attr_val(e, "val").as_deref().and_then(parse_hex_rgb)
+                && let Some(rgb) = attr_local(e, "val").as_deref().and_then(parse_hex_rgb)
             {
                 run.style.color = Some(rgb);
             }
         }
         "blip" => {
-            if let Some(rid) = attr_val(e, "embed") {
+            if let Some(rid) = attr_local(e, "embed") {
                 let name = image_rels
                     .get(&rid)
                     .map(|t| basename(t).to_string())
@@ -326,18 +327,18 @@ fn handle_close(s: &mut SlideWalk, e: &quick_xml::events::BytesEnd<'_>) {
 
 /// Read the bold / italic / underline attributes off an `<a:rPr>`.
 fn apply_run_props(style: &mut Run, e: &quick_xml::events::BytesStart<'_>) {
-    if let Some(v) = attr_val(e, "b") {
+    if let Some(v) = attr_local(e, "b") {
         style.bold = is_truthy(&v);
     }
-    if let Some(v) = attr_val(e, "i") {
+    if let Some(v) = attr_local(e, "i") {
         style.italic = is_truthy(&v);
     }
-    if let Some(v) = attr_val(e, "u") {
+    if let Some(v) = attr_local(e, "u") {
         // `u` is an enum (sng / dbl / heavy / none / …); anything but
         // none means underlined.
         style.underline = !matches!(v.as_str(), "none");
     }
-    if let Some(v) = attr_val(e, "strike") {
+    if let Some(v) = attr_local(e, "strike") {
         // `strike` is sngStrike / dblStrike / noStrike.
         style.strike = !matches!(v.as_str(), "noStrike");
     }
@@ -453,30 +454,6 @@ fn parse_app_application(xml: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-
-fn local_name(name: QName<'_>) -> &str {
-    name.local_name().into_inner()
-}
-
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if attr.key.local_name().as_ref() == want_local {
-            return crate::xml::unescape_attr_value(&attr);
-        }
-    }
-    None
-}
-
-/// Like [`attr_val`] but matches the full prefixed key — for attributes
-/// whose local name collides (`r:id` vs the plain `id` on `<p:sldId>`).
-fn attr_val_full(e: &quick_xml::events::BytesStart<'_>, want_key: &str) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if attr.key.as_ref() == want_key {
-            return crate::xml::unescape_attr_value(&attr);
-        }
-    }
-    None
-}
 
 fn basename(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)

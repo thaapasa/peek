@@ -94,40 +94,20 @@ impl PeekThemeName {
         }
     }
 
-    /// Cycle to the next theme.
+    /// Cycle to the next theme. Ring order = `value_variants()` order.
     pub fn next(self) -> Self {
-        match self {
-            Self::IdeaDark => Self::IdeaLight,
-            Self::IdeaLight => Self::SolarizedLight,
-            Self::SolarizedLight => Self::GithubLight,
-            Self::GithubLight => Self::VscodeDarkModern,
-            Self::VscodeDarkModern => Self::VscodeDark2026,
-            Self::VscodeDark2026 => Self::VscodeMonokai,
-            Self::VscodeMonokai => Self::Iceberg,
-            Self::Iceberg => Self::IcebergLight,
-            Self::IcebergLight => Self::Graveyard,
-            Self::Graveyard => Self::CandyFloss,
-            Self::CandyFloss => Self::Victorian,
-            Self::Victorian => Self::IdeaDark,
-        }
+        self.step(1)
     }
 
     /// Cycle to the previous theme.
     pub fn prev(self) -> Self {
-        match self {
-            Self::IdeaDark => Self::Victorian,
-            Self::IdeaLight => Self::IdeaDark,
-            Self::SolarizedLight => Self::IdeaLight,
-            Self::GithubLight => Self::SolarizedLight,
-            Self::VscodeDarkModern => Self::GithubLight,
-            Self::VscodeDark2026 => Self::VscodeDarkModern,
-            Self::VscodeMonokai => Self::VscodeDark2026,
-            Self::Iceberg => Self::VscodeMonokai,
-            Self::IcebergLight => Self::Iceberg,
-            Self::Graveyard => Self::IcebergLight,
-            Self::CandyFloss => Self::Graveyard,
-            Self::Victorian => Self::CandyFloss,
-        }
+        self.step(-1)
+    }
+
+    fn step(self, delta: isize) -> Self {
+        let all = <Self as clap::ValueEnum>::value_variants();
+        let idx = all.iter().position(|t| *t == self).expect("variant listed");
+        all[(idx as isize + delta).rem_euclid(all.len() as isize) as usize]
     }
 
     pub fn help_text(self) -> &'static str {
@@ -181,4 +161,21 @@ impl clap::ValueEnum for PeekThemeName {
 pub fn load_embedded_theme(source: &str) -> Theme {
     let mut cursor = Cursor::new(source.as_bytes());
     ThemeSet::load_from_reader(&mut cursor).expect("failed to parse embedded theme")
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::ValueEnum;
+
+    use super::PeekThemeName;
+
+    #[test]
+    fn next_prev_ring_covers_every_variant() {
+        let all = PeekThemeName::value_variants();
+        for (i, &t) in all.iter().enumerate() {
+            assert_eq!(t.next(), all[(i + 1) % all.len()]);
+            assert_eq!(t.prev().next(), t);
+            assert_eq!(t.next().prev(), t);
+        }
+    }
 }

@@ -15,8 +15,9 @@
 //! size resources) is ignored.
 
 use quick_xml::events::Event;
-use quick_xml::name::QName;
 use quick_xml::reader::Reader;
+
+use crate::xml::local_name;
 
 /// One blkx array entry: its descriptive name and the decoded mish bytes.
 pub struct BlkxEntry {
@@ -63,7 +64,7 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
 
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(e)) => match local(e.name()) {
+            Ok(Event::Start(e)) => match local_name(e.name()) {
                 "key" => {
                     scalar = Some(Scalar::Key);
                     text.clear();
@@ -97,7 +98,7 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
                     text.push_str(&t.xml10_content());
                 }
             }
-            Ok(Event::End(e)) => match local(e.name()) {
+            Ok(Event::End(e)) => match local_name(e.name()) {
                 "key" => {
                     cur_key = text.trim().to_string();
                     if cur_key == "blkx" {
@@ -158,10 +159,6 @@ pub fn extract_blkx(xml: &str) -> Vec<BlkxEntry> {
     }
 
     out
-}
-
-fn local<'a>(name: QName<'a>) -> &'a str {
-    name.local_name().into_inner()
 }
 
 #[cfg(test)]

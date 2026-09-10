@@ -29,6 +29,7 @@ use quick_xml::reader::Reader;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
+use crate::xml::{attr_local, local_name};
 
 pub fn open(source: &InputSource) -> Result<Doc> {
     let mut zip = open_zip(source, "ODT")?;
@@ -325,8 +326,8 @@ fn styles_handle_start(
 ) {
     match tag {
         "style" => {
-            sw.current_name = attr_val_local(e, "name");
-            sw.current_family = attr_val_local(e, "family");
+            sw.current_name = attr_local(e, "name");
+            sw.current_family = attr_local(e, "family");
             sw.current_attrs = StyleAttrs::default();
             sw.current_para_heading = sw
                 .current_name
@@ -334,19 +335,19 @@ fn styles_handle_start(
                 .and_then(heading_level_from_style_name);
         }
         "text-properties" => {
-            if let Some(v) = attr_val_local(e, "font-weight") {
+            if let Some(v) = attr_local(e, "font-weight") {
                 sw.current_attrs.bold = Some(v == "bold");
             }
-            if let Some(v) = attr_val_local(e, "font-style") {
+            if let Some(v) = attr_local(e, "font-style") {
                 sw.current_attrs.italic = Some(v == "italic" || v == "oblique");
             }
-            if let Some(v) = attr_val_local(e, "text-underline-style") {
+            if let Some(v) = attr_local(e, "text-underline-style") {
                 sw.current_attrs.underline = Some(!matches!(v.as_str(), "none" | ""));
             }
-            if let Some(v) = attr_val_local(e, "text-line-through-style") {
+            if let Some(v) = attr_local(e, "text-line-through-style") {
                 sw.current_attrs.strike = Some(!matches!(v.as_str(), "none" | ""));
             }
-            if let Some(v) = attr_val_local(e, "color") {
+            if let Some(v) = attr_local(e, "color") {
                 sw.current_attrs.color = parse_hex_color(&v);
             }
         }
@@ -434,7 +435,7 @@ fn body_after_start(
 ) {
     match tag {
         "p" => {
-            let style_name = attr_val_local(e, "style-name");
+            let style_name = attr_local(e, "style-name");
             let mut ps = ParaState::default();
             if let Some(name) = &style_name {
                 if let Some(attrs) = styles.text.get(name) {
@@ -447,11 +448,11 @@ fn body_after_start(
             *state = WalkState::Paragraph(ps);
         }
         "h" => {
-            let outline = attr_val_local(e, "outline-level")
+            let outline = attr_local(e, "outline-level")
                 .and_then(|v| v.parse::<u8>().ok())
                 .filter(|n| (1..=6).contains(n))
                 .unwrap_or(1);
-            let style_name = attr_val_local(e, "style-name");
+            let style_name = attr_local(e, "style-name");
             let mut ps = ParaState {
                 heading_level: Some(outline),
                 ..ParaState::default()
@@ -480,7 +481,7 @@ fn body_after_start_in_para(
     };
     match tag {
         "span" => {
-            let attrs = attr_val_local(e, "style-name")
+            let attrs = attr_local(e, "style-name")
                 .and_then(|n| styles.text.get(&n).cloned())
                 .unwrap_or_default();
             ps.style_stack.push(attrs);
@@ -507,14 +508,12 @@ fn handle_empty(tag: &str, e: &BytesStart<'_>, state: &mut WalkState, _image_cou
         "line-break" => push_text(ps, "\n"),
         "tab" => push_text(ps, "    "),
         "s" => {
-            let n: usize = attr_val_local(e, "c")
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(1);
+            let n: usize = attr_local(e, "c").and_then(|v| v.parse().ok()).unwrap_or(1);
             push_text(ps, &" ".repeat(n));
         }
         "image" => {
             if ps.drawing_depth > 0
-                && let Some(href) = attr_val_local(e, "href")
+                && let Some(href) = attr_local(e, "href")
             {
                 let basename = href.rsplit('/').next().unwrap_or(&href).to_string();
                 ps.pending_image_name = Some(basename);
@@ -685,19 +684,6 @@ fn assign_meta(meta: &mut DocumentMetadata, field: MetaField, value: String) {
 // ---------------------------------------------------------------------------
 // Small helpers
 // ---------------------------------------------------------------------------
-
-fn local_name(name: QName<'_>) -> &str {
-    name.local_name().into_inner()
-}
-
-fn attr_val_local(e: &BytesStart<'_>, want_local: &str) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if attr.key.local_name().as_ref() == want_local {
-            return crate::xml::unescape_attr_value(&attr);
-        }
-    }
-    None
-}
 
 /// Style names from MS Office and LibreOffice both prefix headings as
 /// `Heading_20_N` (the `_20_` is the encoded space). Match that and

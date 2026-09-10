@@ -18,7 +18,7 @@ cargo clippy --workspace     # ALL crates — bare skips member crates
 **Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and
 skips library-crates.
 
-**Toolchain pinned in `rust-toolchain.toml`** (1.97.1). Local + CI + release all resolve there;
+**Toolchain pinned in `rust-toolchain.toml`.** Local + CI + release all resolve there;
 rustup installs it on demand. Bump it in its own commit — a new rustc means new clippy lints.
 MSRV (`rust-version` in root `Cargo.toml`) is a separate, lower floor and isn't CI-verified.
 

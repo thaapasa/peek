@@ -22,10 +22,11 @@ exclude = ["fuzz"]
 [workspace.package]
 version = "1.0.0"
 edition = "2024"
-# Honest floor: dep-driven. image/tiff/time/plist (post 2026-06 update)
-# require 1.88; our own code needs only 1.87 (stdlib items in lines.rs,
-# csv/parse.rs, font, glyph_atlas const ctx). Floor follows the deps.
-rust-version = "1.88"
+# Honest floor: dep-driven. sevenz-rust2 0.22 requires 1.93; our own code
+# needs only 1.88 (`as_chunks`, stdlib items in lines.rs, csv/parse.rs, font,
+# glyph_atlas const ctx). Floor follows the deps. Not CI-verified — re-check
+# with `cargo metadata` after dep bumps.
+rust-version = "1.93"
 authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/thaapasa/peek"

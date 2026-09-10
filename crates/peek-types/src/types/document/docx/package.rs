@@ -20,6 +20,7 @@ use quick_xml::reader::Reader;
 use crate::types::archive::reader::{open_zip, read_zip_entry_str};
 use crate::types::document::DocumentMetadata;
 use crate::types::document::ast::{Block, Doc, Paragraph, Run, count_words, merge_paragraphs};
+use crate::xml::{attr_local, local_name};
 
 pub(crate) fn open(source: &InputSource) -> Result<Doc> {
     let mut zip = open_zip(source, "DOCX")?;
@@ -82,7 +83,7 @@ fn parse_document(
                     "pStyle" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                         {
                             ps.heading_level = heading_level_from_style(&val);
                         }
@@ -97,7 +98,7 @@ fn parse_document(
                     "ilvl" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                             && let Ok(n) = val.parse::<u8>()
                         {
                             ps.list_indent = n;
@@ -126,7 +127,7 @@ fn parse_document(
                             // `<w:u/>` with no val or `val="single"`
                             // both mean underlined; only `none` turns
                             // it off.
-                            let val = attr_val(&e, "val");
+                            let val = attr_local(&e, "val");
                             rs.style.underline =
                                 !matches!(val.as_deref(), Some("none" | "false" | "0"));
                         }
@@ -135,7 +136,7 @@ fn parse_document(
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                         {
                             rs.style.color = parse_hex_rgb(&val);
                         }
@@ -165,7 +166,7 @@ fn parse_document(
                     "blip" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.drawing_depth > 0
-                            && let Some(rid) = attr_val_ns(&e, "embed")
+                            && let Some(rid) = attr_local(&e, "embed")
                         {
                             ps.pending_image_rid = Some(rid);
                         }
@@ -193,7 +194,7 @@ fn parse_document(
                     "pStyle" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                         {
                             ps.heading_level = heading_level_from_style(&val);
                         }
@@ -201,7 +202,7 @@ fn parse_document(
                     "ilvl" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.in_pPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                             && let Ok(n) = val.parse::<u8>()
                         {
                             ps.list_indent = n;
@@ -222,7 +223,7 @@ fn parse_document(
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
                         {
-                            let val = attr_val(&e, "val");
+                            let val = attr_local(&e, "val");
                             rs.style.underline =
                                 !matches!(val.as_deref(), Some("none" | "false" | "0"));
                         }
@@ -231,7 +232,7 @@ fn parse_document(
                         if let ParseState::Paragraph(ps) = &mut state
                             && let Some(rs) = ps.cur_run.as_mut()
                             && rs.in_rPr
-                            && let Some(val) = attr_val(&e, "val")
+                            && let Some(val) = attr_local(&e, "val")
                         {
                             rs.style.color = parse_hex_rgb(&val);
                         }
@@ -269,7 +270,7 @@ fn parse_document(
                     "blip" => {
                         if let ParseState::Paragraph(ps) = &mut state
                             && ps.drawing_depth > 0
-                            && let Some(rid) = attr_val_ns(&e, "embed")
+                            && let Some(rid) = attr_local(&e, "embed")
                         {
                             ps.pending_image_rid = Some(rid);
                         }
@@ -471,7 +472,7 @@ fn set_run_flag(
         && let Some(rs) = ps.cur_run.as_mut()
         && rs.in_rPr
     {
-        let val = attr_val(e, "val");
+        let val = attr_local(e, "val");
         let on = match val.as_deref() {
             None => true,
             Some(v) => !matches!(v, "0" | "false" | "off"),
@@ -484,26 +485,6 @@ fn scan_drawing_open(_pending: &mut Option<String>, _e: &quick_xml::events::Byte
     // No work on open — the `<a:blip r:embed="…"/>` event is what
     // surfaces the rId. Hook kept as an extension point for future
     // anchor/inline fallback scraping.
-}
-
-fn local_name(name: QName<'_>) -> &str {
-    name.local_name().into_inner()
-}
-
-fn attr_val(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
-    for attr in e.attributes().flatten() {
-        if attr.key.local_name().as_ref() == want_local {
-            return crate::xml::unescape_attr_value(&attr);
-        }
-    }
-    None
-}
-
-/// Like [`attr_val`], but checks the attribute's local name only —
-/// good for namespaced attributes like `r:embed` where the prefix
-/// differs across files.
-fn attr_val_ns(e: &quick_xml::events::BytesStart<'_>, want_local: &str) -> Option<String> {
-    attr_val(e, want_local)
 }
 
 fn heading_level_from_style(style: &str) -> Option<u8> {

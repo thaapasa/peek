@@ -21,6 +21,7 @@ use zip::ZipArchive;
 
 use crate::types::archive::reader::{self, ReadSeek};
 use crate::types::ebook::Metadata;
+use crate::xml::local_name;
 
 /// Bookkeeping for one EPUB. Built once per file open; chapter bodies
 /// are still pulled lazily via [`read_entry`].
@@ -229,10 +230,6 @@ fn assign_dc(meta: &mut Metadata, field: DcField, value: String) {
     if slot.is_none() {
         *slot = Some(value);
     }
-}
-
-fn local_name(name: QName<'_>) -> &str {
-    name.local_name().into_inner()
 }
 
 fn resolve_spine(parsed: &ParsedOpf, opf_dir: &str) -> Vec<Chapter> {
