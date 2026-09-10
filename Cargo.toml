@@ -20,7 +20,7 @@ exclude = ["fuzz"]
 # = true` to inherit). One version line for the whole workspace — the release
 # pipeline bumps this; see docs/release.md.
 [workspace.package]
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 # Honest floor: dep-driven. sevenz-rust2 0.22 requires 1.93; our own code
 # needs only 1.88 (`as_chunks`, stdlib items in lines.rs, csv/parse.rs, font,
