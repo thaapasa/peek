@@ -24,6 +24,10 @@ twenty mixed ones.
 Be skeptical of the code — and equally skeptical of your own findings
 before they go in the report.
 
+## Usage
+
+Run `/checkup`. No arguments. Runs in a forked agent. Follow the steps below in order and end with the Step 6 report.
+
 ## Step 1: Load context
 
 Read these to understand the *intended* design — then judge the code

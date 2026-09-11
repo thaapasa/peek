@@ -3,3 +3,4 @@
 /.pdfium/*
 !/.pdfium/VERSION
 /manual/book
+.claudelint-cache/

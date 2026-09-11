@@ -18,6 +18,10 @@ actually a problem" is a tax on the review. If you are not confident a
 finding is a real problem *right now*, drop it. Be skeptical of the code
 — and equally skeptical of your own findings before they go in.
 
+## Usage
+
+Run `/scoped-review [scope]` — scope is a path, commit range, PR, branch, or "working tree"; omitted scope resolves per Step 1. Also invoked by the `code-reviewer` agent. Follow the steps below in order and end with the Step 5 report.
+
 ## Step 1: Determine scope
 
 What changes are under review. Resolve in this order; stop at the first

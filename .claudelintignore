@@ -1,0 +1,3 @@
+# claudelint walks the whole tree; cargo output is huge and irrelevant.
+target/
+fuzz/target/

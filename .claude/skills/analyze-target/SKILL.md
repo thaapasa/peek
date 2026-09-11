@@ -1,6 +1,7 @@
 ---
-name: analyze
+name: analyze-target
 description: Analyze a target — a crate, a module within a crate, or a single file — for its surface within peek, its place in the architecture, its API, its correctness, and its efficiency. Produces an overview followed by findings. Catches obvious bugs, not a deep edge-case bug hunt.
+argument-hint: crate | module | file
 disable-model-invocation: true
 context: fork
 agent: general-purpose
@@ -30,6 +31,10 @@ one padded with speculation. Every finding the user dismisses as "not
 actually a problem" is a tax on the analysis. If you are not confident a
 finding is real *right now*, drop it. Be skeptical of the code — and
 equally skeptical of your own findings before they go in.
+
+## Usage
+
+Run `/analyze-target <crate | module | file>`. Runs in a forked agent. Follow the steps below in order and end with the Step 4 report.
 
 ## Step 1: Resolve the target and load context
 

@@ -28,6 +28,10 @@ files, do not run `cargo fmt`, do not open `AskUserQuestion` to pick a
 fix — even for findings that look trivial or that the forks flagged as
 "clear drift". Reporting is the whole job.
 
+## Usage
+
+Run `/docs-checkup`. No arguments. Runs in a forked agent. Follow the steps below in order and end with the Step 5 report.
+
 ## Step 1: Load context
 
 Read these to understand what the docs are *supposed* to look like and

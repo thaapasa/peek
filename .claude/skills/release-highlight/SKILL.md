@@ -62,7 +62,7 @@ user reviews and pastes it into the GitHub release workflow input manually
 - If only one user-visible thing landed, one sentence is the answer. Don't
   pad to three.
 - If nothing user-visible landed, say so plainly: "No user-visible changes
-  since <tag> — release is internal cleanup only."
+  since `<tag>` — release is internal cleanup only."
 
 ## Examples
 
