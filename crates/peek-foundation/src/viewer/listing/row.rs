@@ -9,7 +9,7 @@ use std::time::SystemTime;
 use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
 
-use crate::info::{format_archive_mtime_zoned, format_size_human, thousands_sep};
+use crate::info::{format_archive_mtime_zoned, format_size_human, synthesized_mode, thousands_sep};
 
 /// Width (chars) of the size column, including thousands separators.
 pub const SIZE_COL_WIDTH: usize = 12;
@@ -33,11 +33,11 @@ pub enum SizeCell {
 /// Render the 10-char `drwxr-xr-x`-style permission string. Caller
 /// supplies the type character (`'d'` / `'-'` / `'l'` / `'?'`); when
 /// `mode` is unset (sources that don't carry mode bits at all, or
-/// implicit tree parents), fall back to typical defaults — `rwxr-xr-x`
-/// for dirs, `rw-r--r--` for files — so the column stays informative
-/// instead of dissolving into a wall of `?`s.
+/// implicit tree parents), fall back to [`synthesized_mode`] defaults
+/// so the column stays informative instead of dissolving into a wall
+/// of `?`s.
 pub fn format_perms(type_ch: char, mode: Option<u32>, is_dir: bool) -> String {
-    let mode = mode.unwrap_or(if is_dir { 0o755 } else { 0o644 });
+    let mode = mode.unwrap_or_else(|| synthesized_mode(is_dir, type_ch == 'l', false));
     let mut s = String::with_capacity(PERMS_COL_WIDTH);
     s.push(type_ch);
     for (r, w, x) in [

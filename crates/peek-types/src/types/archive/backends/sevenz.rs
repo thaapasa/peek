@@ -8,8 +8,7 @@ use super::CappedList;
 use crate::types::archive::reader::ReadSeek;
 use crate::viewer::listing::{EntryMtime, FlatEntry};
 
-/// Windows file-attribute bit for read-only files. Used to translate the
-/// 7z native attribute set into a meaningful Unix permission preview.
+/// Windows file-attribute bit for read-only files.
 const FILE_ATTRIBUTE_READONLY: u32 = 0x0000_0001;
 
 pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
@@ -25,17 +24,9 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
         } else {
             None
         };
-        // 7z stores Windows attributes, not Unix mode bits. Synthesize a
-        // representative mode so the perms column is informative: dirs
-        // get `rwxr-xr-x`, read-only files `r--r--r--`, others `rw-r--r--`.
-        let attrs = entry.windows_attributes();
-        let mode = Some(if is_dir {
-            0o755
-        } else if attrs & FILE_ATTRIBUTE_READONLY != 0 {
-            0o444
-        } else {
-            0o644
-        });
+        // 7z stores Windows attributes, not unix mode; see `synthesized_mode`.
+        let readonly = entry.windows_attributes() & FILE_ATTRIBUTE_READONLY != 0;
+        let mode = Some(crate::info::synthesized_mode(is_dir, false, readonly));
         if !out.push(FlatEntry {
             path,
             size: entry.size(),

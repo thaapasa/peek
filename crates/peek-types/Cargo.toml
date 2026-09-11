@@ -87,4 +87,3 @@ peek-foundation = { workspace = true, features = ["testing"] }
 insta = { workspace = true }
 # 7z writer (compress feature) for the multi-block archive extract test.
 sevenz-rust2 = { workspace = true, features = ["compress"] }
-tempfile = { workspace = true }

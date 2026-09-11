@@ -234,27 +234,42 @@ pub fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     ))
 }
 
-// Windows exposes only a readonly bit, not a full unix mode. Synthesize an
-// rwx string so the permissions column paints/aligns the same as the listing
-// modes (which also fake unix defaults when mode is absent). Base defaults
-// match `listing::row::format_perms`: 0o755 for dirs, 0o644 for files; with
-// the readonly attribute we drop all write bits.
+// Windows exposes only a readonly bit, not a full unix mode; synthesize
+// one so the permissions column paints/aligns the same as the listing.
 #[cfg(not(unix))]
 pub fn format_permissions_from_meta(meta: &fs::Metadata) -> Option<String> {
     let ft = meta.file_type();
-    let (type_char, base_mode) = if ft.is_dir() {
-        ('d', 0o755)
+    let type_char = if ft.is_dir() {
+        'd'
     } else if ft.is_symlink() {
-        ('l', 0o777)
+        'l'
     } else {
-        ('-', 0o644)
+        '-'
     };
-    let mode = if meta.permissions().readonly() {
-        base_mode & !0o222
-    } else {
-        base_mode
-    };
+    let mode = synthesized_mode(ft.is_dir(), ft.is_symlink(), meta.permissions().readonly());
     Some(format_unix_permissions(type_char, mode))
+}
+
+/// Unix-shape mode for entries that carry no mode bits — Windows
+/// metadata (only a readonly flag), container TOCs (7z), implicit tree
+/// parents. Typical defaults: `0o755` dirs, `0o777` symlinks, `0o644`
+/// files; `readonly` drops every write bit on non-dirs. On dirs it is
+/// ignored: Windows' READONLY attribute on a folder marks a customised
+/// view, not a write lock. Single source for the info panel, the 7z
+/// backend and both listing renderers so they paint the same rwx string.
+pub fn synthesized_mode(is_dir: bool, is_symlink: bool, readonly: bool) -> u32 {
+    let base = if is_dir {
+        0o755
+    } else if is_symlink {
+        0o777
+    } else {
+        0o644
+    };
+    if readonly && !is_dir {
+        base & !0o222
+    } else {
+        base
+    }
 }
 
 #[cfg(unix)]
@@ -306,52 +321,46 @@ fn format_unix_permissions(type_char: char, mode: u32) -> String {
 }
 
 #[cfg(test)]
-#[cfg(windows)]
+mod synth_tests {
+    use super::synthesized_mode;
+
+    #[test]
+    fn defaults_by_kind() {
+        assert_eq!(synthesized_mode(false, false, false), 0o644);
+        assert_eq!(synthesized_mode(true, false, false), 0o755);
+        assert_eq!(synthesized_mode(false, true, false), 0o777);
+    }
+
+    #[test]
+    fn readonly_drops_write_bits() {
+        assert_eq!(synthesized_mode(false, false, true), 0o444);
+        assert_eq!(synthesized_mode(true, false, true), 0o755);
+        assert_eq!(synthesized_mode(false, true, true), 0o555);
+    }
+}
+
+// Smoke test for the `cfg(not(unix))` wiring above; CI runs it on Windows.
+#[cfg(test)]
+#[cfg(not(unix))]
 mod windows_tests {
     use std::fs;
-
-    use tempfile::tempdir;
 
     use super::format_permissions_from_meta;
 
     #[test]
-    fn writable_file_renders_rwx_form() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("writable.txt");
-        fs::write(&path, b"x").unwrap();
-        let meta = fs::metadata(&path).unwrap();
-        assert_eq!(
-            format_permissions_from_meta(&meta).as_deref(),
-            Some("-rw-r--r--")
-        );
-    }
-
-    #[test]
-    fn readonly_file_drops_write_bits() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("readonly.txt");
+    fn readonly_file_renders_r_only() {
+        let path = std::env::temp_dir().join(format!("peek-info-ro-{}.txt", std::process::id()));
         fs::write(&path, b"x").unwrap();
         let mut perms = fs::metadata(&path).unwrap().permissions();
         perms.set_readonly(true);
         fs::set_permissions(&path, perms).unwrap();
-        let meta = fs::metadata(&path).unwrap();
-        let got = format_permissions_from_meta(&meta);
-        // Restore writable so tempdir cleanup can remove the file.
-        let mut perms = meta.permissions();
+        let got = format_permissions_from_meta(&fs::metadata(&path).unwrap());
+        let mut perms = fs::metadata(&path).unwrap().permissions();
         #[allow(clippy::permissions_set_readonly_false)]
         perms.set_readonly(false);
         fs::set_permissions(&path, perms).unwrap();
+        fs::remove_file(&path).unwrap();
         assert_eq!(got.as_deref(), Some("-r--r--r--"));
-    }
-
-    #[test]
-    fn directory_gets_dir_prefix() {
-        let dir = tempdir().unwrap();
-        let meta = fs::metadata(dir.path()).unwrap();
-        assert_eq!(
-            format_permissions_from_meta(&meta).as_deref(),
-            Some("drwxr-xr-x")
-        );
     }
 }
 

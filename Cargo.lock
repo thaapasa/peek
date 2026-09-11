@@ -2060,7 +2060,6 @@ dependencies = [
  "serde",
  "serde_json",
  "syntect",
- "tempfile",
  "unicode-width",
 ]
 
