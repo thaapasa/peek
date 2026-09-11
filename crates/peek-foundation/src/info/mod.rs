@@ -1,3 +1,10 @@
+//! Info base: `FileInfo` + `InfoExtras`, the `--info` gather/render
+//! entry points, and the shared unix-permissions helpers. Perms string
+//! rendering ([`format_unix_permissions`]), painting
+//! ([`paint_permissions`]) and mode synthesis ([`synthesized_mode`]) live
+//! here as the single source — the listing renderers delegate, they
+//! don't re-derive.
+
 use std::fs;
 use std::time::SystemTime;
 
@@ -16,8 +23,8 @@ pub use json::to_json;
 /// (macro vs. type namespace) the way serde's `Serialize` does.
 pub use peek_foundation_derive::InfoView;
 pub use render::{
-    RenderOptions, format_size_human, paint_count, push_field, push_section_header, render,
-    thousands_sep,
+    RenderOptions, format_size_human, paint_count, paint_permissions, push_field,
+    push_section_header, render, thousands_sep,
 };
 pub use rows::{InfoRow, push_entry, push_parse_errors, push_rows, rows_to_json};
 pub use section::{InfoNode, InfoValue, InfoView, MaybeZero, render_info};
@@ -292,7 +299,11 @@ fn unix_type_char(ft: &fs::FileType) -> char {
     }
 }
 
-fn format_unix_permissions(type_char: char, mode: u32) -> String {
+/// Render the 10-char `ls -l` permission string: `type_char` (`d`/`-`/`l`/
+/// `b`/`c`/`p`/`s`, or `?` for unknown) then three rwx triplets. Single
+/// renderer for the info panel and both listings — see
+/// [`crate::viewer::listing::row::format_perms`] for the listing wrapper.
+pub fn format_unix_permissions(type_char: char, mode: u32) -> String {
     let mut s = String::with_capacity(10);
     s.push(type_char);
 
@@ -339,6 +350,37 @@ mod synth_tests {
     }
 }
 
+// Smoke test for the `cfg(unix)` wiring above: real mode bits + type char
+// reach the renderer. CI runs it on Linux.
+#[cfg(test)]
+#[cfg(unix)]
+mod unix_tests {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+
+    use super::format_permissions_from_meta;
+
+    #[test]
+    fn mode_bits_and_type_char_reach_renderer() {
+        let dir = std::env::temp_dir().join(format!("peek-info-unix-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("f");
+        fs::write(&file, b"x").unwrap();
+        fs::set_permissions(&file, fs::Permissions::from_mode(0o4750)).unwrap();
+        let link = dir.join("l");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+
+        let got_file = format_permissions_from_meta(&fs::metadata(&file).unwrap());
+        let got_dir = format_permissions_from_meta(&fs::metadata(&dir).unwrap());
+        let got_link = format_permissions_from_meta(&fs::symlink_metadata(&link).unwrap());
+        fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(got_file.as_deref(), Some("-rwsr-x---"));
+        assert!(got_dir.as_deref().unwrap().starts_with('d'));
+        assert!(got_link.as_deref().unwrap().starts_with('l'));
+    }
+}
+
 // Smoke test for the `cfg(not(unix))` wiring above; CI runs it on Windows.
 #[cfg(test)]
 #[cfg(not(unix))]
@@ -364,8 +406,8 @@ mod windows_tests {
     }
 }
 
+// Pure renderer: runs on every CI runner, Windows included.
 #[cfg(test)]
-#[cfg(unix)]
 mod tests {
     use super::format_unix_permissions;
 

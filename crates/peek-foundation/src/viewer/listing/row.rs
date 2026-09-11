@@ -1,20 +1,22 @@
 //! Row-painting primitives shared by the file-shaped listing sources —
 //! [`super::tree_source::TreeListSource`] for container TOCs and the
 //! directory listing for on-disk browsing. Both render identical columns
-//! (perms, size, mtime, name), so column widths, palette, and formatters
-//! live here and stay in sync by construction.
+//! (perms, size, mtime, name). Size + mtime widths, palette, and
+//! formatters live here; perms rendering delegates to [`crate::info`]
+//! so listings and the info panel paint one rwx string.
 
 use std::time::SystemTime;
 
 use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
 
-use crate::info::{format_archive_mtime_zoned, format_size_human, synthesized_mode, thousands_sep};
+use crate::info::{
+    format_archive_mtime_zoned, format_size_human, format_unix_permissions, paint_permissions,
+    synthesized_mode, thousands_sep,
+};
 
 /// Width (chars) of the size column, including thousands separators.
 pub const SIZE_COL_WIDTH: usize = 12;
-/// Width (chars) of the permissions column. 10-char `drwxr-xr-x` form.
-pub const PERMS_COL_WIDTH: usize = 10;
 /// Below this terminal width the mtime column is dropped to leave room
 /// for the path.
 pub const MTIME_HIDE_BELOW_COLS: usize = 80;
@@ -30,47 +32,16 @@ pub enum SizeCell {
     Unknown,
 }
 
-/// Render the 10-char `drwxr-xr-x`-style permission string. Caller
-/// supplies the type character (`'d'` / `'-'` / `'l'` / `'?'`); when
-/// `mode` is unset (sources that don't carry mode bits at all, or
-/// implicit tree parents), fall back to [`synthesized_mode`] defaults
-/// so the column stays informative instead of dissolving into a wall
-/// of `?`s.
-pub fn format_perms(type_ch: char, mode: Option<u32>, is_dir: bool) -> String {
-    let mode = mode.unwrap_or_else(|| synthesized_mode(is_dir, type_ch == 'l', false));
-    let mut s = String::with_capacity(PERMS_COL_WIDTH);
-    s.push(type_ch);
-    for (r, w, x) in [
-        (0o400, 0o200, 0o100),
-        (0o040, 0o020, 0o010),
-        (0o004, 0o002, 0o001),
-    ] {
-        s.push(if mode & r != 0 { 'r' } else { '-' });
-        s.push(if mode & w != 0 { 'w' } else { '-' });
-        s.push(if mode & x != 0 { 'x' } else { '-' });
-    }
-    s
-}
-
-/// Paint a perms string with per-char colors and the dim separator
-/// between owner/group/other triplets.
-pub fn paint_perms(perms: &str, theme: &PeekTheme) -> String {
-    let mut out = String::new();
-    for (i, ch) in perms.chars().enumerate() {
-        let color = match ch {
-            'r' => theme.value,
-            'w' => theme.accent,
-            'x' => theme.heading,
-            'd' | 'l' => theme.heading,
-            '-' => lerp_color(theme.muted, theme.background, 0.3),
-            _ => theme.foreground,
-        };
-        out.push_str(&theme.paint(&ch.to_string(), color));
-        if (i == 3 || i == 6) && i + 1 < PERMS_COL_WIDTH {
-            out.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
-        }
-    }
-    out
+/// Render the 10-char `drwxr-xr-x`-style permission string for a listing
+/// row. Caller supplies the `ls -l` type character (`'d'` / `'-'` / `'l'` /
+/// `'?'`); when `mode` is unset (sources without mode bits, implicit tree
+/// parents) fall back to [`synthesized_mode`] defaults keyed off that same
+/// character, so the column stays informative instead of dissolving into
+/// a wall of `?`s. Rendering delegates to [`format_unix_permissions`] so
+/// listing and info panel agree on special bits.
+pub fn format_perms(type_ch: char, mode: Option<u32>) -> String {
+    let mode = mode.unwrap_or_else(|| synthesized_mode(type_ch == 'd', type_ch == 'l', false));
+    format_unix_permissions(type_ch, mode)
 }
 
 /// Right-pad the size-cell raw text to [`SIZE_COL_WIDTH`].
@@ -221,7 +192,7 @@ pub fn file_row_left(
     mtime_text: impl FnOnce() -> String,
 ) -> Vec<String> {
     let mut left = vec![
-        paint_perms(perms, theme),
+        paint_permissions(perms, theme),
         paint_size(size, size_bytes, is_dir, theme),
     ];
     if term_cols >= MTIME_HIDE_BELOW_COLS {
@@ -255,6 +226,17 @@ mod tests {
         assert_eq!(format_size(SizeCell::Unknown, true).trim(), "?");
     }
 
+    /// Listing perms go through the info renderer, so special bits paint
+    /// the same `s`/`t` overlay as the info panel.
+    #[test]
+    fn perms_delegate_special_bits_and_fallback() {
+        assert_eq!(format_perms('d', Some(0o1777)), "drwxrwxrwt");
+        assert_eq!(format_perms('-', Some(0o4755)), "-rwsr-xr-x");
+        assert_eq!(format_perms('d', None), "drwxr-xr-x");
+        assert_eq!(format_perms('l', None), "lrwxrwxrwx");
+        assert_eq!(format_perms('-', None), "-rw-r--r--");
+    }
+
     /// The mtime column is the only width-gated cell: present at and above
     /// [`MTIME_HIDE_BELOW_COLS`], dropped below it. Pin the breakpoint here
     /// so both file-shaped sources stay aligned through the one helper.
@@ -262,7 +244,7 @@ mod tests {
     fn mtime_column_gated_on_term_width() {
         let tm = plain_theme();
         let theme = tm.peek_theme();
-        let perms = format_perms('-', None, false);
+        let perms = format_perms('-', None);
         let size = format_size(SizeCell::Bytes(42), false);
         let mtime = || "2026-06-10 12:00".to_string();
 
@@ -301,7 +283,7 @@ mod tests {
     fn mtime_text_not_formatted_when_column_hidden() {
         let tm = plain_theme();
         let theme = tm.peek_theme();
-        let perms = format_perms('-', None, false);
+        let perms = format_perms('-', None);
         let size = format_size(SizeCell::Bytes(0), false);
         let mut called = false;
         file_row_left(

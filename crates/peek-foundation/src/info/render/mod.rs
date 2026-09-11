@@ -77,6 +77,35 @@ pub(super) fn paint_count_u64(count: u64, theme: &PeekTheme) -> String {
     theme.paint(&thousands_sep(count), color)
 }
 
+/// Paint the 10-char `ls -l` permission string from
+/// [`super::format_unix_permissions`]: type char, then rwx triplets with a
+/// dim `─` after each. Shared by the info panel and both listings.
+pub fn paint_permissions(perms: &str, theme: &PeekTheme) -> String {
+    let dim = lerp_color(theme.muted, theme.background, 0.3);
+    let mut out = String::new();
+    for (i, ch) in perms.chars().enumerate() {
+        let color = match (i, ch) {
+            (0, '-') => dim,
+            // Type char (`d`/`l`/`b`/`c`/`p`/`s`/`?`), whatever it is.
+            (0, _) => theme.heading,
+            (_, 'r') => theme.value,
+            (_, 'w') => theme.accent,
+            (_, 'x') => theme.heading,
+            // Special bits — accent so they pop. Capital S/T means the
+            // execute bit is *not* set, which is more surprising than the
+            // lowercase form, but a single color keeps the row legible.
+            (_, 's' | 'S' | 't' | 'T') => theme.accent,
+            (_, '-') => dim,
+            _ => theme.foreground,
+        };
+        out.push_str(&theme.paint(&ch.to_string(), color));
+        if i == 3 || i == 6 {
+            out.push_str(&theme.paint("\u{2500}", lerp_color(theme.muted, theme.background, 0.5)));
+        }
+    }
+    out
+}
+
 fn count_color(count: usize, theme: &PeekTheme) -> Color {
     if count == 0 {
         return theme.muted;

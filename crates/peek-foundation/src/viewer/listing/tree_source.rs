@@ -16,6 +16,7 @@ use peek_theme::PeekTheme;
 use super::entry::{Entry, EntryKind, EntryMtime};
 use super::row::{self, SizeCell};
 use super::source::{ListSource, NameCell, RowCells};
+use crate::info::paint_permissions;
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 pub struct TreeListSource {
@@ -109,7 +110,7 @@ impl ListSource for TreeListSource {
 
     fn row_cells(&self, idx: usize, ctx: &RenderCtx) -> RowCells {
         let row = &self.rows[idx];
-        let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode, row.is_dir);
+        let perms = row::format_perms(if row.is_dir { 'd' } else { '-' }, row.mode);
         let size = row::format_size(
             if row.is_dir {
                 SizeCell::Dir
@@ -143,12 +144,12 @@ impl ListSource for TreeListSource {
     fn flat_line(&self, idx: usize, theme: &PeekTheme) -> Option<String> {
         let row = &self.rows[idx];
         let path = row.inner_path.as_ref()?;
-        let perms = row::format_perms('-', row.mode, false);
+        let perms = row::format_perms('-', row.mode);
         // `--list` pipe output stays exact bytes (the toggle is interactive).
         let size = row::format_size(SizeCell::Bytes(row.size), false);
         let safe_path = peek_io::sanitize_terminal_controls(path);
         Some(row::compose_row(
-            &row::paint_perms(&perms, theme),
+            &paint_permissions(&perms, theme),
             &row::paint_size(&size, row.size, false, theme),
             None,
             &theme.paint(&safe_path, theme.foreground),

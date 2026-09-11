@@ -14,6 +14,7 @@
 use peek_theme::PeekTheme;
 
 use super::read::{DirEntry, DirEntryKind};
+use crate::info::paint_permissions;
 use crate::viewer::listing::row::{self, SizeCell};
 use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
@@ -140,7 +141,7 @@ impl ListSource for DirListSource {
         let safe_name = peek_io::sanitize_terminal_controls(&entry.name);
         let painted_name = theme.paint(&format!("{safe_name}{suffix}"), theme.foreground);
         Some(row::compose_row(
-            &row::paint_perms(&perms, theme),
+            &paint_permissions(&perms, theme),
             &row::paint_size(&size, entry.size, is_dir, theme),
             None,
             &painted_name,
@@ -155,7 +156,7 @@ fn format_perms(entry: &DirEntry) -> String {
         (false, DirEntryKind::File) => '-',
         (false, DirEntryKind::Other) => '?',
     };
-    row::format_perms(type_ch, entry.mode, entry.kind == DirEntryKind::Dir)
+    row::format_perms(type_ch, entry.mode)
 }
 
 fn format_size(entry: &DirEntry, human: bool) -> String {
