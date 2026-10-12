@@ -843,6 +843,11 @@ impl Mode for RowsTableMode {
         let body_start = self.body_start();
         let loaded = self.source.loaded();
         for rec_idx in body_start..loaded {
+            // Windowed sources hold one window; page each row in before
+            // printing it. A no-op for rows already resident.
+            if self.source.ensure_row(rec_idx).is_err() {
+                break;
+            }
             if self.source.row_is_malformed(rec_idx) {
                 // Whole-row marker — print mode collapses a malformed
                 // record to one spanning line rather than per-column.
@@ -1764,6 +1769,71 @@ mod tests {
             segs.iter().any(|(t, _)| t == "no match (partial scan)"),
             "zero-hit truncated scan must say partial: {segs:?}"
         );
+    }
+
+    /// Windowed [`RowSource`]: holds only the row last ensured, like a
+    /// sliding window shrunk to one row. `served` counts distinct rows
+    /// handed out.
+    struct WindowRows {
+        total: usize,
+        resident: usize,
+        cells: Vec<Option<String>>,
+        served: Rc<std::cell::RefCell<std::collections::BTreeSet<usize>>>,
+    }
+
+    impl RowSource for WindowRows {
+        fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+            self.resident = idx;
+            self.cells = vec![Some(format!("row{idx}"))];
+            Ok(self.total)
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            Ok(())
+        }
+        fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+            (idx == self.resident).then(|| {
+                self.served.borrow_mut().insert(idx);
+                self.cells.as_slice()
+            })
+        }
+        fn loaded(&self) -> usize {
+            self.total
+        }
+        fn total(&self) -> Option<usize> {
+            Some(self.total)
+        }
+        fn column_count(&self) -> usize {
+            1
+        }
+    }
+
+    /// The print path must page every row of a windowed source in, not
+    /// print only the resident window.
+    #[test]
+    fn print_pulls_every_windowed_row() {
+        let file_info = synthetic_file_info();
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme: &theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 40,
+            term_rows: usize::MAX,
+        };
+        let served = Rc::default();
+        let source = WindowRows {
+            total: 5,
+            resident: 0,
+            cells: vec![Some("row0".into())],
+            served: Rc::clone(&served),
+        };
+        let mut mode = RowsTableMode::new(Box::new(source), vec![Alignment::Left], false, "T");
+        served.borrow_mut().clear();
+        mode.render_to_pipe(&ctx, &mut PrintOutput::stdout())
+            .unwrap();
+        assert_eq!(served.borrow().len(), 5);
     }
 
     // --- Row cursor ---------------------------------------------------------
