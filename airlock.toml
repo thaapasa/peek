@@ -1,0 +1,9 @@
+[packs]
+alpine = { version = "1", args = { allow-apk = true } }
+claude = { version = "1", args = { acp = true } }
+git = { version = "1" }
+rust = { version = "1", args = { allow-cargo = true, toolchain = "stable" } }
+
+[clipboard]
+copy = true
+paste = false
