@@ -12,7 +12,7 @@ use peek_io::InputSource;
 
 use super::cells::{self, RowPath};
 use super::env::LmdbEnv;
-use super::format::{DbRecord, F_DUPDATA, F_SUBDATA};
+use super::format::{DbRecord, F_DUPDATA, F_SUBDATA, V10};
 use super::tree::{self, ValueRef};
 use crate::extract::{ExtractError, Extracted};
 
@@ -54,16 +54,18 @@ fn resolve_db(env: &LmdbEnv, path: &RowPath, key: &str) -> Result<DbRecord, Extr
     let Some(name) = &path.db else {
         return Ok(env.meta.main);
     };
-    // 1.0 stores names NUL-terminated; 0.9 doesn't.
+    // 1.0 stores names NUL-terminated; 0.9 doesn't. Try the native spelling
+    // first: both descents run before any full scan of MAIN.
     let mut nul_name = name.to_vec();
     nul_name.push(0);
-    let main = &env.meta.main;
-    let node = match tree::find(env, main, name).map_err(ExtractError::Other)? {
-        Some(node) => node,
-        None => tree::find(env, main, &nul_name)
-            .map_err(ExtractError::Other)?
-            .ok_or_else(|| ExtractError::NotFound(key.to_string()))?,
+    let names: [&[u8]; 2] = if env.variant == V10 {
+        [&nul_name, name]
+    } else {
+        [name, &nul_name]
     };
+    let node = tree::find_any(env, &env.meta.main, &names)
+        .map_err(ExtractError::Other)?
+        .ok_or_else(|| ExtractError::NotFound(key.to_string()))?;
     if node.flags & F_SUBDATA == 0 || node.flags & F_DUPDATA != 0 {
         return Err(ExtractError::NotFound(key.to_string()));
     }

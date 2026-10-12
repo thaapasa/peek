@@ -127,6 +127,9 @@ CSV search is scoped to a single cell — a query that would span the delimiter 
 columns yields nothing. `n` / `p` cycle through matches and pan / scroll to bring each
 match's cell into view.
 
+LMDB row tables add a row cursor. `Up` / `Down` move it instead of scrolling, `Enter` opens the
+selected value as its own file, and `e` extracts it. See [LMDB databases](file-types/lmdb.md).
+
 ## Multi-page / multi-chapter (PDF, EPUB, CBZ)
 
 | Key       | Action                                            |

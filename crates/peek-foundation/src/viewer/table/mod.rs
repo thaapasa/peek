@@ -21,11 +21,23 @@ pub mod rows_mode;
 pub use mode::TableMode;
 
 /// Sliding-window size in rows, shared by every windowed [`RowSource`]
-/// (CSV streaming + SQLite contents). 1000 rows fit comfortably in
+/// (CSV streaming, SQLite contents, LMDB rows). 1000 rows fit comfortably in
 /// memory for any realistic column count and keep window refills
 /// infrequent under normal scrolling (≈ 25 viewports of typical
 /// terminal height between refills).
 pub const WINDOW_SIZE: usize = 1000;
+
+/// First row of a [`WINDOW_SIZE`] window covering `target`: centred on it
+/// for equal scroll room both ways, pulled back near the end so the window
+/// stays full, and never below `floor` (rows held outside the window).
+/// `total` is the row count, `None` while still unknown.
+pub fn window_start(target: usize, total: Option<usize>, floor: usize) -> usize {
+    let start = target.saturating_sub(WINDOW_SIZE / 2).max(floor);
+    match total {
+        Some(t) => start.min(t.saturating_sub(WINDOW_SIZE).max(floor)),
+        None => start,
+    }
+}
 
 /// One structured table: fixed column layout + rows of typed cells, plus
 /// an optional one-line notice shown above the body.
@@ -132,4 +144,30 @@ pub fn fit_columns(specs: &[(&'static str, Align)], rows: &[Vec<Cell>]) -> Vec<C
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn window_centres_on_target() {
+        assert_eq!(window_start(5000, Some(10_000), 0), 4500);
+        assert_eq!(window_start(5000, None, 0), 4500);
+    }
+
+    #[test]
+    fn window_stays_full_near_the_end() {
+        assert_eq!(window_start(9990, Some(10_000), 0), 9000);
+        assert_eq!(window_start(9990, Some(10_000), 1), 9000);
+    }
+
+    #[test]
+    fn window_respects_floor() {
+        assert_eq!(window_start(10, Some(10_000), 0), 0);
+        assert_eq!(window_start(10, Some(10_000), 1), 1);
+        assert_eq!(window_start(10, None, 100), 100);
+        // Fewer rows than a window: start at the floor.
+        assert_eq!(window_start(50, Some(60), 1), 1);
+    }
 }

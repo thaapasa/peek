@@ -25,9 +25,9 @@ use rusqlite::types::ValueRef;
 
 use crate::types::sqlite::reader::SqliteReader;
 use crate::types::sqlite::sql::quote_ident;
-use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
+use crate::viewer::table::{WINDOW_SIZE, window_start};
 
 pub struct SqliteRowSet {
     reader: SqliteReader,
@@ -111,10 +111,7 @@ impl SqliteRowSet {
             self.window.clear();
             return Ok(());
         }
-        let half = WINDOW_SIZE / 2;
-        let raw_start = target_body.saturating_sub(half);
-        let max_start = self.total_body_rows.saturating_sub(WINDOW_SIZE);
-        let start = min(raw_start, max_start);
+        let start = window_start(target_body, Some(self.total_body_rows), 0);
         let limit = min(WINDOW_SIZE, self.total_body_rows - start);
         let rows = fetch_window(
             &self.reader.conn,

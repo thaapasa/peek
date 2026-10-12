@@ -458,7 +458,7 @@ pub fn int_le(b: &[u8]) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -520,6 +520,38 @@ mod tests {
         let data = node_abs + 11 + usize::from(v.even_keys);
         page[data..data + 2].copy_from_slice(b"ok");
         Page::new(Bytes::from(page), v).unwrap()
+    }
+
+    /// A LEAF2 page of `n` packed `ksize`-byte keys (key `i` = `[i; ksize]`),
+    /// laid out per `v`.
+    pub(crate) fn leaf2_page_bytes(v: Variant, ksize: usize, n: usize) -> Vec<u8> {
+        let h = v.header;
+        let len = h + n * ksize;
+        let mut page = vec![0u8; len];
+        page[h - 8..h - 6].copy_from_slice(&(ksize as u16).to_le_bytes()); // pad = key size
+        page[h - 6..h - 4].copy_from_slice(&(P_LEAF | P_LEAF2).to_le_bytes());
+        page[h - 4..h - 2].copy_from_slice(&((h + 2 * n - v.base) as u16).to_le_bytes()); // lower
+        page[h - 2..h].copy_from_slice(&((len - v.base) as u16).to_le_bytes()); // upper
+        for i in 0..n {
+            page[h + i * ksize..h + (i + 1) * ksize].fill(i as u8);
+        }
+        page
+    }
+
+    #[test]
+    fn leaf2_keys_per_variant() {
+        for v in [V09, V10] {
+            let p = Page::new(Bytes::from(leaf2_page_bytes(v, 4, 3)), v).unwrap();
+            assert!(p.hdr.is_leaf2(), "{v:?}");
+            assert_eq!(p.num_keys(), 3, "{v:?}");
+            assert_eq!(usize::from(p.hdr.pad), 4, "{v:?}");
+            for i in 0..3 {
+                assert_eq!(&p.leaf2_key(i, 4).unwrap()[..], &[i as u8; 4], "{v:?}");
+            }
+            assert!(p.leaf2_key(3, 4).is_err(), "past num_keys");
+            assert!(p.leaf2_key(0, 0).is_err(), "zero key size");
+            assert!(p.leaf2_key(2, 5).is_err(), "key overruns page");
+        }
     }
 
     #[test]

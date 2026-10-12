@@ -43,8 +43,8 @@ use peek_io::InputSource;
 use peek_io::stream::{ByteStream, ReadSeek};
 
 use super::CsvFormat;
-use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
+use crate::viewer::table::{WINDOW_SIZE, window_start};
 
 /// Seed scan record cap. First 1000 records build initial column widths,
 /// drive the header heuristic, and provide the type-inference sample.
@@ -304,16 +304,11 @@ impl CsvData {
     /// Refill the window so it covers record `target`, centred on it.
     fn refill_window(&mut self, target: usize) -> Result<()> {
         let seed_len = self.seed.len();
-        let half = WINDOW_SIZE / 2;
-        let mut start = target.saturating_sub(half).max(seed_len);
-        if let Some(t) = self.total {
-            let max_start = t.saturating_sub(WINDOW_SIZE).max(seed_len);
-            start = start.min(max_start);
-            if start >= t {
-                self.window.clear();
-                self.window_start = seed_len;
-                return Ok(());
-            }
+        let start = window_start(target, self.total, seed_len);
+        if self.total.is_some_and(|t| start >= t) {
+            self.window.clear();
+            self.window_start = seed_len;
+            return Ok(());
         }
         if !self.seek_to_record(start)? {
             // `start` is past EOF — total now known; nothing to window.

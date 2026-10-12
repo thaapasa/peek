@@ -917,7 +917,7 @@ because liblmdb mmaps the whole map and writes the lock file even on a read-only
 24-byte page header). Detection is by the meta-page magic only, since `.mdb` is also MS Access.
 
 - **Databases** (landing view, when named sub-databases exist) — a `ListingMode` with one row
-  per database and its entry count. `@main` is listed when the main database also holds plain
+  per database and its size on disk (pages × page size). `@main` is listed when the main database also holds plain
   keys. Enter opens a database's rows.
 - **Rows** (landing view when there are no named sub-databases) — the shared `RowsTableMode`
   with the row cursor on: `Key │ Value │ Size`. One row per `(key, value)` pair, so a

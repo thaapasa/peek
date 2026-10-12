@@ -59,7 +59,7 @@ fn landing_mode(source: &InputSource, detected: &Detected) -> Result<Box<dyn Mod
     // MAIN's entries count its named-DB records too; list MAIN only when
     // it also holds plain keys.
     if main.entries > named.dbs.len() as u64 {
-        entries.push(db_entry(MAIN_SEGMENT.to_string(), &main));
+        entries.push(db_entry(MAIN_SEGMENT.to_string(), &main, env.psize));
         targets.insert(
             MAIN_SEGMENT.to_string(),
             DbTarget {
@@ -70,7 +70,7 @@ fn landing_mode(source: &InputSource, detected: &Detected) -> Result<Box<dyn Mod
     }
     for d in named.dbs {
         let seg = cells::encode_segment(&d.name);
-        entries.push(db_entry(seg.clone(), &d.db));
+        entries.push(db_entry(seg.clone(), &d.db, env.psize));
         targets.insert(
             seg,
             DbTarget {
@@ -98,11 +98,13 @@ fn landing_mode(source: &InputSource, detected: &Detected) -> Result<Box<dyn Mod
     Ok(Box::new(listing))
 }
 
-/// Listing row: size column shows the entry count, like SQLite tables.
-fn db_entry(name: String, db: &DbRecord) -> Entry {
+/// Listing row. The size column is a byte column (human-size toggle,
+/// byte gradient), so it shows the DB's pages on disk; the entry count
+/// lives in Info.
+fn db_entry(name: String, db: &DbRecord, psize: u64) -> Entry {
     Entry {
         name,
-        size: db.entries,
+        size: db.total_pages().saturating_mul(psize),
         mtime: None,
         mode: None,
         kind: EntryKind::File,
@@ -135,4 +137,28 @@ fn db_frame(
         modes,
         breadcrumb_label: Some(label.to_string()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::lmdb::testing::catalogs;
+
+    #[test]
+    fn listing_size_is_bytes_on_disk() {
+        for source in catalogs() {
+            let env = LmdbEnv::open(&source).unwrap();
+            let users = env
+                .named_dbs()
+                .unwrap()
+                .dbs
+                .into_iter()
+                .find(|d| &d.name[..] == b"users")
+                .unwrap()
+                .db;
+            let entry = db_entry("users".to_string(), &users, env.psize);
+            assert_eq!(entry.size, users.total_pages() * env.psize);
+            assert_ne!(entry.size, users.entries);
+        }
+    }
 }

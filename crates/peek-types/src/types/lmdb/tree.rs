@@ -169,7 +169,7 @@ pub fn expand_leaf(
                 skip -= n;
                 continue;
             }
-            expand_dups(env, db, &node, skip, take, out)?;
+            expand_dups(env, &node, skip, take, out)?;
             skip = 0;
             continue;
         }
@@ -205,10 +205,10 @@ fn plain_value(node: &Node) -> Result<ValueRef> {
 }
 
 /// Push a dupsort node's duplicates (from `skip`) as rows. Dups are the
-/// keys of an inline sub-page or of a sub-tree.
+/// keys of an inline sub-page or of a sub-tree. A DUPFIXED dup's size
+/// lives in the sub-page's `pad` or the sub-DB record's `pad`.
 fn expand_dups(
     env: &LmdbEnv,
-    db: &DbRecord,
     node: &Node,
     skip: u64,
     take: usize,
@@ -226,7 +226,7 @@ fn expand_dups(
     };
     if node.flags & F_SUBDATA == 0 {
         let sub = Page::new(data, env.variant)?;
-        let ksize = usize::from(sub.hdr.pad).max(db.pad as usize);
+        let ksize = usize::from(sub.hdr.pad);
         for i in (skip as usize)..sub.num_keys() {
             if out.len() >= take {
                 break;
@@ -271,16 +271,28 @@ fn dup_key(page: &Page, i: usize, ksize: usize) -> Result<Bytes> {
 /// order; when that misses (an app-defined comparator), falls back to a
 /// full in-order scan.
 pub fn find(env: &LmdbEnv, db: &DbRecord, key: &[u8]) -> Result<Option<Node>> {
+    find_any(env, db, &[key])
+}
+
+/// Leaf node matching any of `keys`. Tries a descent per key, in order,
+/// before one shared full scan — so a miss on the first spelling costs a
+/// descent, not a walk of the whole tree.
+pub fn find_any(env: &LmdbEnv, db: &DbRecord, keys: &[&[u8]]) -> Result<Option<Node>> {
     let Some(root) = db.root else {
         return Ok(None);
     };
-    if let Some(node) = descend_to(env, db, root, key)? {
-        return Ok(Some(node));
+    for key in keys {
+        if let Some(node) = descend_to(env, db, root, key)? {
+            return Ok(Some(node));
+        }
     }
     let mut walker = LeafWalker::new(db.root);
     while let Some(leaf) = walker.next_leaf(env)? {
-        if let Some(node) = scan_leaf(&env.read_page(leaf.pgno)?, key)? {
-            return Ok(Some(node));
+        let page = env.read_page(leaf.pgno)?;
+        for key in keys {
+            if let Some(node) = scan_leaf(&page, key)? {
+                return Ok(Some(node));
+            }
         }
     }
     Ok(None)
@@ -321,7 +333,7 @@ fn scan_leaf(page: &Page, key: &[u8]) -> Result<Option<Node>> {
 pub fn node_value(env: &LmdbEnv, db: &DbRecord, node: &Node, dup: u64) -> Result<Option<ValueRef>> {
     if db.is_dupsort() && node.flags & F_DUPDATA != 0 {
         let mut out = Vec::with_capacity(1);
-        expand_dups(env, db, node, dup, 1, &mut out)?;
+        expand_dups(env, node, dup, 1, &mut out)?;
         return Ok(out.pop().map(|item| item.value));
     }
     (dup == 0).then(|| plain_value(node)).transpose()
@@ -330,6 +342,8 @@ pub fn node_value(env: &LmdbEnv, db: &DbRecord, node: &Node, dup: u64) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::lmdb::format::tests::leaf2_page_bytes;
+    use crate::types::lmdb::format::{MDB_DUPFIXED, MDB_DUPSORT, Variant};
     use crate::types::lmdb::testing::{catalogs, event_log};
 
     /// Every row of `db`, in order.
@@ -452,6 +466,84 @@ mod tests {
             let env = LmdbEnv::open(&event_log()).unwrap();
             let key = (1_760_000_000u64 + 5 * 3600).to_le_bytes();
             assert!(find(&env, &env.meta.main, &key).unwrap().is_some());
+        }
+    }
+
+    /// A leaf page with one `F_DUPDATA` node `key` whose dups sit in an
+    /// inline LEAF2 sub-page of `n` 4-byte values, laid out per `v`.
+    fn dupfixed_leaf(v: Variant, key: &[u8], n: usize) -> Page {
+        assert!(key.len().is_multiple_of(2), "even key: no 1.0 data padding");
+        let sub = leaf2_page_bytes(v, 4, n);
+        let h = v.header;
+        let node = h + 8;
+        let mut page = vec![0u8; node + 8 + key.len() + sub.len()];
+        page[h - 6..h - 4].copy_from_slice(&0x02u16.to_le_bytes()); // P_LEAF
+        page[h - 4..h - 2].copy_from_slice(&((h + 2 - v.base) as u16).to_le_bytes()); // lower
+        page[h..h + 2].copy_from_slice(&((node - v.base) as u16).to_le_bytes());
+        page[node..node + 2].copy_from_slice(&(sub.len() as u16).to_le_bytes()); // dsize
+        page[node + 4..node + 6].copy_from_slice(&F_DUPDATA.to_le_bytes());
+        page[node + 6..node + 8].copy_from_slice(&(key.len() as u16).to_le_bytes());
+        page[node + 8..node + 8 + key.len()].copy_from_slice(key);
+        page[node + 8 + key.len()..].copy_from_slice(&sub);
+        Page::new(Bytes::from(page), v).unwrap()
+    }
+
+    #[test]
+    fn dupfixed_sub_page_rows_use_its_key_size() {
+        for source in catalogs() {
+            let env = LmdbEnv::open(&source).unwrap();
+            let page = dupfixed_leaf(env.variant, b"k1", 3);
+            // A stray top-level `pad` must not change the dup size.
+            let db = DbRecord {
+                pad: 99,
+                flags: MDB_DUPSORT | MDB_DUPFIXED,
+                depth: 1,
+                branch_pages: 0,
+                leaf_pages: 1,
+                overflow_pages: 0,
+                entries: 3,
+                root: None,
+            };
+            let mut out = Vec::new();
+            expand_leaf(&env, &db, &page, 0, usize::MAX, &mut out).unwrap();
+            assert_eq!(out.len(), 3, "{:?}", env.variant);
+            for (i, item) in out.iter().enumerate() {
+                assert_eq!(&item.key[..], b"k1");
+                assert_eq!(item.dup, Some(i as u64));
+                let ValueRef::Inline(v) = &item.value else {
+                    panic!("dup values are inline");
+                };
+                assert_eq!(&v[..], &[i as u8; 4]);
+            }
+
+            let mut out = Vec::new();
+            assert_eq!(expand_leaf(&env, &db, &page, 1, 1, &mut out).unwrap(), 0);
+            assert_eq!(out[0].dup, Some(1));
+
+            let node = page.node(0).unwrap();
+            let Some(ValueRef::Inline(v)) = node_value(&env, &db, &node, 2).unwrap() else {
+                panic!("dup 2 exists");
+            };
+            assert_eq!(&v[..], &[2u8; 4]);
+            assert!(node_value(&env, &db, &node, 3).unwrap().is_none());
+        }
+    }
+
+    #[test]
+    fn find_any_tries_each_spelling() {
+        for source in catalogs() {
+            let env = LmdbEnv::open(&source).unwrap();
+            let main = env.meta.main;
+            // 1.0 stores DB names with a trailing NUL, 0.9 without.
+            let node = find_any(&env, &main, &[b"nosuch", b"users\0", b"users"])
+                .unwrap()
+                .unwrap();
+            assert!(node.key.starts_with(b"users"));
+            assert!(
+                find_any(&env, &main, &[b"nosuch", b"nosuch\0"])
+                    .unwrap()
+                    .is_none()
+            );
         }
     }
 

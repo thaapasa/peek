@@ -1,3 +1,4 @@
+use peek_io::sanitize::control_replacement;
 use peek_io::sanitize_terminal_controls;
 use peek_theme::{PeekTheme, lerp_color};
 use syntect::highlighting::Color;
@@ -43,14 +44,29 @@ pub fn render(info: &FileInfo, theme: &PeekTheme, opts: RenderOptions) -> Vec<St
 }
 
 pub fn push_section_header(lines: &mut Vec<String>, title: &str, theme: &PeekTheme) {
-    let rule_len = 40usize.saturating_sub(title.len() + 4);
+    let title = one_line_title(title);
+    let rule_len = 40usize.saturating_sub(title.chars().count() + 4);
     let rule = "\u{2500}".repeat(rule_len);
     lines.push(format!(
         "{} {} {}",
         theme.paint_muted("\u{2500}\u{2500}"),
-        theme.paint_heading(title),
+        theme.paint_heading(&title),
         theme.paint_muted(&rule),
     ));
+}
+
+/// Titles can carry file-derived names (an LMDB database name), so map
+/// terminal controls to visible glyphs — TAB and LF too, keeping the
+/// header on one line.
+fn one_line_title(title: &str) -> String {
+    title
+        .chars()
+        .map(|c| match c {
+            '\t' => '\u{2409}',
+            '\n' => '\u{240a}',
+            c => control_replacement(c).unwrap_or(c),
+        })
+        .collect()
 }
 
 /// Push a field with a themed label and a pre-colored value.
@@ -182,7 +198,7 @@ pub fn thousands_sep(n: u64) -> String {
 mod tests {
     use peek_theme::{PeekThemeName, StyleMode, load_embedded_theme};
 
-    use super::thousands_sep;
+    use super::{push_section_header, thousands_sep};
     use crate::info::{InfoValue, Role, Value};
 
     #[test]
@@ -195,6 +211,26 @@ mod tests {
         let v = Value::split("0x10", Role::Value, serde_json::json!(16));
         assert_eq!(v.render_value(&theme), "0x10");
         assert_eq!(Value::labelled("ELF", "elf").render_value(&theme), "ELF");
+    }
+
+    #[test]
+    fn section_title_controls_are_neutralised() {
+        let mut theme = peek_theme::PeekTheme::from_syntect(&load_embedded_theme(
+            PeekThemeName::default().tmtheme_source(),
+        ));
+        theme.style_mode = StyleMode::Plain;
+        let mut lines = Vec::new();
+        push_section_header(&mut lines, "Database co\rX\n\t\x1b]0;t\x07\u{202e}", &theme);
+        assert_eq!(lines.len(), 1);
+        let line = &lines[0];
+        assert!(
+            !line.chars().any(|c| c.is_control() || c == '\u{202e}'),
+            "{line:?}"
+        );
+        assert!(
+            line.contains("co\u{240d}X\u{240a}\u{2409}\u{241b}"),
+            "{line:?}"
+        );
     }
 
     #[test]

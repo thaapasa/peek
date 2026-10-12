@@ -17,7 +17,8 @@ name.
 ## Landing view
 
 If the environment has named sub-databases, peek lands on a list of them. The size column
-shows each database's entry count. `@main` appears first when the main database also holds
+shows the space each database's pages take on disk. The Info view (Tab) has the entry
+counts. `@main` appears first when the main database also holds
 plain keys of its own. Press Enter on a database to open its rows.
 
 If there are no named sub-databases, peek opens the main database's rows directly.
@@ -71,4 +72,6 @@ own block with its entry count, tree depth, page counts and flags.
 - Encrypted LMDB 1.0 environments are not supported.
 - peek doesn't register as a reader in the lock file. If another process is writing to the
   database while peek reads it, peek can see a partly updated tree.
-- `--list` lists the databases, not the keys inside them.
+- `--list` lists the databases, not the keys inside them. An environment with no named
+  databases has nothing to list. `--extract` needs a full key path such as
+  `users/user:00042`; a bare database name like `users` is rejected.

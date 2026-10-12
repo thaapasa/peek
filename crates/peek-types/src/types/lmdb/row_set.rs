@@ -18,9 +18,9 @@ use super::env::LmdbEnv;
 use super::format::DbRecord;
 use super::tree::{self, Item, LeafWalker, ValueRef};
 use crate::viewer::modes::ExtractTarget;
-use crate::viewer::table::WINDOW_SIZE;
 use crate::viewer::table::row_source::RowSource;
 use crate::viewer::table::rows_mode::Alignment;
+use crate::viewer::table::{WINDOW_SIZE, window_start};
 
 const HEADER: [&str; 3] = ["Key", "Value", "Size"];
 
@@ -157,7 +157,8 @@ impl RowSource for LmdbRowSet {
         if idx == 0 || idx >= self.total || self.row_at(idx).is_some() {
             return Ok(self.total);
         }
-        let start = idx.saturating_sub(WINDOW_SIZE / 2).max(1);
+        // Row 0 is the header, held outside the window.
+        let start = window_start(idx, Some(self.total), 1);
         let items = self.load(start as u64 - 1, WINDOW_SIZE)?;
         self.window = items.into_iter().map(|item| self.to_row(item)).collect();
         self.window_start = start;
