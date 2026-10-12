@@ -60,6 +60,9 @@ fn main() -> Result<()> {
         viewer::cell_size::set_override(aspect);
     }
 
+    // Codecs the `image` crate lacks, registered before any decode.
+    peek_types::types::image::avif::register();
+
     let mut source = input::build_source(&args)?;
     let mut detected = peek_detect::detect(&source)?;
 

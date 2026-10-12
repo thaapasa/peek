@@ -13,10 +13,13 @@
 //!   HDR, ICC, animation header walk) and the Image info section.
 //! - `exif` / `xmp` / `animation_stats` — gather subhelpers used from
 //!   `info_gather`.
+//! - `avif` — pure-Rust AVIF decoder registered as an `image` hook;
+//!   call `avif::register()` before decoding.
 
 pub(crate) mod anim_frame;
 pub mod animation_mode;
 pub mod animation_stats;
+pub mod avif;
 pub mod compose;
 pub mod exif;
 pub mod extract;

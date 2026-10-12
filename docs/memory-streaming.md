@@ -131,6 +131,9 @@ hard-refusing capped read — it degrades the **view**, not the whole frame:
   buffer read. The File arm streams from the path (uncapped); a non-File source
   must buffer whole to decode, and a spill `TempFile` or archive entry can be
   GB, so the render cap gates it. Asymmetric by design.
+- AVIF decode hook (`image/avif.rs`) — AV1 needs the whole file, so it
+  buffers on every arm, File included; `render_cap_exceeded` on the stream
+  length gates it first.
 
 ## The decision rule
 

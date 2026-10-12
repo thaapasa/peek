@@ -567,7 +567,8 @@ Two viewing sub-modes (toggle with `r`; CLI `--raw`):
 
 ### Image Files ✅
 
-Raster formats rendered as ASCII art. Supported via the `image` crate:
+Raster formats rendered as ASCII art. Supported via the `image` crate; AVIF via `avif-decode`
+(rav1d) registered as an `image` decoding hook (`types/image/avif.rs`):
 
 | Format  | Extensions             |
 |---------|------------------------|

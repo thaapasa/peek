@@ -22,11 +22,11 @@ exclude = ["fuzz"]
 [workspace.package]
 version = "1.0.1"
 edition = "2024"
-# Honest floor: dep-driven. sevenz-rust2 0.24 requires 1.93; our own code
+# Honest floor: dep-driven. avif-decode 3 requires 1.98; our own code
 # needs only 1.88 (`as_chunks`, stdlib items in lines.rs, csv/parse.rs, font,
 # glyph_atlas const ctx). Floor follows the deps. Not CI-verified — re-check
 # with `cargo metadata` after dep bumps.
-rust-version = "1.93"
+rust-version = "1.98"
 authors = ["Tuukka Haapasalo <tuukka.haapasalo@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/thaapasa/peek"
@@ -80,8 +80,20 @@ json5 = "1"
 toml = { version = "1.1.2", features = ["preserve_order"] }
 quick-xml = { version = "0.42", features = ["serialize"] }
 
-# Image handling
-image = "0.25"
+# Image handling. Decoders only: the default `avif` feature is an encoder
+# (ravif + rav1e) peek never uses. AVIF decode comes from avif-decode below.
+image = { version = "0.25", default-features = false, features = [
+    "rayon", "bmp", "dds", "exr", "ff", "gif", "hdr", "ico", "jpeg", "png",
+    "pnm", "qoi", "tga", "tiff", "webp",
+] }
+# AVIF decode (HEIF container + rav1d, a pure-Rust dav1d port), plugged into
+# `image` as a decoding hook. x86 builds assemble rav1d's SIMD with nasm.
+avif-decode = { version = "3.0", default-features = false }
+# Container walk for AVIF dimensions / layout ahead of the decode. Same
+# version avif-decode uses.
+avif-parse = "2.1"
+# Pixel-slice casts for avif-decode's rgb buffers (already in the tree).
+bytemuck = "1.25"
 
 # SVG rasterization
 resvg = "0.48"
@@ -286,6 +298,14 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.tiny-skia]
 opt-level = 2
+[profile.dev.package.rav1d]
+opt-level = 2
+[profile.dev.package.yuv]
+opt-level = 2
+# avif-parse debug-asserts on malformed boxes before returning its error, so
+# debug builds and tests would panic on truncated files that release rejects.
+[profile.dev.package.avif-parse]
+debug-assertions = false
 
 [profile.release]
 opt-level = 3

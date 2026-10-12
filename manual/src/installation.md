@@ -44,6 +44,9 @@ the same as on Unix.
 
 ## From source
 
+On x86_64, the build needs [nasm](https://www.nasm.us/) (2.14+) on `PATH` for the AVIF decoder's
+SIMD code (`brew install nasm`, `apt install nasm`, `choco install nasm`). ARM builds don't.
+
 ```sh
 just pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
 just install     # cargo build --release; install to $PEEK_INSTALL_DIR

@@ -30,6 +30,9 @@ quick-xml = { workspace = true }
 
 # Images + SVG + EXIF + GIF anim
 image = { workspace = true }
+avif-decode = { workspace = true }
+avif-parse = { workspace = true }
+bytemuck = { workspace = true }
 resvg = { workspace = true }
 kamadak-exif = { workspace = true }
 gif = { workspace = true }

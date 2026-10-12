@@ -36,6 +36,16 @@ jobs:
       - name: Install nightly rustfmt
         run: rustup toolchain install nightly --profile minimal --component rustfmt
 
+      # rav1d (AVIF decode) assembles its x86 SIMD with nasm at build time.
+      - name: Install nasm (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y nasm
+      - name: Install nasm (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          choco install nasm --no-progress -y
+          echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
+
       - uses: Swatinem/rust-cache@v2
 
       - name: Check formatting

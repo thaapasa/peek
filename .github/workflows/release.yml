@@ -168,6 +168,20 @@ jobs:
           rustup toolchain install
           rustup target add ${{ matrix.target }}
 
+      # rav1d (AVIF decode) assembles its x86 SIMD with nasm at build time;
+      # arm targets use no external assembler.
+      - name: Install nasm (x86 macOS)
+        if: matrix.target == 'x86_64-apple-darwin'
+        run: brew install nasm
+      - name: Install nasm (x86 Linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y nasm
+      - name: Install nasm (Windows)
+        if: matrix.target == 'x86_64-pc-windows-msvc'
+        run: |
+          choco install nasm --no-progress -y
+          echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
+
       - uses: Swatinem/rust-cache@v2
         with:
           # key suffix bumped to discard caches that baked in ~/.cargo/bin

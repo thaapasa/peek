@@ -9,7 +9,7 @@ ignore = [
     # yaml-rust — unmaintained, not vulnerable. Via syntect (.sublime-syntax loading).
     # Upstream-owned.
     "RUSTSEC-2024-0320",
-    # paste — unmaintained proc-macro, build-time only. Via image -> ravif -> rav1e
-    # (AVIF encode). No runtime surface.
+    # paste — unmaintained proc-macro, build-time only. Via image -> exr -> pulp.
+    # No runtime surface.
     "RUSTSEC-2024-0436",
 ]

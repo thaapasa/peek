@@ -23,7 +23,8 @@ that best match the pixels beneath it.*
 | QOI     | `.qoi`                 |
 | DDS     | `.dds`                 |
 
-Decoded via the [image](https://crates.io/crates/image) crate.
+Decoded via the [image](https://crates.io/crates/image) crate; AVIF via
+[avif-decode](https://crates.io/crates/avif-decode) (pure-Rust rav1d).
 
 ## Render modes
 
