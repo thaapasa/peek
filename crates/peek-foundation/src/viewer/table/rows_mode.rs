@@ -44,6 +44,7 @@ use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
 use crate::output::PrintOutput;
+use crate::viewer::listing::row::SELECTED_MARKER;
 use crate::viewer::modes::{
     ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window,
 };
@@ -63,7 +64,7 @@ const SEP_ROW_CHAR: char = '─';
 const SEP_JUNCTION_CHAR: char = '┼';
 /// Leading-gutter glyph on the cursor row. Takes the place of the one-space
 /// left edge every row starts with, so columns stay aligned.
-const CURSOR_MARKER: &str = "\u{25b8}";
+const CURSOR_MARKER: &str = SELECTED_MARKER;
 /// Truncation marker on cells wider than their column width.
 const TRUNCATE_MARKER: char = '…';
 /// Placeholder for a `NULL` body cell (`Some(None)` from the source).
@@ -830,7 +831,7 @@ impl Mode for RowsTableMode {
 
     fn render_to_pipe(&mut self, ctx: &RenderCtx, out: &mut PrintOutput) -> Result<()> {
         // Drive the source to its end so every record renders.
-        let _ = self.source.ensure_all();
+        self.source.ensure_all()?;
         // Print mode uses seed widths only — single-row overflow allowed
         // (alignment breaks for that row, next row realigns).
         let widths = self.seed_widths.clone();
@@ -841,11 +842,13 @@ impl Mode for RowsTableMode {
             out.write_line(&build_separator_row(&widths, ctx.peek_theme, 0))?;
         }
         let body_start = self.body_start();
-        let loaded = self.source.loaded();
-        for rec_idx in body_start..loaded {
-            // Windowed sources hold one window; page each row in before
-            // printing it. A no-op for rows already resident.
-            if self.source.ensure_row(rec_idx).is_err() {
+        for rec_idx in body_start.. {
+            // Page each row in before printing it (windowed sources hold one
+            // window). `ensure_row` returns the live bound — a source may
+            // shrink an overstated total at the real end — and a failed
+            // page-in aborts rather than silently dropping the tail. The
+            // `loaded` check first spares a past-the-end window refill.
+            if rec_idx >= self.source.loaded() || rec_idx >= self.source.ensure_row(rec_idx)? {
                 break;
             }
             if self.source.row_is_malformed(rec_idx) {
@@ -893,14 +896,12 @@ impl Mode for RowsTableMode {
                 true
             }
             Action::PageUp => {
-                let reserved = if self.has_header { 2 } else { 0 };
-                let step = self.cached_rows.saturating_sub(reserved).max(1);
+                let step = self.body_rows();
                 self.top_record = self.top_record.saturating_sub(step);
                 true
             }
             Action::PageDown => {
-                let reserved = if self.has_header { 2 } else { 0 };
-                let step = self.cached_rows.saturating_sub(reserved).max(1);
+                let step = self.body_rows();
                 self.top_record = self.top_record.saturating_add(step);
                 // Try to pull records before clamping so Bottom-ish jumps
                 // surface every loadable row.
@@ -1907,6 +1908,36 @@ mod tests {
         assert_eq!(mode.cursor, Some(6));
         mode.scroll(Action::Top);
         assert_eq!((mode.cursor, mode.top_record), (Some(0), 0));
+    }
+
+    #[test]
+    fn cursor_page_down_steps_a_screen_and_clamps_at_end() {
+        let mut mode = cursor_mode(10);
+        mode.scroll(Action::PageDown);
+        assert_eq!((mode.cursor, mode.top_record), (Some(3), 3));
+        mode.scroll(Action::PageDown);
+        assert_eq!((mode.cursor, mode.top_record), (Some(6), 6));
+        mode.scroll(Action::PageDown);
+        assert_eq!((mode.cursor, mode.top_record), (Some(9), 7));
+        mode.scroll(Action::PageDown);
+        assert_eq!((mode.cursor, mode.top_record), (Some(9), 7), "stays put");
+    }
+
+    #[test]
+    fn cursor_stays_visible_after_resize_and_header_toggle() {
+        let mut mode = cursor_mode(10);
+        mode.scroll(Action::Bottom);
+        mode.on_resize(40, 3); // one body row
+        assert_eq!((mode.cursor, mode.top_record), (Some(9), 9));
+        mode.on_resize(40, 5);
+        mode.scroll(Action::Top);
+        mode.handle(Action::ToggleHeader); // off: five body rows
+        for _ in 0..4 {
+            mode.scroll(Action::ScrollDown);
+        }
+        assert_eq!((mode.cursor, mode.top_record), (Some(4), 0));
+        mode.handle(Action::ToggleHeader); // on: three body rows
+        assert_eq!((mode.cursor, mode.top_record), (Some(4), 2));
     }
 
     #[test]

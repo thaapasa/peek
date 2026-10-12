@@ -254,8 +254,9 @@ platform" to "verify cryptographically," and are the meaningful follow-ups.
 - ☐ **Drop the `cargo audit` ignores when upstream catches up.** `just audit` is clean
   except 3 *unmaintained* advisories (no known vulnerability), all transitive and
   upstream-owned, suppressed in `.cargo/audit.toml`: `bincode` + `yaml-rust` via
-  `syntect`, `paste` (build-time proc-macro) via `image`→`exr`→`pulp`. Re-check on
-  each dep bump; remove an ignore once the chain stops pulling it in.
+  `syntect`, `paste` (build-time proc-macro) via `image`→`exr`→`pulp` and
+  `avif-decode`→`rav1d`. Re-check on each dep bump; remove an ignore once the chain
+  stops pulling it in.
 
 ---
 

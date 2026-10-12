@@ -20,7 +20,7 @@ use crate::types::archive::reader::{self, ReadSeek, zip_entry_name};
 const PAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff"];
 
 /// One page entry resolved from the ZIP central directory. Holds the
-/// absolute ZIP entry name (suitable for `ZipArchive::by_name`) and
+/// decoded ZIP entry name (the key `read_page` looks up) and
 /// the uncompressed byte size for stats.
 #[derive(Clone)]
 pub(crate) struct Page {

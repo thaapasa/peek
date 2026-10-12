@@ -182,6 +182,23 @@ mod tests {
         assert!(diff < 4.0, "mean diff {diff}");
     }
 
+    #[test]
+    fn decodes_mono_as_gray() {
+        let img = decode("heron-mono.avif");
+        assert_eq!(img.color(), ColorType::L8);
+        let gray = DynamicImage::ImageLuma8(image::open(fixture("heron.jpg")).unwrap().to_luma8());
+        let diff = mean_diff(&img, &gray);
+        assert!(diff < 6.0, "mean diff {diff}");
+    }
+
+    #[test]
+    fn decodes_10bit_opaque_as_rgb16() {
+        let img = decode("heron-10bit.avif");
+        assert_eq!(img.color(), ColorType::Rgb16);
+        let diff = mean_diff(&img, &image::open(fixture("heron.jpg")).unwrap());
+        assert!(diff < 4.0, "mean diff {diff}");
+    }
+
     /// Dimensions come from the container, before any AV1 decode.
     #[test]
     fn reports_dimensions_from_memory_without_decoding() {

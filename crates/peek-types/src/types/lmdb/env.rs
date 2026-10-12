@@ -3,7 +3,7 @@
 //! lock file — a running writer is undisturbed, but peek also doesn't
 //! register as a reader, so a file under active writes can read torn.
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{Context, Result, anyhow, bail, ensure};
 use bytes::Bytes;
 use peek_io::{ByteSource, InputSource};
 
@@ -58,19 +58,26 @@ impl LmdbEnv {
             Layout::Unknown => vec![V09, V10],
             other => bail!(other.unsupported_reason()),
         };
+        let mut last_err = None;
         for variant in variants {
-            if let Some((meta, active_meta)) = pick_meta(&*src, &head, variant)? {
-                return Ok(Self {
-                    src,
-                    variant,
-                    psize: meta.page_size(),
-                    meta,
-                    active_meta,
-                    file_len,
-                });
+            match pick_meta(&*src, &head, variant)? {
+                Ok((meta, active_meta)) => {
+                    return Ok(Self {
+                        src,
+                        variant,
+                        psize: meta.page_size(),
+                        meta,
+                        active_meta,
+                        file_len,
+                    });
+                }
+                Err(e) => last_err = Some(e),
             }
         }
-        bail!("no valid LMDB meta page")
+        // Surface why page 0 failed (encrypted, odd page size) — not just
+        // that it did.
+        let err = last_err.unwrap_or_else(|| anyhow!("no meta page"));
+        Err(err.context("no valid LMDB meta page"))
     }
 
     /// Pages present in the file — the bound on any honest tree walk.
@@ -159,12 +166,13 @@ impl LmdbEnv {
 }
 
 /// The active meta page for `variant`: page 0 (from `head`) and page 1,
-/// higher valid `txnid` wins. `None` when neither parses.
-fn pick_meta(src: &dyn ByteSource, head: &[u8], variant: Variant) -> Result<Option<(Meta, u8)>> {
-    let meta0 = Meta::parse(head, variant).ok();
-    let candidates: Vec<u64> = match meta0 {
-        Some(m) => vec![m.page_size()],
-        None => FALLBACK_PAGE_SIZES.to_vec(),
+/// higher valid `txnid` wins. Inner `Err` is page 0's parse error when
+/// neither parses; the outer one is an I/O failure.
+fn pick_meta(src: &dyn ByteSource, head: &[u8], variant: Variant) -> Result<Result<(Meta, u8)>> {
+    let meta0 = Meta::parse(head, variant);
+    let candidates: Vec<u64> = match &meta0 {
+        Ok(m) => vec![m.page_size()],
+        Err(_) => FALLBACK_PAGE_SIZES.to_vec(),
     };
     let mut meta1 = None;
     for psize in candidates {
@@ -177,10 +185,10 @@ fn pick_meta(src: &dyn ByteSource, head: &[u8], variant: Variant) -> Result<Opti
         }
     }
     Ok(match (meta0, meta1) {
-        (Some(a), Some(b)) if b.txnid > a.txnid => Some((b, 1)),
-        (Some(a), _) => Some((a, 0)),
-        (None, Some(b)) => Some((b, 1)),
-        (None, None) => None,
+        (Ok(a), Some(b)) if b.txnid > a.txnid => Ok((b, 1)),
+        (Ok(a), _) => Ok((a, 0)),
+        (Err(_), Some(b)) => Ok((b, 1)),
+        (Err(e), None) => Err(e),
     })
 }
 
@@ -239,6 +247,20 @@ mod tests {
             assert_eq!(env.active_meta, 1 - active, "{path}");
             assert!(env.meta.txnid < txnid);
         }
+    }
+
+    #[test]
+    fn encrypted_env_names_the_reason() {
+        let bytes = std::fs::read(crate::types::lmdb::testing::CATALOG).unwrap();
+        let env = LmdbEnv::open(&InputSource::memory(bytes.clone(), "c")).unwrap();
+        let mut enc = bytes;
+        // dbs[FREE].flags on both metas carries the env flags.
+        for meta in 0..2 {
+            let off = meta * env.psize as usize + env.variant.header + 24 + 4;
+            enc[off + 1] |= 0x20;
+        }
+        let err = LmdbEnv::open(&InputSource::memory(enc, "c")).err().unwrap();
+        assert!(format!("{err:#}").contains("encrypted"), "{err:#}");
     }
 
     #[test]

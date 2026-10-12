@@ -105,7 +105,11 @@ pub fn mimes_for_path(
         // format, and showing `application/x-sh` next to the mismatch warning
         // would present the lie as fact. The magic + type-derived entries
         // above already carry the truth.
-        if extension_mismatch(&ext, magic_mime, file_type).is_none() {
+        // LMDB's `data.mdb` shares Access's `.mdb`; the magic MIME already
+        // names it, so the extension guess would only add a wrong format.
+        if extension_mismatch(&ext, magic_mime, file_type).is_none()
+            && !matches!(file_type, FileType::Lmdb)
+        {
             for guess in mime_guess::from_ext(&ext).iter() {
                 push_unique(&mut out, MimeInfo::new(guess.essence_str()));
             }
@@ -507,6 +511,17 @@ mod tests {
         );
         let strings: Vec<&str> = mimes.iter().map(|m| m.mime.as_str()).collect();
         assert_eq!(strings, vec!["image/jpeg"]);
+    }
+
+    #[test]
+    fn lmdb_data_mdb_is_not_access() {
+        let mimes = mimes_for_path(
+            &FileType::Lmdb,
+            Some(Path::new("data.mdb")),
+            Some("application/x-lmdb"),
+        );
+        let strings: Vec<&str> = mimes.iter().map(|m| m.mime.as_str()).collect();
+        assert_eq!(strings, vec!["application/x-lmdb"]);
     }
 
     #[test]

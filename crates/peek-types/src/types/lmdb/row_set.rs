@@ -1,8 +1,10 @@
 //! [`RowSource`] over one LMDB database: `Key │ Value │ Size`, one row per
 //! `(key, value)` pair.
 //!
-//! The row total comes straight from the DB record's `entries`, so it's
-//! definite without a walk. Random access goes through a lazily grown
+//! The row total starts from the DB record's `entries`, so it's definite
+//! without a walk. That count is file-supplied (or torn mid-write), so once
+//! the walk reaches the last leaf the total snaps to the rows actually
+//! indexed. Random access goes through a lazily grown
 //! **leaf index** — `(pgno, first_row)` per leaf, appended as the walker
 //! passes each one. A plain leaf costs a 16-byte header read to count; a
 //! dupsort leaf is read whole to sum its duplicates. Rows themselves load
@@ -162,6 +164,11 @@ impl RowSource for LmdbRowSet {
         let items = self.load(start as u64 - 1, WINDOW_SIZE)?;
         self.window = items.into_iter().map(|item| self.to_row(item)).collect();
         self.window_start = start;
+        if self.walk_done {
+            self.total = usize::try_from(self.indexed_rows)
+                .unwrap_or(usize::MAX - 1)
+                .saturating_add(1);
+        }
         Ok(self.total)
     }
 
@@ -297,6 +304,18 @@ mod tests {
             let keys: Vec<String> = (1..=6).map(|i| cell(&rs, i, 0)).collect();
             assert_eq!(keys, ["1", "2", "255", "256", "65536", "4000000000"]);
         }
+    }
+
+    #[test]
+    fn overstated_entries_clamp_to_walked_rows() {
+        let source = event_log();
+        let env = LmdbEnv::open(&source).unwrap();
+        let mut db = env.meta.main;
+        db.entries = 1_000_000_000;
+        let mut rs = LmdbRowSet::open(&source, db, None).unwrap();
+        assert_eq!(rs.ensure_row(5_000).unwrap(), 25);
+        assert_eq!(rs.total(), Some(25));
+        assert!(rs.row(25).is_none());
     }
 
     #[test]

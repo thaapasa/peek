@@ -30,7 +30,7 @@ pub(crate) mod testing {
         env!("CARGO_MANIFEST_DIR"),
         "/../../test-data/catalog-0.9.lmdb"
     );
-    /// Directory-layout 0.9 data file: one INTEGERKEY MAIN, 24 entries.
+    /// Directory-layout 1.0 data file: one INTEGERKEY MAIN, 24 entries.
     pub const EVENT_LOG: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../test-data/event-log.lmdb/data.mdb"

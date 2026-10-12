@@ -6,7 +6,7 @@
 use peek_theme::PeekTheme;
 use serde::{Serialize, Serializer};
 
-use super::cells::MAIN_LABEL;
+use super::cells::MAIN_SEGMENT;
 use super::format::DbRecord;
 use super::info::LmdbInfo;
 use crate::info::{InfoNode, format_size_human, paint_count, render_info, thousands_sep};
@@ -104,7 +104,7 @@ impl crate::info::InfoView for LmdbView<'_> {
                 title: "LMDB".to_string(),
                 body,
             },
-            db_block(format!("Database {MAIN_LABEL}"), &s.main, theme),
+            db_block(format!("Database {MAIN_SEGMENT}"), &s.main, theme),
         ];
         for (name, db) in s.named.iter().take(MAX_DB_BLOCKS) {
             nodes.push(db_block(format!("Database {name}"), db, theme));

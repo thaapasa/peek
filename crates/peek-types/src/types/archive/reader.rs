@@ -83,9 +83,9 @@ pub(crate) fn read_zip_entry(
     path: &str,
     label: &str,
 ) -> Result<Bytes> {
-    let file = zip
-        .by_name(path)
-        .with_context(|| format!("{label} entry {path:?} not found"))?;
+    let idx =
+        entry_index(zip, path).with_context(|| format!("{label} entry {path:?} not found"))?;
+    let file = zip.by_index(idx)?;
     let declared = file.size();
     ensure_under_render_cap(declared, path)?;
     // The declared size is attacker-controlled metadata and the deflate
@@ -102,6 +102,19 @@ pub(crate) fn read_zip_entry(
     Ok(Bytes::from(buf))
 }
 
+/// Index of the entry whose [`zip_entry_name`] is `path`. `by_name` keys on
+/// raw name bytes, so a CP437 or lossy-decoded name listed by us misses it;
+/// those fall back to a central-directory scan.
+fn entry_index(zip: &mut ZipArchive<Box<dyn ReadSeek>>, path: &str) -> Option<usize> {
+    if let Some(i) = zip.index_for_name(path) {
+        return Some(i);
+    }
+    (0..zip.len()).find(|&i| {
+        zip.by_index_raw(i)
+            .is_ok_and(|f| zip_entry_name(f.name(), f.name_raw()) == path)
+    })
+}
+
 /// [`read_zip_entry`] decoded as UTF-8, for the XML-payload callers.
 pub(crate) fn read_zip_entry_str(
     zip: &mut ZipArchive<Box<dyn ReadSeek>>,
@@ -114,7 +127,8 @@ pub(crate) fn read_zip_entry_str(
 
 /// Zip entry name, never failing. `zip` decodes UTF-8 then CP437 and
 /// returns `Err` only if both fail; fall back to lossy UTF-8 so a bad name
-/// still lists. Listing and extract both use this, so keys match.
+/// still lists. Listing, extract and [`read_zip_entry`] all resolve names
+/// through this, so keys match.
 /// Call as `zip_entry_name(file.name(), file.name_raw())`.
 pub(crate) fn zip_entry_name<'a>(
     decoded: zip::result::ZipResult<Cow<'a, str>>,
@@ -424,6 +438,23 @@ mod tests {
         w.start_file(name, opts).unwrap();
         w.write_all(data).unwrap();
         w.finish().unwrap().into_inner()
+    }
+
+    /// A CP437 name lists decoded (`ü`), but `by_name` keys on raw bytes
+    /// (`0x81`); reading by the listed name must still find it.
+    #[test]
+    fn read_zip_entry_finds_cp437_name() {
+        let mut bytes = zip_with_entry("page1.png", b"img");
+        let cdh = bytes
+            .windows(4)
+            .rposition(|w| w == b"PK\x01\x02")
+            .expect("central directory header");
+        bytes[30] = 0x81;
+        bytes[cdh + 46] = 0x81;
+        let src = InputSource::memory(bytes::Bytes::from(bytes), "cp437.zip");
+        let mut zip = open_zip(&src, "TEST").unwrap();
+        let data = read_zip_entry(&mut zip, "\u{fc}age1.png", "TEST").unwrap();
+        assert_eq!(&data[..], b"img");
     }
 
     #[test]

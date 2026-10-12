@@ -13,10 +13,8 @@ use bytes::Bytes;
 
 use super::format::{MDB_INTEGERDUP, MDB_INTEGERKEY, int_le};
 
-/// Inner-path segment naming MAIN.
+/// Inner-path segment naming MAIN; also its name in the listing and Info.
 pub const MAIN_SEGMENT: &str = "@main";
-/// Display name for MAIN in the database listing.
-pub const MAIN_LABEL: &str = "(main)";
 const HEX_PREFIX: &str = "x:";
 /// Longest segment kept as text; longer ones go hex.
 const MAX_TEXT_SEGMENT: usize = 200;

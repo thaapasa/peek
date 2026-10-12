@@ -106,12 +106,16 @@ pub fn format_mtime_systime(mtime: Option<SystemTime>, utc: bool) -> String {
     }
 }
 
+/// Caret marking the selected row — shared by listings and the table
+/// cursor so both read the same.
+pub const SELECTED_MARKER: &str = "\u{25b8}";
+
 /// Two-cell caret prefix marking the selected row — paired with a
 /// 2-space gutter on non-selected rows ([`ROW_GUTTER`]) so columns
 /// stay aligned across the viewport.
 pub fn paint_selected_marker(line: &str, theme: &PeekTheme) -> String {
-    let marker = theme.paint("\u{25b8} ", theme.accent);
-    format!("{marker}{line}")
+    let marker = theme.paint(SELECTED_MARKER, theme.accent);
+    format!("{marker} {line}")
 }
 
 /// Two-space gutter for non-selected rows, matching the width of
