@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "peek"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2197,7 +2197,7 @@ dependencies = [
 
 [[package]]
 name = "peek-detect"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "peek-foundation"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2232,7 +2232,7 @@ dependencies = [
 
 [[package]]
 name = "peek-foundation-derive"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2241,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "peek-io"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "brotli-decompressor 6.1.0",
@@ -2258,7 +2258,7 @@ dependencies = [
 
 [[package]]
 name = "peek-theme"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "clap",
  "syntect",
@@ -2268,7 +2268,7 @@ dependencies = [
 
 [[package]]
 name = "peek-types"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "anyhow",
  "avif-decode",

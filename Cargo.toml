@@ -20,7 +20,7 @@ exclude = ["fuzz"]
 # = true` to inherit). One version line for the whole workspace — the release
 # pipeline bumps this; see docs/release.md.
 [workspace.package]
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 # Honest floor: dep-driven. avif-decode 3 requires 1.98; our own code
 # needs only 1.88 (`as_chunks`, stdlib items in lines.rs, csv/parse.rs, font,
