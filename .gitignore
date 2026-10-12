@@ -4,3 +4,4 @@
 !/.pdfium/VERSION
 /manual/book
 .claudelint-cache/
+.DS_Store
