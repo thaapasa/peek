@@ -6,6 +6,7 @@
 //! render path (DOCX, ODT, EPUB, CBZ, spreadsheet props) needs the same
 //! zip-bomb gate.
 
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{self, Cursor, Read, Seek, SeekFrom};
 use std::path::Path;
@@ -109,6 +110,17 @@ pub(crate) fn read_zip_entry_str(
 ) -> Result<String> {
     let bytes = read_zip_entry(zip, path, label)?;
     String::from_utf8(bytes.into()).with_context(|| format!("{label} entry {path:?} is not UTF-8"))
+}
+
+/// Zip entry name, never failing. `zip` decodes UTF-8 then CP437 and
+/// returns `Err` only if both fail; fall back to lossy UTF-8 so a bad name
+/// still lists. Listing and extract both use this, so keys match.
+/// Call as `zip_entry_name(file.name(), file.name_raw())`.
+pub(crate) fn zip_entry_name<'a>(
+    decoded: zip::result::ZipResult<Cow<'a, str>>,
+    raw: &'a [u8],
+) -> Cow<'a, str> {
+    decoded.unwrap_or_else(|_| String::from_utf8_lossy(raw))
 }
 
 /// `Read + Seek` window over `[start, start+len)` of a backing file.
@@ -428,7 +440,9 @@ mod tests {
     /// data that expands to gigabytes. The declared-size gate alone misses
     /// that — the read itself must stop at the cap. Patches the recorded
     /// uncompressed sizes (local header at offset 22, central directory
-    /// header at offset 24) down to 1 KB and asserts refusal.
+    /// header at offset 24) down to 1 KB and asserts refusal. `zip` ≥ 9.0.1
+    /// already fails reads past the declared size; our cap still guards
+    /// against regressions there, so either error counts.
     #[test]
     fn read_zip_entry_bounds_actual_decompression_when_declared_size_lies() {
         let data = vec![0u8; (RENDER_MAX_BYTES + 1) as usize];
@@ -447,8 +461,14 @@ mod tests {
         let file = zip.by_name("liar.xml").unwrap();
         assert_eq!(file.size(), 1024, "patch must land on the declared size");
         drop(file);
-        let err = read_zip_entry(&mut zip, "liar.xml", "TEST").unwrap_err();
-        assert!(format!("{err:#}").contains("render cap"), "got: {err:#}");
+        let err = format!(
+            "{:#}",
+            read_zip_entry(&mut zip, "liar.xml", "TEST").unwrap_err()
+        );
+        assert!(
+            err.contains("render cap") || err.contains("larger than its declared"),
+            "got: {err}"
+        );
     }
 
     /// Compressed-tar listings against zero-byte input must finish —

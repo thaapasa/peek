@@ -110,7 +110,7 @@ proptest = "1"
 
 # Archive listing (TOC viewer). Listing-only paths read just the entry
 # headers — no payload decompression — so multi-GB archives list cheaply.
-zip = { version = "8", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 tar = "0.4"
 flate2 = "1"
 bzip2 = "0.6"

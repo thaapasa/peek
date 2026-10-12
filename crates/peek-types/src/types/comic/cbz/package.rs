@@ -12,7 +12,7 @@ use bytes::Bytes;
 use peek_io::InputSource;
 use zip::ZipArchive;
 
-use crate::types::archive::reader::{self, ReadSeek};
+use crate::types::archive::reader::{self, ReadSeek, zip_entry_name};
 
 /// Image extensions that count as a comic page. Matches what
 /// established readers (Komga, Tachiyomi, ComicRack) accept; uncommon
@@ -39,13 +39,13 @@ pub(crate) fn list_pages(source: &InputSource) -> Result<Vec<Page>> {
         if entry.is_dir() {
             continue;
         }
-        let name = entry.name();
+        let name = zip_entry_name(entry.name(), entry.name_raw());
         if name.starts_with("__MACOSX/") || name.contains("/__MACOSX/") {
             continue;
         }
-        if has_page_extension(name) {
+        if has_page_extension(&name) {
             pages.push(Page {
-                full_path: name.to_string(),
+                full_path: name.into_owned(),
                 size: entry.size(),
             });
         }

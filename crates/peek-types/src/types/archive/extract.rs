@@ -21,7 +21,7 @@ use tempfile::Builder as TempBuilder;
 use crate::extract::{
     ExtractError, ExtractOptions, Extracted, forward_slash_key, sanitize_entry_path,
 };
-use crate::types::archive::reader::open_seekable;
+use crate::types::archive::reader::{open_seekable, zip_entry_name};
 
 /// Hard cap on a single in-memory extracted entry. Only enforced on
 /// the `Vec<u8>` fallback path — the spool-to-tempfile path bypasses
@@ -227,8 +227,8 @@ fn extract_zip(
         if file.is_dir() {
             continue;
         }
-        let stored = file.name().trim_start_matches('/');
-        if stored == target_str {
+        let name = zip_entry_name(file.name(), file.name_raw());
+        if name.trim_start_matches('/') == target_str {
             found_idx = Some(i);
             break;
         }

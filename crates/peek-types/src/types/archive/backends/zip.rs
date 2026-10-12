@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 
 use super::CappedList;
-use crate::types::archive::reader::ReadSeek;
+use crate::types::archive::reader::{ReadSeek, zip_entry_name};
 use crate::viewer::listing::{EntryMtime, FlatEntry};
 
 pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
@@ -26,7 +26,7 @@ pub(crate) fn list(reader: Box<dyn ReadSeek>) -> Result<CappedList> {
             minute: dt.minute(),
         });
         if !out.push(FlatEntry {
-            path: file.name().to_string(),
+            path: zip_entry_name(file.name(), file.name_raw()).into_owned(),
             size: file.size(),
             mtime,
             mode: file.unix_mode(),
