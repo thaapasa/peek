@@ -22,7 +22,7 @@ exclude = ["fuzz"]
 [workspace.package]
 version = "1.0.1"
 edition = "2024"
-# Honest floor: dep-driven. sevenz-rust2 0.22 requires 1.93; our own code
+# Honest floor: dep-driven. sevenz-rust2 0.24 requires 1.93; our own code
 # needs only 1.88 (`as_chunks`, stdlib items in lines.rs, csv/parse.rs, font,
 # glyph_atlas const ctx). Floor follows the deps. Not CI-verified — re-check
 # with `cargo metadata` after dep bumps.
@@ -130,7 +130,7 @@ lz4_flex = { version = "0.14", default-features = false, features = ["frame"] }
 brotli-decompressor = "6"
 # Runtime: decode-only (default-features = false). The root bin's
 # dev-dependencies re-add the `compress` feature for the extract test.
-sevenz-rust2 = { version = "0.22", default-features = false }
+sevenz-rust2 = { version = "0.24", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 
 # Rich Text Format parser. Small lexer/parser; covers the common Word-export
