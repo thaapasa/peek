@@ -255,7 +255,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Sqlite(_) => "application/vnd.sqlite3",
         FileType::VObject(crate::VObjectFormat::ICal) => "text/calendar",
         FileType::VObject(crate::VObjectFormat::VCard) => "text/vcard",
-        // For Image, Archive, Compressed, ObjectFile, DsStore, and Binary,
+        // For Image, Archive, Compressed, ObjectFile, DsStore, Lmdb, and Binary,
         // the magic-byte MIME is more specific than any generic registered
         // fallback would be.
         FileType::Image
@@ -264,6 +264,7 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         | FileType::ObjectFile
         | FileType::Classfile
         | FileType::DsStore
+        | FileType::Lmdb
         | FileType::Binary => {
             return None;
         }

@@ -60,7 +60,9 @@ Consume a window or seek, never the whole file. `InputSource` exposes:
 - `open_line_source()` — anchor-indexed `LineSource` for line windows.
 
 `ContentMode` (plain text / source) and `HexMode` render from these, so a
-multi-GB text or binary file never materializes. This is the default —
+multi-GB text or binary file never materializes. The LMDB reader walks B+tree
+pages through a `ByteSource` the same way: info, rows and value extracts read
+single pages, never the whole file. This is the default —
 reach for a cap only when streaming is genuinely impossible.
 
 ### 2. Capped whole read (hard refuse / degrade)

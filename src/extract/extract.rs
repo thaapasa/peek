@@ -45,6 +45,7 @@ pub fn extract(
         FileType::Directory => types::directory::extract::extract(source, key),
         FileType::Audio(fmt) => types::audio::extract::extract(source, *fmt, key),
         FileType::Sqlite(_) => types::sqlite::extract::extract(source, key),
+        FileType::Lmdb => types::lmdb::extract::extract(source, key),
         FileType::Notebook => types::notebook::extract::extract(source, key),
         FileType::Email(_) => types::email::extract::extract(source, key),
         FileType::SourceCode { .. }

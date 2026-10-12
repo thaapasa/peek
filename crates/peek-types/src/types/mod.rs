@@ -26,6 +26,7 @@ pub mod eps;
 pub mod font;
 pub mod html;
 pub mod image;
+pub mod lmdb;
 pub mod markdown;
 pub mod notebook;
 pub mod objfile;

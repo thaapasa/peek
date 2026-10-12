@@ -81,7 +81,7 @@ crates/
                     Types: binary, text, markdown, notebook, sql, sqlite, css, structured (JSON/
                     YAML/TOML/XML), csv, spreadsheet, presentation, image, html, email, ebook,
                     document, pdf, eps, comic, svg, audio, archive, directory, disk_image, objfile,
-                    classfile, cert, font, vobject, ds_store.
+                    classfile, cert, font, vobject, ds_store, lmdb.
   peek-theme/themes/  embedded .tmTheme (idea-dark default + light/solarized/github + vscode + iceberg +
                     graveyard/candy-floss/victorian).
 src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop). Names member

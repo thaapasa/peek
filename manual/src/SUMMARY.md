@@ -21,6 +21,7 @@
   - [Structured data](./file-types/structured-data.md)
   - [CSV / TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
+  - [LMDB databases](./file-types/lmdb.md)
   - [Spreadsheets](./file-types/spreadsheets.md)
   - [Presentations](./file-types/presentations.md)
   - [Documents](./file-types/documents.md)

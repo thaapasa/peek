@@ -28,6 +28,8 @@ shortcuts, extraction, themes, and the full CLI reference.
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
+- **LMDB databases** — 0.9 and 1.0 environments: database list, streaming key / value rows, open
+  any value as its own file
 - **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV
   extract, workbook metadata
 - **Presentations** — `.pptx` / `.pptm` / `.ppsx` / `.odp`: slide-by-slide text (`n` / `p` to

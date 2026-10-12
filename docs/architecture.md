@@ -229,7 +229,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | `ContentMode`         | text, source, structured, SVG XML                                                  | **yes**                       | **yes**           |
 | `RenderedTextMode<R>` | whole-document read views (DOCX / ODT / RTF / HTML / PDF text / vCard / iCalendar) | no                            | **yes**           |
 | `PagedTextReadMode<R>`| paged-text read views over a `PagedText` reader: presentation slides + EPUB chapters (per-page search; EPUB adds cover render) | no | **yes**           |
-| `ListingMode`         | generic listing engine over a `ListSource`: container TOCs (archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic / sqlite / spreadsheet) + filesystem directory listings | **yes**                       | **yes**           |
+| `ListingMode`         | generic listing engine over a `ListSource`: container TOCs (archive / ISO / PDF / EPUB / DOCX / ODT / audio / comic / sqlite / lmdb / spreadsheet) + filesystem directory listings | **yes**                       | **yes**           |
 | `HexMode`             | binary; reachable from any view via `x`                                            | **yes** (byte-aligned)        | **yes**           |
 | `ImageRenderMode`     | raster + rasterized SVG                                                            | **yes** (FitWidth/Height pan) | **yes**           |
 | `AnimationMode`       | GIF / WebP (drives `next_tick`/`tick`)                                             | **yes**                       | **yes**           |
@@ -237,7 +237,7 @@ A `Mode` is one renderable + interactive view of a file. The interactive viewer 
 | `PagedImageMode<R>`   | PDF / CBZ paged image render                                                       | **yes**                       | **yes**           |
 | `SpecimenMode`        | font specimen rasterisation (`.ttf` / `.otf` / `.ttc`)                             | **yes**                       | **yes**           |
 | `TableMode`           | objfile / classfile aligned tables                                                 | **yes**                       | **yes**           |
-| `RowsTableMode`       | streaming CSV / TSV + SQLite contents; opt-in row cursor (`Enter` / `e` via `RowSource::extract_target`) | **yes**                       | **yes**           |
+| `RowsTableMode`       | streaming CSV / TSV + SQLite contents + LMDB rows; opt-in row cursor (`Enter` / `e` via `RowSource::extract_target`) | **yes**                       | **yes**           |
 | `InfoMode`            | every file (file metadata)                                                         | no                            | no                |
 | `HelpMode`            | every file (keyboard-shortcut listing)                                             | no                            | no                |
 | `AboutMode`           | every file (logo, version, palette swatches)                                       | no                            | no                |

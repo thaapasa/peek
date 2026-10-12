@@ -31,9 +31,9 @@ use crate::types::{
     archive as archive_detect, audio as audio_detect, cert as cert_detect, comic as comic_detect,
     csv as csv_detect, disk_image as disk_image_detect, document as document_detect,
     ds_store as ds_store_detect, ebook as ebook_detect, email as email_detect, eps as eps_detect,
-    font as font_detect, objfile as objfile_detect, presentation as presentation_detect,
-    spreadsheet as spreadsheet_detect, sqlite as sqlite_detect, structured as structured_detect,
-    vobject as vobject_detect,
+    font as font_detect, lmdb as lmdb_detect, objfile as objfile_detect,
+    presentation as presentation_detect, spreadsheet as spreadsheet_detect,
+    sqlite as sqlite_detect, structured as structured_detect, vobject as vobject_detect,
 };
 
 /// Bytes read from the head of a file for magic-byte detection and the
@@ -139,6 +139,8 @@ pub enum FileType {
     VObject(VObjectFormat),
     /// Apple Finder `.DS_Store` (Desktop Services Store)
     DsStore,
+    /// LMDB environment data file (`data.mdb`, or a no-subdir file)
+    Lmdb,
     /// Binary / unknown
     Binary,
 }
@@ -498,6 +500,10 @@ fn head_magic_mime(head: &[u8]) -> Option<String> {
     if ds_store_detect::sniff_magic(head) {
         return Some("application/x-apple-dsstore".to_string());
     }
+    // LMDB meta page 0 — `infer` doesn't know it, and names are arbitrary.
+    if lmdb_detect::sniff_magic(head) {
+        return Some("application/x-lmdb".to_string());
+    }
     // Java class vs Mach-O fat binary — same `CA FE BA BE` magic. A
     // classfile's major_version (big-endian u16 at offset 6) is >= 45
     // (JDK 1.0); a fat Mach-O's nfat_arch slice count there is small
@@ -605,6 +611,9 @@ fn file_type_from_magic_mime(mime: &str) -> Option<FileType> {
     }
     if mime == "application/x-apple-dsstore" {
         return Some(FileType::DsStore);
+    }
+    if mime == "application/x-lmdb" {
+        return Some(FileType::Lmdb);
     }
     if mime.starts_with("video/") {
         return Some(FileType::Binary);
@@ -1392,6 +1401,15 @@ mod tests {
         let mime = head_magic_mime(head).expect("magic recognised");
         assert_eq!(mime, "application/x-apple-dsstore");
         assert_eq!(file_type_from_magic_mime(&mime), Some(FileType::DsStore));
+    }
+
+    #[test]
+    fn lmdb_routes_by_magic() {
+        let mut head = vec![0u8; 64];
+        head[10..12].copy_from_slice(&0x08u16.to_le_bytes());
+        head[16..20].copy_from_slice(&0xBEEF_C0DEu32.to_le_bytes());
+        let mime = head_magic_mime(&head).expect("magic recognised");
+        assert_eq!(file_type_from_magic_mime(&mime), Some(FileType::Lmdb));
     }
 
     #[test]

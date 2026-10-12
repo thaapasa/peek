@@ -20,6 +20,7 @@ Status legend: ✅ implemented · ◐ partial
     - [Object Files](#object-files-)
     - [Java Classfiles](#java-classfiles-)
     - [SQLite Databases](#sqlite-databases-)
+    - [LMDB Databases](#lmdb-databases-)
     - [Certificates and Keys](#certificates-and-keys-)
     - [Fonts](#fonts-)
     - [`.DS_Store`](#ds_store-)
@@ -907,6 +908,36 @@ pushdown LIKE / GLOB queries (running the match in SQL instead of row-by-row) ar
 WAL / `-journal` sidecar inspection, SQLCipher-encrypted DBs, and a custom-query prompt are
 also deferred.
 
+### LMDB Databases ✅
+
+LMDB environments open read-only: a `data.mdb`, or a single-file (`MDB_NOSUBDIR`) environment
+under any name. peek reads the pages itself through a `ByteSource`. It doesn't link liblmdb,
+because liblmdb mmaps the whole map and writes the lock file even on a read-only open. Both
+64-bit little-endian formats are supported: 0.9 (data version 1) and 1.0 (data version 3,
+24-byte page header). Detection is by the meta-page magic only, since `.mdb` is also MS Access.
+
+- **Databases** (landing view, when named sub-databases exist) — a `ListingMode` with one row
+  per database and its entry count. `@main` is listed when the main database also holds plain
+  keys. Enter opens a database's rows.
+- **Rows** (landing view when there are no named sub-databases) — the shared `RowsTableMode`
+  with the row cursor on: `Key │ Value │ Size`. One row per `(key, value)` pair, so a
+  `dupsort` key spans one row per duplicate. Text shows as text, other bytes as hex;
+  `integerkey` / `integerdup` show as numbers. The row total comes from the database record,
+  and a leaf index built on demand gives random access. Value cells preview 256 bytes, so an
+  overflow value costs one small read.
+- **Info** — format, page size, map size, pages used, last txnid, active meta page, free-list
+  pages, and one block per database (entries, depth, branch / leaf / overflow pages, flags).
+
+Enter on a row opens the value as its own source and peek re-detects it (JSON, image, …); `e`
+saves it. An overflow value comes back as a `FileRange` over the database file, so any size
+opens without a copy. The extract key is `<db>/<key>[/<dup>]` with `@main` for the main
+database and `x:<hex>` for keys that aren't plain text. Extract looks the key up by B+tree
+descent and falls back to a full scan when an app-defined comparator defeats the descent.
+
+The walk is defensive: depth is capped at 32 and a walk may visit at most as many pages as the
+file holds, so a crafted cycle or shared subtree ends in an error instead of a hang. 32-bit,
+big-endian and encrypted environments are detected and reported in Info, with no table.
+
 ### Certificates and Keys ◐
 
 Cryptographic material gets a per-entry Info section. The source view depends on the container:
@@ -1398,6 +1429,8 @@ Pull an inner item out of a container as a standalone file. Sources currently:
   (`pages/page{N}/image{M}.{ext}` pseudo-paths for image XObjects).
 - **Audio embeds**: `pictures/<usage>.<ext>` per visual, plus `lyrics/lyrics.txt`.
 - **SQLite entities**: `<kind>/<name>.sql` (DDL) and `<kind>/<name>.csv` (table / view contents).
+- **LMDB values**: `<db>/<key>[/<dup>]` (`@main` for the main database, `x:<hex>` for binary
+  keys).
 - **Spreadsheet sheets**: `<sheet>.csv` streams one worksheet to CSV; raw ZIP paths extract the
   underlying workbook part.
 - **Document embeds** (DOCX / ODT / RTF): extract an embedded image by its inner path.
@@ -1489,12 +1522,15 @@ All for viewer mode. Keys marked *(context)* are file-type-specific.
 `Left` / `Right` are pan keys in both static and animated image views — frame stepping uses
 `n` / `p` exclusively (the previous Left/Right frame-step bindings are gone).
 
-### Streaming Table — CSV / TSV / SQLite contents *(context)*
+### Streaming Table — CSV / TSV / SQLite contents / LMDB rows *(context)*
 
 | Key       | Action                                                   |
 |-----------|----------------------------------------------------------|
 | `Shift+H` | Toggle header row on / off (CSV: override the heuristic) |
 | `Shift+R` | Reflow column widths from the currently-visible viewport |
+
+LMDB rows turn on the row cursor: `Up` / `Down` / page keys move the selected row instead of
+scrolling, `Enter` opens its value and `e` saves it.
 
 ### Font Specimen *(context)*
 

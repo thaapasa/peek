@@ -136,6 +136,11 @@ impl_info_extras!(
     crate::types::csv::info_render::json_section
 );
 impl_info_extras!(
+    crate::types::lmdb::info::LmdbInfo,
+    crate::types::lmdb::info_render::render_section,
+    crate::types::lmdb::info_render::json_section
+);
+impl_info_extras!(
     crate::types::sqlite::info::SqliteInfo,
     crate::types::sqlite::info_render::render_section,
     crate::types::sqlite::info_render::json_section

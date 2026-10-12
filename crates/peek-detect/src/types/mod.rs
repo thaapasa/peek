@@ -16,6 +16,7 @@ pub mod ebook;
 pub mod email;
 pub mod eps;
 pub mod font;
+pub mod lmdb;
 pub mod objfile;
 pub mod pdf;
 pub mod presentation;
