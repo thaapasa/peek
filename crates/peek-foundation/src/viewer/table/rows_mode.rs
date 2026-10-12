@@ -20,6 +20,10 @@
 //!   caller-provided seed
 //! * `top_record` — record index at the top of the body viewport
 //! * `h_col` — left-most visible column (column-step horizontal pan)
+//! * `cursor` — opt-in selected body row ([`RowsTableMode::with_row_cursor`]).
+//!   Up / Down move it and the viewport follows; `Enter` / `e` act on the
+//!   row through [`RowSource::extract_target`]. Off for sources whose rows
+//!   aren't extractable (CSV, SQLite), which keep plain line scrolling.
 //!
 //! Print mode renders the seeded widths only — no auto-widen — so the
 //! table layout never depends on the deepest row consumed.
@@ -40,7 +44,9 @@ use syntect::highlighting::Color;
 use unicode_width::UnicodeWidthStr;
 
 use crate::output::PrintOutput;
-use crate::viewer::modes::{Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window};
+use crate::viewer::modes::{
+    ExtractTarget, Handled, Mode, ModeId, NEXT_PREV_MATCH_HELP, RenderCtx, Window,
+};
 use crate::viewer::search::{
     MAX_MATCHES, SEARCH_SCAN_MAX_BYTES, ScanStop, SearchQuery, SearchTarget, overlay_matches,
     search_status_label, truncated_scan_warning,
@@ -55,6 +61,9 @@ const COL_SEP: &str = " │ ";
 const SEP_ROW_CHAR: char = '─';
 /// Junction glyph at column boundaries on the separator row.
 const SEP_JUNCTION_CHAR: char = '┼';
+/// Leading-gutter glyph on the cursor row. Takes the place of the one-space
+/// left edge every row starts with, so columns stay aligned.
+const CURSOR_MARKER: &str = "\u{25b8}";
 /// Truncation marker on cells wider than their column width.
 const TRUNCATE_MARKER: char = '…';
 /// Placeholder for a `NULL` body cell (`Some(None)` from the source).
@@ -93,6 +102,9 @@ pub struct RowsTableMode {
     /// toggles.
     has_header: bool,
     top_record: usize,
+    /// Selected body record, `Some` only when the cursor is enabled. Kept
+    /// inside `top_record..top_record + body rows` by [`Self::reveal_cursor`].
+    cursor: Option<usize>,
     h_col: usize,
     cached_cols: usize,
     cached_rows: usize,
@@ -167,6 +179,7 @@ impl RowsTableMode {
             has_header,
             source,
             top_record: 0,
+            cursor: None,
             h_col: 0,
             cached_cols: 0,
             cached_rows: 0,
@@ -174,6 +187,13 @@ impl RowsTableMode {
             search: None,
             pending_warnings: Vec::new(),
         }
+    }
+
+    /// Enable the row cursor. Use when the source implements
+    /// [`RowSource::extract_target`].
+    pub fn with_row_cursor(mut self) -> Self {
+        self.cursor = Some(0);
+        self
     }
 
     fn body_start(&self) -> usize {
@@ -190,9 +210,61 @@ impl RowsTableMode {
     /// the sticky header + separator rows (which occupy 2 visual rows
     /// when a header is shown).
     fn max_top(&self) -> usize {
+        self.body_total().saturating_sub(self.body_rows())
+    }
+
+    /// Body rows that fit the viewport below the sticky header (at least 1).
+    fn body_rows(&self) -> usize {
         let reserved = if self.has_header { 2 } else { 0 };
-        let rows = self.cached_rows.saturating_sub(reserved).max(1);
-        self.body_total().saturating_sub(rows)
+        self.cached_rows.saturating_sub(reserved).max(1)
+    }
+
+    /// Clamp the cursor to the loaded body, then scroll just enough to keep
+    /// it on screen. No-op when the cursor is off.
+    fn reveal_cursor(&mut self) {
+        let Some(cur) = self.cursor else { return };
+        let cur = cur.min(self.body_total().saturating_sub(1));
+        self.cursor = Some(cur);
+        let rows = self.body_rows();
+        if cur < self.top_record {
+            self.top_record = cur;
+        } else if cur >= self.top_record + rows {
+            self.top_record = cur + 1 - rows;
+        }
+        self.clamp_top();
+    }
+
+    /// Cursor-mode handling for the vertical scroll actions: move the
+    /// selection, pulling rows ahead of it, and let the viewport follow.
+    fn scroll_cursor(&mut self, cur: usize, action: Action) -> bool {
+        let step = self.body_rows();
+        let next = match action {
+            Action::ScrollUp => cur.saturating_sub(1),
+            Action::ScrollDown => cur.saturating_add(1),
+            Action::PageUp => cur.saturating_sub(step),
+            Action::PageDown => cur.saturating_add(step),
+            Action::Top => 0,
+            Action::Bottom => {
+                // Drive to EOF so the bottom is a true bottom.
+                let _ = self.source.ensure_all();
+                self.body_total().saturating_sub(1)
+            }
+            _ => return false,
+        };
+        match action {
+            Action::PageUp => self.top_record = self.top_record.saturating_sub(step),
+            Action::PageDown => self.top_record = self.top_record.saturating_add(step),
+            _ => {}
+        }
+        let _ = self.source.ensure_row(self.body_start() + next);
+        self.cursor = Some(next);
+        self.reveal_cursor();
+        true
+    }
+
+    /// Source record index under the cursor, if the cursor is on.
+    fn cursor_record(&self) -> Option<usize> {
+        self.cursor.map(|c| self.body_start() + c)
     }
 
     fn clamp_top(&mut self) {
@@ -383,6 +455,9 @@ impl RowsTableMode {
             let body_idx = record_idx.saturating_sub(self.body_start());
             self.top_record = body_idx;
             self.clamp_top();
+            if self.cursor.is_some() {
+                self.cursor = Some(body_idx);
+            }
         }
         if col_idx < self.widths.len() {
             self.h_col = col_idx;
@@ -703,6 +778,7 @@ impl Mode for RowsTableMode {
         let _ = self.source.ensure_row(body_target.saturating_sub(1));
 
         self.clamp_top();
+        self.reveal_cursor();
         self.clamp_h_col();
         self.grow_widths_for_visible();
 
@@ -732,6 +808,11 @@ impl Mode for RowsTableMode {
             if let Some(row) =
                 self.build_body_row(body_idx, &widths, ctx.peek_theme, self.h_col, false)
             {
+                let row = if self.cursor == Some(body_idx) {
+                    paint_cursor_row(&row, ctx.peek_theme, ctx.term_cols)
+                } else {
+                    row
+                };
                 lines.push(clip(row));
             }
             body_idx += 1;
@@ -791,6 +872,11 @@ impl Mode for RowsTableMode {
     }
 
     fn scroll(&mut self, action: Action) -> bool {
+        if let Some(cur) = self.cursor
+            && self.scroll_cursor(cur, action)
+        {
+            return true;
+        }
         match action {
             Action::ScrollUp => {
                 self.top_record = self.top_record.saturating_sub(1);
@@ -858,6 +944,7 @@ impl Mode for RowsTableMode {
                 // remains at the top; auto-widen will pick up the header
                 // cell on the next render.
                 self.clamp_top();
+                self.reveal_cursor();
                 Handled::Yes
             }
             Action::Next => {
@@ -884,6 +971,7 @@ impl Mode for RowsTableMode {
         self.cached_cols = term_cols;
         self.cached_rows = term_rows;
         self.clamp_top();
+        self.reveal_cursor();
         self.clamp_h_col();
     }
 
@@ -891,7 +979,11 @@ impl Mode for RowsTableMode {
         let mut segs: Vec<(String, Color)> = Vec::new();
         // Records: `cur/total` body rows (or `cur/≥loaded` while partial).
         let body_total = self.body_total();
-        let cur = self.top_record.saturating_add(1).min(body_total.max(1));
+        let cur = self
+            .cursor
+            .unwrap_or(self.top_record)
+            .saturating_add(1)
+            .min(body_total.max(1));
         let total_label = match self.source.total() {
             Some(_) => body_total.to_string(),
             None => format!("≥{body_total}"),
@@ -948,6 +1040,24 @@ impl Mode for RowsTableMode {
     fn take_warnings(&mut self) -> Vec<String> {
         std::mem::take(&mut self.pending_warnings)
     }
+
+    fn extract_target(&self) -> Option<ExtractTarget> {
+        self.source.extract_target(self.cursor_record()?)
+    }
+
+    fn selected_extract_size(&self) -> Option<u64> {
+        self.source.extract_size(self.cursor_record()?)
+    }
+}
+
+/// Highlight the cursor row: swap the leading gutter space for
+/// [`CURSOR_MARKER`] and band the rest with the selection background out to
+/// `width`. Plain style modes keep only the marker.
+fn paint_cursor_row(row: &str, theme: &PeekTheme, width: usize) -> String {
+    let rest = row.strip_prefix(' ').unwrap_or(row);
+    let mut out = theme.paint(CURSOR_MARKER, theme.accent);
+    out.push_str(&theme.paint_bg_filled(rest, theme.selection, width.saturating_sub(1)));
+    out
 }
 
 /// Box-drawing separator row between header and body. `start_col` is
@@ -1654,6 +1764,126 @@ mod tests {
             segs.iter().any(|(t, _)| t == "no match (partial scan)"),
             "zero-hit truncated scan must say partial: {segs:?}"
         );
+    }
+
+    // --- Row cursor ---------------------------------------------------------
+
+    /// [`FakeRows`] that names every body row as an extract target, the way
+    /// a cursor-enabled source (LMDB values) does.
+    struct ExtractableRows(FakeRows);
+
+    impl RowSource for ExtractableRows {
+        fn ensure_row(&mut self, idx: usize) -> Result<usize> {
+            self.0.ensure_row(idx)
+        }
+        fn ensure_all(&mut self) -> Result<()> {
+            self.0.ensure_all()
+        }
+        fn row(&self, idx: usize) -> Option<&[Option<String>]> {
+            self.0.row(idx)
+        }
+        fn loaded(&self) -> usize {
+            self.0.loaded()
+        }
+        fn total(&self) -> Option<usize> {
+            self.0.total()
+        }
+        fn column_count(&self) -> usize {
+            self.0.column_count()
+        }
+        fn extract_target(&self, idx: usize) -> Option<ExtractTarget> {
+            // Row 0 is the header.
+            (idx > 0).then(|| ExtractTarget::EntryPath(format!("row{idx}")))
+        }
+        fn extract_size(&self, idx: usize) -> Option<u64> {
+            (idx > 0).then_some(idx as u64 * 10)
+        }
+    }
+
+    /// Header + `n` body rows, cursor on, 3 body rows visible.
+    fn cursor_mode(n: usize) -> RowsTableMode {
+        let mut rows = vec![vec![Some("h".to_string())]];
+        rows.extend((0..n).map(|i| vec![Some(format!("r{i}"))]));
+        let source = ExtractableRows(FakeRows { rows, cols: 1 });
+        let mut mode = RowsTableMode::new(Box::new(source), vec![Alignment::Left], true, "Table")
+            .with_row_cursor();
+        mode.cached_cols = 40;
+        mode.cached_rows = 5; // 2 reserved for header + separator
+        mode
+    }
+
+    #[test]
+    fn cursor_moves_and_viewport_follows() {
+        let mut mode = cursor_mode(10);
+        assert_eq!(mode.cursor, Some(0));
+        mode.scroll(Action::ScrollDown);
+        mode.scroll(Action::ScrollDown);
+        assert_eq!(
+            (mode.cursor, mode.top_record),
+            (Some(2), 0),
+            "still on screen"
+        );
+        mode.scroll(Action::ScrollDown);
+        assert_eq!(
+            (mode.cursor, mode.top_record),
+            (Some(3), 1),
+            "viewport follows"
+        );
+        mode.scroll(Action::Bottom);
+        assert_eq!((mode.cursor, mode.top_record), (Some(9), 7));
+        mode.scroll(Action::ScrollDown);
+        assert_eq!(mode.cursor, Some(9), "clamped at the last row");
+        mode.scroll(Action::PageUp);
+        assert_eq!(mode.cursor, Some(6));
+        mode.scroll(Action::Top);
+        assert_eq!((mode.cursor, mode.top_record), (Some(0), 0));
+    }
+
+    #[test]
+    fn cursor_extract_delegates_to_source_record() {
+        let mut mode = cursor_mode(5);
+        mode.scroll(Action::ScrollDown);
+        // Body row 1 is source record 2 (record 0 is the header).
+        assert!(matches!(
+            mode.extract_target(),
+            Some(ExtractTarget::EntryPath(p)) if p == "row2"
+        ));
+        assert_eq!(mode.selected_extract_size(), Some(20));
+        assert!(mode_from("a\nb\n").extract_target().is_none(), "cursor off");
+    }
+
+    #[test]
+    fn cursor_row_painted_with_marker_and_status_tracks_it() {
+        let file_info = synthetic_file_info();
+        let tm = theme_manager();
+        let theme = tm.peek_theme().clone();
+        let ctx = RenderCtx {
+            file_info: &file_info,
+            theme_name: PeekThemeName::IdeaDark,
+            peek_theme: &theme,
+            render_opts: RenderOptions::default(),
+            term_cols: 40,
+            term_rows: 5,
+        };
+        let mut mode = cursor_mode(5);
+        mode.scroll(Action::ScrollDown);
+        let win = mode.render_window(&ctx, 0, 5).unwrap();
+        let marked: Vec<&String> = win
+            .lines
+            .iter()
+            .filter(|l| l.starts_with(CURSOR_MARKER))
+            .collect();
+        assert_eq!(marked.len(), 1);
+        assert!(marked[0].contains("r1"));
+        let segs = mode.status_segments(&theme);
+        assert!(segs.iter().any(|(s, _)| s == "2/5"), "{segs:?}");
+    }
+
+    #[test]
+    fn search_step_moves_cursor_to_match_row() {
+        let mut mode = cursor_mode(10);
+        mode.set_search(Some(&lit("r7")));
+        assert_eq!(mode.cursor, Some(7));
     }
 
     /// A table wider than the viewport must not emit a line wider than

@@ -30,6 +30,8 @@
 
 use anyhow::Result;
 
+use crate::viewer::modes::ExtractTarget;
+
 /// Lazy, index-addressable row stream.
 ///
 /// Implementations cache rows as the caller asks for them, but both
@@ -98,5 +100,19 @@ pub trait RowSource {
     /// when non-zero. Default `0` for sources that can't produce them.
     fn malformed_count(&self) -> usize {
         0
+    }
+
+    /// Extract key for row `idx`, read by a cursor-enabled
+    /// [`RowsTableMode`](super::rows_mode::RowsTableMode) when the user
+    /// descends (`Enter`) or extracts (`e`) the selected row. `None`
+    /// (default) = row not extractable.
+    fn extract_target(&self, _idx: usize) -> Option<ExtractTarget> {
+        None
+    }
+
+    /// Byte size of row `idx`'s extract payload, if known. Gates a large
+    /// extract behind the session's confirmation prompt.
+    fn extract_size(&self, _idx: usize) -> Option<u64> {
+        None
     }
 }
