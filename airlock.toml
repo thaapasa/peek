@@ -1,9 +1,21 @@
 [packs]
-alpine = { version = "1", args = { allow-apk = true } }
+debian = { version = "1", args = { allow-apt = true } }
 claude = { version = "1", args = { acp = true } }
 git = { version = "1" }
+python = { version = "1", args = { allow-pypi = true, python-version = "latest" } }
 rust = { version = "1", args = { allow-cargo = true, toolchain = "stable" } }
 
 [clipboard]
 copy = true
 paste = false
+
+[disk.cache.cargo-target]
+paths = ["target"]
+
+# Optional, saves downloads after an image change.
+# The rust pack sets CARGO_HOME=/usr/local/cargo, so ~/.cargo/registry is unused.
+[disk.cache.cargo-registry]
+paths = ["/usr/local/cargo/registry", "/usr/local/cargo/git"]
+
+[disk]
+size = "30 GB"   # default 10 GB fills fast with target dirs
