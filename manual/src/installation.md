@@ -48,6 +48,7 @@ SIMD code (`brew install nasm`, `apt install nasm`, `choco install nasm`). ARM b
 build tasks run with [mise](https://mise.jdx.dev/).
 
 ```sh
+mise install         # Rust toolchain + build tools
 mise run pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
 mise run install     # cargo build --release; install to $PEEK_INSTALL_DIR
 ```

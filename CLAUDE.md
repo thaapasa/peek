@@ -18,14 +18,15 @@ cargo clippy --workspace     # ALL crates — bare skips member crates
 **Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and skips
 library-crates.
 
-**Toolchain pinned in `rust-toolchain.toml`.** Local + CI + release all resolve there; rustup
-installs it on demand. Bump it in its own commit — a new rustc means new clippy lints. MSRV
-(`rust-version` in root `Cargo.toml`) is a separate, lower floor and isn't CI-verified.
+**Toolchain pinned in `rust-toolchain.toml`.** Local + CI + release all resolve there;
+`mise install` installs it (via rustup) plus nightly rustfmt. Bump it in its own commit — a new
+rustc means new clippy lints. MSRV (`rust-version` in root `Cargo.toml`) is a separate, lower floor
+and isn't CI-verified.
 
 **Other tools via mise.** `mise.toml` pins node, prettier, mdbook (CI installs these) and holds the
 dev tasks (`mise tasks`; `mise run <task>`). Opt-in dev tools (cargo-fuzz, cargo-audit, demo
-capture) live in `mise.dev.toml`, installed by `mise run setup`. Rust stays out of mise: its backend
-sets `RUSTUP_TOOLCHAIN`, overriding the file.
+capture) live in `mise.dev.toml`, installed by `mise run setup`. Only `nasm` (x86 builds) is outside
+mise.
 
 **Verify against the debug build** — `cargo run -- [args]` or `target/debug/peek`. Release builds
 take minutes; never `cargo build --release` just to check a change. Reserve release for shipping.

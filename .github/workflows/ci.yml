@@ -24,21 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Tools from mise.toml (node, prettier, mdbook). Rust stays with
-      # rustup below.
+      # Tools from mise.toml: Rust from rust-toolchain.toml, nightly rustfmt
+      # (postinstall hook), node, prettier, mdbook.
       - uses: jdx/mise-action@v3
-
-      # Bare `rustup toolchain install` resolves rust-toolchain.toml (channel
-      # + components). Not dtolnay/rust-toolchain: it sets RUSTUP_TOOLCHAIN,
-      # which overrides the file and puts CI back on floating stable.
-      - name: Install Rust toolchain
-        run: rustup toolchain install
-
-      # rustfmt.toml's group_imports is nightly-only; the pinned rustfmt would
-      # skip it and pass ungrouped imports. Nightly is used for nothing else —
-      # the explicit `+nightly` keeps build/clippy/test on the pinned channel.
-      - name: Install nightly rustfmt
-        run: rustup toolchain install nightly --profile minimal --component rustfmt
 
       # rav1d (AVIF decode) assembles its x86 SIMD with nasm at build time.
       - name: Install nasm (Linux)

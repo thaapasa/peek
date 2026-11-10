@@ -2,8 +2,9 @@
 # here, so a new stable's lints can't red CI on an unrelated PR and release
 # binaries are built by a known compiler. Bump deliberately, in one commit.
 #
-# NB: dtolnay/rust-toolchain sets RUSTUP_TOOLCHAIN, which overrides this file.
-# CI therefore installs via bare `rustup toolchain install` instead.
+# mise reads the channel from here (idiomatic_version_file_enable_tools in
+# mise.toml). It sets RUSTUP_TOOLCHAIN to the same value, so this file stays
+# the only pin.
 [toolchain]
 channel = "1.99.0"
 components = ["clippy", "rustfmt"]

@@ -1,7 +1,16 @@
-# Tools for build, lint and docs. Rust is not here: rustup installs the pinned
-# toolchain from rust-toolchain.toml. mise's rust backend sets RUSTUP_TOOLCHAIN,
-# which overrides that file and skips its components.
-# Opt-in dev tools (fuzzing, audit, demo capture) live in mise.dev.toml.
+# Tools for build, lint and docs. Opt-in dev tools (fuzzing, audit, demo
+# capture) live in mise.dev.toml.
+
+# Rust version comes from rust-toolchain.toml, so it's pinned in one place.
+# mise installs it through rustup.
+[settings]
+idiomatic_version_file_enable_tools = ["rust"]
+
+# rustfmt.toml's import options are nightly-only, so `format` and `lint` run
+# `cargo +nightly fmt`. Nightly is used for nothing else.
+[hooks]
+postinstall = "rustup toolchain install nightly --profile minimal --component rustfmt"
+
 [tools]
 "github:rust-lang/mdBook" = "0.5.4"
 node = "24.22.2"

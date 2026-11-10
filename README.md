@@ -154,11 +154,11 @@ mise run manual    # serves http://localhost:12620
 
 ## Development
 
-[mise](https://mise.jdx.dev/) installs the tools for building, linting and the manual. rustup
-installs the Rust toolchain pinned in `rust-toolchain.toml`. x86 builds also need `nasm`.
+[mise](https://mise.jdx.dev/) installs the tools for building, linting and the manual, including the
+Rust toolchain pinned in `rust-toolchain.toml`. x86 builds also need `nasm`.
 
 ```sh
-mise install        # node, prettier, mdbook
+mise install        # Rust, nightly rustfmt, node, prettier, mdbook
 mise run setup      # opt-in: fuzzing, cargo-audit, demo capture (mise.dev.toml)
 mise run lint
 mise run test
