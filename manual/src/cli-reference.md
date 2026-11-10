@@ -28,6 +28,7 @@
 | `--no-tempfile`   |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                                |
 | `--yes`           | `-y`  | Pre-grant slow ops: skip the load prompt for big compressed files                                                           |
 | `--update`        |       | Check for newer release and re-run `install.sh`                                                                             |
+| `--completions`   |       | Print the shell completion script — see [Shell completions](./installation.md#shell-completions)                            |
 
 ## Notes
 

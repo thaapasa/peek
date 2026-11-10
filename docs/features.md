@@ -1616,6 +1616,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--extract-size` |       | Output pixel size for animation / SVG frame extract                                                               | ✅     |
 | `--no-tempfile`  |       | Keep archive extracts in RAM (skip the `$TMPDIR` spool path)                                                      | ✅     |
 | `--update`       |       | Check for newer release and re-run `install.sh`                                                                   | ✅     |
+| `--completions`  |       | Print the bash / zsh / fish / elvish / PowerShell completion script, with theme, color and language values        | ✅     |
 
 `--plain` is the single "sterile output" knob: it implies `--color plain` and additionally disables
 syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered / rasterized

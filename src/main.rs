@@ -8,6 +8,7 @@ use peek_foundation::{info, viewer};
 use peek_io::InputSource;
 
 mod cli;
+mod completions;
 mod compose;
 mod extract;
 mod gather;
@@ -32,6 +33,9 @@ fn main() -> Result<()> {
     }
     if args.update {
         return update::run();
+    }
+    if let Some(shell) = args.completions {
+        return completions::print(shell);
     }
 
     // No explicit theme → pick the light or dark default from the

@@ -71,7 +71,10 @@ curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
 Installs the latest release into `~/.local/bin`. Supports `aarch64` and `x86_64`. Pin a version with
 `PEEK_VERSION=v0.1.0` or relocate with `PEEK_INSTALL_DIR=/usr/local/bin`.
 
-Manual downloads, Windows, building from source, and updating: see the
+Shell completions: add `eval "$(peek --completions zsh)"` (or `bash`) to your shell startup file, or
+`peek --completions fish | source` for fish.
+
+Manual downloads, Windows, building from source, updating and completions: see the
 [Installation chapter](https://thaapasa.github.io/peek/installation.html) of the manual.
 
 ## Usage

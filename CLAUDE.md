@@ -95,6 +95,7 @@ src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop)
   main.rs           CLI entry: resolve source, build Registry, dispatch (info/list/interactive/pipe).
   cli.rs            Args (clap) + compose_opts() projection (keeps clap out of readers).
   update.rs         --update: GitHub Releases check + pipe install.sh into sh.
+  completions.rs    --completions: static clap_complete script + --language values.
   input.rs          CLI stdin/source dispatch (build_source).
   output.rs         CLI help + version screens.
   compose.rs        Registry + FileType→types::<x>::compose hub (holds ComposeOpts).

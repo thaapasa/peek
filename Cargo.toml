@@ -55,6 +55,8 @@ proc-macro2 = "1"
 
 # CLI framework with derive macros for self-documenting commands
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
+# Static shell completion scripts for `--completions`.
+clap_complete = "4"
 
 # Terminal handling and colors
 crossterm = "0.29"
@@ -256,7 +258,9 @@ peek-detect = { workspace = true }
 peek-theme = { workspace = true }
 peek-foundation = { workspace = true }
 peek-types = { workspace = true }
-clap = { workspace = true }
+# `string`: owned `--language` values in the `--completions` script.
+clap = { workspace = true, features = ["string"] }
+clap_complete = { workspace = true }
 crossterm = { workspace = true }
 anyhow = { workspace = true }
 bytes = { workspace = true }

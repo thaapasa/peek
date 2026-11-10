@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::{CommandFactory, FromArgMatches, Parser};
+use clap::{CommandFactory, FromArgMatches, Parser, ValueHint};
 use peek_foundation::viewer::ComposeOpts;
 
 /// peek — a modern file viewer for the terminal.
@@ -20,6 +20,7 @@ use peek_foundation::viewer::ComposeOpts;
 )]
 pub struct Args {
     /// File to view. Use `-` to read stdin.
+    #[arg(value_hint = ValueHint::FilePath)]
     pub file: Option<PathBuf>,
 
     /// Show concise help (logo and common options)
@@ -122,6 +123,11 @@ pub struct Args {
     /// Check GitHub for a newer release and install it via the official installer
     #[arg(long, hide_short_help = true)]
     pub update: bool,
+
+    /// Print the shell completion script, for use with eval in the shell
+    /// startup file
+    #[arg(long, value_name = "SHELL", hide_short_help = true)]
+    pub completions: Option<clap_complete::Shell>,
 
     /// Pull a sub-item out of a container by key. Use --list to discover
     /// available keys.

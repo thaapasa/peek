@@ -72,3 +72,21 @@ peek --update
 ```
 
 Checks GitHub Releases and re-runs `install.sh` if a newer version is available.
+
+## Shell completions
+
+peek completes its options and their values, such as themes, color modes and `--language` names. Add
+the line for your shell to its startup file:
+
+```sh
+# bash: ~/.bashrc
+command -v peek >/dev/null && eval "$(peek --completions bash)"
+# zsh: ~/.zshrc
+command -v peek >/dev/null && eval "$(peek --completions zsh)"
+# fish: ~/.config/fish/config.fish
+command -q peek; and peek --completions fish | source
+```
+
+The script comes from the installed binary at each shell start, so it stays in sync after an update.
+The `command -v` check keeps the shell starting cleanly if peek is removed. The zsh script runs
+`compinit` if it has not run yet. `--completions` also takes `elvish` and `powershell`.
