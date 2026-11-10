@@ -5,6 +5,7 @@ docker = { version = "1", args = { allow-pulls = true } }
 git = { version = "1" }
 mise = { version = "1" }
 python = { version = "1", args = { allow-pypi = true, python-version = "latest" } }
+rust = { version = "1", args = { allow-cargo = true, toolchain = "stable" } }
 
 [clipboard]
 copy = true
