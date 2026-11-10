@@ -304,6 +304,13 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.rav1d]
 opt-level = 2
+# With debug assertions, rav1d's `DisjointMut` overlap check sometimes aborts
+# parallel AVIF tests on non-x86 targets. In the Rust cdef fallback,
+# `padding()` takes the `top` row slice 2 pixels left of a left-edge block,
+# which overlaps another worker's line-buffer write. The loop never reads
+# those 2 pixels, so release (no check) is unaffected. See
+# docs/planned.md for the upstream follow-up.
+debug-assertions = false
 [profile.dev.package.yuv]
 opt-level = 2
 # avif-parse debug-asserts on malformed boxes before returning its error, so

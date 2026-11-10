@@ -240,6 +240,34 @@ cryptographically," and are the meaningful follow-ups.
   `image`→`exr`→`pulp` and `avif-decode`→`rav1d`. Re-check on each dep bump; remove an ignore once
   the chain stops pulling it in.
 
+- ☐ **Report the rav1d cdef overlap, then re-enable its debug assertions.** The dev profile turns
+  off `debug-assertions` for `rav1d` (root `Cargo.toml`), because its `DisjointMut` overlap check
+  aborted the AVIF tests in `peek-types` (`types::image::avif`) on aarch64. Release builds are not
+  affected: the check exists only under `cfg(debug_assertions)` in rav1d's `src/disjoint_mut.rs`.
+  - **Symptom.** A `rav1d-worker` thread panics with `overlapping DisjointMut`: a shared borrow at
+    `src/cdef.rs` (`padding()`) against a mutable borrow at `src/cdef_apply.rs` (`backup2lines`).
+    The panic is in a function that cannot unwind, so the test binary aborts with SIGABRT and the
+    harness prints no test name.
+  - **Cause.** In rav1d 1.1.0, `padding()` takes the `top` slice from `x = -2` even when `HAVE_LEFT`
+    is unset (a block on the left edge of the frame), but then reads only from `x_start = 2`. Those
+    2 unread pixels are the tail of the previous line-buffer row, which another worker writes at the
+    same time. No pixel is read during the write, so the overlap is harmless in practice. x86 builds
+    use the assembly cdef and never run this code; non-x86 builds get the Rust fallback because
+    `avif-decode` turns off rav1d's `asm` feature there. The upstream fix would start the slice at
+    `x_start`.
+  - **Reproduce.** With the override removed, build the test binary
+    (`cargo test -p peek-types --lib --no-run`) and run `<binary> --quiet image::avif` 200 times in
+    a loop. On a 10-core aarch64 machine about 9 of 200 runs aborted. Each decode test alone, or all
+    of them with `--test-threads=1`, gave 0 aborts in 200 runs: the overlap needs several decodes
+    running at once.
+  - **Rejected: single-threaded decode.** `avif-decode` 3 sets rav1d's thread count from
+    `available_parallelism()` and has no setting for it, so this would need a fork or direct rav1d
+    calls.
+  - **Upstream state, 2026-11-10.** crates.io's latest is 1.1.0. Upstream main has an unpublished
+    1.1.1 version bump, but no commit after 1.1.0 changes this logic, and no upstream issue reports
+    it. Re-check on each `avif-decode` / `rav1d` bump; once a fixed release lands, remove the
+    override and run the loop above.
+
 ---
 
 ## Post-1.0 / 1.x
