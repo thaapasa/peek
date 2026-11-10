@@ -4,7 +4,7 @@ peek auto-detects the file type by extension and magic bytes. Where the detected
 dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 
 | Category          | Formats                                                                              |
-|-------------------|--------------------------------------------------------------------------------------|
+| ----------------- | ------------------------------------------------------------------------------------ |
 | Source code       | 100+ languages via syntect (Rust, Python, Go, TS, …)                                 |
 | Markup            | Markdown, HTML, XML, SQL                                                             |
 | Email             | `.eml` messages, `.mbox` mailboxes                                                   |
@@ -34,5 +34,5 @@ dedicated viewer, that viewer runs; otherwise peek falls back to the hex dump.
 | `.DS_Store`       | Apple Finder store — records table (icon / window / view settings)                   |
 | Binary / unknown  | Hex dump (`hexdump -C` style)                                                        |
 
-Detection logic: [
-`crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).
+Detection logic:
+[ `crates/peek-detect/`](https://github.com/thaapasa/peek/blob/main/crates/peek-detect/src/detect.rs).

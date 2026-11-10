@@ -6,7 +6,7 @@ The example images included in this repository are used under the
 [Unsplash License](https://unsplash.com/license).
 
 | File                             | Photographer                                              | Link                                                                                                       |
-|----------------------------------|-----------------------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| -------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `test-images/orange-flowers.jpg` | [Truong Tuyet Ly](https://unsplash.com/@liliantruong2603) | [Unsplash](https://unsplash.com/photos/orange-bougainvillea-flowers-against-a-pale-sky-v8HyIkglUjA)        |
 | `test-images/letters-tiles.jpg`  | [Galina Nelyubova](https://unsplash.com/@galka_nz)        | [Unsplash](https://unsplash.com/photos/letters-a-i-and-q-on-tiles-vFdxlswSa_w)                             |
 | `test-images/cozy-room.jpg`      | [Clay Banks](https://unsplash.com/@claybanks)             | [Unsplash](https://unsplash.com/photos/cozy-living-room-with-eames-lounge-chair-and-fireplace-6uYe3CbKb8A) |
@@ -15,10 +15,10 @@ The example images included in this repository are used under the
 
 ## Other example images
 
-| File                        | Source                                                                                                                                     | License                                                                                |
-|-----------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| `test-images/clover.png`    | [Gluecksklee (transparent background) — Kolossos, Lvova](https://commons.wikimedia.org/wiki/File:Gluecksklee_(transparent_background).png) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (also GFDL)            |
-| `test-images/bionicle.webp` | [BIONICLE Logo (transparent) — Amongusiek](https://commons.wikimedia.org/wiki/File:BIONICLE_Logo_(transparent).webp)                       | Public domain ([PD-textlogo](https://commons.wikimedia.org/wiki/Template:PD-textlogo)) |
+| File                        | Source                                                                                                                                       | License                                                                                |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `test-images/clover.png`    | [Gluecksklee (transparent background) — Kolossos, Lvova](<https://commons.wikimedia.org/wiki/File:Gluecksklee_(transparent_background).png>) | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) (also GFDL)            |
+| `test-images/bionicle.webp` | [BIONICLE Logo (transparent) — Amongusiek](<https://commons.wikimedia.org/wiki/File:BIONICLE_Logo_(transparent).webp>)                       | Public domain ([PD-textlogo](https://commons.wikimedia.org/wiki/Template:PD-textlogo)) |
 
 "BIONICLE" is a trademark of the LEGO Group, used here only as a test fixture; no endorsement
 implied.
@@ -26,7 +26,7 @@ implied.
 ## Example vectors
 
 | File                                         | Source                                                                                                                       | License                                                               |
-|----------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | `test-images/airlock-demo.svg`               | [airlock by Matti Lankinen](https://github.com/milankinen/airlock/blob/main/docs/manual/src/demo.svg)                        | [Apache 2.0](https://github.com/milankinen/airlock/blob/main/LICENSE) |
 | `test-images/bonfire-nature.ai`              | [Public Domain Vectors](https://publicdomainvectors.org/en/free-clipart/Bonfire-in-the-nature/84221.html)                    | [CC0](https://publicdomainvectors.org/en/public-domain)               |
 | `test-images/calendar.svg`                   | [Bootstrap Icons](https://icons.getbootstrap.com/icons/calendar2-week/)                                                      | [MIT](https://github.com/twbs/icons/blob/main/LICENSE)                |
@@ -45,7 +45,7 @@ implied.
 ## Animated test images
 
 | File                        | Source                      | License                                                                                        |
-|-----------------------------|-----------------------------|------------------------------------------------------------------------------------------------|
+| --------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------- |
 | `test-images/rickroll.gif`  | [Giphy](https://giphy.com/) | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |
 | `test-images/rickroll.webp` | [Giphy](https://giphy.com/) | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |
 | `test-images/lightning.gif` | [Giphy](https://giphy.com/) | [Giphy Terms](https://support.giphy.com/hc/en-us/articles/360020027752-GIPHY-Terms-of-Service) |
@@ -53,25 +53,25 @@ implied.
 ## Example audio
 
 | File                                  | Author / Source                                                                                                                                | License                                                   |
-|---------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
-| `test-audio/scotch-reels.mp3`         | [Charles A. Prince / Columbia Orchestra (1909)](https://commons.wikimedia.org/wiki/File:Scotch_reels_(Prince,_1909).mp3)                       | Public domain (recording 1909)                            |
-| `test-audio/sensation-rag.ogg`        | [Scott Joplin (1908 piano roll)](https://commons.wikimedia.org/wiki/File:Scott_Joplin_-_Sensation_Rag_(1908).ogg)                              | Public domain                                             |
-| `test-audio/bee-buzzing.opus`         | [Free Sounds Library](https://commons.wikimedia.org/wiki/File:Bee_buzzing_sound_(animal_noises).opus)                                          | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `test-audio/scotch-reels.mp3`         | [Charles A. Prince / Columbia Orchestra (1909)](<https://commons.wikimedia.org/wiki/File:Scotch_reels_(Prince,_1909).mp3>)                     | Public domain (recording 1909)                            |
+| `test-audio/sensation-rag.ogg`        | [Scott Joplin (1908 piano roll)](<https://commons.wikimedia.org/wiki/File:Scott_Joplin_-_Sensation_Rag_(1908).ogg>)                            | Public domain                                             |
+| `test-audio/bee-buzzing.opus`         | [Free Sounds Library](<https://commons.wikimedia.org/wiki/File:Bee_buzzing_sound_(animal_noises).opus>)                                        | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 | `test-audio/small-step.wav`           | [NASA — Neil Armstrong, Apollo 11 (1969)](https://commons.wikimedia.org/wiki/File:Neil_Armstrong_small_step.wav)                               | Public domain (NASA / U.S. federal work)                  |
 | `test-audio/sally-mann-vmfa.flac`     | [Sally Mann at VMFA, 2024-12-05](https://commons.wikimedia.org/wiki/File:Sally_Mann_at_VMFA_2024-12-05.flac)                                   | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `test-audio/lijepa-nasa-domovino.mid` | [Croatian national anthem MIDI](https://commons.wikimedia.org/wiki/File:Lijepa_na%C5%A1a_domovino.mid) (composer Josip Runjanin, d. 1878 — PD) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 
 ## Example books
 
-Mary Shelley's *Frankenstein; or, the Modern Prometheus* (1818), via
-[Project Gutenberg #84](https://www.gutenberg.org/ebooks/84). The work itself
-is in the public domain. Project Gutenberg's distribution is governed by the
-[Project Gutenberg License](https://www.gutenberg.org/policy/license.html);
-trademark restrictions apply if redistributing under the "Project Gutenberg"
-name, otherwise the bare text is freely usable.
+Mary Shelley's _Frankenstein; or, the Modern Prometheus_ (1818), via
+[Project Gutenberg #84](https://www.gutenberg.org/ebooks/84). The work itself is in the public
+domain. Project Gutenberg's distribution is governed by the
+[Project Gutenberg License](https://www.gutenberg.org/policy/license.html); trademark restrictions
+apply if redistributing under the "Project Gutenberg" name, otherwise the bare text is freely
+usable.
 
 | File                                  | Format                        | Source                                                                                 |
-|---------------------------------------|-------------------------------|----------------------------------------------------------------------------------------|
+| ------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------- |
 | `test-books/frankenstein.epub`        | EPUB 3 (no embedded images)   | <https://www.gutenberg.org/cache/epub/84/pg84.epub>                                    |
 | `test-books/frankenstein-images.epub` | EPUB 3 (with embedded images) | <https://www.gutenberg.org/cache/epub/84/pg84-images.epub>                             |
 | `test-books/frankenstein.mobi`        | Mobipocket / Kindle KF8       | <https://www.gutenberg.org/cache/epub/84/pg84-images-kf8.mobi>                         |
@@ -86,31 +86,27 @@ name, otherwise the bare text is freely usable.
 ## Example documents
 
 | File                                  | Author / Source                                                                                                                                                    | License                                                   |
-|---------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
 | `test-data/image-post-processing.pdf` | [The open draft](https://commons.wikimedia.org/wiki/File:Image_Post_Processing_12_April_2024.pdf) (Wikimedia Commons)                                              | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
-| `test-data/surreal-numbers.pdf`       | [Philip Ehrlich](https://commons.wikimedia.org/wiki/File:Conway_names,_the_simplicity_hierarchy_and_the_surreal_number_tree.pdf), *J. Logic & Analysis* 3:1 (2011) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
+| `test-data/surreal-numbers.pdf`       | [Philip Ehrlich](https://commons.wikimedia.org/wiki/File:Conway_names,_the_simplicity_hierarchy_and_the_surreal_number_tree.pdf), _J. Logic & Analysis_ 3:1 (2011) | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) |
 
 ## Example fonts
 
-Bundled verbatim from [google/fonts](https://github.com/google/fonts); each subdirectory
-carries the upstream `OFL.txt` alongside the font binary. Used by the font-viewer tests and
-to give the specimen render output enough visual range for a useful smoke test.
+Bundled verbatim from [google/fonts](https://github.com/google/fonts); each subdirectory carries the
+upstream `OFL.txt` alongside the font binary. Used by the font-viewer tests and to give the specimen
+render output enough visual range for a useful smoke test.
 
 | File                                                | Author / Source                                                                               | License                                                                         |
-|-----------------------------------------------------|-----------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------|
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | `test-data/fonts/sacramento/Sacramento-Regular.ttf` | [Astigmatic — Brian J. Bonislawsky](https://github.com/google/fonts/tree/main/ofl/sacramento) | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/sacramento/OFL.txt) |
 | `test-data/fonts/greatvibes/GreatVibes-Regular.ttf` | [TypeSETit](https://github.com/google/fonts/tree/main/ofl/greatvibes)                         | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/greatvibes/OFL.txt) |
 | `test-data/fonts/cabin/Cabin[wdth,wght].ttf`        | [Pablo Impallari](https://github.com/google/fonts/tree/main/ofl/cabin)                        | [SIL OFL 1.1](https://github.com/google/fonts/blob/main/ofl/cabin/OFL.txt)      |
 
 ## Example databases
 
-`test-data/library.sqlite` is built by `examples/gen_sqlite_fixture.py`
-from the Project Gutenberg catalogue feed
-(<https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv>). The
-catalogue records bibliographic facts about public-domain works and
-is itself freely redistributable; Project Gutenberg's trademark
-restrictions apply only to use of the "Project Gutenberg" name, not
-to the underlying metadata. The fixture normalises the first 2500
-text entries into eight tables (books / authors / subjects /
-bookshelves / languages plus three join tables) and a
-`popular_authors` view.
+`test-data/library.sqlite` is built by `examples/gen_sqlite_fixture.py` from the Project Gutenberg
+catalogue feed (<https://www.gutenberg.org/cache/epub/feeds/pg_catalog.csv>). The catalogue records
+bibliographic facts about public-domain works and is itself freely redistributable; Project
+Gutenberg's trademark restrictions apply only to use of the "Project Gutenberg" name, not to the
+underlying metadata. The fixture normalises the first 2500 text entries into eight tables (books /
+authors / subjects / bookshelves / languages plus three join tables) and a `popular_authors` view.

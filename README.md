@@ -1,10 +1,10 @@
 # peek
 
 ```
-                 __  
+                 __
    ___  ___ ___ / /__
   / _ \/ -_) -_)  '_/
- / .__/\__/\__/_/\_\ 
+ / .__/\__/\__/_/\_\
 /_/ a file previewer
 ```
 
@@ -28,16 +28,16 @@ shortcuts, extraction, themes, and the full CLI reference.
 - **Pretty-printing** for JSON / YAML / TOML / XML
 - **Aligned tables** for CSV / TSV with sticky header, type inference, streaming record reader
 - **SQLite databases** — read-only schema listing + streaming row viewer with sliding-window cursor
-- **LMDB databases** — 0.9 and 1.0 environments: database list, streaming key / value rows, open
-  any value as its own file
+- **LMDB databases** — 0.9 and 1.0 environments: database list, streaming key / value rows, open any
+  value as its own file
 - **Spreadsheets** — `.xlsx` / `.xlsm` / `.ods`: sheet listing → aligned table per sheet, CSV
   extract, workbook metadata
-- **Presentations** — `.pptx` / `.pptm` / `.ppsx` / `.odp`: slide-by-slide text (`n` / `p` to
-  step, per-slide search); Apple Keynote (`.key`) shows the embedded preview + metadata
+- **Presentations** — `.pptx` / `.pptm` / `.ppsx` / `.odp`: slide-by-slide text (`n` / `p` to step,
+  per-slide search); Apple Keynote (`.key`) shows the embedded preview + metadata
 - **ASCII-art image rendering** with glyph-matched 24-bit color. Animated gifs!
 - **Documents** — Markdown, Jupyter notebooks (`.ipynb`), PDF, Adobe Illustrator (`.ai`), DOCX, ODT,
-  RTF, EPUB, CBZ. PDF pages render as images with an optional reconstructed-text overlay (`o`)
-  that writes the real text over the pixels at matching zoom
+  RTF, EPUB, CBZ. PDF pages render as images with an optional reconstructed-text overlay (`o`) that
+  writes the real text over the pixels at matching zoom
 - **Email** — `.eml` messages and `.mbox` mailboxes: rendered headers + body, attachment listing +
   extract, message-list drill-in
 - **Calendar / contacts** — iCalendar (`.ics`) and vCard (`.vcf`): rendered agenda / contact cards
@@ -68,8 +68,8 @@ macOS / Linux:
 curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
 ```
 
-Installs the latest release into `~/.local/bin`. Supports `aarch64` and `x86_64`. Pin a version
-with `PEEK_VERSION=v0.1.0` or relocate with `PEEK_INSTALL_DIR=/usr/local/bin`.
+Installs the latest release into `~/.local/bin`. Supports `aarch64` and `x86_64`. Pin a version with
+`PEEK_VERSION=v0.1.0` or relocate with `PEEK_INSTALL_DIR=/usr/local/bin`.
 
 Manual downloads, Windows, building from source, and updating: see the
 [Installation chapter](https://thaapasa.github.io/peek/installation.html) of the manual.
@@ -134,19 +134,19 @@ peek config.json -p | grep version
 echo '{"a":1}' | peek               # stdin auto-detected
 ```
 
-peek also reads executables, Java classfiles, fonts, calendars, vCards, `.DS_Store`, and more —
-see the manual for the full list.
+peek also reads executables, Java classfiles, fonts, calendars, vCards, `.DS_Store`, and more — see
+the manual for the full list.
 
 Run `peek -h` for the short option list, `peek --help` for the full set, or read the
-[manual](https://thaapasa.github.io/peek/) for per-format details, keyboard shortcuts,
-extraction, themes, and the full CLI reference.
+[manual](https://thaapasa.github.io/peek/) for per-format details, keyboard shortcuts, extraction,
+themes, and the full CLI reference.
 
 ## Manual
 
 Full user manual: **<https://thaapasa.github.io/peek/>**.
 
-Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/).
-Local preview:
+Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/). Local
+preview:
 
 ```sh
 just manual    # serves http://localhost:12620
@@ -167,8 +167,8 @@ just format     # Rust (nightly rustfmt) + Markdown (Prettier)
 
 ## Credits
 
-Demo photo
-by [Dmytro Koplyk on Unsplash](https://unsplash.com/photos/a-green-heron-stands-on-one-leg-by-the-water-LHZgiiQz97o).
+Demo photo by
+[Dmytro Koplyk on Unsplash](https://unsplash.com/photos/a-green-heron-stands-on-one-leg-by-the-water-LHZgiiQz97o).
 Full attribution for all bundled sample files: [CREDITS.md](CREDITS.md).
 
 Screenshots regenerate from repo fixtures with `just demos` (`just setup` installs the tools).

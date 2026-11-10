@@ -1,24 +1,24 @@
 # Markdown
 
-`.md` / `.markdown` / `.mdown` / `.mkd` / `.mkdn` / `.mdwn` files get a dual view, same as HTML
-and PDF:
+`.md` / `.markdown` / `.mdown` / `.mkd` / `.mkdn` / `.mdwn` files get a dual view, same as HTML and
+PDF:
 
-- **Rendered** (default) — pulldown-cmark drives a CommonMark + GFM walker that emits
-  width-wrapped, ANSI-styled text. Styled headings (with H1 / H2 underlines), bullet / ordered /
-  task lists (`☐` / `✓`), blockquote rail, horizontal rules, tables as box-drawing, fenced code
-  blocks syntect-highlighted by their declared language, emphasis / strong / strikethrough,
-  inline code, links (text underlined + dim URL after), images, and footnote references and
-  definitions. YAML (`---`) and TOML (`+++`) frontmatter render as a dim verbatim block at the
-  top so the opening fence doesn't get mistaken for a horizontal rule.
-- **Source** — syntax-highlighted markdown source via `ContentMode`. Reachable with Tab. Becomes
-  the entry view with `--raw`.
+- **Rendered** (default) — pulldown-cmark drives a CommonMark + GFM walker that emits width-wrapped,
+  ANSI-styled text. Styled headings (with H1 / H2 underlines), bullet / ordered / task lists (`☐` /
+  `✓`), blockquote rail, horizontal rules, tables as box-drawing, fenced code blocks
+  syntect-highlighted by their declared language, emphasis / strong / strikethrough, inline code,
+  links (text underlined + dim URL after), images, and footnote references and definitions. YAML
+  (`---`) and TOML (`+++`) frontmatter render as a dim verbatim block at the top so the opening
+  fence doesn't get mistaken for a horizontal rule.
+- **Source** — syntax-highlighted markdown source via `ContentMode`. Reachable with Tab. Becomes the
+  entry view with `--raw`.
 
 `--plain` drops the rendered view entirely.
 
 ![Markdown rendered with styled headings, a callout, and a table of contents](../img/markdown-render.svg)
 
-*The default rendered view: headings, emphasis, strikethrough, blockquotes, and tables styled
-inline rather than shown as raw markup.*
+_The default rendered view: headings, emphasis, strikethrough, blockquotes, and tables styled inline
+rather than shown as raw markup._
 
 The Info view adds a Markdown section:
 

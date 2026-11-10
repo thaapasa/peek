@@ -4,8 +4,8 @@
 
 ![A photograph rendered in the terminal as glyph-matched 24-bit color art](img/image-render.webp)
 
-*peek rendering a JPEG directly in the terminal — each cell is a character whose shape and
-24-bit color approximate the underlying pixels. Open any image file to get this view.*
+_peek rendering a JPEG directly in the terminal — each cell is a character whose shape and 24-bit
+color approximate the underlying pixels. Open any image file to get this view._
 
 Features at a glance:
 
@@ -31,5 +31,5 @@ concatenation — those use cases belong to other tools. Run peek once per file.
 **Stream, don't load.** Multi-GB files are first-class. Archives open instantly via header walks;
 hex dump reads from disk on demand. Whole-file reads only when the format truly needs it.
 
-**Auto-detect.** Magic bytes for binary content, sniffing for structured text on stdin. The
-filename is a hint, not the source of truth.
+**Auto-detect.** Magic bytes for binary content, sniffing for structured text on stdin. The filename
+is a hint, not the source of truth.

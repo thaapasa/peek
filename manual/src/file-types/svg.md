@@ -1,7 +1,7 @@
 # SVG
 
-SVG (`.svg`) is vector; rasterized via [resvg](https://github.com/RazrFalcon/resvg) before
-ASCII rendering.
+SVG (`.svg`) is vector; rasterized via [resvg](https://github.com/RazrFalcon/resvg) before ASCII
+rendering.
 
 ![An SVG emoji rasterized and rendered as glyph-matched color art in the terminal](../img/svg-render.webp)
 
@@ -15,15 +15,15 @@ Re-renders on terminal resize.
 ## Animation
 
 CSS `@keyframes` animation is supported. The parser collects each `@keyframes` rule plus
-inline-style `animation-*` references on elements, builds a merged frame timeline (one frame
-per stop for `steps()` timing, ~30 fps interpolated for `linear`), and rasterizes each frame on
-demand. A bounded LRU cache (64 entries) keeps a full second loop free.
+inline-style `animation-*` references on elements, builds a merged frame timeline (one frame per
+stop for `steps()` timing, ~30 fps interpolated for `linear`), and rasterizes each frame on demand.
+A bounded LRU cache (64 entries) keeps a full second loop free.
 
 Covers what termsvg / asciinema-svg-style files use: `transform: translateX/Y/translate` under
-`steps()` or `linear` timing. Targets resolve via inline `style="..."` *or* flat CSS selectors
-(tag, `.class`, `#id`, `tag.class`); combinators, pseudo-classes, attribute selectors, and `*`
-are silently dropped. SMIL (`<animate>`, `<animateMotion>`) is still not supported.
-`--no-svg-anim` forces the static render.
+`steps()` or `linear` timing. Targets resolve via inline `style="..."` _or_ flat CSS selectors (tag,
+`.class`, `#id`, `tag.class`); combinators, pseudo-classes, attribute selectors, and `*` are
+silently dropped. SMIL (`<animate>`, `<animateMotion>`) is still not supported. `--no-svg-anim`
+forces the static render.
 
 `Space` plays / pauses, `n` / `p` step frames, `e` extracts the current frame as PNG.
 

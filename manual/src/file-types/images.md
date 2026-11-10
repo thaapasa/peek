@@ -4,11 +4,11 @@ Raster images render as ASCII art with 24-bit color, using glyph-matched charact
 
 ![A photo rendered as glyph-matched color art in the default mode](../img/image-render.webp)
 
-*The default `full` mode: every terminal cell picks the glyph and foreground/background colors
-that best match the pixels beneath it.*
+_The default `full` mode: every terminal cell picks the glyph and foreground/background colors that
+best match the pixels beneath it._
 
 | Format  | Extensions             |
-|---------|------------------------|
+| ------- | ---------------------- |
 | PNG     | `.png`                 |
 | JPEG    | `.jpg`, `.jpeg`        |
 | GIF     | `.gif`                 |
@@ -31,7 +31,7 @@ Decoded via the [image](https://crates.io/crates/image) crate; AVIF via
 Cycle with `m` (or `--image-mode <mode>`):
 
 | Mode      | Description                                                        |
-|-----------|--------------------------------------------------------------------|
+| --------- | ------------------------------------------------------------------ |
 | `full`    | All glyphs (block, quadrant, extended) — default                   |
 | `block`   | Block / quadrant elements + ASCII subset                           |
 | `geo`     | Block / quadrant elements + line segments only                     |
@@ -42,8 +42,7 @@ Cycle with `m` (or `--image-mode <mode>`):
 
 ![The same photo rendered as Sobel edge line-art](../img/image-contour.svg)
 
-*The same photo in `contour` mode — Sobel edge detection drawn as line-art instead of filled
-color.*
+_The same photo in `contour` mode — Sobel edge detection drawn as line-art instead of filled color._
 
 ## Backgrounds
 
@@ -53,7 +52,7 @@ transparent regions default to black, making dark content invisible on dark term
 Cycle with `b` (or `--background <mode>`):
 
 | Background     | Description                                              |
-|----------------|----------------------------------------------------------|
+| -------------- | -------------------------------------------------------- |
 | `auto`         | Dark content → white bg, light content → black (default) |
 | `black`        | Solid black                                              |
 | `white`        | Solid white                                              |
@@ -64,7 +63,7 @@ Cycle with `b` (or `--background <mode>`):
 Cycle with `f`:
 
 | Mode        | Behavior                                                          |
-|-------------|-------------------------------------------------------------------|
+| ----------- | ----------------------------------------------------------------- |
 | `Contain`   | Fit within both axes — whole image shown (default)                |
 | `FitWidth`  | Width fills the terminal; height grows freely → vertical scroll   |
 | `FitHeight` | Height fills the terminal; width grows freely → horizontal scroll |
@@ -79,16 +78,15 @@ See [Zoom & pan](../viewer/zoom-pan.md) for keys and behaviour.
 
 ## Animated GIF / WebP
 
-Auto-plays at native frame rate. `Space` toggles play/pause, `n` / `p` step frames, `e`
-extracts the current frame as a PNG. Print mode renders the first frame. Frame stats appear in
-the file info screen.
+Auto-plays at native frame rate. `Space` toggles play/pause, `n` / `p` step frames, `e` extracts the
+current frame as a PNG. Print mode renders the first frame. Frame stats appear in the file info
+screen.
 
 ## Info view
 
 Dimensions, megapixels, color mode, bit depth, ICC profile, HDR detection (Ultra HDR gain map
 markers), animation stats, EXIF, XMP metadata.
 
-EXIF fields surfaced: camera make/model, lens, orientation, resolution/DPI, exposure, aperture,
-ISO, focal length, flash, white balance, date taken, GPS, artist, copyright. XMP scraped from
-head bytes for Dublin Core / XMP fields (title, subject, description, creator, rights, rating,
-label).
+EXIF fields surfaced: camera make/model, lens, orientation, resolution/DPI, exposure, aperture, ISO,
+focal length, flash, white balance, date taken, GPS, artist, copyright. XMP scraped from head bytes
+for Dublin Core / XMP fields (title, subject, description, creator, rights, rating, label).

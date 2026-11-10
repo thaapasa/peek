@@ -1,19 +1,19 @@
 # Crate-split carve — execution playbook (peek-foundation + peek-types)
 
-> **Status: Completed 2026-06-05.** Archived for reference. The carve landed:
-> `peek-foundation` + `peek-types` exist, the three dispatch hubs (compose /
-> gather / extract) live in the bin, and Cargo bars peek-types from the session
-> layer. Some mechanics differed from the playbook below — notably the bin grew a
-> `viewer_session/` module (ViewerState + event loop), the extract *vocabulary*
-> moved to foundation while only the dispatch stayed in the bin, and cross-crate
-> test helpers sit behind a `testing` cargo feature rather than being relocated.
-> Kept for the rationale + gotchas. Companion:
-> [crate-split-continuation.md](crate-split-continuation.md) (the why + the inversion history).
+> **Status: Completed 2026-06-05.** Archived for reference. The carve landed: `peek-foundation` +
+> `peek-types` exist, the three dispatch hubs (compose / gather / extract) live in the bin, and
+> Cargo bars peek-types from the session layer. Some mechanics differed from the playbook below —
+> notably the bin grew a `viewer_session/` module (ViewerState + event loop), the extract
+> _vocabulary_ moved to foundation while only the dispatch stayed in the bin, and cross-crate test
+> helpers sit behind a `testing` cargo feature rather than being relocated. Kept for the rationale +
+> gotchas. Companion: [crate-split-continuation.md](crate-split-continuation.md) (the why + the
+> inversion history).
 
 ## Precondition (already true on the branch)
 
 - `peek-theme`, `peek-io`, `peek-detect` are crates.
-- Five inversions done (FileExtras→trait, pretty_view, image vocab, ComposeOpts, `text_content_mode` pretty).
+- Five inversions done (FileExtras→trait, pretty_view, image vocab, ComposeOpts, `text_content_mode`
+  pretty).
 - **Zero** non-hub, non-test `foundation→types` edges. Verify before starting:
   ```sh
   # both must print nothing:
@@ -27,9 +27,9 @@
 ## Decisions locked in
 
 - **Hubs go in the bin**, not `peek-types`. The three `FileType → types::X::*` dispatch matches
-  (`compose_modes`, `gather`, `extract`) are session-orchestration glue. `peek-types` stays *pure
-  parsers* — per-type modules with no FileType matching. The per-type `compose` / `extract` /
-  `gather_extras` *functions* stay in `peek-types`; only the dispatch matches live in the bin.
+  (`compose_modes`, `gather`, `extract`) are session-orchestration glue. `peek-types` stays _pure
+  parsers_ — per-type modules with no FileType matching. The per-type `compose` / `extract` /
+  `gather_extras` _functions_ stay in `peek-types`; only the dispatch matches live in the bin.
 - `ComposeCtx`, `ComposeOpts`, `Mode`, `RenderCtx` → foundation (types call them).
 - `Registry`, `ViewerState`, the interactive event loop → bin.
 - Foundation tests that drive the full pipeline (real types) relocate to the bin.
@@ -60,11 +60,11 @@ peek (bin) → types, foundation, detect, io
 
 ### Three intra-unit splits (the fiddly part)
 
-1. **`viewer/mod.rs`** splits: `ComposeCtx` / `ComposeOpts` / `text_content_mode` /
-   `image_config` / `is_lossy_pretty` / `Mode` re-exports / `highlight_lines` re-export →
-   stay foundation. `Registry` (struct + `new` + `compose_modes` + `compose_ctx` + `theme_name`
-   + `peek_theme`) → bin `compose.rs`. Note `Registry::compose_ctx()` builds a foundation
-   `ComposeCtx` — fine, bin→foundation.
+1. **`viewer/mod.rs`** splits: `ComposeCtx` / `ComposeOpts` / `text_content_mode` / `image_config` /
+   `is_lossy_pretty` / `Mode` re-exports / `highlight_lines` re-export → stay foundation. `Registry`
+   (struct + `new` + `compose_modes` + `compose_ctx` + `theme_name`
+   - `peek_theme`) → bin `compose.rs`. Note `Registry::compose_ctx()` builds a foundation
+     `ComposeCtx` — fine, bin→foundation.
 2. **`info/`** splits: `mod.rs` + `render/` + `time.rs` → foundation; `gather/` → bin.
    `format_permissions_from_meta` (currently `pub(super)` in `info/mod.rs`) must become
    `pub(crate)`/`pub` so the relocated gather can call it.
@@ -74,23 +74,38 @@ peek (bin) → types, foundation, detect, io
 ## Execution order (each step compiles; commit per step)
 
 ### C1 — relocate `gather` hub to bin (in-monolith)
-- `git mv src/info/gather src/gather`; add `mod gather;` to `main.rs`; drop `mod gather; pub use gather::gather;` from `info/mod.rs`.
-- In `src/gather/mod.rs`: `use super::{...}` → `use crate::info::{...}`; bump `format_permissions_from_meta` visibility.
-- Callers `info::gather` / `crate::info::gather` → `crate::gather::gather` (main.rs ×3, state.rs ×4, the two foundation tests — see relocation below).
+
+- `git mv src/info/gather src/gather`; add `mod gather;` to `main.rs`; drop
+  `mod gather; pub use gather::gather;` from `info/mod.rs`.
+- In `src/gather/mod.rs`: `use super::{...}` → `use crate::info::{...}`; bump
+  `format_permissions_from_meta` visibility.
+- Callers `info::gather` / `crate::info::gather` → `crate::gather::gather` (main.rs ×3, state.rs ×4,
+  the two foundation tests — see relocation below).
 - Verify: build + test green.
 
 ### C2 — relocate `compose_modes` + `Registry` to bin (in-monolith)
-- Move `Registry` (struct + impl incl `compose_modes`) from `viewer/mod.rs` → new `src/compose.rs`; add `mod compose;` to `main.rs`. Keep `ComposeCtx`/`ComposeOpts`/`text_content_mode`/`image_config`/`is_lossy_pretty` in `viewer/mod.rs`.
-- `Registry::compose_ctx()` moves with Registry; it constructs the foundation `ComposeCtx` (uses `self.theme_manager` etc).
+
+- Move `Registry` (struct + impl incl `compose_modes`) from `viewer/mod.rs` → new `src/compose.rs`;
+  add `mod compose;` to `main.rs`. Keep
+  `ComposeCtx`/`ComposeOpts`/`text_content_mode`/`image_config`/`is_lossy_pretty` in
+  `viewer/mod.rs`.
+- `Registry::compose_ctx()` moves with Registry; it constructs the foundation `ComposeCtx` (uses
+  `self.theme_manager` etc).
 - Callers `viewer::Registry` → `crate::compose::Registry` (main.rs, state.rs).
 - After C1+C2: `viewer/mod.rs` and `info/` are 100% types-clean (production). Verify.
 
 ### C3 — relocate the bin-bound viewer session pieces (prep, optional pre-D)
-- `ViewerState` (`viewer/ui/state.rs`) and `interactive.rs` are bin. Can stay physically until D, but their `#[cfg(test)]` + production edges into `gather`/`compose`/`types` are bin→* (fine).
+
+- `ViewerState` (`viewer/ui/state.rs`) and `interactive.rs` are bin. Can stay physically until D,
+  but their `#[cfg(test)]` + production edges into `gather`/`compose`/`types` are bin→* (fine).
 
 ### D1 — create `peek-foundation` crate
-- `crates/peek-foundation/` Cargo.toml (deps: peek-theme, peek-io, peek-detect + syntect, image, crossterm, unicode-width, bytes, anyhow, … — whatever `viewer`/`info`/`output` use). Inherit workspace package + `rust-version`.
-- Move foundation modules (per the layout) into `crates/peek-foundation/src/`. `lib.rs` declares them + the **facade aliases** so intra-crate `crate::` paths survive:
+
+- `crates/peek-foundation/` Cargo.toml (deps: peek-theme, peek-io, peek-detect + syntect, image,
+  crossterm, unicode-width, bytes, anyhow, … — whatever `viewer`/`info`/`output` use). Inherit
+  workspace package + `rust-version`.
+- Move foundation modules (per the layout) into `crates/peek-foundation/src/`. `lib.rs` declares
+  them + the **facade aliases** so intra-crate `crate::` paths survive:
   ```rust
   pub use peek_theme as theme;            // crate::theme:: keeps working
   pub mod input { pub use peek_io::*; pub use peek_detect as detect; /* match src/input/mod.rs */ }
@@ -98,13 +113,19 @@ peek (bin) → types, foundation, detect, io
   pub mod base64; pub mod xml;
   ```
 - **Visibility:** every item `peek-types` (and the bin) reaches must be `pub` (not `pub(crate)`).
-  Grep the ~167 viewer + ~56 info edge targets; bump them. Expect a long but mechanical pass —
-  let the compiler enumerate via `error[E0603]` (private item).
-- The bin keeps `crate::viewer`/`crate::info`/`crate::output` working via `pub use peek_foundation::{viewer, info, output};` + `pub use peek_theme as theme;` etc. in `main.rs` (mirror the existing `use peek_theme as theme` and `src/input/` facade).
+  Grep the ~167 viewer + ~56 info edge targets; bump them. Expect a long but mechanical pass — let
+  the compiler enumerate via `error[E0603]` (private item).
+- The bin keeps `crate::viewer`/`crate::info`/`crate::output` working via
+  `pub use peek_foundation::{viewer, info, output};` + `pub use peek_theme as theme;` etc. in
+  `main.rs` (mirror the existing `use peek_theme as theme` and `src/input/` facade).
 - Verify: build + test.
 
 ### D2 — create `peek-types` crate
-- `crates/peek-types/` Cargo.toml (deps: peek-foundation, peek-detect, peek-io, peek-theme + every parser dep currently in the bin's Cargo.toml that `types/` uses — object, cafebabe, rusqlite, pdfium-render, calamine, symphonia, ttf-parser, fontdue, mail-parser, x509-parser, … ). This is the big dep move.
+
+- `crates/peek-types/` Cargo.toml (deps: peek-foundation, peek-detect, peek-io, peek-theme + every
+  parser dep currently in the bin's Cargo.toml that `types/` uses — object, cafebabe, rusqlite,
+  pdfium-render, calamine, symphonia, ttf-parser, fontdue, mail-parser, x509-parser, … ). This is
+  the big dep move.
 - `git mv src/types crates/peek-types/src` (becomes the crate's modules). `lib.rs` facade aliases:
   ```rust
   pub use peek_foundation::{viewer, info, output};
@@ -123,9 +144,14 @@ peek (bin) → types, foundation, detect, io
   peek-types does NOT depend on the bin.
 
 ### D3 — relocate foundation tests that drive the full pipeline
+
 These call `gather` (bin) and/or real `types`, so they can't live in foundation:
-- `src/viewer/paged.rs` `#[cfg(test)] mod tests` — uses `types::binary::BinaryInfo`, `types::comic::CbzPageRenderer` / `cbz`. Move to a bin-side or peek-types integration test (`tests/` or a bin module).
-- `src/viewer/modes/content_tests.rs` — `crate::info::gather` (×2, lines ~46, ~438). Move to bin, or build a `FileInfo` fixture without the full gather.
+
+- `src/viewer/paged.rs` `#[cfg(test)] mod tests` — uses `types::binary::BinaryInfo`,
+  `types::comic::CbzPageRenderer` / `cbz`. Move to a bin-side or peek-types integration test
+  (`tests/` or a bin module).
+- `src/viewer/modes/content_tests.rs` — `crate::info::gather` (×2, lines ~46, ~438). Move to bin, or
+  build a `FileInfo` fixture without the full gather.
 - `src/viewer/table/rows_mode.rs` `#[cfg(test)]` (~1408) — `crate::info::gather`. Same.
 - `src/viewer/ui/state.rs` `#[cfg(test)]` — already bin-bound (ViewerState is bin), travels with it.
 - `info/gather/tests.rs` — travels with gather to the bin (C1).
@@ -144,15 +170,23 @@ detect→gather→compose integration tests live bin-side.
 
 ## Gotchas seen this session
 
-- **zsh word-split:** `for f in $files` does NOT split on spaces; use `while IFS= read -r f` or `${(f)var}`.
-- **`include_str!` is file-relative**, not `CARGO_MANIFEST_DIR` — moving a crate shifts the `../` depth (bit us on `peek-theme`'s `themes/`).
-- **`pub use` can't re-export a `pub(crate)` item** (E0365) — the facade re-exports force `pub` on the source.
-- **Hidden foundation→types edges surface only at the boundary** — twice this session a method *looked* inverted but a foundation method still named `types` (the `text_content_mode` pretty closure). After the crates exist, the compiler finds the rest; expect a few more.
-- **Trait/`Registry` inherent impls can't cross crates** — `compose_modes` must move *with* `Registry` (can't impl a foundation `Registry` from the bin).
+- **zsh word-split:** `for f in $files` does NOT split on spaces; use `while IFS= read -r f` or
+  `${(f)var}`.
+- **`include_str!` is file-relative**, not `CARGO_MANIFEST_DIR` — moving a crate shifts the `../`
+  depth (bit us on `peek-theme`'s `themes/`).
+- **`pub use` can't re-export a `pub(crate)` item** (E0365) — the facade re-exports force `pub` on
+  the source.
+- **Hidden foundation→types edges surface only at the boundary** — twice this session a method
+  _looked_ inverted but a foundation method still named `types` (the `text_content_mode` pretty
+  closure). After the crates exist, the compiler finds the rest; expect a few more.
+- **Trait/`Registry` inherent impls can't cross crates** — `compose_modes` must move _with_
+  `Registry` (can't impl a foundation `Registry` from the bin).
 
 ## Docs to update when done
 
 - `CLAUDE.md` workspace block (+ peek-foundation, peek-types).
 - `docs/architecture-map.md` (crate breakdowns; the bin's `gather`/`compose`/`extract` hubs).
-- `docs/architecture.md` "add a new type" (now: peek-detect entry + peek-types module + 3 one-line hub arms in the bin).
-- Archive both `crate-split-continuation.md` + this file to `docs/archived/` with a completed-status note.
+- `docs/architecture.md` "add a new type" (now: peek-detect entry + peek-types module + 3 one-line
+  hub arms in the bin).
+- Archive both `crate-split-continuation.md` + this file to `docs/archived/` with a completed-status
+  note.

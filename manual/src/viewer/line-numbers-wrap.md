@@ -4,9 +4,8 @@
 
 Off by default. Enable at startup with `-n` / `--line-numbers`; toggle with `l` in the viewer.
 
-Right-aligned gutter, minimum width 2 digits, painted in the theme's gutter color. In pretty
-mode the numbers count visible pretty-printed lines (the lines actually shown), not source
-byte lines.
+Right-aligned gutter, minimum width 2 digits, painted in the theme's gutter color. In pretty mode
+the numbers count visible pretty-printed lines (the lines actually shown), not source byte lines.
 
 ## Soft wrap
 
@@ -15,17 +14,17 @@ logical line is sliced into visual rows of width `term_cols - gutter_width`, so 
 accounts for wrapped continuations and the status line never scrolls out of view.
 
 Toggle with `w`. When wrap is on, the [vertical scroll keys](../keyboard-shortcuts.md#navigation)
-move one **visual row** at a time — long lines no longer make a single keypress jump over all
-their wrapped rows.
+move one **visual row** at a time — long lines no longer make a single keypress jump over all their
+wrapped rows.
 
-The line-number gutter shows the real (logical) line number on the first segment; continuation
-rows have a blank gutter of the same width so wrapped content aligns under its first row.
+The line-number gutter shows the real (logical) line number on the first segment; continuation rows
+have a blank gutter of the same width so wrapped content aligns under its first row.
 
 Status bar shows `Wrap` whenever soft wrap is on (a deliberate always-on reminder — most status
 segments surface only non-default state, but wrap shows even though on is the default).
 
 ## Horizontal scrolling
 
-Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 columns per
-press (`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because
-content is already fully visible. The gutter does not pan; it stays anchored to the left edge.
+Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 columns per press
+(`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because content is
+already fully visible. The gutter does not pan; it stays anchored to the left edge.

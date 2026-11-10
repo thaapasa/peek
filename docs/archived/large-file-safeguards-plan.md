@@ -1,24 +1,21 @@
 # Large File Safeguards — access-unlock design (items 1 + 3)
 
-> **Status: Completed 2026-06-13.** Archived for reference. The
-> session-unlock model shipped — budget-required reads, the
-> deferred-decompress / compressed-tar load prompts, the large-extract
-> confirm, and the 8 GiB spill ceiling. Memory-tier elevation was
-> considered and **declined** (see Sequencing step 6). Live status lives in
-> [planned.md → Large File Safeguards](../planned.md#large-file-safeguards-)
-> and the strategy doc [memory-streaming.md](../memory-streaming.md); this
-> file is the design rationale (the unlock model, the risk asymmetry, why
-> `cap()` is not tier-threaded).
+> **Status: Completed 2026-06-13.** Archived for reference. The session-unlock model shipped —
+> budget-required reads, the deferred-decompress / compressed-tar load prompts, the large-extract
+> confirm, and the 8 GiB spill ceiling. Memory-tier elevation was considered and **declined** (see
+> Sequencing step 6). Live status lives in
+> [planned.md → Large File Safeguards](../planned.md#large-file-safeguards-) and the strategy doc
+> [memory-streaming.md](../memory-streaming.md); this file is the design rationale (the unlock
+> model, the risk asymmetry, why `cap()` is not tier-threaded).
 
 ## Goal
 
 Two remaining pieces from the [two-threat model](memory-streaming.md#two-threats):
 
-- **Latency** — a confirmation before a slow-but-bounded op (big bare-codec
-  decompress, big compressed-tar TOC build, deep compressed seek).
-- **Info-default / opt-in** — when opening a file whose primary view needs
-  a guarded op, land on the Info screen with a "press [key] to load"
-  prompt instead of doing the work up front.
+- **Latency** — a confirmation before a slow-but-bounded op (big bare-codec decompress, big
+  compressed-tar TOC build, deep compressed seek).
+- **Info-default / opt-in** — when opening a file whose primary view needs a guarded op, land on the
+  Info screen with a "press [key] to load" prompt instead of doing the work up front.
 
 Unify both under one idea: a **session-wide access unlock**.
 
@@ -30,59 +27,51 @@ Unify both under one idea: a **session-wide access unlock**.
 enum Access { Default, Unlocked }
 ```
 
-- The **first** guarded op in a session prompts. On confirm → `Unlocked`
-  for the rest of the session; no re-ask. Permission is granted once and
-  covers every later slow/large op.
-- **Non-interactive** paths (pipe / print / `--info` / `--list`) start
-  `Unlocked` — a pipe can't answer a prompt, and the caller chose the op.
-- A CLI flag (`--yes` / `--force`, name TBD) starts an interactive session
-  `Unlocked` too — pre-granted, no prompts.
+- The **first** guarded op in a session prompts. On confirm → `Unlocked` for the rest of the
+  session; no re-ask. Permission is granted once and covers every later slow/large op.
+- **Non-interactive** paths (pipe / print / `--info` / `--list`) start `Unlocked` — a pipe can't
+  answer a prompt, and the caller chose the op.
+- A CLI flag (`--yes` / `--force`, name TBD) starts an interactive session `Unlocked` too —
+  pre-granted, no prompts.
 
-The unlock is **session-wide**: it persists across descend frames (push a
-huge archive entry, then a second — only the first asks).
+The unlock is **session-wide**: it persists across descend frames (push a huge archive entry, then a
+second — only the first asks).
 
 ## What unlock grants (mind the risk asymmetry)
 
 | Effect                                                                             | Risk                                                 | Recommendation                                                                                                                                                      |
-|------------------------------------------------------------------------------------|------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Latency** — slow ops proceed (decompress, full TOC scan, deep seek)              | none (just time)                                     | always grant on unlock                                                                                                                                              |
 | **Disk** — raise/remove the spill-path disk ceiling (the decompression-bomb guard) | low (ENOSPC, not crash)                              | grant on unlock                                                                                                                                                     |
 | **Memory** — non-spillable hard caps move Default → Elevated tier                  | real (OOM/crash for transform / random-access parse) | **the one explicit knob**; keep an absolute max even when unlocked; prefer leaving whole-doc-transform caps on their soft-degrade placeholder rather than elevating |
 
-Key invariant: **even Unlocked, an absolute ceiling holds** so peek can
-never be driven to a hard crash. "Two classes of hard limit" = `Default`
-(conservative) and `Elevated` (risk-accepted), both bounded; nothing
-becomes infinite.
+Key invariant: **even Unlocked, an absolute ceiling holds** so peek can never be driven to a hard
+crash. "Two classes of hard limit" = `Default` (conservative) and `Elevated` (risk-accepted), both
+bounded; nothing becomes infinite.
 
 ## Two-tier caps
 
-`limits.rs` grows, for each *elevatable* class, a `Default` and an
-`Elevated` value plus an absolute ceiling. The active tier is selected by
-`Access`. Spillable paths (decompress, extract) mostly need only a **disk**
-ceiling lifted, not a memory tier — they already bound RAM by their spool
-threshold.
+`limits.rs` grows, for each _elevatable_ class, a `Default` and an `Elevated` value plus an absolute
+ceiling. The active tier is selected by `Access`. Spillable paths (decompress, extract) mostly need
+only a **disk** ceiling lifted, not a memory tier — they already bound RAM by their spool threshold.
 
 ## Where the decision lives (coherence — see caveat 2)
 
-The leaf guards stay **pure**: they receive a cap, they never read session
-state. The tier is threaded down **as data**, reusing existing carriers:
+The leaf guards stay **pure**: they receive a cap, they never read session state. The tier is
+threaded down **as data**, reusing existing carriers:
 
-- `ComposeOpts` (already flows bin → `compose_modes` → per-type compose)
-  carries the `Access`/tier.
-- `ExtractOptions` (already carries `no_tempfile`) carries it for the
-  extract / descend path.
+- `ComposeOpts` (already flows bin → `compose_modes` → per-type compose) carries the `Access`/tier.
+- `ExtractOptions` (already carries `no_tempfile`) carries it for the extract / descend path.
 - `run_view` passes it into the transparent-decompress deferral.
 
-**This is the same plumbing as Option A** (budget-required reads): a
-`Budget` resolves to a concrete cap *given the tier*. Do Option A and this
-together — a bare `read_bytes()` becomes `read_bytes(Budget)`, where
-`Budget` + session tier → cap. One refactor, not two.
+**This is the same plumbing as Option A** (budget-required reads): a `Budget` resolves to a concrete
+cap _given the tier_. Do Option A and this together — a bare `read_bytes()` becomes
+`read_bytes(Budget)`, where `Budget` + session tier → cap. One refactor, not two.
 
 ## The eager-decompress deferral (coherence — see caveat 3)
 
-`resolve_transparent` runs in `run_view` **before** the session exists, so
-a top-level `huge.xz` is already decompressed before any prompt could show.
-Fix: defer in the bin.
+`resolve_transparent` runs in `run_view` **before** the session exists, so a top-level `huge.xz` is
+already decompressed before any prompt could show. Fix: defer in the bin.
 
 ```
 run_view:
@@ -96,36 +85,34 @@ run_view:
         resolve_transparent eagerly (small/common path, or pre-authorized)
 ```
 
-On the load key: run `decompress_to_source`, re-detect the inner content,
-rebuild the frame (same path the retry-detect / descend reseed uses).
-`peek-detect` stays pure — only the bin knows `interactive` / the flag.
+On the load key: run `decompress_to_source`, re-detect the inner content, rebuild the frame (same
+path the retry-detect / descend reseed uses). `peek-detect` stays pure — only the bin knows
+`interactive` / the flag.
 
-The same gate applies in `push_extracted` (descend), but there `access`
-may already be `Unlocked`, so it just proceeds.
+The same gate applies in `push_extracted` (descend), but there `access` may already be `Unlocked`,
+so it just proceeds.
 
 ## Prompt points (interactive)
 
-- **Open** — the primary view needs a guarded op (deferred decompress; a
-  whole-load mode over its Elevated cap): land on **Info**, with a status /
-  prompt line `press [key] to load (N MB, slow)`. Key → unlock → run the op
-  → switch to the real primary view. Reuses the deferred-primary idea (a
+- **Open** — the primary view needs a guarded op (deferred decompress; a whole-load mode over its
+  Elevated cap): land on **Info**, with a status / prompt line `press [key] to load (N MB, slow)`.
+  Key → unlock → run the op → switch to the real primary view. Reuses the deferred-primary idea (a
   `Mode::loads_whole_file()`-style signal + a frame `deferred` slot).
-- **Descend (Enter)** — the entry's extract / decompress is guarded: a
-  **modal prompt before extraction** (reuse the existing `ViewerState`
-  prompt slot + `PromptKind`). Confirm → unlock → proceed with the descend.
+- **Descend (Enter)** — the entry's extract / decompress is guarded: a **modal prompt before
+  extraction** (reuse the existing `ViewerState` prompt slot + `PromptKind`). Confirm → unlock →
+  proceed with the descend.
 
 ## Latency predicate
 
-"Expensive" ≈ a compressed / sequential source whose **compressed**
-`byte_len` exceeds `LATENCY_PROMPT_BYTES` (start ~50 MB, tune). Evaluated
-where the op is about to run: the `run_view` deferral, the archive
-compressed-TOC build, the extract path. Random-access formats (zip / plain
-tar / ISO) never trip it.
+"Expensive" ≈ a compressed / sequential source whose **compressed** `byte_len` exceeds
+`LATENCY_PROMPT_BYTES` (start ~50 MB, tune). Evaluated where the op is about to run: the `run_view`
+deferral, the archive compressed-TOC build, the extract path. Random-access formats (zip / plain tar
+/ ISO) never trip it.
 
 ## Guarded-op map
 
 | Op                                         | Spillable?         | Default guard today            | Unlock effect                                                |
-|--------------------------------------------|--------------------|--------------------------------|--------------------------------------------------------------|
+| ------------------------------------------ | ------------------ | ------------------------------ | ------------------------------------------------------------ |
 | Top-level bare-codec decompress            | yes (RAM bounded)  | eager, no prompt               | defer + prompt when compressed > threshold; unlock = proceed |
 | Compressed-tar TOC build                   | no (full pass)     | runs silently                  | prompt when compressed > threshold                           |
 | Archive entry extract / descend            | yes (spool ≥16 MB) | runs; disk uncapped            | prompt on large; unlock lifts disk ceiling                   |
@@ -134,76 +121,63 @@ tar / ISO) never trip it.
 
 ## Open decisions
 
-- **Elevate memory caps, or latency + disk only?** Recommend latency +
-  disk on unlock; treat memory-tier elevation as a separate opt-in (or skip
-  it, leaving transform caps on soft-degrade). Avoids turning a "wait
-  longer" grant into an OOM.
-- Threshold numbers: `LATENCY_PROMPT_BYTES`, the spill disk ceiling, the
-  Elevated tier values + absolute max.
+- **Elevate memory caps, or latency + disk only?** Recommend latency + disk on unlock; treat
+  memory-tier elevation as a separate opt-in (or skip it, leaving transform caps on soft-degrade).
+  Avoids turning a "wait longer" grant into an OOM.
+- Threshold numbers: `LATENCY_PROMPT_BYTES`, the spill disk ceiling, the Elevated tier values +
+  absolute max.
 - CLI flag name (`--yes` / `--force` / `--large`).
 - Does the deferred-open reuse the descend reseed path, or a new one?
 - Interaction with the existing retry-detect rebuild (`reseed_from_modes`).
 
 ## Sequencing
 
-1. ~~**Option A first** (budget-required reads + the ~44-site audit) — lays
-   the tier-aware `Budget` plumbing this design rides on.~~ **Done.**
-   `InputSource::read_bytes`/`read_text` now take a required
-   `peek_io::limits::Budget` (`WholeDoc` / `Sidecar` / `BulkWalk` /
-   `Unbounded("why")`); the four `*_capped` variants folded in; the audit
-   landed. `Budget::cap()` resolves to the fixed Default class constant.
-2. ~~Session `Access` state + non-interactive default + CLI flag.~~ +
-   ~~3. `run_view` deferral + the Info-default open prompt.~~ **Done
-   together** (they share a consumer — `Access` is inert without the
-   deferral that reads it). Landed:
-   - `viewer_session::Access { Default, Unlocked }` (in the bin, not
-     `peek-io` — see the cap() note below) + `--yes` flag + the
-     non-interactive-starts-Unlocked default, stored on `ViewerState`.
-   - `deferred_decompress()` (compressed-size > `LATENCY_PROMPT_BYTES`,
-     Default session) gates both the top-level open (`run_view`) and the
-     descend path (`push_extracted`): skip the eager `resolve_transparent`,
-     keep the compressed wrapper, mark `SessionFrame.deferred`, land on
-     Info with a status-line load hint.
-   - Enter on a deferred frame (`load_deferred`) runs the decompress,
-     reseeds the frame to the inner content, and flips the session to
-     `Unlocked` so later guarded ops don't re-ask.
-   - **Not** the `cap()` threading the old note here promised: `cap()` has
-     one call site but tier-awareness would need `Access` at every
-     `read_bytes` caller (~44 sites), and both tiers resolve to the same
-     Default today (no Elevated values; step 5 is recommended-against). So
-     `Access` lives in the bin where the prompt logic consumes it; the
-     leaf caps stay untouched until/unless step 5 elevates memory tiers.
-   - **Open** (this step uses a status-line hint, not a modal): the modal
-     prompt-slot route the original design sketched is unused — Enter on
-     the Info-landed frame is the confirmation. Revisit if a modal reads
-     better.
-4. ~~Descend / extract prompt + spill disk ceiling.~~ **Done.**
-   - `MAX_SPILL_BYTES` (8 GiB, in `peek_io::compression`) caps both spill
-     paths — `decompress_to_source` and the archive-entry `materialise` —
-     so a decompression bomb fails cleanly instead of `ENOSPC`. Fixed,
-     **always enforced** (incl. pipe / `--print`), *not* tier-lifted —
-     keeps `Access` out of `peek-io`. A confirmed prompt skips the nag but
-     the ceiling still holds (the plan's "absolute ceiling even unlocked").
-   - Type-agnostic extract confirm: `descend()` and `start_extract()` ask
-     before spooling when the selection's declared size > `EXTRACT_PROMPT_BYTES`
-     (256 MB) and the session is `Default`. `y` / Enter unlocks + proceeds.
-     Needs `Mode::selected_extract_size()` (listing → `ListSource::extract_size`)
-     + a `Prompt::confirm` yes/no mode. A decompression bomb with no
-     declared size sails past the prompt → the hard ceiling catches it.
-5. ~~Compressed-tar TOC latency gate.~~ **Done.** `deferred_decompress`
-   generalized to `deferred_open` → `Deferred { Decompress(fmt),
-   Listing(fmt) }`. A compressed-stream archive
-   (`ArchiveFormat::streams_compressed()` — the `tar.gz` / `tar.xz` / …
-   variants whose TOC walk inflates the whole archive) over
-   `LATENCY_PROMPT_BYTES` defers: `compose_or_defer` substitutes a cheap
-   Hex + Info placeholder, the frame lands on Info, and Enter runs the real
-   compose (the walk) + reseeds to the listing. `load_deferred` is uniform
-   across both kinds (`resolve_transparent` is a no-op on an archive). The
-   deferral is gated to the actual viewer path (`enters_viewer`), so
-   `--info` / `--list` still resolve eagerly and report the inner content.
-6. **Memory-tier elevation — declined.** Resolved the Open decision: keep
-   `Access` to latency + disk only. Elevating the non-spillable memory caps
-   trades a recoverable "wait longer" / `ENOSPC` for a real OOM, and the
-   whole-doc transforms already soft-degrade to a placeholder over cap — a
-   better failure than a crash. The absolute-ceiling invariant holds for
-   free with the caps fixed. Not building it.
+1. ~~**Option A first** (budget-required reads + the ~44-site audit) — lays the tier-aware `Budget`
+   plumbing this design rides on.~~ **Done.** `InputSource::read_bytes`/`read_text` now take a
+   required `peek_io::limits::Budget` (`WholeDoc` / `Sidecar` / `BulkWalk` / `Unbounded("why")`);
+   the four `*_capped` variants folded in; the audit landed. `Budget::cap()` resolves to the fixed
+   Default class constant.
+2. ~~Session `Access` state + non-interactive default + CLI flag.~~ + ~~3. `run_view` deferral + the
+   Info-default open prompt.~~ **Done together** (they share a consumer — `Access` is inert without
+   the deferral that reads it). Landed:
+   - `viewer_session::Access { Default, Unlocked }` (in the bin, not `peek-io` — see the cap() note
+     below) + `--yes` flag + the non-interactive-starts-Unlocked default, stored on `ViewerState`.
+   - `deferred_decompress()` (compressed-size > `LATENCY_PROMPT_BYTES`, Default session) gates both
+     the top-level open (`run_view`) and the descend path (`push_extracted`): skip the eager
+     `resolve_transparent`, keep the compressed wrapper, mark `SessionFrame.deferred`, land on Info
+     with a status-line load hint.
+   - Enter on a deferred frame (`load_deferred`) runs the decompress, reseeds the frame to the inner
+     content, and flips the session to `Unlocked` so later guarded ops don't re-ask.
+   - **Not** the `cap()` threading the old note here promised: `cap()` has one call site but
+     tier-awareness would need `Access` at every `read_bytes` caller (~44 sites), and both tiers
+     resolve to the same Default today (no Elevated values; step 5 is recommended-against). So
+     `Access` lives in the bin where the prompt logic consumes it; the leaf caps stay untouched
+     until/unless step 5 elevates memory tiers.
+   - **Open** (this step uses a status-line hint, not a modal): the modal prompt-slot route the
+     original design sketched is unused — Enter on the Info-landed frame is the confirmation.
+     Revisit if a modal reads better.
+3. ~~Descend / extract prompt + spill disk ceiling.~~ **Done.**
+   - `MAX_SPILL_BYTES` (8 GiB, in `peek_io::compression`) caps both spill paths —
+     `decompress_to_source` and the archive-entry `materialise` — so a decompression bomb fails
+     cleanly instead of `ENOSPC`. Fixed, **always enforced** (incl. pipe / `--print`), _not_
+     tier-lifted — keeps `Access` out of `peek-io`. A confirmed prompt skips the nag but the ceiling
+     still holds (the plan's "absolute ceiling even unlocked").
+   - Type-agnostic extract confirm: `descend()` and `start_extract()` ask before spooling when the
+     selection's declared size > `EXTRACT_PROMPT_BYTES` (256 MB) and the session is `Default`. `y` /
+     Enter unlocks + proceeds. Needs `Mode::selected_extract_size()` (listing →
+     `ListSource::extract_size`)
+     - a `Prompt::confirm` yes/no mode. A decompression bomb with no declared size sails past the
+       prompt → the hard ceiling catches it.
+4. ~~Compressed-tar TOC latency gate.~~ **Done.** `deferred_decompress` generalized to
+   `deferred_open` → `Deferred { Decompress(fmt), Listing(fmt) }`. A compressed-stream archive
+   (`ArchiveFormat::streams_compressed()` — the `tar.gz` / `tar.xz` / … variants whose TOC walk
+   inflates the whole archive) over `LATENCY_PROMPT_BYTES` defers: `compose_or_defer` substitutes a
+   cheap Hex + Info placeholder, the frame lands on Info, and Enter runs the real compose (the
+   walk) + reseeds to the listing. `load_deferred` is uniform across both kinds
+   (`resolve_transparent` is a no-op on an archive). The deferral is gated to the actual viewer path
+   (`enters_viewer`), so `--info` / `--list` still resolve eagerly and report the inner content.
+5. **Memory-tier elevation — declined.** Resolved the Open decision: keep `Access` to latency + disk
+   only. Elevating the non-spillable memory caps trades a recoverable "wait longer" / `ENOSPC` for a
+   real OOM, and the whole-doc transforms already soft-degrade to a placeholder over cap — a better
+   failure than a crash. The absolute-ceiling invariant holds for free with the caps fixed. Not
+   building it.

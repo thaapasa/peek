@@ -2,8 +2,8 @@
 
 Modern terminal file viewer. Syntax highlight, structured-data pretty-print, image render.
 
-**Single-file viewer.** One path (or stdin) at a time. No batch, no file list, no `cat`-style
-concat — those belong to other tools.
+**Single-file viewer.** One path (or stdin) at a time. No batch, no file list, no `cat`-style concat
+— those belong to other tools.
 
 ## Build & Run
 
@@ -15,15 +15,15 @@ cargo test --workspace       # ALL tests — bare `cargo test` runs only the bin
 cargo clippy --workspace     # ALL crates — bare skips member crates
 ```
 
-**Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and
-skips library-crates.
+**Always `--workspace`** for test/clippy. Without it cargo targets only root `peek` bin and skips
+library-crates.
 
-**Toolchain pinned in `rust-toolchain.toml`.** Local + CI + release all resolve there;
-rustup installs it on demand. Bump it in its own commit — a new rustc means new clippy lints.
-MSRV (`rust-version` in root `Cargo.toml`) is a separate, lower floor and isn't CI-verified.
+**Toolchain pinned in `rust-toolchain.toml`.** Local + CI + release all resolve there; rustup
+installs it on demand. Bump it in its own commit — a new rustc means new clippy lints. MSRV
+(`rust-version` in root `Cargo.toml`) is a separate, lower floor and isn't CI-verified.
 
-**Other tools via mise.** `mise.toml` pins just, node, prettier, mdbook (CI installs these).
-Opt-in dev tools (cargo-fuzz, cargo-audit, demo capture) live in `mise.dev.toml`, installed by
+**Other tools via mise.** `mise.toml` pins just, node, prettier, mdbook (CI installs these). Opt-in
+dev tools (cargo-fuzz, cargo-audit, demo capture) live in `mise.dev.toml`, installed by
 `just setup`. Rust stays out of mise: its backend sets `RUSTUP_TOOLCHAIN`, overriding the file.
 
 **Verify against the debug build** — `cargo run -- [args]` or `target/debug/peek`. Release builds
@@ -34,7 +34,7 @@ dynamically at startup). Ghostscript used if on path.
 
 ## Architecture map
 
-Top-level only. Per-file detail (what + *why*) lives in each file's `//!` header — read it when
+Top-level only. Per-file detail (what + _why_) lives in each file's `//!` header — read it when
 unsure where logic lives. No separate map doc.
 
 Cargo workspace: 5 library crates under thin `peek` bin. **Layering Cargo-enforced**: detect +
@@ -131,9 +131,9 @@ install.sh          POSIX installer for curl | sh.
 
 Three north stars:
 
-1. **Clean, robust, maintainable architecture.** New abstractions earn place by cutting surface
-   area or easing extension. Narrow responsibilities. `main.rs` stays short — file-type logic
-   lives in `compose_modes` + the modes.
+1. **Clean, robust, maintainable architecture.** New abstractions earn place by cutting surface area
+   or easing extension. Narrow responsibilities. `main.rs` stays short — file-type logic lives in
+   `compose_modes` + the modes.
 2. **Stream, don't load.** Multi-GB files first-class. Prefer `open_byte_source()` (random access)
    or chunked iteration over whole-file `read_bytes()`/`read_text()`. Whole-file only when feature
    needs it (pretty-print structured data, image decode) — never casual default.
@@ -163,8 +163,8 @@ Keep in sync with code:
 - **README.md** — overview, features, usage.
 - **manual/src/** — user manual (mdbook). Update chapter on user-visible change.
 - **docs/architecture.md** — design, data flow, abstractions, how to extend.
-- **docs/memory-streaming.md** — size/streaming guard: threat model, budget classes, mechanisms,
-  the rule every whole-file read follows.
+- **docs/memory-streaming.md** — size/streaming guard: threat model, budget classes, mechanisms, the
+  rule every whole-file read follows.
 - **docs/image-rendering.md** — image render algorithm + glyph-atlas regeneration.
 - **docs/theme-conversion.md** — porting external themes into `.tmTheme`.
 - **CLAUDE.md file map + `//!` headers** — per-file breakdown. Add/move/remove a file → update
@@ -183,8 +183,8 @@ Keep in sync with code:
   fix links; no file-map entry. Else delete. Never leave a landed plan in `docs/` root.
 - **Active instructions belong in their own doc** (or a section of architecture.md/conventions.md),
   never inside a plan file. E.g. "adding new file type" checklist lives in architecture.md.
-- **Flag contradictions, don't resolve them silently.** When normal work has you reading these
-  docs / CLAUDE.md / module headers and two instructions conflict, stop and notify the user — name
-  both sources. Don't pick one, don't ignore it. User decides the fix.
-- **Keep docs + comments terse.** Lead with the beef, cut boilerplate; tighten verbosity in any
-  doc / `//!` header / comment you touch. Full rule: conventions.md → "Writing".
+- **Flag contradictions, don't resolve them silently.** When normal work has you reading these docs
+  / CLAUDE.md / module headers and two instructions conflict, stop and notify the user — name both
+  sources. Don't pick one, don't ignore it. User decides the fix.
+- **Keep docs + comments terse.** Lead with the beef, cut boilerplate; tighten verbosity in any doc
+  / `//!` header / comment you touch. Full rule: conventions.md → "Writing".

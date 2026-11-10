@@ -11,7 +11,7 @@ experience.
 ## Behavior
 
 | Scenario         | Stdin is TTY                     | Stdin is piped                    |
-|------------------|----------------------------------|-----------------------------------|
+| ---------------- | -------------------------------- | --------------------------------- |
 | `peek` (no args) | Error: "no files specified"      | Read stdin, render                |
 | `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render                |
 | `peek file.rs`   | View file normally               | View file normally (ignore stdin) |
@@ -76,7 +76,9 @@ Change `Viewer` trait and `Registry` methods:
 
 - `Viewer::render(&self, source: &InputSource, file_type: &FileType, output: &mut Output)`
 -
+
 `Registry::content_renderer(source: &InputSource, file_type: &FileType) -> Result<ContentRenderer>`
+
 - `Registry::syntax_token_for(source: &InputSource, file_type: &FileType)` — uses extension from
   source, falls back to `--language`
 
@@ -116,7 +118,7 @@ Each viewer replaces `fs::read_to_string(path)` with `source.read_text()`:
 ## Files Modified
 
 | File                        | Change                                                 |
-|-----------------------------|--------------------------------------------------------|
+| --------------------------- | ------------------------------------------------------ |
 | `src/input.rs`              | **New** — `InputSource` enum                           |
 | `src/main.rs`               | Stdin detection, reading, fd reopen, use `InputSource` |
 | `src/detect.rs`             | Accept `&InputSource`, add content-based detection     |

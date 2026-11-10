@@ -1,7 +1,7 @@
 # CLI options
 
 | Option            | Short | Description                                                                                                                 |
-|-------------------|-------|-----------------------------------------------------------------------------------------------------------------------------|
+| ----------------- | ----- | --------------------------------------------------------------------------------------------------------------------------- |
 | `--help`          | `-h`  | Show help (short form; `--help` prints the long form)                                                                       |
 | `--version`       | `-V`  | Show version info and exit                                                                                                  |
 | `--print`         | `-p`  | Force print mode (direct stdout)                                                                                            |
@@ -31,14 +31,13 @@
 
 ## Notes
 
-- `--plain` is the single "sterile output" knob: implies `--color plain` and additionally
-  disables syntax highlighting and structured pretty-printing. HTML and SVG drop their
-  rendered / rasterized view and fall back to raw source; other rich views (image, PDF,
-  DOCX, EPUB) still compose but render without color. Use it when piping into tools that
-  expect bytes-as-typed.
-- `--raw` is narrower: it skips pretty-printing of structured / SVG sources but keeps colors,
-  font styles, and rich renders. Pair `--raw --color plain` if you want raw structure
-  without colors but still want HTML / SVG rendered.
+- `--plain` is the single "sterile output" knob: implies `--color plain` and additionally disables
+  syntax highlighting and structured pretty-printing. HTML and SVG drop their rendered / rasterized
+  view and fall back to raw source; other rich views (image, PDF, DOCX, EPUB) still compose but
+  render without color. Use it when piping into tools that expect bytes-as-typed.
+- `--raw` is narrower: it skips pretty-printing of structured / SVG sources but keeps colors, font
+  styles, and rich renders. Pair `--raw --color plain` if you want raw structure without colors but
+  still want HTML / SVG rendered.
 - `--print` / `-p` forces print mode regardless of TTY.
 - `--json` (with `--info`) prints the info screen as a single JSON object for shell pipelines —
   `peek file.pdf --info --json | jq .size_bytes`. Core metadata is typed (numbers stay numbers,
@@ -58,8 +57,7 @@
 ## Help screens
 
 - **`-h`** (concise) — gradient logo, version + tagline, usage line, common options.
-- **`--help`** (full) — everything in `-h`, plus rarely-used options (theme, color, language,
-  width, image-mode, background, margin, utc) and the full theme listing with the active
-  marker.
+- **`--help`** (full) — everything in `-h`, plus rarely-used options (theme, color, language, width,
+  image-mode, background, margin, utc) and the full theme listing with the active marker.
 
 Both are custom-themed — not the default clap output.

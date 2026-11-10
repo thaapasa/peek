@@ -11,17 +11,17 @@ without a `.elf` / `.exe` extension. WebAssembly functions surface in the Symbol
 
 Tab cycles three views:
 
-- **Info** — the header summary: format, architecture, kind (executable, relocatable object,
-  dynamic library, core dump), 32- or 64-bit, endianness, entry point, section and symbol counts,
-  whether debug info is present, the build identity (ELF build ID, Mach-O UUID, or PE PDB GUID),
-  and the shared libraries the file links against (ELF `DT_NEEDED`, Mach-O dylibs, PE imports —
-  shown only when the file has any).
+- **Info** — the header summary: format, architecture, kind (executable, relocatable object, dynamic
+  library, core dump), 32- or 64-bit, endianness, entry point, section and symbol counts, whether
+  debug info is present, the build identity (ELF build ID, Mach-O UUID, or PE PDB GUID), and the
+  shared libraries the file links against (ELF `DT_NEEDED`, Mach-O dylibs, PE imports — shown only
+  when the file has any).
 - **Sections** — a table of every section: index, name, address, size, kind.
 - **Symbols** — a listing of every symbol: address, size, type, bind, name. `Enter` jumps the
-  **Hex** view straight to the selected symbol's byte offset, so you can go from a name to its
-  bytes in one keystroke (the landed byte is highlighted). Symbols with no on-disk location —
-  undefined imports, or `.bss` data — list with a muted address and don't jump. When the file is
-  stripped, the dynamic symbol table is shown in place of the missing `.symtab`.
+  **Hex** view straight to the selected symbol's byte offset, so you can go from a name to its bytes
+  in one keystroke (the landed byte is highlighted). Symbols with no on-disk location — undefined
+  imports, or `.bss` data — list with a muted address and don't jump. When the file is stripped, the
+  dynamic symbol table is shown in place of the missing `.symtab`.
 
 ## Navigating sections and symbols
 
@@ -44,7 +44,7 @@ Wavefront `.obj` 3D model — which shares the extension but is text — still o
 
 ## Limitations
 
-Sections and symbols are views, not extractable files — there is no `e` extract here, and the
-symbol row's `Enter` jumps within the file rather than opening anything. `peek --list` on an object
-file prints the symbol table (address, size, type, bind, name) as a readable `nm`-style dump — handy
-on stdout, but there are no extract keys to pipe into `--extract`.
+Sections and symbols are views, not extractable files — there is no `e` extract here, and the symbol
+row's `Enter` jumps within the file rather than opening anything. `peek --list` on an object file
+prints the symbol table (address, size, type, bind, name) as a readable `nm`-style dump — handy on
+stdout, but there are no extract keys to pipe into `--extract`.

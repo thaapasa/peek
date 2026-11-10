@@ -5,51 +5,50 @@ How peek is packaged and published. User-facing install: [README.md](../README.m
 ## Pipeline
 
 `.github/workflows/release.yml`, manual dispatch (`workflow_dispatch`) with one input: `bump` —
-`patch` (default) / `minor` / `major`. The version bump happens *in* the pipeline; nothing is
-bumped or committed locally. Three jobs:
+`patch` (default) / `minor` / `major`. The version bump happens _in_ the pipeline; nothing is bumped
+or committed locally. Three jobs:
 
 1. **`prepare`** (ubuntu-24.04) — reads the current version from `Cargo.toml`, applies the `bump`
    level to compute `vX.Y.Z`, fails fast if that tag exists on `origin`. The version is the single
-   workspace version under `[workspace.package]` (the `peek` bin + every member crate inherit it
-   via `version.workspace = true`). Bumps that one line in `Cargo.toml`, then runs
+   workspace version under `[workspace.package]` (the `peek` bin + every member crate inherit it via
+   `version.workspace = true`). Bumps that one line in `Cargo.toml`, then runs
    `cargo update --workspace` so cargo rewrites every internal crate entry in `Cargo.lock`
    (`--workspace` keeps registry deps pinned; `--locked` builds stay valid; adding a member crate
-   never re-breaks this).
-   Commits as `github-actions[bot]` on a fresh
-   `release/vX.Y.Z` branch, and force-pushes that branch. Outputs the new version, tag, previous
-   tag (for release notes), branch name, and the branch commit SHA.
+   never re-breaks this). Commits as `github-actions[bot]` on a fresh `release/vX.Y.Z` branch, and
+   force-pushes that branch. Outputs the new version, tag, previous tag (for release notes), branch
+   name, and the branch commit SHA.
 2. **`build`** — 5-target matrix, all built from the release-branch SHA:
-    - `aarch64-apple-darwin` on `macos-14`
-    - `x86_64-apple-darwin` on `macos-14` (cross-compiled from aarch64; macOS ships a universal SDK
-      so `rustup target add` works out of the box, and the free `macos-13` Intel runner is gone)
-    - `x86_64-unknown-linux-gnu` on `ubuntu-24.04`
-    - `aarch64-unknown-linux-gnu` on `ubuntu-24.04-arm`
-    - `x86_64-pc-windows-msvc` on `windows-latest`
+   - `aarch64-apple-darwin` on `macos-14`
+   - `x86_64-apple-darwin` on `macos-14` (cross-compiled from aarch64; macOS ships a universal SDK
+     so `rustup target add` works out of the box, and the free `macos-13` Intel runner is gone)
+   - `x86_64-unknown-linux-gnu` on `ubuntu-24.04`
+   - `aarch64-unknown-linux-gnu` on `ubuntu-24.04-arm`
+   - `x86_64-pc-windows-msvc` on `windows-latest`
 
    Each emits `peek-<version>-<target>.tar.gz` (`.zip` on Windows) + `.sha256` companion. Unix
    builds are stripped via the release profile. Each archive also bundles the matching Pdfium
    dynamic library (see [Pdfium bundling](#pdfium-bundling) below).
 
-   `cargo test --workspace --release --locked --target <target>` runs on every *native* matrix entry
+   `cargo test --workspace --release --locked --target <target>` runs on every _native_ matrix entry
    before bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
    targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from the
    arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure in any
    target halts the matrix (`fail-fast: true`) so no release artifacts publish.
-3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`:
-   `--ff-only` when `main` hasn't moved, otherwise a `--no-ff` merge commit (the log line says
-   which). Pushes `main`, tags the **release-branch commit** (see below), publishes a GitHub
-   Release with all 5 archives + 5 `.sha256` + `install.sh` + auto-generated notes
-   (`git log <previous-tag>..<tag>`), and deletes the release branch.
 
-The bump commit only ever reaches `main` through a *successful* release — a failed `build`
-leaves nothing but the throwaway `release/vX.Y.Z` branch. Merge-before-tag ordering means the
-tag is only created once `main` actually has the commit.
+3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`: `--ff-only` when
+   `main` hasn't moved, otherwise a `--no-ff` merge commit (the log line says which). Pushes `main`,
+   tags the **release-branch commit** (see below), publishes a GitHub Release with all 5 archives +
+   5 `.sha256` + `install.sh` + auto-generated notes (`git log <previous-tag>..<tag>`), and deletes
+   the release branch.
 
-The tag points at the release-branch commit that was *built*, not the merge commit. On a
-`--no-ff` merge the merge commit's tree picks up whatever raced onto `main` after the branch was
-cut — code the release artifacts don't contain — so tagging it would misrepresent the release.
-The built commit is reachable from `main` through the merge either way, so `git checkout vX.Y.Z`
-still works.
+The bump commit only ever reaches `main` through a _successful_ release — a failed `build` leaves
+nothing but the throwaway `release/vX.Y.Z` branch. Merge-before-tag ordering means the tag is only
+created once `main` actually has the commit.
+
+The tag points at the release-branch commit that was _built_, not the merge commit. On a `--no-ff`
+merge the merge commit's tree picks up whatever raced onto `main` after the branch was cut — code
+the release artifacts don't contain — so tagging it would misrepresent the release. The built commit
+is reachable from `main` through the merge either way, so `git checkout vX.Y.Z` still works.
 
 Workflow needs `contents: write` to push the branch, push `main`, push the tag, and create the
 release. No other secrets.
@@ -80,8 +79,8 @@ The release pipeline ships the dylib next to the binary so the exe-dir lookup wi
 - Each build matrix entry carries `pdfium_asset` (e.g. `pdfium-mac-arm64.tgz`) and `pdfium_lib`
   (e.g. `lib/libpdfium.dylib`).
 - The `Bundle Pdfium` step reads `BUILD` from `.pdfium/VERSION`, fetches
-  `https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$BUILD/<asset>`,
-  extracts the platform's `pdfium_lib`, and drops it into `dist/$STAGE/` alongside `peek`.
+  `https://github.com/bblanchon/pdfium-binaries/releases/download/chromium/$BUILD/<asset>`, extracts
+  the platform's `pdfium_lib`, and drops it into `dist/$STAGE/` alongside `peek`.
 - Pdfium's `LICENSE` is also copied as `LICENSE-pdfium`.
 
 Tarball / zip layout:
@@ -137,9 +136,9 @@ Where the failure lands decides the cleanup:
   git fetch --prune --prune-tags               # sync local tag list
   ```
 
-  The bump commit stays on `main` — re-dispatching with the same `bump` level would compute a
-  *new* version on top of it. To re-cut the *same* version, hard-reset `main` back past the bump
-  commit and force-push first, or just accept the version skip and re-dispatch.
+  The bump commit stays on `main` — re-dispatching with the same `bump` level would compute a _new_
+  version on top of it. To re-cut the _same_ version, hard-reset `main` back past the bump commit
+  and force-push first, or just accept the version skip and re-dispatch.
 
 Re-dispatch with the same `bump` level for a transient failure (CI flake, GitHub outage); the
 pipeline recomputes the version from `Cargo.toml` each run, so a clean `main` always yields the

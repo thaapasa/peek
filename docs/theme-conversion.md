@@ -15,7 +15,7 @@ Files: `dark_modern.json`, `dark_plus.json`, `dark_vs.json`, `light_modern.json`
 themes use an `"include"` chain — read every file in the chain and merge (child overrides parent).
 Dark Modern: `dark_modern → dark_plus → dark_vs`.
 
-**JetBrains:** *Settings → Editor → Color Scheme → ⚙️ → Export* to `.icls`. Usually drops at
+**JetBrains:** _Settings → Editor → Color Scheme → ⚙️ → Export_ to `.icls`. Usually drops at
 `~/<Theme>.icls`.
 
 ## tmTheme structure
@@ -81,7 +81,7 @@ Two relevant top-level keys.
 **`colors`** — UI palette. Map to globals:
 
 | VS Code key                                               | tmTheme global     |
-|-----------------------------------------------------------|--------------------|
+| --------------------------------------------------------- | ------------------ |
 | `editor.background`                                       | `background`       |
 | `editor.foreground`                                       | `foreground`       |
 | `editorCursor.foreground` (or `foreground`)               | `caret`            |
@@ -91,7 +91,7 @@ Two relevant top-level keys.
 | `editor.findMatchBackground`                              | `findHighlight`    |
 | `focusBorder` / `textLink.foreground`                     | `accent`           |
 
-**Don't use `editor.selectionBackground` for `selection`.** peek uses `selection` *only* as the
+**Don't use `editor.selectionBackground` for `selection`.** peek uses `selection` _only_ as the
 status-bar background. VS Code's `editor.selectionBackground` typically carries an alpha (
 `#878b9180`, `#276782dd`) and is meant to be drawn translucently over the editor — strip alpha and
 you get a too-bright status bar with poor text contrast. `statusBar.background` is what VS Code uses
@@ -105,8 +105,8 @@ transfers directly.
 then let child override. Walk the chain.
 
 **Semantic tokens:** VS Code also has `semanticTokenColors` and `semanticHighlighting: true`. *
-*syntect has no semantic-token support** — it only sees TextMate scopes. Skip the
-`semanticTokenColors` block; the result looks like VS Code with semantic highlighting *off*. This is
+_syntect has no semantic-token support_* — it only sees TextMate scopes. Skip the
+`semanticTokenColors` block; the result looks like VS Code with semantic highlighting _off_. This is
 why `u8` / `Self` / `None` may render as keyword-blue instead of type-teal in Rust.
 
 ## IntelliJ `.icls` → tmTheme
@@ -116,7 +116,7 @@ XML, two relevant sections.
 **`<colors>`** — UI palette. Map to globals:
 
 | `.icls` option                                   | tmTheme global              |
-|--------------------------------------------------|-----------------------------|
+| ------------------------------------------------ | --------------------------- |
 | `TEXT` (foreground/background)                   | `foreground` / `background` |
 | `CARET_COLOR`                                    | `caret`                     |
 | `CARET_ROW_COLOR`                                | `lineHighlight`             |
@@ -127,7 +127,7 @@ XML, two relevant sections.
 **`<attributes>`** — named attribute → color. Map IDEA `DEFAULT_*` to TextMate scopes:
 
 | `.icls` attribute                                          | tmTheme scope(s)                                                                                         |
-|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------|
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `DEFAULT_LINE_COMMENT` / `DEFAULT_BLOCK_COMMENT`           | `comment, comment.line, comment.block`                                                                   |
 | `DEFAULT_DOC_COMMENT`                                      | `comment.block.documentation, comment.line.documentation`                                                |
 | `DEFAULT_KEYWORD`                                          | `keyword, keyword.control, storage, storage.type, storage.modifier`                                      |
@@ -144,7 +144,7 @@ XML, two relevant sections.
 | `HTML_TAG_NAME` / `XML_TAG_NAME`                           | `entity.name.tag`                                                                                        |
 | `ERRORS_ATTRIBUTES` `EFFECT_COLOR`                         | `invalid, invalid.illegal`                                                                               |
 
-Language-specific overrides (`org.rust.*`, `KOTLIN_*`, `JS.*`) reveal what the IDE *intends* a token
+Language-specific overrides (`org.rust.*`, `KOTLIN_*`, `JS.*`) reveal what the IDE _intends_ a token
 to look like. Use them to inform color choices for the generic scope (`org.rust.STRUCT` is the "
 real" struct color even when `DEFAULT_CLASS_REFERENCE` is also defined). Cannot map 1:1 — syntect
 doesn't know IDE-specific scopes.

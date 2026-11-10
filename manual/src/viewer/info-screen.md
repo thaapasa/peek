@@ -8,9 +8,9 @@ Every file type has an Info view, reachable via:
 
 ![The Info view for a JPEG, with File, Image, and a detailed EXIF section](../img/file-info.svg)
 
-*The Info view groups universal fields (name, size, MIME, timestamps) with format-specific
-sections — here the image's dimensions, color model, HDR gain map, and the camera / lens /
-exposure metadata read straight from EXIF.*
+_The Info view groups universal fields (name, size, MIME, timestamps) with format-specific sections
+— here the image's dimensions, color model, HDR gain map, and the camera / lens / exposure metadata
+read straight from EXIF._
 
 ## Universal fields
 
@@ -22,7 +22,7 @@ exposure metadata read straight from EXIF.*
 ## Format-specific sections
 
 | File kind           | Info section adds                                                                                                                                            |
-|---------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Text / source       | Line / word / char counts, blank lines, longest line, line endings, indent style, encoding, shebang                                                          |
 | Markdown            | Heading counts, fenced code + langs, links, images, tables, list items, task progress, reading time                                                          |
 | SQL                 | Dialect, statement counts by category, created-object inventory, comment count, PL/pgSQL flag                                                                |
@@ -69,9 +69,9 @@ Core metadata is fully typed: `size_bytes` is a number, timestamps are ISO-8601 
 (independent of `--utc`), and each MIME entry carries a machine `category`. Absent fields (created
 time, compression, warnings) are omitted rather than emitted as null. The format-specific stats are
 nested under a per-type key (`pdf`, `archive`, `image`, …) with raw typed values and lowercase
-tokens for enum fields. Per-type dates (`pdf.created`, an email's `date`, a document's
-`created` / `modified`, …) are normalised to the same ISO-8601 UTC form as the core timestamps,
-whatever shape the source file stored them in. `--json` requires `--info`.
+tokens for enum fields. Per-type dates (`pdf.created`, an email's `date`, a document's `created` /
+`modified`, …) are normalised to the same ISO-8601 UTC form as the core timestamps, whatever shape
+the source file stored them in. `--json` requires `--info`.
 
 The fields depend on the file type, but the overall shape is consistent:
 

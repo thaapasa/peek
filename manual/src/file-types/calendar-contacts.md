@@ -1,13 +1,13 @@
 # Calendar and contacts
 
-| Format     | Extensions             | Notes |
-|------------|------------------------|-------|
-| iCalendar  | `.ics` `.ical` `.ifb`  | Calendar of events and todos |
-| vCard      | `.vcf` `.vcard`        | One or more contacts |
+| Format    | Extensions            | Notes                        |
+| --------- | --------------------- | ---------------------------- |
+| iCalendar | `.ics` `.ical` `.ifb` | Calendar of events and todos |
+| vCard     | `.vcf` `.vcard`       | One or more contacts         |
 
-These are the two IETF "vObject" text formats, exported by Google Calendar, Apple Calendar,
-Outlook, and most address books. peek also recognises them by content, so an extension-less file
-(or piped stdin) still opens here when it starts with a `BEGIN:VCALENDAR` or `BEGIN:VCARD` line.
+These are the two IETF "vObject" text formats, exported by Google Calendar, Apple Calendar, Outlook,
+and most address books. peek also recognises them by content, so an extension-less file (or piped
+stdin) still opens here when it starts with a `BEGIN:VCALENDAR` or `BEGIN:VCARD` line.
 
 Both open on a rendered read view, with the raw text as a second view (cycle with Tab). `--plain`
 skips the rendered view and opens straight on the source. As with every file, `x` opens the
@@ -15,8 +15,8 @@ skips the rendered view and opens straight on the source. As with every file, `x
 
 ## iCalendar — an agenda
 
-The rendered view lists each event and todo in turn: a summary heading, the date and time (with
-the time zone shown as written — peek doesn't convert zones), location, a readable recurrence rule
+The rendered view lists each event and todo in turn: a summary heading, the date and time (with the
+time zone shown as written — peek doesn't convert zones), location, a readable recurrence rule
 (`Weekly on Mon, Tue, Wed, Thu, Fri, 40 times`), organizer and attendees, status, categories, and
 the description. Todos show their due date and completion status.
 

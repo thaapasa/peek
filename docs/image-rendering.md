@@ -16,7 +16,7 @@ For each terminal cell:
    without extra storage.
 4. **ANSI rendering.** Selected glyph emitted with 24-bit truecolor fg + bg.
 
-Glyph selection is driven by *spatial color distribution*, not just brightness. A diagonal color
+Glyph selection is driven by _spatial color distribution_, not just brightness. A diagonal color
 boundary picks `/` or `\`; a cell mostly one color at the top picks `▄`.
 
 ## Bitmap representation

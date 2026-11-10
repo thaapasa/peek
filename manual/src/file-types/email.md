@@ -1,35 +1,34 @@
 # Email
 
-| Format  | Extension | Notes |
-|---------|-----------|-------|
-| Message | `.eml`    | A single RFC822 / MIME message |
+| Format  | Extension | Notes                                                       |
+| ------- | --------- | ----------------------------------------------------------- |
+| Message | `.eml`    | A single RFC822 / MIME message                              |
 | Mailbox | `.mbox`   | Many messages concatenated, each preceded by a `From ` line |
 
-Both parse with the pure-Rust `mail-parser` crate. peek also recognises a message by content, so
-an extension-less file still opens here when it starts with a `From ` separator (mbox) or an
-RFC822 header block.
+Both parse with the pure-Rust `mail-parser` crate. peek also recognises a message by content, so an
+extension-less file still opens here when it starts with a `From ` separator (mbox) or an RFC822
+header block.
 
 ## `.eml` — a single message
 
 Cycled with Tab:
 
-- **Message** (default) — a header block (From / To / Cc / Date / Subject, plus an attachment
-  count when the message has attachments) followed by the body. HTML messages render through the
-  same `html2text` driver as the [HTML viewer](./html.md); plain-text messages are word-wrapped
-  to the terminal width.
+- **Message** (default) — a header block (From / To / Cc / Date / Subject, plus an attachment count
+  when the message has attachments) followed by the body. HTML messages render through the same
+  `html2text` driver as the [HTML viewer](./html.md); plain-text messages are word-wrapped to the
+  terminal width.
 - **Source** — the raw RFC822 text. `--plain` skips the rendered view and opens straight on the
   source.
 - **Attachments** (only when the message has any) — one row per MIME attachment with its content
-  type and size.
-  Press `e` to [extract](../viewer/extraction.md) the selected attachment to disk; `Enter`
-  opens it with a recursive peek.
+  type and size. Press `e` to [extract](../viewer/extraction.md) the selected attachment to disk;
+  `Enter` opens it with a recursive peek.
 - **[Info](../viewer/info-screen.md)** — the header summary (see below).
 
 As with every file, `x` opens the [hex dump](./binary.md) and `h` / `?` the help screen.
 
 ![Email message with a From / To / Date / Subject header block above the word-wrapped body](../img/email-render.svg)
 
-*The default Message view: the header summary followed by the rendered body.*
+_The default Message view: the header summary followed by the rendered body._
 
 ## `.mbox` — a mailbox
 

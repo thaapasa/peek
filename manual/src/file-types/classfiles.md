@@ -10,18 +10,18 @@ extension.
 
 Tab cycles four views:
 
-- **Info** — the class header: name, superclass, implemented interfaces, JDK version, kind
-  (class / interface / enum), the source file it was compiled from, and field and method counts.
+- **Info** — the class header: name, superclass, implemented interfaces, JDK version, kind (class /
+  interface / enum), the source file it was compiled from, and field and method counts.
 - **Fields** — a table of every field: modifiers, type, name.
-- **Methods** — a table of every method: modifiers, name, signature. Type descriptors are
-  decoded to source form — `(String, int) -> int`, not the raw `(Ljava/lang/String;I)I`.
-- **Bytecode** — a `javap -c`-style disassembly of every method: byte offset, mnemonic, and
-  operand (method / field references resolved, simple branch targets shown as absolute offsets,
-  `tableswitch` / `lookupswitch` summarised by entry count). `n` and `p` jump to the next /
-  previous method; `/` searches the listing.
+- **Methods** — a table of every method: modifiers, name, signature. Type descriptors are decoded to
+  source form — `(String, int) -> int`, not the raw `(Ljava/lang/String;I)I`.
+- **Bytecode** — a `javap -c`-style disassembly of every method: byte offset, mnemonic, and operand
+  (method / field references resolved, simple branch targets shown as absolute offsets,
+  `tableswitch` / `lookupswitch` summarised by entry count). `n` and `p` jump to the next / previous
+  method; `/` searches the listing.
 
-The Fields and Methods tables behave like the object-file tables: a pinned column header,
-`Left` / `Right` column pan, and `/` search.
+The Fields and Methods tables behave like the object-file tables: a pinned column header, `Left` /
+`Right` column pan, and `/` search.
 
 ## Limitations
 
