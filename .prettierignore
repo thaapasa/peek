@@ -1,0 +1,12 @@
+# Fixtures that peek renders: keep their bytes as they are.
+test-data/
+test-books/
+test-audio/
+test-images/
+examples/
+fuzz/corpus/
+fuzz/artifacts/
+# Build output and fetched files
+target/
+manual/book/
+.pdfium/

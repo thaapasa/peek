@@ -1,17 +1,17 @@
 # See: https://help.github.com/articles/dealing-with-line-endings/
 
-# ensure the .gitattributes file itself is normalized
-.gitattributes text eol=lf
-
 # Set the default behavior, in case people don't have core.autocrlf set.
 * text=auto
+
+# ensure the .gitattributes file itself is normalized (must come after * text=auto)
+.gitattributes text eol=lf
 
 # Explicitly declare text files that are always converted
 
 # Code files - normalized to LF in repo, checked out per platform (via core.autocrlf)
 *.java text diff=java
-*.kotlin text diff=kotlin
 *.kt text diff=kotlin
+*.kts text diff=kotlin
 *.scala text
 *.sbt text
 *.c text diff=cpp
@@ -28,7 +28,6 @@
 *.mm text diff=objc
 *.groovy text
 *.gradle text
-*.gradle.kts text diff=kotlin
 
 # Scripting languages
 *.py text diff=python
@@ -50,13 +49,18 @@
 *.sass text
 *.scss text
 *.stylus text
-*.js text
-*.jsx text
-*.ts text
-*.tsx text
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.mts text eol=lf
+*.cts text eol=lf
+*.tsx text eol=lf
 *.vue text
 *.htc text
 *.svg text
+*.webmanifest text eol=lf
 
 # Markup & Data
 *.xml text
@@ -66,14 +70,21 @@
 *.ent text
 *.csv text
 *.json text eol=lf
+*.jsonc text eol=lf
 *.yaml text eol=lf
 *.yml text eol=lf
 *.toml text eol=lf
+
+# iCal feeds use CRLF (RFC 5545), but some servers send LF. Keep the saved
+# sample responses byte for byte as the server sent them.
+*.ics -text
 
 # Config & Build files
 *.properties text
 *.settings text
 *.conf text
+*.ini text
+*.cfg text
 *.resx text
 *.wsdd text
 *.wsdl text
@@ -87,13 +98,12 @@
 *.prefs text
 *.launch text
 Cargo.toml text eol=lf
-Cargo.lock text eol=lf
 
 # Documentation
 *.txt text
 *.log text
-*.md text eol=lf
-*.markdown text eol=lf
+*.md text eol=lf diff=markdown
+*.markdown text eol=lf diff=markdown
 *.readme text
 *.README text
 *.tex text diff=tex
@@ -108,6 +118,7 @@ Cargo.lock text eol=lf
 *.otf -text
 *.woff -text
 *.woff2 -text
+*.eot -text
 
 # Certificates & keys (binary / don't normalize)
 *.pem -text
@@ -121,10 +132,19 @@ Cargo.lock text eol=lf
 *.db -text
 
 # Unix scripts - keep LF only (no CRLF conversion)
-*.sh text eol=lf
+*.sh text eol=lf diff=bash
+*.bash text eol=lf diff=bash
+*.zsh text eol=lf
+*.fish text eol=lf
 Makefile text eol=lf
 Dockerfile text eol=lf
+Caddyfile text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
 .editorconfig text eol=lf
+.gitignore text eol=lf
+.gitmodules text eol=lf
+.env* text eol=lf
 
 # Windows scripts - keep CRLF only (no LF conversion)
 *.bat text eol=crlf
@@ -135,11 +155,16 @@ Dockerfile text eol=lf
 *.patch text eol=lf
 *.diff text eol=lf
 
-# npm/yarn config - keep LF for consistency with npm standards
+# npm/yarn/bun config - keep LF for consistency with npm standards
 package.json text eol=lf
-package-lock.json text eol=lf
-yarn.lock text eol=lf
-pnpm-lock.yaml text eol=lf
+
+# Lockfiles - collapsed in GitHub diffs, excluded from language stats
+package-lock.json text eol=lf linguist-generated=true
+yarn.lock text eol=lf linguist-generated=true
+pnpm-lock.yaml text eol=lf linguist-generated=true
+bun.lock text eol=lf linguist-generated=true
+bun.lockb binary linguist-generated=true
+Cargo.lock text eol=lf linguist-generated=true
 
 # Denote all files that are truly binary and should not be modified
 *.png binary
@@ -147,11 +172,22 @@ pnpm-lock.yaml text eol=lf
 *.jpeg binary
 *.gif binary
 *.ico binary
+*.bmp binary
+*.tif binary
+*.tiff binary
+*.heic binary
+*.webp binary
+*.avif binary
 *.xcf binary
 *.mp4 binary
 *.psd binary
 *.swf binary
 *.wav binary
+*.mp3 binary
+*.ogg binary
+*.flac binary
+*.mov binary
+*.avi binary
 *.mpg binary
 *.webm binary
 *.wmv binary
@@ -163,6 +199,9 @@ pnpm-lock.yaml text eol=lf
 *.odt binary
 *.xls binary
 *.xlsx binary
+*.docx binary
+*.ppt binary
+*.pptx binary
 
 # Archives
 *.7z binary
@@ -170,9 +209,12 @@ pnpm-lock.yaml text eol=lf
 *.gz binary
 *.tgz binary
 *.tar binary
-*.tar.gz binary
 *.bz binary
-*.tar.bz binary
+*.bz2 binary
+*.xz binary
+*.zst binary
+*.rar binary
+*.tbz2 binary
 *.jar binary
 *.war binary
 *.ear binary
@@ -182,3 +224,14 @@ pnpm-lock.yaml text eol=lf
 *.cache binary
 *.class binary
 *.bin binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.o binary
+*.a binary
+*.wasm binary
+*.pyc binary
+*.apk binary
+*.aab binary
+*.ipa binary

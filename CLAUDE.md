@@ -22,6 +22,10 @@ skips library-crates.
 rustup installs it on demand. Bump it in its own commit — a new rustc means new clippy lints.
 MSRV (`rust-version` in root `Cargo.toml`) is a separate, lower floor and isn't CI-verified.
 
+**Other tools via mise.** `mise.toml` pins just, node, prettier, mdbook (CI installs these).
+Opt-in dev tools (cargo-fuzz, cargo-audit, demo capture) live in `mise.dev.toml`, installed by
+`just setup`. Rust stays out of mise: its backend sets `RUSTUP_TOOLCHAIN`, overriding the file.
+
 **Verify against the debug build** — `cargo run -- [args]` or `target/debug/peek`. Release builds
 take minutes; never `cargo build --release` just to check a change. Reserve release for shipping.
 
@@ -100,7 +104,7 @@ src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop)
 docs/               builder/agent reference (architecture.md = design + index).
 fuzz/               cargo-fuzz crate (excluded, nightly). `just fuzz`. Stable floor in
                     peek-detect/tests/fuzz_detect.rs.
-manual/             user manual (mdbook). `mdbook serve manual`.
+manual/             user manual (mdbook). `just manual` serves it on port 12620.
 scripts/            dev tooling. capture-demos.sh = manual stills (freeze/tmux, `just demos`);
                     fetch-pdfium.sh = Pdfium dylib + .pdfium/VERSION (`just pdfium`);
                     bump-version.sh = Cargo.toml/lock version math, prints new ver (`just bump`).
@@ -115,9 +119,10 @@ install.sh          POSIX installer for curl | sh.
   `Derive binary + directory info sections`, not `feat: …`. Capitalise first word.
 - **Don't push, open PRs, or trigger CI on own initiative.** Local commits only. User pushes/opens/
   merges so they can amend first. Open PR only on explicit ask.
-- **Run `just format` after editing Rust.** Keeps diffs focused. Not bare `cargo fmt`: the import
-  options in `rustfmt.toml` are nightly-only (stable warns and skips them), and a single pass
-  doesn't always converge — `just format` runs `cargo +nightly fmt` twice for that reason.
+- **Run `just format` after editing Rust or Markdown.** Keeps diffs focused. Not bare `cargo fmt`:
+  the import options in `rustfmt.toml` are nightly-only (stable warns and skips them), and a single
+  pass doesn't always converge — `just format` runs `cargo +nightly fmt` twice for that reason. It
+  also runs Prettier on `**/*.md` (`proseWrap: always`; fixtures excluded in `.prettierignore`).
 - **Keep checkup-finding IDs (H4, M2, …) out of commit subjects.** Findings doc temporary — ID
   dangles once entry deleted. Body may cite ID when commit touches findings doc; subject reads by
   intent.

@@ -1,0 +1,9 @@
+# Tools for build, lint and docs. Rust is not here: rustup installs the pinned
+# toolchain from rust-toolchain.toml. mise's rust backend sets RUSTUP_TOOLCHAIN,
+# which overrides that file and skips its components.
+# Opt-in dev tools (fuzzing, audit, demo capture) live in mise.dev.toml.
+[tools]
+just = "1.59.0"
+"github:rust-lang/mdBook" = "0.5.4"
+node = "24.22.2"
+"npm:prettier" = "3.9.10"

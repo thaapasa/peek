@@ -3,34 +3,23 @@ install_dir := env_var_or_default("PEEK_INSTALL_DIR", env_var_or_default("HOME",
 default:
     @just --list
 
-# Install dev tooling (Rust fuzzing + demo-capture pipeline). Idempotent; skips what's present.
+# Install opt-in dev tools from mise.dev.toml (fuzzing, audit, demo capture)
 setup:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Rust fuzzing (see `just fuzz`)
-    command -v cargo-fuzz >/dev/null || cargo install --locked cargo-fuzz
-    # Vulnerability scan of the dependency tree (see `just audit`)
-    command -v cargo-audit >/dev/null || cargo install --locked cargo-audit
-    # Stills: charmbracelet/freeze — ANSI -> SVG/PNG, keeps fg AND bg truecolor (see `just demos`)
-    command -v freeze    >/dev/null || brew install charmbracelet/tap/freeze
-    # Interactive-screen capture for `just demos` (drives peek in a pane, dumps the live screen)
-    command -v tmux      >/dev/null || brew install tmux
-    # Animated demos: svg-term-cli — asciicast -> CSS-animated SVG that autoplays on GitHub
-    command -v svg-term  >/dev/null || npm install -g svg-term-cli
-    # Terminal recorder feeding the animated path
-    command -v asciinema >/dev/null || brew install asciinema
-    echo "dev tools ready"
+    MISE_ENV=dev mise install
 
-# Format codebase. Twice: with imports_granularity, a merge that pushes a line
-# past max_width doesn't get wrapped until the following pass, so one run can
-# leave the tree failing `--check` (which is all CI runs). Cheap enough.
+# Rust: two passes, because with imports_granularity a merge that pushes a line
+# past max_width doesn't get wrapped until the next pass, so one run can leave
+# the tree failing `--check`.
+# Format Rust (nightly rustfmt) and Markdown (Prettier)
 format:
     cargo +nightly fmt
     cargo +nightly fmt
+    prettier --write --log-level warn "**/*.md"
 
-# Check formatting, cargo check + clippy
+# Check Rust + Markdown formatting, cargo check + clippy
 lint:
     cargo +nightly fmt -- --check
+    prettier --check --log-level warn "**/*.md"
     cargo check --workspace --all-targets
     cargo clippy --workspace --all-targets -- -D warnings
 
@@ -38,7 +27,7 @@ lint:
 test:
     cargo test --workspace
 
-# Scan dependency tree for known vulnerabilities (needs `just setup` or `cargo install cargo-audit`)
+# Scan dependency tree for known vulnerabilities (needs `just setup`)
 audit:
     cargo audit
 
@@ -46,7 +35,7 @@ audit:
 demos *shots:
     ./scripts/capture-demos.sh {{ shots }}
 
-# Run a detection fuzz target (needs nightly + `cargo install cargo-fuzz`); see fuzz/README.md.
+# Run a detection fuzz target (needs nightly + `just setup`); see fuzz/README.md.
 # verbosity=0 (default) silences the per-event NEW/REDUCE spam — faster, crashes + final stats only; pass verbosity=1 to debug coverage.
 fuzz target="detect_bytes" secs="60" verbosity="0":
     cargo +nightly fuzz run {{ target }} --fuzz-dir fuzz -- -max_total_time={{ secs }} -verbosity={{ verbosity }} -print_final_stats=1
@@ -69,6 +58,10 @@ install:
     else
       echo "warning: no .pdfium/lib/libpdfium.* found — run 'just pdfium' first for PDF support" >&2
     fi
+
+# Preview the manual at http://localhost:12620 (port from the shared 1AARR scheme)
+manual:
+    mdbook serve manual --port 12620
 
 # Fetch Pdfium dynamic library into .pdfium/ (build="latest" or e.g. "7825"); also pins .pdfium/VERSION used by release workflow
 pdfium build="latest":
