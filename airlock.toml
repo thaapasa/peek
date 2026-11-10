@@ -1,13 +1,22 @@
 [packs]
 debian = { version = "1", args = { allow-apt = true } }
-claude = { version = "1", args = { acp = true } }
+claude = { version = "2", args = { acp = true } }
+docker = { version = "1", args = { allow-pulls = true } }
 git = { version = "1" }
+mise = { version = "1" }
 python = { version = "1", args = { allow-pypi = true, python-version = "latest" } }
-rust = { version = "1", args = { allow-cargo = true, toolchain = "stable" } }
 
 [clipboard]
 copy = true
 paste = false
+
+[vm.image]
+insecure = false
+name = "debian:stable-slim@sha256:bdd7cd341a19a8f19389281ff0d8f3f9760ecf264c87318cc7221622986c34d9"
+pull-policy = "if-not-present"
+resolution = "registry"
+
+[vm]
 
 [disk.cache.cargo-target]
 paths = ["target"]

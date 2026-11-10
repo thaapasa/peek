@@ -5,3 +5,4 @@
 /manual/book
 .claudelint-cache/
 .DS_Store
+*.local.toml
