@@ -102,7 +102,7 @@ this is about keeping it that way as the parsers change, not chasing a known bug
 depends **only on `peek-detect` + `peek-io`**. To fuzz any `peek-types` parser you must first add
 `peek-types = { path = "../crates/peek-types" }` (and `peek-foundation` for the base64/xml helpers)
 to `fuzz/Cargo.toml`. Once that's in, adding a target is a `[[bin]]` block + a one-line
-`fuzz_target!(|data: &[u8]| { … })`, run via `just fuzz target=<name> secs=<n>`. There is **no**
+`fuzz_target!(|data: &[u8]| { … })`, run via `mise run fuzz <name> <n>`. There is **no**
 `#[cfg(fuzzing)]` infrastructure today and most candidates below are already `pub`, so no harness
 plumbing is needed — except the few `pub(super)` fns (e.g. `mbr::parse`), which would need a `pub`
 bump or a `testing`-style feature to expose.
@@ -234,7 +234,7 @@ Same trust root throughout (repo release-write access), so none introduces a _ne
 but signing (M1) + pinned Pdfium (M3) move provenance from "trust the platform" to "verify
 cryptographically," and are the meaningful follow-ups.
 
-- ☐ **Drop the `cargo audit` ignores when upstream catches up.** `just audit` is clean except 3
+- ☐ **Drop the `cargo audit` ignores when upstream catches up.** `mise run audit` is clean except 3
   _unmaintained_ advisories (no known vulnerability), all transitive and upstream-owned, suppressed
   in `.cargo/audit.toml`: `bincode` + `yaml-rust` via `syntect`, `paste` (build-time proc-macro) via
   `image`→`exr`→`pulp` and `avif-decode`→`rav1d`. Re-check on each dep bump; remove an ignore once

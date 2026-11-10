@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bump the workspace version in Cargo.toml and refresh Cargo.lock. Arg: patch | minor | major
-# (default patch). Prints ONLY the new version to stdout (the git commit in `just bump` captures
+# (default patch). Prints ONLY the new version to stdout (the git commit in `mise run bump` captures
 # it); progress + cargo output go to stderr so the capture stays clean.
 set -euo pipefail
 

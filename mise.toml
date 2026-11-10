@@ -3,7 +3,80 @@
 # which overrides that file and skips its components.
 # Opt-in dev tools (fuzzing, audit, demo capture) live in mise.dev.toml.
 [tools]
-just = "1.59.0"
 "github:rust-lang/mdBook" = "0.5.4"
 node = "24.22.2"
 "npm:prettier" = "3.9.10"
+
+# Tasks: `mise run <task>`, `mise tasks` lists them. Extra arguments go to the
+# last command of a task without a usage spec.
+
+[tasks.setup]
+description = "Install opt-in dev tools from mise.dev.toml (fuzzing, audit, demo capture)"
+run = "MISE_ENV=dev mise install"
+
+# Rust: two passes, because with imports_granularity a merge that pushes a line
+# past max_width doesn't get wrapped until the next pass, so one run can leave
+# the tree failing `--check`.
+[tasks.format]
+description = "Format Rust (nightly rustfmt) and Markdown (Prettier)"
+run = [
+  "cargo +nightly fmt",
+  "cargo +nightly fmt",
+  "prettier --write --log-level warn '**/*.md'",
+]
+
+[tasks.lint]
+description = "Check Rust + Markdown formatting, cargo check + clippy"
+run = [
+  "cargo +nightly fmt -- --check",
+  "prettier --check --log-level warn '**/*.md'",
+  "cargo check --workspace --all-targets",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+]
+
+[tasks.test]
+description = "Run all tests"
+run = "cargo test --workspace"
+
+[tasks.audit]
+description = "Scan dependency tree for known vulnerabilities (needs `mise run setup`)"
+run = "cargo audit"
+
+[tasks.demos]
+description = "Capture manual demo stills (needs `mise run setup`); pass shot names to re-render some, none for all"
+run = "./scripts/capture-demos.sh"
+
+# verbosity=0 silences the per-event NEW/REDUCE spam: faster, crashes + final
+# stats only. Pass 1 to debug coverage.
+[tasks.fuzz]
+description = "Run a detection fuzz target (needs nightly + `mise run setup`); see fuzz/README.md"
+usage = '''
+arg "[target]" default="detect_bytes"
+arg "[secs]" default="60"
+arg "[verbosity]" default="0"
+'''
+run = "cargo +nightly fuzz run ${usage_target} --fuzz-dir fuzz -- -max_total_time=${usage_secs} -verbosity=${usage_verbosity} -print_final_stats=1"
+
+[tasks.install]
+description = "Install peek locally (binary + Pdfium dylib if .pdfium/lib/ has one)"
+run = "./scripts/install-local.sh"
+
+[tasks.manual]
+description = "Preview the manual at http://localhost:12620 (port from the shared 1AARR scheme)"
+run = "mdbook serve manual --port 12620"
+
+[tasks.pdfium]
+description = "Fetch Pdfium dynamic library into .pdfium/; also pins .pdfium/VERSION used by release workflow"
+usage = 'arg "[build]" default="latest" help="\"latest\" or a build number such as 7825"'
+run = "./scripts/fetch-pdfium.sh ${usage_build}"
+
+[tasks.bump]
+description = "Bump project version and commit"
+usage = 'arg "[kind]" default="patch" help="patch | minor | major"'
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+new=$(./scripts/bump-version.sh "$usage_kind")
+git add Cargo.toml Cargo.lock
+git commit -m "Bump version to $new"
+'''

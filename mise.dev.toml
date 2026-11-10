@@ -1,10 +1,10 @@
-# Opt-in dev tools, installed with `just setup` (MISE_ENV=dev mise install).
+# Opt-in dev tools, installed with `mise run setup` (MISE_ENV=dev mise install).
 # Kept out of mise.toml so CI doesn't build cargo-fuzz and cargo-audit from
 # source on every run.
 [tools]
-"cargo:cargo-audit" = "0.22.2"   # `just audit`
-"cargo:cargo-fuzz" = "0.13.2"    # `just fuzz`
-"aqua:charmbracelet/freeze" = "0.2.2"   # `just demos`: ANSI to SVG/PNG
-tmux = "3.8"                     # `just demos`: interactive-screen capture
+"cargo:cargo-audit" = "0.22.2"   # `mise run audit`
+"cargo:cargo-fuzz" = "0.13.2"    # `mise run fuzz`
+"aqua:charmbracelet/freeze" = "0.2.2"   # `mise run demos`: ANSI to SVG/PNG
+tmux = "3.8"                     # `mise run demos`: interactive-screen capture
 "npm:svg-term-cli" = "2.1.1"     # animated demos: asciicast to SVG
 "github:asciinema/asciinema" = "3.2.1"  # animated demos: recorder

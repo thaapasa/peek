@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture demo stills into manual/src/img (needs `just setup`). Shared by the README and the
+# Capture demo stills into manual/src/img (needs `mise run setup`). Shared by the README and the
 # mdbook manual — mdbook only bundles files under src/, so they live there. freeze keeps bg
 # colors, so every mode renders faithfully; all shots are SVG (font.family=monospace → no
 # 366KB font embed). Image/SVG/PDF renders are hand-captured — half-block pixels don't survive

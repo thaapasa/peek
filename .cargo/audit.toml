@@ -1,4 +1,4 @@
-# cargo-audit config (see `just audit`).
+# cargo-audit config (see `mise run audit`).
 # Ignored advisories are reviewed, accepted, transitive-only — no fix in our control.
 # Re-check on each dep bump; drop an ID once the upstream chain stops pulling it in.
 [advisories]

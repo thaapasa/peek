@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Tools from mise.toml (just, node, prettier, mdbook). Rust stays with
+      # Tools from mise.toml (node, prettier, mdbook). Rust stays with
       # rustup below.
       - uses: jdx/mise-action@v3
 

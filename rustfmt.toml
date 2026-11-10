@@ -1,4 +1,4 @@
-# Both options are nightly-only, hence `cargo +nightly fmt` (`just format`)
+# Both options are nightly-only, hence `cargo +nightly fmt` (`mise run format`)
 # and a nightly fmt step in CI. The pinned stable rustfmt warns and skips
 # them, but never undoes what nightly wrote — a plain `cargo fmt` degrades to
 # sort-only rather than fighting the nightly one.

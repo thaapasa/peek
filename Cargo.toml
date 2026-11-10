@@ -13,7 +13,7 @@ homepage.workspace = true
 members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation/derive", "crates/peek-foundation", "crates/peek-types"]
 # The cargo-fuzz crate needs nightly + libfuzzer-sys; kept out of the
 # stable workspace build so `cargo test --workspace` stays green. Run it
-# manually via `just fuzz` — see fuzz/README.md.
+# manually via `mise run fuzz` — see fuzz/README.md.
 exclude = ["fuzz"]
 
 # Shared package metadata for the bin + every member crate (`field.workspace

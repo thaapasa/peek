@@ -44,16 +44,18 @@ as `peek.exe` so PDF rendering loads at startup. Piping text into `peek.exe` reo
 ## From source
 
 On x86_64, the build needs [nasm](https://www.nasm.us/) (2.14+) on `PATH` for the AVIF decoder's
-SIMD code (`brew install nasm`, `apt install nasm`, `choco install nasm`). ARM builds don't.
+SIMD code (`brew install nasm`, `apt install nasm`, `choco install nasm`). ARM builds don't. The
+build tasks run with [mise](https://mise.jdx.dev/).
 
 ```sh
-just pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
-just install     # cargo build --release; install to $PEEK_INSTALL_DIR
+mise run pdfium      # fetch Pdfium dylib for PDF support (skip if you don't need PDF)
+mise run install     # cargo build --release; install to $PEEK_INSTALL_DIR
 ```
 
-`just pdfium` downloads [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries)
-for your host platform and unpacks it into `.pdfium/`. `just install` copies both `peek` and
-`libpdfium.*` into the install dir.
+`mise run pdfium` downloads
+[bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) for your host platform and
+unpacks it into `.pdfium/`. `mise run install` copies both `peek` and `libpdfium.*` into the install
+dir.
 
 Pure-cargo alternative (works for everything except PDF unless the dylib is dropped next to the
 binary):

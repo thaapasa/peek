@@ -18,8 +18,8 @@ cargo install cargo-fuzz              # one-time
 ## Run
 
 ```sh
-just fuzz                  # detect_bytes target, 60s
-just fuzz detect_bytes 300 # explicit target + seconds
+mise run fuzz                  # detect_bytes target, 60s
+mise run fuzz detect_bytes 300 # explicit target + seconds
 ```
 
 Or directly:

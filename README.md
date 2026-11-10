@@ -149,7 +149,7 @@ Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github
 preview:
 
 ```sh
-just manual    # serves http://localhost:12620
+mise run manual    # serves http://localhost:12620
 ```
 
 ## Development
@@ -158,11 +158,11 @@ just manual    # serves http://localhost:12620
 installs the Rust toolchain pinned in `rust-toolchain.toml`. x86 builds also need `nasm`.
 
 ```sh
-mise install    # just, node, prettier, mdbook
-just setup      # opt-in: fuzzing, cargo-audit, demo capture (mise.dev.toml)
-just lint
-just test
-just format     # Rust (nightly rustfmt) + Markdown (Prettier)
+mise install        # node, prettier, mdbook
+mise run setup      # opt-in: fuzzing, cargo-audit, demo capture (mise.dev.toml)
+mise run lint
+mise run test
+mise run format     # Rust (nightly rustfmt) + Markdown (Prettier)
 ```
 
 ## Credits
@@ -171,7 +171,8 @@ Demo photo by
 [Dmytro Koplyk on Unsplash](https://unsplash.com/photos/a-green-heron-stands-on-one-leg-by-the-water-LHZgiiQz97o).
 Full attribution for all bundled sample files: [CREDITS.md](CREDITS.md).
 
-Screenshots regenerate from repo fixtures with `just demos` (`just setup` installs the tools).
+Screenshots regenerate from repo fixtures with `mise run demos` (`mise run setup` installs the
+tools).
 
 ## License
 
