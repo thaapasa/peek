@@ -26,7 +26,7 @@ jobs:
 
       # Tools from mise.toml: Rust from rust-toolchain.toml, nightly rustfmt
       # (postinstall hook), node, prettier, mdbook.
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v5
 
       # rav1d (AVIF decode) assembles its x86 SIMD with nasm at build time.
       - name: Install nasm (Linux)
