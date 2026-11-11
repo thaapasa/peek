@@ -4,8 +4,6 @@
 //! always matches the installed binary. The `--language` values come from the embedded syntax set.
 //! They are added only here, so normal runs don't pay for loading it.
 
-use std::io::Write as _;
-
 use anyhow::Result;
 use clap::CommandFactory;
 use clap::builder::PossibleValuesParser;
@@ -25,8 +23,7 @@ pub fn print(shell: Shell) -> Result<()> {
         buf.extend_from_slice(ZSH_COMPINIT.as_bytes());
     }
     clap_complete::generate(shell, &mut command(), "peek", &mut buf);
-    std::io::stdout().write_all(&buf)?;
-    Ok(())
+    peek_foundation::output::write_stdout(&buf)
 }
 
 /// The CLI command with the syntax names as `--language` values. The values only feed the

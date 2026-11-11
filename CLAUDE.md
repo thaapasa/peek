@@ -109,6 +109,7 @@ src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop)
   viewer_session/   ViewerState (state.rs = struct + key dispatch + mode switch; frame.rs =
                     SessionFrame + recursive-peek stack/descend/extract; prompt.rs = modal prompt;
                     render.rs = view cache + recovery + scroll + draw) + event loop.
+tests/              process-level CLI tests that spawn the built binary (broken_pipe.rs).
 docs/               builder/agent reference (architecture.md = design + index).
 fuzz/               cargo-fuzz crate (excluded, nightly). `mise run fuzz`. Stable floor in
                     peek-detect/tests/fuzz_detect.rs.

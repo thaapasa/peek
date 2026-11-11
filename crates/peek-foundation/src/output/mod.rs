@@ -1,7 +1,7 @@
 pub mod print;
 
 use peek_theme::{PeekTheme, lerp_color};
-pub use print::PrintOutput;
+pub use print::{PrintOutput, is_stdout_closed, stdout_error, write_stdout};
 
 /// The product tagline, shown under the logo on the About view and the
 /// CLI help screen. Lives here (not `env!("CARGO_PKG_DESCRIPTION")`)

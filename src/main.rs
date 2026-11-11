@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use anyhow::{Context, Result};
 pub use cli::Args;
 use peek_foundation::extract::ExtractOptions;
-use peek_foundation::output::PrintOutput;
+use peek_foundation::output::{PrintOutput, is_stdout_closed};
 use peek_foundation::{info, viewer};
 use peek_io::InputSource;
 
@@ -18,6 +18,15 @@ mod update;
 mod viewer_session;
 
 fn main() -> Result<()> {
+    // `peek … | head`: the reader stopped reading. Not an error, so exit 0
+    // without a message, as other CLI tools do.
+    match run() {
+        Err(e) if is_stdout_closed(&e) => Ok(()),
+        result => result,
+    }
+}
+
+fn run() -> Result<()> {
     let (mut args, theme_explicit) = cli::parse();
 
     // `--plain` implies `--color plain`: a single "sterile output" knob.
@@ -111,6 +120,8 @@ fn main() -> Result<()> {
     // the file differently, so we don't repeat a guaranteed failure.
     match run_view(&source, &detected, &args) {
         Ok(()) => Ok(()),
+        // A closed stdout says nothing about the detection; don't retry.
+        Err(e) if is_stdout_closed(&e) => Err(e),
         Err(e) => match peek_detect::detect_ignore_name(&source) {
             Ok(retried) if retried.file_type != detected.file_type => {
                 run_view(&source, &retried, &args).map_err(|_| e)
@@ -272,6 +283,8 @@ fn run_view(source: &InputSource, detected: &peek_detect::Detected, args: &Args)
         // incrementally and then errors mid-stream would break it.
         let rendered_idx = match modes[primary_idx].render_to_pipe(&ctx, &mut output) {
             Ok(()) => primary_idx,
+            // The reader went away; the primary view was fine.
+            Err(e) if is_stdout_closed(&e) => return Err(e),
             Err(e) => {
                 let hex_idx = modes
                     .iter()

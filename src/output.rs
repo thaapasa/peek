@@ -2,26 +2,25 @@
 //! logo painter live in `peek-foundation` (`peek_foundation::output`);
 //! reference those directly.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 use anyhow::Result;
 use clap::CommandFactory;
-use peek_foundation::output::{DESCRIPTION, paint_logo};
+use peek_foundation::output::{DESCRIPTION, paint_logo, write_stdout};
 use peek_theme::{PeekThemeName, ThemeManager};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const MANUAL_URL: &str = "https://thaapasa.github.io/peek/";
 
 pub fn render_version() -> Result<()> {
-    let mut out = io::stdout();
-    writeln!(out, "peek {VERSION}")?;
-    out.flush()?;
-    Ok(())
+    write_stdout(format!("peek {VERSION}\n").as_bytes())
 }
 
 pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
     let pt = theme_manager.peek_theme();
-    let mut out = io::stdout();
+    // Built in memory, written once, so a closed stdout surfaces in one
+    // place (`write_stdout` tags it).
+    let mut out = Vec::new();
 
     for line in paint_logo(pt) {
         writeln!(out, "{line}")?;
@@ -116,8 +115,7 @@ pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
         }
     }
 
-    out.flush()?;
-    Ok(())
+    write_stdout(&out)
 }
 
 #[cfg(test)]

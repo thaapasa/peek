@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use peek_foundation::extract::Extracted;
+use peek_foundation::output::stdout_error;
 
 /// Where extracted bytes land. `Stdout` writes raw bytes (no
 /// rendering — that's the print path). `Path` creates parent dirs as
@@ -37,8 +38,13 @@ pub fn write_extracted(extracted: &Extracted, output: Output) -> Result<PathBuf>
         Output::Stdout => {
             let stdout = io::stdout();
             let mut handle = stdout.lock();
-            io::copy(&mut stream, &mut handle).context("failed to write to stdout")?;
-            handle.flush().context("failed to flush stdout")?;
+            io::copy(&mut stream, &mut handle)
+                .map_err(stdout_error)
+                .context("failed to write to stdout")?;
+            handle
+                .flush()
+                .map_err(stdout_error)
+                .context("failed to flush stdout")?;
             Ok(PathBuf::from("-"))
         }
         Output::Path(dest) => {
