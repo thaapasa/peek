@@ -13,7 +13,7 @@ postinstall = "rustup toolchain install nightly --profile minimal --component ru
 
 [tools]
 "github:rust-lang/mdBook" = "0.5.4"
-node = "24.22.2"
+node = "26.13.0"
 "npm:prettier" = "3.9.10"
 
 # Tasks: `mise run <task>`, `mise tasks` lists them. Extra arguments go to the
