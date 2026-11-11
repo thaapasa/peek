@@ -98,7 +98,7 @@ avif-parse = "2.1"
 bytemuck = "1.25"
 
 # SVG rasterization
-resvg = "0.48"
+resvg = "0.49"
 
 # EXIF metadata extraction
 kamadak-exif = "0.6.1"
@@ -144,12 +144,12 @@ lz4_flex = { version = "0.14", default-features = false, features = ["frame"] }
 brotli-decompressor = "6"
 # Runtime: decode-only (default-features = false). The root bin's
 # dev-dependencies re-add the `compress` feature for the extract test.
-sevenz-rust2 = { version = "0.24", default-features = false }
+sevenz-rust2 = { version = "0.25", default-features = false }
 html2text = { version = "0.17", features = ["css", "css_ext"] }
 
 # Rich Text Format parser. Small lexer/parser; covers the common Word-export
 # subset (control words, groups, runs).
-rtf-parser = "0.4.2"
+rtf-parser = "0.5"
 
 # CSV / TSV parsing for the aligned table view. Pure Rust; handles quoting,
 # escaping, embedded newlines, configurable delimiter. We use the record
@@ -183,7 +183,7 @@ symphonia = { version = "0.6.0", features = ["all-codecs", "all-formats", "opt-s
 # API across all formats, so the objfile viewer needs no per-format
 # parser. `write` feature dropped — peek never emits object files. The
 # `wasm` feature pulls `wasmparser` so `.wasm` modules parse too.
-object = { version = "0.40", default-features = false, features = ["read", "std", "wasm"] }
+object = { version = "0.41", default-features = false, features = ["read", "std", "wasm"] }
 
 # Java classfile parsing (.class — JVM bytecode container). Pure Rust,
 # parse-only: constant pool, fields, methods, attributes, version.
@@ -208,7 +208,7 @@ sha2 = "0.11.0"
 # libsqlite dependency at runtime — matches the bundled-C pattern already
 # used by `bzip2` / `zstd` / `liblzma`. Read-only: peek only ever opens
 # DBs with `OpenFlags::SQLITE_OPEN_READ_ONLY`.
-rusqlite = { version = "0.40.1", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 
 # Font (TTF/OTF/TTC) parsing for metadata + per-face listing. Pure Rust,
 # no_std-friendly, zero-alloc. Decodes name / head / maxp / cmap / OS/2 /
@@ -223,7 +223,7 @@ fontdue = "0.9"
 # on the in-tree flate2 (see types/font/woff.rs). Handles the brotli
 # stream + the glyf/loca table transform that bare decompression can't.
 wuff = { version = "0.2", default-features = false, features = ["brotli"] }
-calamine = "0.36"
+calamine = "0.38"
 
 # Email (.eml / .mbox) parsing. Pure Rust, no system deps. Parses one
 # RFC822/MIME message: headers, decoded text/HTML bodies, nested parts +
