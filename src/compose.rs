@@ -148,6 +148,7 @@ impl Registry {
             FileType::Lmdb => {
                 types::lmdb::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }
+            FileType::Manual => peek_manual::compose(&mut modes),
             FileType::DsStore => {
                 types::ds_store::compose::compose(source, detected, args, &ctx, &mut modes)?;
             }

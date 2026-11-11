@@ -1363,6 +1363,16 @@ logo and stops ticking until color comes back. `Space` (`Action::PlayPause`, sam
 animation modes use) pauses / resumes the animation, freezing it on the current frame; while paused
 the tick scheduling stops entirely.
 
+### Built-in Manual ✅
+
+`peek --manual` opens the user manual from `manual/src/`, embedded at build time by the
+`peek-manual` crate. It is a virtual container (`FileType::Manual`): the TOC follows `SUMMARY.md`
+(part headings as group rows, nested chapters), each chapter extracts as an in-memory `.md` source
+and opens in the Markdown viewer. `--list` prints `path<TAB>title`; `-x <path>` with `-p` / `-o`
+work as for any container; `--info` shows version, chapter count and text size. The build drops
+images, strips relative link targets, and applies the `<!-- peek: … -->` / `<!-- peek-skip -->`
+markers (rules in `manual/README.md`). A broken manual fails the build.
+
 ### Extraction ✅
 
 Pull an inner item out of a container as a standalone file. Sources currently:
@@ -1593,6 +1603,7 @@ syntax-highlighted code is downgraded along with everything else.
 | ---------------- | ----- | ----------------------------------------------------------------------------------------------------------------- | ------ |
 | `--help`         | `-h`  | Show help screen and exit (short / long forms)                                                                    | ✅     |
 | `--version`      | `-V`  | Show version info and exit                                                                                        | ✅     |
+| `--manual`       |       | Open the built-in user manual                                                                                     | ✅     |
 | `--print`        | `-p`  | Force print mode (direct stdout)                                                                                  | ✅     |
 | `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                       | ✅     |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                                                                          | ✅     |

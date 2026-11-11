@@ -6,9 +6,21 @@
 //! lives here is the `Args`-dependent source selection below.
 
 use anyhow::Result;
+use peek_detect::Detected;
 use peek_io::InputSource;
 
 use crate::Args;
+
+/// Resolve the source and detect its type. `--manual` swaps in the
+/// embedded manual, which detection never produces.
+pub fn build_input(args: &Args) -> Result<(InputSource, Detected)> {
+    if args.manual {
+        return Ok((peek_manual::source(), peek_manual::detected()));
+    }
+    let source = build_source(args)?;
+    let detected = peek_detect::detect(&source)?;
+    Ok((source, detected))
+}
 
 /// Decide the input source based on args and stdin state.
 ///
@@ -21,7 +33,7 @@ use crate::Args;
 ///
 /// The actual stdin read + `/dev/tty` reopen (so the interactive event
 /// loop can still read keystrokes) lives in [`peek_io::stdin`].
-pub fn build_source(args: &Args) -> Result<InputSource> {
+fn build_source(args: &Args) -> Result<InputSource> {
     let is_dash = args.file.as_ref().is_some_and(|p| p.as_os_str() == "-");
     let want_stdin = is_dash || args.file.is_none();
 

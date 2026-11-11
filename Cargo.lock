@@ -2227,6 +2227,7 @@ dependencies = [
  "peek-detect",
  "peek-foundation",
  "peek-io",
+ "peek-manual",
  "peek-theme",
  "peek-types",
  "serde_json",
@@ -2292,6 +2293,20 @@ dependencies = [
  "tempfile",
  "windows-sys",
  "zstd",
+]
+
+[[package]]
+name = "peek-manual"
+version = "1.0.3"
+dependencies = [
+ "bytes",
+ "peek-detect",
+ "peek-foundation",
+ "peek-io",
+ "peek-theme",
+ "pulldown-cmark",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

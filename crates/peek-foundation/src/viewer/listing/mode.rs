@@ -23,7 +23,7 @@ use syntect::highlighting::Color;
 
 use super::entry::Entry;
 use super::row;
-use super::source::{ListParentNav, ListSource, NameCell, RowMetaCell};
+use super::source::{ListParentNav, ListSource, NameCell, NameStyle, RowMetaCell};
 use super::tree_source::TreeListSource;
 use super::viewport::ListingViewport;
 use crate::output::PrintOutput;
@@ -472,10 +472,9 @@ fn paint_name(
     match_ranges: &[Range<usize>],
     current_match: Option<usize>,
 ) -> String {
-    let color = if name.is_dir {
-        theme.accent
-    } else {
-        theme.foreground
+    let color = match name.style {
+        NameStyle::Plain => theme.foreground,
+        NameStyle::Dir | NameStyle::Heading => theme.accent,
     };
     // Paint the leaf, then overlay search-match backgrounds. overlay_matches
     // skips SGR escapes, so the foreground colour survives outside hits.
@@ -483,7 +482,7 @@ fn paint_name(
     if !match_ranges.is_empty() {
         painted = overlay_matches(&painted, match_ranges, current_match, theme);
     }
-    if name.is_dir {
+    if name.style == NameStyle::Dir {
         painted.push_str(&theme.paint("/", theme.muted));
     }
     if selected {
@@ -678,7 +677,7 @@ mod tests {
                 left: Vec::new(),
                 name: NameCell {
                     text: "sym".into(),
-                    is_dir: false,
+                    style: NameStyle::Plain,
                 },
             }
         }

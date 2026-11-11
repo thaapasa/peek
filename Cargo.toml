@@ -10,7 +10,7 @@ repository.workspace = true
 homepage.workspace = true
 
 [workspace]
-members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation/derive", "crates/peek-foundation", "crates/peek-types"]
+members = ["crates/peek-io", "crates/peek-detect", "crates/peek-theme", "crates/peek-foundation/derive", "crates/peek-foundation", "crates/peek-types", "crates/peek-manual"]
 # The cargo-fuzz crate needs nightly + libfuzzer-sys; kept out of the
 # stable workspace build so `cargo test --workspace` stays green. Run it
 # manually via `mise run fuzz` — see fuzz/README.md.
@@ -46,6 +46,7 @@ peek-theme = { path = "crates/peek-theme" }
 peek-foundation-derive = { path = "crates/peek-foundation/derive" }
 peek-foundation = { path = "crates/peek-foundation" }
 peek-types = { path = "crates/peek-types" }
+peek-manual = { path = "crates/peek-manual" }
 
 # Proc-macro toolkit for the `#[derive(InfoView)]` macro (build-time only;
 # no runtime dependency added).
@@ -258,6 +259,7 @@ peek-detect = { workspace = true }
 peek-theme = { workspace = true }
 peek-foundation = { workspace = true }
 peek-types = { workspace = true }
+peek-manual = { workspace = true }
 # `string`: owned `--language` values in the `--completions` script.
 clap = { workspace = true, features = ["string"] }
 clap_complete = { workspace = true }

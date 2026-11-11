@@ -16,7 +16,9 @@ use peek_theme::PeekTheme;
 use super::read::{DirEntry, DirEntryKind};
 use crate::info::paint_permissions;
 use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListParentNav, ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::listing::{
+    ListParentNav, ListSource, ListingHelp, NameCell, NameStyle, RowCells,
+};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 /// Synthetic name for the parent-directory row. Selecting it descends to
@@ -124,7 +126,7 @@ impl ListSource for DirListSource {
             left,
             name: NameCell {
                 text: entry.name.clone(),
-                is_dir,
+                style: NameStyle::dir_if(is_dir),
             },
         }
     }

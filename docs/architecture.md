@@ -30,6 +30,8 @@ peek (bin)        session layer: CLI + the compose / gather / extract dispatch h
   ▲               interactive event loop (viewer_session). Depends on every crate below.
 peek-types        per-file-type readers (one module per type). Owns the parser deps. Depends on
   ▲               foundation / detect / io / theme.
+peek-manual       the user manual embedded at build time (TOC + chapter extract + info). Beside
+  ▲               peek-types, not above it: depends on foundation / detect / io / theme.
 peek-foundation   reader/viewer toolkit + info base + output/extract vocab + base64/xml. Depends
   ▲               on theme / io / detect.
 peek-theme  ◀──┐  theming leaf (PeekTheme + tmThemes + SGR). Parallel to peek-io.
@@ -56,10 +58,14 @@ Why these cuts:
 - **`peek-types`** — parses untrusted file bytes (fonts, PDFs, archives, disk images). Cargo bars it
   from the bin's session layer, so a parser bug is contained to a crate with no I/O-control surface.
   `cargo tree -p peek-types` must not show the `peek` bin. Owns the heavy parser dep set.
+- **`peek-manual`** — `manual/src/` compiled into a static chapter table by its `build.rs`, served
+  as the `FileType::Manual` container for `peek --manual`. Chapters extract as in-memory `.md`
+  sources, so the Markdown reader in peek-types renders them without the two crates knowing each
+  other. Holds only trusted, compiled-in bytes.
 - **binary** — thin session layer: CLI + the three `FileType → types::<x>` dispatch hubs
   (`compose.rs`, `gather/`, `extract/`) + the event loop (`viewer_session/`). Names the lower crates
   directly — `peek_io`, `peek_detect`, `peek_theme`, `peek_foundation::{viewer, info, …}`,
-  `peek_types::types` — no re-export shims.
+  `peek_types::types`, `peek_manual` — no re-export shims.
 
 Top-level file map: [CLAUDE.md](../CLAUDE.md). Per-file detail: each file's `//!` header.
 

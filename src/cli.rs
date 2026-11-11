@@ -35,6 +35,11 @@ pub struct Args {
     #[arg(short = 'V', long = "version")]
     pub version: bool,
 
+    /// Open the peek user manual. Combine with --list, --extract or --print
+    /// like any other container
+    #[arg(long, conflicts_with = "file")]
+    pub manual: bool,
+
     /// Disable syntax highlighting, pretty-printing, and color output
     /// (implies `--color plain`)
     #[arg(short = 'P', long)]

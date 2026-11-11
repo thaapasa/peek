@@ -4,6 +4,7 @@
 | ----------------- | ----- | --------------------------------------------------------------------------------------------------------------------------- |
 | `--help`          | `-h`  | Show help (short form; `--help` prints the long form)                                                                       |
 | `--version`       | `-V`  | Show version info and exit                                                                                                  |
+| `--manual`        |       | Open this manual in peek — see [Help and about](./viewer/help-about.md#manual)                                              |
 | `--print`         | `-p`  | Force print mode (direct stdout)                                                                                            |
 | `--plain`         | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                                 |
 | `--raw`           | `-r`  | Output verbatim source (no pretty-print)                                                                                    |

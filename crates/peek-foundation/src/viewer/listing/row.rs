@@ -205,6 +205,24 @@ pub fn file_row_left(
     left
 }
 
+/// Tree connector for a nested row: corner for the last child, tee
+/// otherwise. Two columns — the thin half-line (U+2574) ends at the cell
+/// boundary so the name abuts without a separator space.
+pub fn tree_connector(is_last: bool) -> &'static str {
+    if is_last {
+        "\u{2514}\u{2574}"
+    } else {
+        "\u{251c}\u{2574}"
+    }
+}
+
+/// Prefix segment that a row's children add under it: a vertical bar while
+/// siblings follow, blank under the last child. Same width as
+/// [`tree_connector`].
+pub fn tree_continuation(is_last: bool) -> &'static str {
+    if is_last { "  " } else { "\u{2502} " }
+}
+
 #[cfg(test)]
 mod tests {
     use peek_theme::{PeekThemeName, StyleMode, ThemeManager};

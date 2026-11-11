@@ -12,7 +12,7 @@
 use object::{Object, ObjectSection, ObjectSymbol};
 use peek_theme::PeekTheme;
 
-use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::listing::{ListSource, ListingHelp, NameCell, NameStyle, RowCells};
 use crate::viewer::modes::{ExtractTarget, ModeId, Position, RenderCtx};
 use crate::viewer::ui::Action;
 
@@ -167,7 +167,7 @@ impl ListSource for SymbolListSource {
             left: self.columns(idx, ctx.peek_theme),
             name: NameCell {
                 text: self.rows[idx].name.clone(),
-                is_dir: false,
+                style: NameStyle::Plain,
             },
         }
     }

@@ -194,7 +194,8 @@ fn registered_for_type(file_type: &FileType) -> Option<&'static str> {
         FileType::Structured(StructuredFormat::Xml) => "application/xml",
         FileType::Svg => "image/svg+xml",
         FileType::Html => "text/html",
-        FileType::Markdown => "text/markdown",
+        // The manual source is its `SUMMARY.md`.
+        FileType::Markdown | FileType::Manual => "text/markdown",
         FileType::Notebook => "application/x-ipynb+json",
         FileType::Email(EmailFormat::Eml) => "message/rfc822",
         FileType::Email(EmailFormat::Mbox) => "application/mbox",

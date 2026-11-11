@@ -44,6 +44,8 @@ deepening below.
 
 - **Block Collapsing / Folding** — the biggest single new capability and the natural 1.1 headline;
   big lift (line-metadata layer). See [§ Block Collapsing / Folding](#block-collapsing--folding-).
+- **Built-in manual follow-ups** — following links between chapters, and the manual as a mode in
+  every file's Tab cycle. See [§ Built-in manual](#built-in-manual-).
 - **File-type deepening** — enhancements to already-shipped types (SQL formatter, CSS specificity,
   multi-page `.ps`, PKCS#12, RAR, m4b chapters, …). None block 1.0; pick by demand. See
   [§ File Types](#file-types).
@@ -338,6 +340,20 @@ Indentation-based folding for structured data (JSON/YAML) would be the most prac
 — pretty-printed output has reliable indentation levels.
 
 Also unblocks INI / properties section-folding — see [§ Config Files](#config-files-).
+
+### Built-in manual ❓
+
+`peek --manual` shipped with a TOC and chapter extract (design:
+[archived/embedded-manual-plan.md](archived/embedded-manual-plan.md)). Next steps:
+
+- **Following links.** A key that follows the link under the cursor in the rendered Markdown view,
+  resolving relative `.md` paths and `#fragment` anchors against the chapter table. Needs link spans
+  recorded in the rendered output and a jump hook in the session layer. The build step then keeps
+  relative link targets as link metadata instead of stripping them.
+- **Manual in the Tab cycle.** Every file gets a manual mode next to Info and Help that opens on the
+  chapter for the current file type (a CSV file lands on "CSV / TSV"). Needs a `FileType` to
+  chapter-path map in `peek-manual`, with a test that every `FileType` maps to an existing chapter.
+- **Search across chapters** from the TOC.
 
 ## File Types
 

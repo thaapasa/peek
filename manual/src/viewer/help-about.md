@@ -1,6 +1,6 @@
 # Help and about
 
-Two always-available overlay screens, on every file type.
+Two always-available overlay screens, on every file type. The full manual is built in too.
 
 ## Help
 
@@ -26,3 +26,17 @@ every few seconds two bright runners trace the wordmark outline in opposite dire
 the far edge. `Space` pauses / resumes the animation. In plain mode (`--color plain`, or cycling to
 it with `c`) the animation is off — About paints the static logo and stops ticking until color comes
 back.
+
+## Manual
+
+`peek --manual` opens this manual inside peek. The manual matches the installed version and works
+offline. It opens on the table of contents; `Enter` opens a chapter in the Markdown viewer and `Esc`
+returns to the contents. Images are left out in the terminal.
+
+The manual works like any other container, so the usual flags apply:
+
+```sh
+peek --manual --list                     # chapter paths and titles
+peek --manual -x viewer/themes.md -p     # print one chapter, rendered
+peek --manual -x viewer/themes.md -o -   # the chapter's Markdown to stdout
+```

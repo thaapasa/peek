@@ -8,7 +8,7 @@ use peek_theme::PeekTheme;
 
 use super::message::ParsedEmail;
 use crate::viewer::listing::row::{self, SizeCell};
-use crate::viewer::listing::{ListSource, ListingHelp, NameCell, RowCells};
+use crate::viewer::listing::{ListSource, ListingHelp, NameCell, NameStyle, RowCells};
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
 /// Upper bound on the content-type column so a pathological MIME type can't
@@ -113,7 +113,7 @@ impl ListSource for AttachmentListSource {
             ],
             name: NameCell {
                 text: self.rows[idx].key.clone(),
-                is_dir: false,
+                style: NameStyle::Plain,
             },
         }
     }

@@ -146,7 +146,8 @@ themes, and the full CLI reference.
 
 ## Manual
 
-Full user manual: **<https://thaapasa.github.io/peek/>**.
+Full user manual: **<https://thaapasa.github.io/peek/>**. The same manual is built into peek:
+`peek --manual` opens it in the terminal, matching the installed version.
 
 Sources in [`manual/`](manual/) — built with [mdbook](https://rust-lang.github.io/mdBook/). Local
 preview:

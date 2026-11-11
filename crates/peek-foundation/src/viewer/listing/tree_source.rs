@@ -15,7 +15,7 @@ use peek_theme::PeekTheme;
 
 use super::entry::{Entry, EntryKind, EntryMtime};
 use super::row::{self, SizeCell};
-use super::source::{ListSource, NameCell, RowCells};
+use super::source::{ListSource, NameCell, NameStyle, RowCells};
 use crate::info::paint_permissions;
 use crate::viewer::modes::{ExtractTarget, RenderCtx};
 
@@ -134,7 +134,7 @@ impl ListSource for TreeListSource {
             left,
             name: NameCell {
                 text: row.leaf.clone(),
-                is_dir: row.is_dir,
+                style: NameStyle::dir_if(row.is_dir),
             },
         }
     }
@@ -193,16 +193,7 @@ fn walk(
     let count = entries.len();
     for (i, entry) in entries.iter().enumerate() {
         let is_last = i + 1 == count;
-        // 2-column connectors: corner/tee + thin half-line ("╴", U+2574)
-        // that ends at the cell boundary so the leaf abuts cleanly
-        // without a separator space. Continuation columns are 2 chars
-        // wide as well — vertical bar + space, or two spaces under the
-        // last child of a parent.
-        let connector = if is_last {
-            "\u{2514}\u{2574}"
-        } else {
-            "\u{251c}\u{2574}"
-        };
+        let connector = row::tree_connector(is_last);
         let is_dir = entry.is_dir();
         let inner_full = format!("{parent_path}/{}", entry.name);
         let inner_path = (!is_dir).then(|| inner_full.clone());
@@ -217,8 +208,7 @@ fn walk(
             inner_path,
         });
         if let EntryKind::Dir { children } = &entry.kind {
-            let cont = if is_last { "  " } else { "\u{2502} " };
-            let next_prefix = format!("{parent_prefix}{cont}");
+            let next_prefix = format!("{parent_prefix}{}", row::tree_continuation(is_last));
             let new_parent = rows.len() - 1;
             walk(children, Some(new_parent), &next_prefix, &inner_full, rows);
         }

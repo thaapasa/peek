@@ -585,3 +585,13 @@ fn mbox_sample_detects_and_counts_messages() {
         peek_foundation::info::downcast_extras::<peek_types::types::email::EmailInfo>(&info.extras);
     assert_eq!(email.message_count, Some(3));
 }
+
+#[test]
+fn manual_info_has_manual_section() {
+    let info = gather(&peek_manual::source(), &peek_manual::detected()).expect("gather");
+    assert_eq!(info.file_name, "peek manual");
+    let (key, json) = info.extras.json_section().expect("json section");
+    assert_eq!(key, "manual");
+    assert_eq!(json["version"], env!("CARGO_PKG_VERSION"));
+    assert!(json["chapters"].as_u64().unwrap() > 10);
+}

@@ -39,7 +39,7 @@ dynamically at startup). Ghostscript used if on path.
 Top-level only. Per-file detail (what + _why_) lives in each file's `//!` header — read it when
 unsure where logic lives. No separate map doc.
 
-Cargo workspace: 5 library crates under thin `peek` bin. **Layering Cargo-enforced**: detect +
+Cargo workspace: 6 library crates under thin `peek` bin. **Layering Cargo-enforced**: detect +
 parser layer barred from naming the bin's session layer (compose/gather/extract dispatch hubs +
 event loop), so a bug parsing hostile bytes can't reach process/terminal control.
 
@@ -88,6 +88,11 @@ crates/
                     YAML/TOML/XML), csv, spreadsheet, presentation, image, html, email, ebook,
                     document, pdf, eps, comic, svg, audio, archive, directory, disk_image, objfile,
                     classfile, cert, font, vobject, ds_store, lmdb.
+  peek-manual/      user manual embedded in the binary (`--manual`). build.rs + preprocess.rs turn
+                    manual/src/ into a static chapter table (drop images, strip relative link
+                    targets, `<!-- peek: -->` / `peek-skip` markers); FileType::Manual container:
+                    TOC ListSource, chapter extract (in-memory .md → Markdown viewer), info.
+                    Depends on foundation/detect/io/theme, not peek-types.
   peek-theme/themes/  embedded .tmTheme (idea-dark default + light/solarized/github + vscode + iceberg +
                     graveyard/candy-floss/victorian).
 src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop). Names member
@@ -107,7 +112,8 @@ src/                bin: thin session layer (CLI + 3 dispatch hubs + event loop)
 docs/               builder/agent reference (architecture.md = design + index).
 fuzz/               cargo-fuzz crate (excluded, nightly). `mise run fuzz`. Stable floor in
                     peek-detect/tests/fuzz_detect.rs.
-manual/             user manual (mdbook). `mise run manual` serves it on port 12620.
+manual/             user manual (mdbook). `mise run manual` serves it on port 12620. Also embedded
+                    in the binary; README.md = authoring rules for the in-app copy.
 scripts/            dev tooling. capture-demos.sh = manual stills (freeze/tmux, `mise run demos`);
                     fetch-pdfium.sh = Pdfium dylib + .pdfium/VERSION (`mise run pdfium`);
                     bump-version.sh = Cargo.toml/lock version math, prints new ver (`mise run bump`);

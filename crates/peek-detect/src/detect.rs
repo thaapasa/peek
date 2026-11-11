@@ -141,6 +141,9 @@ pub enum FileType {
     DsStore,
     /// LMDB environment data file (`data.mdb`, or a no-subdir file)
     Lmdb,
+    /// The peek manual embedded in the binary (`peek --manual`). Detection
+    /// never produces it; `peek_manual::detected()` does.
+    Manual,
     /// Binary / unknown
     Binary,
 }

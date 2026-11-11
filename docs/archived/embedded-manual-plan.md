@@ -1,5 +1,8 @@
 # Embedded manual plan
 
+> **Status: Completed 2026-11-11.** Archived for reference. Follow-ups live in
+> [planned.md → Built-in manual](../planned.md#built-in-manual-).
+
 `peek --manual` opens the user manual inside peek. The manual chapters from `manual/src/` are built
 into the binary, and peek shows them with its own Markdown viewer. The manual on the web stays the
 same.
@@ -41,9 +44,10 @@ change.
 
 1. **Images are dropped.** The image Markdown is removed, including the alt text. The manual's
    images are screenshots of peek itself, so they add little in a terminal.
-2. **Links to chapters lose their target.** `[Themes](./viewer/themes.md)` renders as underlined
+2. **Relative links lose their target.** `[Themes](./viewer/themes.md)` renders as underlined
    `Themes` without the ` (./viewer/themes.md)` suffix that the renderer would otherwise add. This
-   applies to any relative `.md` target, with or without a `#fragment`. External links keep the URL.
+   applies to any target without a scheme: chapters, `#anchors` and paths. Links with a scheme
+   (`https://`, `mailto:`) keep the URL.
 3. **`<!-- peek: … -->` adds in-app content.** The comment body is parsed as Markdown and inserted
    in place of the comment. It is typically placed next to a dropped image:
 
@@ -101,13 +105,16 @@ hostile input.
    walking pulldown-cmark events and slicing the source text by event offsets. Only the marked
    ranges change, and the rest of the bytes pass through unchanged. That way the source view in the
    viewer still looks like the authored Markdown.
-3. It writes `manual.rs` to `OUT_DIR`. The file holds a `static CHAPTERS: &[Chapter]`, where each
-   `Chapter` has a title, a path, a depth, a part and a body (`&'static str`), plus a
-   `static SUMMARY: &str` for the container source.
+3. It writes `manual.rs` to `OUT_DIR`. The file holds a `static ENTRIES: &[TocEntry]` in
+   `SUMMARY.md` order, where an entry is a part heading or a `Chapter` with a title, a path, a depth
+   and a body (`&'static str`), plus a `static SUMMARY: &str` for the container source.
+
+The preprocessing lives in `src/preprocess.rs`. `build.rs` includes it with `#[path]`, and the
+crate's unit tests compile it under `cfg(test)`.
 
 `cargo:rerun-if-changed=../../manual/src` keeps incremental builds correct. The crate is never
 published to crates.io, so reading files outside the crate directory is fine (see
-[release.md](release.md)).
+[release.md](../release.md)).
 
 Failures are errors at build time. These include a `SUMMARY.md` entry with no file, a chapter that
 no entry lists, an unclosed `peek-skip` marker and an empty `peek:` comment. A broken manual should
@@ -120,15 +127,15 @@ pulldown-cmark becomes a build dependency of the crate. It is already a workspac
 ### Container wiring
 
 The manual follows the usual pattern for adding a file type (see
-[architecture.md → Adding a new file type](architecture.md#adding-a-new-file-type)), with one
+[architecture.md → Adding a new file type](../architecture.md#adding-a-new-file-type)), with one
 difference: detection never produces it.
 
 1. **`FileType::Manual`** in `peek-detect`. No magic, extension or sniff ever produces it. Only
-   `peek_manual::detected()` builds it. The `match` arms for MIME and the type name get a fixed
-   entry (`text/markdown`, `peek manual`).
+   `peek_manual::detected()` builds it. The registered-MIME `match` maps it to `text/markdown`.
 2. **Source.** `peek_manual::source()` returns
    `InputSource::Memory { bytes: SUMMARY, name: "peek manual" }`. Hex and the source view then show
-   `SUMMARY.md`, and the breadcrumb in the viewer reads `peek manual > Themes`.
+   `SUMMARY.md`. A chapter frame is named by its path, so the breadcrumb in the viewer reads
+   `peek manual > viewer/themes.md`.
 3. **Compose arm** in `src/compose.rs` calls `peek_manual::compose()`. It pushes one `ListingMode`
    over `ManualTocSource`. Hex, Info, About and Help are added automatically as usual.
 4. **Gather arm** in `src/gather/` calls `peek_manual::gather_extras()`.
@@ -136,10 +143,11 @@ difference: detection never produces it.
    The result is `Extracted` wrapping `InputSource::Memory { bytes: chapter body, name: path }`,
    with a suggested file name of the path's last segment. An unknown key gives the same
    `ExtractError` that archives give.
-6. **CLI.** `--manual` in `src/cli.rs`, with no short flag. In `src/input.rs`, `build_source`
-   returns the manual source and the detected value when the flag is set, and skips path and stdin
-   handling. After that, `main.rs` goes through the normal info, list, extract and interactive
-   dispatch with no further changes. Recursion into chapters comes from the existing session stack.
+6. **CLI.** `--manual` in `src/cli.rs`, with no short flag. In `src/input.rs`, `build_input` returns
+   the source and the detected value: the manual pair when the flag is set, without reading a path
+   or stdin, and otherwise the usual source plus `detect`. After that, `main.rs` goes through the
+   normal info, list, extract and interactive dispatch with no further changes. Recursion into
+   chapters comes from the existing session stack.
 
 Why the hubs rather than a separate code path: `--list`, `--print`, `--extract`, `--info`, recursion
 and the breadcrumb all come for free. A separate path would duplicate the dispatch in `main.rs`. The
@@ -155,11 +163,12 @@ both a page and the parent of the type chapters.
 `ManualTocSource` implements `ListSource` directly:
 
 - One row for each `SUMMARY.md` entry, in `SUMMARY.md` order.
-- Part headings (`Getting Started`, `File Types`, …) are rows that can't be selected, painted as
-  headings.
+- Part headings (`Getting Started`, `File Types`, …) are top-level group rows. They are selectable,
+  as directory rows are in `TreeListSource`, so moving to the parent level works, but they don't
+  extract. They paint with the new `NameStyle::Heading`: accent colour, without the trailing `/` of
+  a directory. `NameStyle` replaces the `is_dir` flag on `NameCell`.
 - Chapter rows show the title, indented by depth with the same tree connectors that `TreeListSource`
-  uses. Use the shared helpers in `viewer/listing/row.rs` rather than copying them, and move the
-  connector helper there if it is private today.
+  uses. The connector helpers moved to `viewer/listing/row.rs` so both sources share them.
 - Every chapter row is selectable and extractable, including ones with children. `parent()` points a
   nested chapter at its parent chapter, which gives the sticky breadcrumb.
 - The size column shows the size of the preprocessed chapter. The listing has no permission or mtime
@@ -168,33 +177,41 @@ both a page and the parent of the type chapters.
   then to `-x`.
 - `initial_selection()` is the first chapter (Introduction).
 
-## Steps
+## What shipped
 
-Each step builds and passes `cargo test --workspace` and `cargo clippy --workspace` on its own.
+All four steps landed:
 
-1. **Crate skeleton and build step.** Add `crates/peek-manual` with `build.rs`, the chapter table
-   and unit tests for the preprocessing. Tests cover image drop, link-target strip, `peek:` unwrap,
-   `peek-skip` removal, untouched pass-through and each build-error case. Nothing calls the crate
-   yet.
-2. **Container type.** Add `FileType::Manual`, `ManualTocSource`, compose, gather and extract, the
-   three hub arms, and `--manual` in the CLI and `build_source`. Add integration tests for
-   `--manual --list`, `-x <path> -o -` (bytes equal the preprocessed body), `-x <path> -p --plain`
-   and an unknown key.
-3. **Content pass on the manual.** Add `peek:` text next to the images where the in-app copy needs
-   it, and add a web-only `peek-skip` pointer to `--manual` in the introduction.
-4. **Docs.** Add `--manual` to `manual/src/cli-reference.md`, a short section to `help-about.md` or
-   a new chapter, the content rules in a new `manual/README.md`, the new crate in the CLAUDE.md file
-   map and the crate structure in `docs/architecture.md`, and an entry in `docs/features.md`. Also
-   mention `--manual` in the README usage section.
+1. **Crate and build step.** `crates/peek-manual` with `build.rs` and `src/preprocess.rs`. Unit
+   tests cover image drop, link-target strip, `peek:` unwrap, `peek-skip` removal, pass-through of
+   untouched text, `SUMMARY.md` parsing and each marker error. Missing or unlisted chapters fail the
+   build.
+2. **Container type.** `FileType::Manual`, `ManualTocSource`, compose, gather and extract, the three
+   hub arms, and `--manual`. The bin has no process-level CLI tests, so the tests go through the
+   hubs instead: extract and re-detect a chapter, gather the Info section, and descend from the TOC
+   into a chapter in a `ViewerState`. The CLI paths were checked by hand against the debug build.
+3. **Content pass.** Of the 23 images, 7 had no caption and needed nothing. 11 image-and-caption
+   pairs are wrapped in `peek-skip`, because the caption repeated nearby text or only made sense
+   next to the picture. Two captions stand alone and stay. Three sites got a `peek:` replacement:
+   the introduction, the Info screen and the Markdown chapter. The introduction has a web-only
+   pointer to `--manual`. The pass also fixed the SQLite chapter, which claimed that empty cells are
+   NULLs; the table view shows a muted `NULL`.
+4. **Docs.** `--manual` in the CLI reference, a "Manual" section in `help-about.md`, the authoring
+   rules in `manual/README.md`, the crate in the CLAUDE.md file map and `docs/architecture.md`, and
+   entries in `docs/features.md` and the README.
+
+## Known limitations
+
+- **Links can't be followed.** Relative links render as underlined text only. Following them is a
+  planned follow-up (see [Later](#later)).
+- **`--plain` shows the rewritten source.** `--plain` turns off the rendered Markdown view, so a
+  chapter prints as its preprocessed Markdown, where stripped links read `[Themes]()`.
+- **Pipes.** Print mode reports an error when the reader closes the pipe early (`| head`), and piped
+  output stays coloured without `--color plain`. Both affect every file type and are tracked in
+  [checkup-findings.md](../checkup-findings.md).
+
+The chapter-path breadcrumb and the missing `-x` completions are covered under
+[Container wiring](#container-wiring) and [User-facing behaviour](#user-facing-behaviour).
 
 ## Later
 
-- **Following links.** A key that follows the link under the cursor in the rendered Markdown view,
-  resolving relative `.md` paths and `#fragment` anchors against the chapter table. This needs link
-  spans recorded in the rendered output and a jump hook in the session layer. When it lands, rule 2
-  changes from "strip the target" to "keep it as link metadata".
-- **Manual in the Tab cycle.** Every file gets a manual mode in its Tab cycle, next to Info and
-  Help, that opens on the chapter for the current file type (a CSV file lands on "CSV / TSV"). This
-  needs a `FileType` to chapter-path map. The manual crate already depends on `peek-detect`, so the
-  map belongs there, and a test can check that every `FileType` maps to a chapter that exists.
-- **Search across chapters** from the TOC.
+Moved to [planned.md → Built-in manual](../planned.md#built-in-manual-).

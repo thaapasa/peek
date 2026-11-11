@@ -297,6 +297,26 @@ fn descend_then_back_round_trips_stack() {
     assert!(matches!(final_back, Outcome::Quit));
 }
 
+/// `peek --manual` opens on the TOC; Enter on the first chapter opens it
+/// in the Markdown viewer through the normal extract + detect path.
+#[test]
+fn manual_descends_into_a_markdown_chapter() {
+    let mut state = build_state(
+        &["peek", "--manual"],
+        peek_manual::source(),
+        peek_manual::detected(),
+    );
+    assert_eq!(active_id(&state), ModeId::Listing);
+
+    state.apply(Action::Descend).unwrap();
+    assert_eq!(state.stack_depth(), 2);
+    assert_eq!(
+        state.frame().detected.file_type,
+        peek_detect::FileType::Markdown
+    );
+    assert_eq!(state.frame().source.name(), "introduction.md");
+}
+
 /// A SQLite table-contents frame reuses the db source, so its
 /// breadcrumb must show the table name rather than repeating the
 /// db file (`library.sqlite > books`, not `library.sqlite >

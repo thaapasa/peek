@@ -124,12 +124,28 @@ pub struct RowCells {
     pub name: NameCell,
 }
 
-/// The one selectable column. `is_dir` picks the accent colour and the
-/// trailing `/`; `text` is what the engine paints, overlays matches on, and
-/// backgrounds when selected.
+/// The one selectable column. `text` is what the engine paints, overlays
+/// matches on, and backgrounds when selected; `style` picks the colour.
 pub struct NameCell {
     pub text: String,
-    pub is_dir: bool,
+    pub style: NameStyle,
+}
+
+/// How the engine paints a [`NameCell`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NameStyle {
+    /// Foreground — files, sheets, symbols.
+    Plain,
+    /// Accent plus a muted trailing `/`.
+    Dir,
+    /// Accent with no `/`: a group row that isn't a directory (manual parts).
+    Heading,
+}
+
+impl NameStyle {
+    pub fn dir_if(is_dir: bool) -> Self {
+        if is_dir { Self::Dir } else { Self::Plain }
+    }
 }
 
 /// Navigation metadata the engine caches per row so the viewport can do

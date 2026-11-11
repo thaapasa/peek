@@ -1,0 +1,25 @@
+[package]
+name = "peek-manual"
+description = "peek user manual embedded in the binary — TOC listing, chapter extract and info, barred from the bin's session layer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+peek-io = { workspace = true }
+peek-detect = { workspace = true }
+peek-theme = { workspace = true }
+peek-foundation = { workspace = true }
+
+bytes = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[build-dependencies]
+pulldown-cmark = { workspace = true }
+
+[dev-dependencies]
+pulldown-cmark = { workspace = true }

@@ -46,6 +46,7 @@ pub fn extract(
         FileType::Audio(fmt) => types::audio::extract::extract(source, *fmt, key),
         FileType::Sqlite(_) => types::sqlite::extract::extract(source, key),
         FileType::Lmdb => types::lmdb::extract::extract(source, key),
+        FileType::Manual => peek_manual::extract(key),
         FileType::Notebook => types::notebook::extract::extract(source, key),
         FileType::Email(_) => types::email::extract::extract(source, key),
         FileType::SourceCode { .. }
@@ -80,6 +81,22 @@ mod tests {
         p.push("test-data");
         p.push(name);
         InputSource::File(p)
+    }
+
+    /// `peek --manual -x <chapter>`: the hub routes to the manual crate and
+    /// the chapter re-detects as Markdown, so `--print` renders it.
+    #[test]
+    fn manual_chapter_extracts_as_markdown() {
+        let extracted = extract(
+            &peek_manual::source(),
+            &peek_manual::detected(),
+            "viewer/themes.md",
+            &ExtractOptions::default(),
+        )
+        .unwrap();
+        assert_eq!(extracted.suggested_name, "themes.md");
+        let inner = detect::detect(&extracted.source).unwrap();
+        assert_eq!(inner.file_type, detect::FileType::Markdown);
     }
 
     /// Recursive peek: extract an entry and confirm the resulting

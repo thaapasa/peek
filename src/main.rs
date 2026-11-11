@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     }
 
     // No args + interactive stdin → show short help instead of erroring.
-    let no_input = args.file.is_none() && std::io::stdin().is_terminal();
+    let no_input = args.file.is_none() && !args.manual && std::io::stdin().is_terminal();
     if args.short_help || args.help || no_input {
         let theme_manager = peek_theme::ThemeManager::new(args.theme, args.color);
         output::render_help(&theme_manager, !args.help)?;
@@ -67,8 +67,7 @@ fn main() -> Result<()> {
     // Codecs the `image` crate lacks, registered before any decode.
     peek_types::types::image::avif::register();
 
-    let mut source = input::build_source(&args)?;
-    let mut detected = peek_detect::detect(&source)?;
+    let (mut source, mut detected) = input::build_input(&args)?;
 
     // --extract: pull an inner item out of a container. With `--print`
     // or `--info`, swap source for the extracted one and fall through
