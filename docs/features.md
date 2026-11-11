@@ -207,9 +207,9 @@ messages still route here.
   the viewport. `RenderedTextMode` caches the result per width / theme.
 - **Source** — the raw RFC822 text via `ContentMode`. `--plain` drops the rendered view and opens
   straight on the source.
-- **Attachments** (when present) — a listing over the message's MIME attachments, showing each
-  part's **content type** alongside size and name; `e` extracts one to disk through the standard
-  extract pipeline (`message/rfc822` → recursive peek on the saved part).
+- **Attachments** (when present) — a listing over the message's MIME attachments and inline media,
+  showing each part's **content type** alongside size and name; `e` extracts one to disk through the
+  standard extract pipeline (`message/rfc822` → recursive peek on the saved part).
 
 **`.mbox`** composes a **Messages** TOC (one row per message, prefixed with its index so duplicate
 subjects stay distinct, with the message `Date` in the mtime column) over a hand-rolled

@@ -1,5 +1,6 @@
 //! Extract one MIME attachment from an email message. The lookup key is
-//! produced by [`message::attachment_keys`] — the same shared derivation
+//! produced by [`message::attachment_keys`] over
+//! [`message::attachment_parts`] — the same shared derivation
 //! the attachments listing uses — so a row round-trips back to its part.
 
 use bytes::Bytes;
@@ -17,10 +18,10 @@ pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractErro
         .parse(bytes.as_ref())
         .ok_or_else(|| ExtractError::Other(anyhow::anyhow!("could not parse email")))?;
 
-    // Same key derivation the listing used (one shared helper), so a row
-    // round-trips to its part. Keys and parts share `attachments()` order.
-    let keys = message::attachment_keys(&msg);
-    let parts: Vec<_> = msg.attachments().collect();
+    // Same parts + key derivation the listing used (shared helpers), so a
+    // row round-trips to its part.
+    let parts = message::attachment_parts(&msg);
+    let keys = message::attachment_keys(&parts);
     let Some(idx) = keys.iter().position(|k| k == key) else {
         return Err(ExtractError::NotFound(key.to_string()));
     };
@@ -34,7 +35,7 @@ pub fn extract(source: &InputSource, key: &str) -> Result<Extracted, ExtractErro
     Ok(Extracted {
         suggested_name: suggested,
         source: InputSource::Memory {
-            bytes: Bytes::copy_from_slice(parts[idx].contents()),
+            bytes: Bytes::copy_from_slice(&parts[idx].decoded()),
             name: key.to_string(),
         },
     })

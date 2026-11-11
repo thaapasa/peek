@@ -204,3 +204,36 @@ fn gather_mbox_info() {
     let i = crate::info::downcast_extras::<info::EmailInfo>(&extras);
     assert_eq!(i.message_count, Some(3));
 }
+
+/// Plain-text-only mail stays a text body; it must not go through the
+/// HTML renderer, which would fold its lines together.
+#[test]
+fn plain_text_only_body_is_text() {
+    let raw = b"From: a@example.com\r\nSubject:\r\n\r\nLine one\r\nLine two\r\n";
+    let email = message::parse(raw).expect("parse");
+    assert!(matches!(&email.body, message::Body::Text(t) if t.contains("Line one\r\nLine two")));
+    // A blank Subject reads as absent.
+    assert_eq!(email.subject, None);
+}
+
+/// Inline media counts as body in RFC 8621, but peek renders only the
+/// text/HTML part, so an inline image is still listed and extractable.
+#[test]
+fn inline_image_is_listed_and_extractable() {
+    let raw = b"From: a@example.com\r\n\
+        Content-Type: multipart/mixed; boundary=\"XX\"\r\n\r\n\
+        --XX\r\nContent-Type: text/plain\r\n\r\nbody\r\n\
+        --XX\r\nContent-Type: image/png\r\nContent-Disposition: inline\r\n\r\nPNGDATA\r\n\
+        --XX--\r\n";
+    let email = message::parse(raw).expect("parse");
+    assert!(matches!(&email.body, message::Body::Text(t) if t == "body"));
+    let keys: Vec<&str> = email.attachments.iter().map(|a| a.key.as_str()).collect();
+    assert_eq!(keys, ["attachment-1.png"]);
+
+    let source = InputSource::memory(raw.to_vec(), "inline.eml");
+    let out = extract::extract(&source, "attachment-1.png").expect("extract");
+    let InputSource::Memory { bytes, .. } = out.source else {
+        panic!("expected memory source");
+    };
+    assert_eq!(bytes.as_ref(), b"PNGDATA");
+}

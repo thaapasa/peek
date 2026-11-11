@@ -7,7 +7,7 @@
 
 use std::time::{Duration, SystemTime};
 
-use mail_parser::{Address, Message, MessageParser, MimeHeaders};
+use mail_parser::{AddressList, Message, MessageParser, MessagePart, PartKind};
 
 /// The display-facing view of one email message.
 pub struct ParsedEmail {
@@ -50,26 +50,30 @@ pub struct Attachment {
 pub fn parse(bytes: &[u8]) -> Option<ParsedEmail> {
     let msg = MessageParser::default().parse(bytes)?;
 
+    // `html_body()` falls back to the text part when there's no HTML
+    // alternative; only a real `text/html` part counts as HTML here.
     let html = msg
-        .html_bodies()
-        .next()
-        .and_then(|p| p.text_contents().map(str::to_owned));
+        .html_body()
+        .find(|p| matches!(p.kind(), PartKind::Html))
+        .and_then(|p| p.text().map(String::from));
+    // Body lists also hold inline media; skip to the first text part.
     let text = msg
-        .text_bodies()
-        .next()
-        .and_then(|p| p.text_contents().map(str::to_owned));
+        .text_body()
+        .find(|p| p.is_text())
+        .and_then(|p| p.text().map(String::from));
     let body = match (html, text) {
         (Some(h), _) => Body::Html(h),
         (None, Some(t)) => Body::Text(t),
         (None, None) => Body::Empty,
     };
 
-    let attachments = attachment_keys(&msg)
+    let parts = attachment_parts(&msg);
+    let attachments = attachment_keys(&parts)
         .into_iter()
-        .zip(msg.attachments())
+        .zip(&parts)
         .map(|(key, part)| Attachment {
             key,
-            size: part.len() as u64,
+            size: part.decoded_len() as u64,
             content_type: content_type(part),
         })
         .collect();
@@ -78,7 +82,8 @@ pub fn parse(bytes: &[u8]) -> Option<ParsedEmail> {
         from: msg.from().and_then(format_address),
         to: msg.to().and_then(format_address),
         cc: msg.cc().and_then(format_address),
-        subject: msg.subject().map(str::to_owned),
+        // A blank `Subject:` parses as `Some("")`; show it as absent.
+        subject: msg.subject().filter(|s| !s.is_empty()).map(str::to_owned),
         date: msg.date().map(|d| d.to_rfc822()),
         timestamp: msg
             .date()
@@ -91,13 +96,28 @@ pub fn parse(bytes: &[u8]) -> Option<ParsedEmail> {
     })
 }
 
-/// The unique extract keys for a message's attachments, in document
-/// order. The single derivation shared by [`parse`] (builds the listing
-/// rows) and the extractor (matches a key back to its part) — so the two
-/// can't drift and silently mismap a row to the wrong attachment.
-pub(crate) fn attachment_keys(msg: &Message) -> Vec<String> {
-    let bases: Vec<String> = msg
-        .attachments()
+/// A message's extractable parts, in document order: the RFC 8621
+/// attachments plus inline media. `mail-parser` files inline media under the
+/// body, but peek renders only the first text/HTML part, so without this an
+/// inline image would be neither shown nor extractable.
+pub(crate) fn attachment_parts<'m>(msg: &'m Message<'m>) -> Vec<MessagePart<'m>> {
+    let inline_media = msg
+        .text_body()
+        .chain(msg.html_body())
+        .filter(|p| !p.is_text());
+    let mut parts: Vec<_> = msg.attachments().chain(inline_media).collect();
+    parts.sort_by_key(|p| p.id());
+    parts.dedup_by_key(|p| p.id());
+    parts
+}
+
+/// The unique extract keys for [`attachment_parts`], index-aligned with
+/// it. The single derivation shared by [`parse`] (builds the listing rows)
+/// and the extractor (matches a key back to its part) — so the two can't
+/// drift and silently mismap a row to the wrong attachment.
+pub(crate) fn attachment_keys(parts: &[MessagePart]) -> Vec<String> {
+    let bases: Vec<String> = parts
+        .iter()
         .enumerate()
         .map(|(i, p)| attachment_base(i, p.attachment_name(), &content_type(p)))
         .collect();
@@ -158,7 +178,7 @@ fn split_ext(name: &str) -> (&str, &str) {
 
 /// `text` form of a part's `Content-Type` (`type/subtype`), defaulting
 /// to `application/octet-stream` when absent.
-fn content_type(part: &mail_parser::MessagePart) -> String {
+fn content_type(part: &MessagePart) -> String {
     match part.content_type() {
         Some(ct) => match ct.subtype() {
             Some(sub) => format!("{}/{}", ct.ctype(), sub),
@@ -171,9 +191,9 @@ fn content_type(part: &mail_parser::MessagePart) -> String {
 /// Render an address header to a single display string, joining multiple
 /// recipients with `, `. Prefers `Name <addr>`, falling back to either
 /// alone.
-fn format_address(addr: &Address) -> Option<String> {
+fn format_address(addr: AddressList) -> Option<String> {
     let parts: Vec<String> = addr
-        .iter()
+        .mailboxes()
         .map(|a| match (a.name(), a.address()) {
             (Some(name), Some(email)) => format!("{name} <{email}>"),
             (Some(name), None) => name.to_string(),
