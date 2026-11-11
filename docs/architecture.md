@@ -75,10 +75,10 @@ Top-level file map: [CLAUDE.md](../CLAUDE.md). Per-file detail: each file's `//!
 CLI args (clap)
   |
   v
-build_source() --> InputSource  (File path, or buffered Stdin)
-  |
-  v
-detect::detect(source) --> FileType
+input::build_input() --> (InputSource, Detected)
+  |   File path or buffered stdin, then detect::detect(source) --> FileType.
+  |   --manual skips both: peek_manual::source() + FileType::Manual, which
+  |   detection never produces.
   |
   +-- Registry::compose_modes() --> Vec<Box<dyn Mode>>
         |

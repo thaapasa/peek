@@ -8,6 +8,7 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
+use peek_foundation::output::write_stdout;
 
 const REPO: &str = "thaapasa/peek";
 const RELEASES_API: &str = "https://api.github.com/repos/thaapasa/peek/releases/latest";
@@ -36,17 +37,22 @@ pub fn run() -> Result<()> {
     let latest_tag = fetch_latest_tag()?;
     let latest = latest_tag.strip_prefix('v').unwrap_or(&latest_tag);
 
-    println!("peek {current} (current) → {latest} (latest on github.com/{REPO})");
+    write_stdout(
+        format!("peek {current} (current) → {latest} (latest on github.com/{REPO})\n").as_bytes(),
+    )?;
 
     if !is_newer(latest, current) {
-        println!("already on latest");
+        write_stdout(b"already on latest\n")?;
         return Ok(());
     }
 
-    println!(
-        "upgrading to {latest} via install.sh → {}",
-        install_dir.display()
-    );
+    write_stdout(
+        format!(
+            "upgrading to {latest} via install.sh → {}\n",
+            install_dir.display()
+        )
+        .as_bytes(),
+    )?;
 
     let script = fetch(INSTALL_SCRIPT_URL).context("failed to fetch install.sh")?;
     let mut sh = Command::new("sh")

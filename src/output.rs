@@ -84,6 +84,12 @@ pub fn render_help(theme_manager: &ThemeManager, short: bool) -> Result<()> {
 
     writeln!(out, "{}", pt.paint_heading("MANUAL"))?;
     writeln!(out, "  {}", pt.paint_value(MANUAL_URL))?;
+    writeln!(
+        out,
+        "  {} {}",
+        pt.paint_label("peek --manual"),
+        pt.paint_muted("(built in, matches this version)")
+    )?;
     writeln!(out)?;
 
     if short {
