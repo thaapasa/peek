@@ -65,10 +65,15 @@ writer into a tempfile and saves it where you point the prompt. Cell mapping in 
 
 Enter on a contents leaf opens a **streaming row view**:
 
+<!-- peek-skip -->
+
 ![A SQLite table's rows shown as an aligned table with header and NULL cells](../img/sqlite-table.svg)
 
 _A table's rows, drawn as an aligned table — the same renderer CSV uses, fed by a SQLite cursor.
-Empty cells are NULLs; the body scrolls a 1000-row sliding window without loading the whole table._
+NULL cells show a muted `NULL`; the body scrolls a 1000-row sliding window without loading the whole
+table._
+
+<!-- /peek-skip -->
 
 - Sticky header row with the column names.
 - Body rows fetched lazily — a sliding window of 1000 rows is held in memory and the buffer refills
@@ -90,7 +95,7 @@ underneath, just fed by a SQLite cursor instead of a CSV reader.
 
 ### NULL and BLOB cells
 
-- `NULL` cells render as a placeholder — they're distinct from the empty string.
+- `NULL` cells show the text `NULL` in a muted color, so they stand apart from empty strings.
 - `BLOB` cells render as `<blob: N bytes>`. Inline hex preview is deferred; use the schema view to
   see the column's declared type.
 

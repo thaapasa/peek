@@ -15,10 +15,14 @@ tracked by indented tree glyphs. The walker reads the root directory extent from
 when Joliet is present — preferred for longer Unicode names) and recurses through child extents.
 Bounded depth + entry caps defend against malformed images.
 
+<!-- peek-skip -->
+
 ![The interactive ISO browser showing a multi-level directory tree](../img/iso-browser.svg)
 
 _The same interactive TOC browser as archives — here a multi-level tree
 (`sub/ ├╴deeper/ │ └╴deep.txt`) read straight from the ISO 9660 directory extents._
+
+<!-- /peek-skip -->
 
 Per-entry permissions are not surfaced (Rock Ridge SUSP isn't parsed); defaults are `rwxr-xr-x` for
 dirs and `rw-r--r--` for files.

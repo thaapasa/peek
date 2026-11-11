@@ -26,9 +26,13 @@ Cycled with Tab:
 
 As with every file, `x` opens the [hex dump](./binary.md) and `h` / `?` the help screen.
 
+<!-- peek-skip -->
+
 ![Email message with a From / To / Date / Subject header block above the word-wrapped body](../img/email-render.svg)
 
 _The default Message view: the header summary followed by the rendered body._
+
+<!-- /peek-skip -->
 
 ## `.mbox` — a mailbox
 

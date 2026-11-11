@@ -6,11 +6,21 @@ Every file type has an Info view, reachable via:
 - **`Tab`** — cycle into Info as one of the file's view modes
 - **`--info`** on the CLI — print info and exit
 
+<!-- peek-skip -->
+
 ![The Info view for a JPEG, with File, Image, and a detailed EXIF section](../img/file-info.svg)
 
 _The Info view groups universal fields (name, size, MIME, timestamps) with format-specific sections
 — here the image's dimensions, color model, HDR gain map, and the camera / lens / exposure metadata
 read straight from EXIF._
+
+<!-- /peek-skip -->
+
+<!-- peek:
+Press `i` on a JPEG to see it in action: the universal fields (name, size, MIME, timestamps)
+followed by format sections — the image's dimensions, color model, HDR gain map, and the camera /
+lens / exposure metadata read from EXIF.
+-->
 
 ## Universal fields
 

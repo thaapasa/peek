@@ -2,10 +2,19 @@
 
 **peek** is a modern terminal file viewer — preview any file, any format.
 
+<!-- peek-skip -->
+
 ![A photograph rendered in the terminal as glyph-matched 24-bit color art](img/image-render.webp)
 
 _peek rendering a JPEG directly in the terminal — each cell is a character whose shape and 24-bit
 color approximate the underlying pixels. Open any image file to get this view._
+
+<!-- /peek-skip -->
+
+<!-- peek:
+Open any image file to see it rendered in the terminal: each cell is a character whose shape and
+24-bit color approximate the pixels beneath it.
+-->
 
 Features at a glance:
 
@@ -22,6 +31,13 @@ Features at a glance:
 - PEM certificates and keys — subject, validity, SANs, fingerprints
 - Hex dump for unknown binary
 - Interactive viewer with live theme cycling, file info, extraction
+
+<!-- peek-skip -->
+
+This manual is also built into peek: `peek --manual` opens it in the terminal, matching the
+installed version. See [Help and about](./viewer/help-about.md#manual).
+
+<!-- /peek-skip -->
 
 ## Design principles
 

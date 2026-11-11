@@ -13,10 +13,14 @@ with a dual view like Markdown:
     colour stripped), and image outputs noted by name (matching the Blocks listing, e.g.
     `image-1.png`).
 
+  <!-- peek-skip -->
+
   ![A notebook rendered with a markdown cell, a highlighted code cell, and its output](../img/notebook.svg)
 
   _The rendered view: markdown prose, an `In [n]:` code cell highlighted in the kernel language, and
   the cell's output below it._
+
+  <!-- /peek-skip -->
 
 - **Source** — the raw notebook JSON, pretty-printed via the structured content mode. Reachable with
   Tab; `r` toggles the raw (unformatted) JSON. Becomes the entry view with `--raw`.

@@ -3,11 +3,15 @@
 Container archives open in a **TOC view** — one row per entry with permissions, uncompressed size,
 mtime, and path. Listing reads only the per-entry headers, so multi-GB archives open instantly.
 
+<!-- peek-skip -->
+
 ![The interactive archive browser showing a nested entry tree with a selection cursor](../img/archive-browser.svg)
 
 _The interactive TOC browser: entries shown as a nested tree (directories with `├╴` / `└╴`
 children), with permissions, size, and mtime per row. Move the cursor to descend into an entry and
 preview it, or extract it._
+
+<!-- /peek-skip -->
 
 | Format       | Extensions                     | Spec                                                                               |
 | ------------ | ------------------------------ | ---------------------------------------------------------------------------------- |

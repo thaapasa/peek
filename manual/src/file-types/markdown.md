@@ -15,10 +15,18 @@ PDF:
 
 `--plain` drops the rendered view entirely.
 
+<!-- peek-skip -->
+
 ![Markdown rendered with styled headings, a callout, and a table of contents](../img/markdown-render.svg)
 
 _The default rendered view: headings, emphasis, strikethrough, blockquotes, and tables styled inline
 rather than shown as raw markup._
+
+<!-- /peek-skip -->
+
+<!-- peek:
+You're reading this chapter in the rendered view.
+-->
 
 The Info view adds a Markdown section:
 

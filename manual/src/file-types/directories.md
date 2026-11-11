@@ -3,10 +3,14 @@
 `peek <dir>` opens a one-level listing instead of erroring on "is a directory". Columns mirror the
 archive TOC view: permissions, size, mtime, name.
 
+<!-- peek-skip -->
+
 ![The directory browser listing the peek project root, dirs first then files](../img/dir-browser.svg)
 
 _Browsing the project root: directories first (trailing `/`), then files, with a synthetic `..` row
 to walk back up. `Enter` descends into the selected entry._
+
+<!-- /peek-skip -->
 
 Sorted dirs-first, then by case-insensitive name. A synthetic `..` row leads the list (suppressed at
 filesystem root) so the user can walk back up — selecting `..` canonicalizes the current path and

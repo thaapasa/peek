@@ -40,9 +40,13 @@ Cycle with `m` (or `--image-mode <mode>`):
 
 `--edge-density` tunes the `contour` line count.
 
+<!-- peek-skip -->
+
 ![The same photo rendered as Sobel edge line-art](../img/image-contour.svg)
 
 _The same photo in `contour` mode — Sobel edge detection drawn as line-art instead of filled color._
+
+<!-- /peek-skip -->
 
 ## Backgrounds
 

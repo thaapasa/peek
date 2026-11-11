@@ -27,10 +27,14 @@ Cycled with Tab:
   colliding. The status line shows `text` while the overlay is active. Only offered when the
   document has a text layer.
 
+  <!-- peek-skip -->
+
   ![A PDF page rendered as ASCII glyph cells with real words overlaid from the text layer](../img/pdf-render.webp)
 
   _The Read view with the reconstructed-text overlay (`o`): rasterized page cells underneath, the
   PDF's own words written over them at their page positions._
+
+  <!-- /peek-skip -->
 
 - **Text** — width-wrapped text extraction across the whole document, separated by muted
   `--- Page N ---` markers. Present only when the document has a text layer; image-only scans and
