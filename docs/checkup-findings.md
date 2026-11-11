@@ -28,25 +28,6 @@ Future item: add a libFuzzer target per high-value parser to harden the floor ag
 Not urgent — no live bug; this is regression insurance. Reopen as a real finding only if a parser
 change lands without matching adversarial tests.
 
-### L15. Print mode errors out when the reader closes the pipe early
-
-`peek t.tar --list | head -2` prints the two lines, then
-`Error: failed to render listing … Broken pipe (os error 32)` and exits 1. With `--print`, the
-broken pipe also triggers the render-failure fallback in `main.rs`: it prints
-`cannot display … showing hex`, tries the hex view, and fails on the same pipe. Every file type is
-affected, not only containers. The manual (`operating-modes.md`) says print mode is safe to pipe
-into `head`. Fix: treat `io::ErrorKind::BrokenPipe` as a quiet, successful exit, and keep it out of
-the hex fallback.
-
-### L16. Piped output stays coloured unless `--color plain` is given
-
-`--color` defaults to truecolor whether or not stdout is a terminal, so `--list` and `--print`
-output carry ANSI escapes into a pipe. `peek --manual --list | cut -f1` yields paths wrapped in
-escape codes. The manual documents `--plain` as the way to strip them, so this may be intended
-(colours survive `less -R`). Decide whether the default should become plain when stdout isn't a
-terminal, the way `ls` and `grep` behave with `--color=auto`. `PEEK_COLOR` and an explicit `--color`
-would still win.
-
 ## Wontfix records
 
 ### M6. Per-type dispatch hubs are a `match file_type` family
@@ -57,12 +38,12 @@ explicit matches are compiler-enforced completeness where trait defaults would s
 rationale: `architecture.md` → "Why the dispatch arms stay explicit". Reopen if a dispatcher can
 someday silently fall through and ship a bug.
 
-### M12. `--plain` mutates `args.color`
+### M12. `--plain` kept separate from `--color plain`
 
 Merging `--plain` into `--color plain` declined: plain mode additionally suppresses pretty-print,
 the syntect pipeline, and rendered views — none derivable from `StyleMode::Plain`. Rationale:
-`architecture.md` → Registry. Residual wart stays open there too: `main.rs` mutates `args.color`;
-compute an `effective_color` instead next time the argument plumbing is touched.
+`architecture.md` → Registry. The former wart (`main.rs` mutating `args.color`) is gone:
+`cli::parse` computes the effective encoding once, and `args.color_arg` keeps the user's choice.
 
 ### M18. `render_window`'s `scroll` parameter is dead for owns-scroll modes
 

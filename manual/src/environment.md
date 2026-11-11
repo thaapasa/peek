@@ -3,7 +3,8 @@
 | Variable           | Description                                                 | Default        |
 | ------------------ | ----------------------------------------------------------- | -------------- |
 | `PEEK_THEME`       | Syntax highlighting theme                                   | `idea-dark`    |
-| `PEEK_COLOR`       | Output color encoding                                       | `truecolor`    |
+| `PEEK_COLOR`       | Output color encoding                                       | `auto`         |
+| `NO_COLOR`         | Non-empty: `auto` color gives plain output                  | unset          |
 | `PEEK_VERSION`     | Pin a specific release for `install.sh`                     | latest         |
 | `PEEK_INSTALL_DIR` | Install location for `install.sh`                           | `~/.local/bin` |
 | `COLUMNS`          | Terminal width fallback for piped / `--print` output (≥ 24) | 80 if unset    |

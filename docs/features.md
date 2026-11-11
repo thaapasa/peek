@@ -1206,15 +1206,16 @@ there.
 
 ### Color Modes ✅
 
-`--color` / `-C`, or `PEEK_COLOR`. Five modes:
+`--color` / `-C`, or `PEEK_COLOR`. Default `auto`, plus five encodings:
 
-| Mode        | Encoding                                      |
-| ----------- | --------------------------------------------- |
-| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`) — default     |
-| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)      |
-| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`) |
-| `grayscale` | 24-bit luminance only — preserves shading     |
-| `plain`     | no escapes — strip all color from the output  |
+| Mode        | Encoding                                               |
+| ----------- | ------------------------------------------------------ |
+| `auto`      | `truecolor` on a terminal, `plain` otherwise — default |
+| `truecolor` | 24-bit RGB (`\x1b[38;2;r;g;bm`)                        |
+| `256`       | xterm 256-color palette (`\x1b[38;5;Nm`)               |
+| `16`        | 16 base ANSI colors (`\x1b[3Nm` / `\x1b[9Nm`)          |
+| `grayscale` | 24-bit luminance only — preserves shading              |
+| `plain`     | no escapes — strip all color from the output           |
 
 `c` cycles modes interactively; the rendered-lines cache invalidates on each cycle so the whole UI
 repaints in the new encoding.
@@ -1223,6 +1224,10 @@ All callers paint truecolor RGB; the `StyleMode` enum on `PeekTheme` owns the co
 single point where the encoding is decided. Image rendering routes the same way via
 `StyleMode::write_fg` / `write_fg_bg`. Plain mode emits text content with zero ANSI escapes (no SGR
 resets), so piped output is safe to compose with other tools.
+
+`auto` is a CLI value (`cli::ColorArg`), not a `StyleMode`: `cli::parse` resolves it once at startup
+to `truecolor` when stdout is a terminal and `NO_COLOR` is unset or empty, else `plain`. An explicit
+encoding (flag or `PEEK_COLOR`) always wins, so `--color truecolor | less -R` keeps colors.
 
 ### File Info Screen ✅
 
@@ -1584,7 +1589,7 @@ Two rendering axes:
 
 | Axis      | Modes                                                                  | Status                                                                  |
 | --------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Color     | truecolor, 256, 16, grayscale, plain                                   | ✅ (see [Color Modes](#color-modes-))                                   |
+| Color     | auto, truecolor, 256, 16, grayscale, plain                             | ✅ (see [Color Modes](#color-modes-))                                   |
 | Character | Full Unicode, ASCII-only (image rendering only — `--image-mode ascii`) | ◐ image side done; UI/glyph fallback for non-Unicode terminals not done |
 
 Color is handled by `StyleMode` — all callers paint truecolor RGB and the active mode decides the
@@ -1608,7 +1613,7 @@ syntax-highlighted code is downgraded along with everything else.
 | `--plain`        | `-P`  | Sterile output: no highlighting, pretty-printing, or colors                                                       | ✅     |
 | `--raw`          | `-r`  | Output verbatim source (no pretty-print)                                                                          | ✅     |
 | `--theme`        | `-t`  | Syntax highlighting theme                                                                                         | ✅     |
-| `--color`        | `-C`  | Output color encoding (truecolor/256/16/grayscale/plain)                                                          | ✅     |
+| `--color`        | `-C`  | Output color encoding (auto/truecolor/256/16/grayscale/plain; auto = plain when piped)                            | ✅     |
 | `--language`     | `-L`  | Force syntax language                                                                                             | ✅     |
 | `--width`        | `-w`  | Image rendering width in characters (capped at 2048, `MAX_FORCED_WIDTH_CELLS`)                                    | ✅     |
 | `--image-mode`   | `-m`  | Image rendering mode                                                                                              | ✅     |

@@ -32,8 +32,9 @@ still works.
 ## Output
 
 - **Viewer**: full-screen, alt-screen, no scrollback pollution. Quit returns the terminal unchanged.
-- **Print**: streams to stdout. Safe to pipe into `less`, `grep`, `head`. `--plain` / `-P` strips
-  ANSI escapes, pretty-printing, and rich renders.
+- **Print**: streams to stdout. Safe to pipe into `less`, `grep`, `head`. Piped output is plain text
+  by default; `--color truecolor` keeps colors (see [Color modes](./viewer/colors.md)). `--plain` /
+  `-P` also drops pretty-printing and rich renders.
 - **`--info`**: prints the [file info screen](./viewer/info-screen.md) and exits.
 - **`--list`**: prints the container TOC and exits — works for archives, ISOs, directories, and
   per-page / per-file embed listings in PDF / EPUB / DOCX / ODT / RTF / audio / comic files.

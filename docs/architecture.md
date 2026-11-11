@@ -326,9 +326,9 @@ the single dispatcher producing the mode stack for both the event loop + pipe pa
 `StyleMode::Plain` only drops ANSI at the encoder; `plain_mode` additionally suppresses structured
 pretty-print, skips the syntect pipeline entirely (`syntax_token = None`), and disables rendered
 views (SVG / HTML / Markdown). A user wanting sterile _colors_ still expects pretty-print + rendered
-views to work, so the two flags must not be conflated. Known wart: `main.rs` mutates `args.color` to
-`Plain` when `--plain` is set — correct but hides the user's actual `--color` choice; compute an
-`effective_color` at theme construction next time the arg plumbing is touched.
+views to work, so the two flags must not be conflated. `cli::parse` computes the effective encoding
+once into `args.color` (`plain` under `--plain`, else `--color` with `auto` resolved);
+`args.color_arg` keeps the user's actual choice.
 
 ### HexMode (`viewer/modes/hex.rs`)
 

@@ -1,7 +1,9 @@
+use std::io::IsTerminal;
 use std::path::PathBuf;
 
 use clap::{CommandFactory, FromArgMatches, Parser, ValueHint};
 use peek_foundation::viewer::ComposeOpts;
+use peek_theme::StyleMode;
 
 /// peek — a modern file viewer for the terminal.
 ///
@@ -64,16 +66,24 @@ pub struct Args {
     )]
     pub theme: peek_theme::PeekThemeName,
 
-    /// Output color encoding (truecolor / 256 / 16 / grayscale / plain)
+    /// Output color encoding (auto / truecolor / 256 / 16 / grayscale /
+    /// plain). `auto` colors only when stdout is a terminal
     #[arg(
         short = 'C',
-        long,
+        long = "color",
+        value_name = "COLOR",
         env = "PEEK_COLOR",
-        default_value_t = peek_theme::StyleMode::default(),
+        default_value = "auto",
         value_enum,
-        hide_short_help = true,
+        hide_short_help = true
     )]
-    pub color: peek_theme::StyleMode,
+    pub color_arg: ColorArg,
+
+    /// The encoding in effect: `plain` under `--plain`, else `color_arg` with
+    /// `auto` resolved. Set by [`parse`]; `Args::parse_from` (tests) leaves
+    /// the truecolor default.
+    #[arg(skip)]
+    pub color: StyleMode,
 
     /// Force a specific language for syntax highlighting (skip auto-detection)
     #[arg(short = 'L', long, hide_short_help = true)]
@@ -184,8 +194,61 @@ pub fn parse() -> (Args, bool) {
     let matches = Args::command().get_matches();
     let theme_explicit =
         matches.value_source("theme") != Some(clap::parser::ValueSource::DefaultValue);
-    let args = Args::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    let mut args = Args::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    // `--plain` implies `--color plain`: one "sterile output" knob. Otherwise
+    // the status bar and UI chrome would stay themed around unstyled content.
+    args.color = if args.plain {
+        StyleMode::Plain
+    } else {
+        let no_color = std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty());
+        args.color_arg
+            .resolve(std::io::stdout().is_terminal(), no_color)
+    };
     (args, theme_explicit)
+}
+
+/// `--color` as given. `auto` is a startup decision, not an encoding, so it
+/// stays out of [`StyleMode`] and is resolved once in [`parse`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorArg {
+    Auto,
+    Mode(StyleMode),
+}
+
+impl ColorArg {
+    /// `auto`: truecolor on a terminal, plain when piped or redirected, and
+    /// plain when `NO_COLOR` is set (<https://no-color.org>). An explicit
+    /// encoding always wins, so `--color truecolor | less -R` keeps colors.
+    pub fn resolve(self, stdout_is_terminal: bool, no_color: bool) -> StyleMode {
+        match self {
+            Self::Mode(mode) => mode,
+            Self::Auto if stdout_is_terminal && !no_color => StyleMode::TrueColor,
+            Self::Auto => StyleMode::Plain,
+        }
+    }
+}
+
+impl clap::ValueEnum for ColorArg {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self::Auto,
+            Self::Mode(StyleMode::TrueColor),
+            Self::Mode(StyleMode::Ansi256),
+            Self::Mode(StyleMode::Ansi16),
+            Self::Mode(StyleMode::Grayscale),
+            Self::Mode(StyleMode::Plain),
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        match self {
+            Self::Auto => Some(
+                clap::builder::PossibleValue::new("auto")
+                    .help("Truecolor on a terminal, plain when piped (default)"),
+            ),
+            Self::Mode(mode) => mode.to_possible_value(),
+        }
+    }
 }
 
 impl Args {
@@ -207,6 +270,39 @@ impl Args {
             image_mode: self.image_mode.clone(),
             background: self.background.clone(),
             edge_density: self.edge_density,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_colors_only_on_a_terminal_without_no_color() {
+        assert_eq!(ColorArg::Auto.resolve(true, false), StyleMode::TrueColor);
+        assert_eq!(ColorArg::Auto.resolve(false, false), StyleMode::Plain);
+        assert_eq!(ColorArg::Auto.resolve(true, true), StyleMode::Plain);
+    }
+
+    #[test]
+    fn explicit_encoding_always_wins() {
+        let mode = ColorArg::Mode(StyleMode::Ansi256);
+        assert_eq!(mode.resolve(false, true), StyleMode::Ansi256);
+    }
+
+    #[test]
+    fn color_flag_parses_auto_default_and_every_encoding() {
+        assert_eq!(Args::parse_from(["peek"]).color_arg, ColorArg::Auto);
+        for (name, mode) in [
+            ("truecolor", StyleMode::TrueColor),
+            ("256", StyleMode::Ansi256),
+            ("16", StyleMode::Ansi16),
+            ("grayscale", StyleMode::Grayscale),
+            ("plain", StyleMode::Plain),
+        ] {
+            let args = Args::parse_from(["peek", "--color", name]);
+            assert_eq!(args.color_arg, ColorArg::Mode(mode), "{name}");
         }
     }
 }

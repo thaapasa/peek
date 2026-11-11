@@ -29,13 +29,6 @@ fn main() -> Result<()> {
 fn run() -> Result<()> {
     let (mut args, theme_explicit) = cli::parse();
 
-    // `--plain` implies `--color plain`: a single "sterile output" knob.
-    // Otherwise the status bar and UI chrome stay themed while content is
-    // unstyled, which is surprising.
-    if args.plain {
-        args.color = peek_theme::StyleMode::Plain;
-    }
-
     if args.version {
         output::render_version()?;
         return Ok(());

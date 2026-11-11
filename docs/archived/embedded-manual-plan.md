@@ -205,9 +205,10 @@ All four steps landed:
   planned follow-up (see [Later](#later)).
 - **`--plain` shows the rewritten source.** `--plain` turns off the rendered Markdown view, so a
   chapter prints as its preprocessed Markdown, where stripped links read `[Themes]()`.
-- **Pipes.** Print mode reports an error when the reader closes the pipe early (`| head`), and piped
-  output stays coloured without `--color plain`. Both affect every file type and are tracked in
-  [checkup-findings.md](../checkup-findings.md).
+- **Pipes.** At ship time, print mode reported an error when the reader closed the pipe early
+  (`| head`), and piped output stayed coloured without `--color plain`. Both affected every file
+  type and were fixed right after: a closed stdout now exits quietly, and `--color` defaults to
+  `auto`.
 
 The chapter-path breadcrumb and the missing `-x` completions are covered under
 [Container wiring](#container-wiring) and [User-facing behaviour](#user-facing-behaviour).
