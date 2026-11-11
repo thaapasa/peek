@@ -6,5 +6,5 @@
 # mise.toml). It sets RUSTUP_TOOLCHAIN to the same value, so this file stays
 # the only pin.
 [toolchain]
-channel = "1.99.0"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]

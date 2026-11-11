@@ -28,4 +28,4 @@ paths = ["target"]
 paths = ["/usr/local/cargo/registry", "/usr/local/cargo/git"]
 
 [disk]
-size = "30 GB"   # default 10 GB fills fast with target dirs
+size = "60 GB"   # default 10 GB fills fast with target dirs
