@@ -18,8 +18,8 @@ or committed locally. Three jobs:
    force-pushes that branch. Outputs the new version, tag, previous tag (for release notes), branch
    name, and the branch commit SHA.
 2. **`build`** — 5-target matrix, all built from the release-branch SHA:
-   - `aarch64-apple-darwin` on `macos-14`
-   - `x86_64-apple-darwin` on `macos-14` (cross-compiled from aarch64; macOS ships a universal SDK
+   - `aarch64-apple-darwin` on `macos-15`
+   - `x86_64-apple-darwin` on `macos-15` (cross-compiled from aarch64; macOS ships a universal SDK
      so `rustup target add` works out of the box, and the free `macos-13` Intel runner is gone)
    - `x86_64-unknown-linux-gnu` on `ubuntu-24.04`
    - `aarch64-unknown-linux-gnu` on `ubuntu-24.04-arm`
@@ -32,7 +32,7 @@ or committed locally. Three jobs:
    `cargo test --workspace --release --locked --target <target>` runs on every _native_ matrix entry
    before bundling (ubuntu x64 / arm, windows, mac arm) — catches arch- / OS-specific regressions in
    targets CI doesn't run (arm linux, both macs). `x86_64-apple-darwin` is cross-compiled from the
-   arm64 macos-14 runner so its tests are skipped; the binary still ships. A test failure in any
+   arm64 macos-15 runner so its tests are skipped; the binary still ships. A test failure in any
    target halts the matrix (`fail-fast: true`) so no release artifacts publish.
 
 3. **`release`** — downloads artifacts, then merges `release/vX.Y.Z` into `main`: `--ff-only` when

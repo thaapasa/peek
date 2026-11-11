@@ -118,18 +118,18 @@ jobs:
         # `test: true` runs `cargo test` for this target before bundling
         # artifacts — only set when the target matches the runner's
         # native arch (no emulator dependency). x86_64-apple-darwin is
-        # cross-built from the arm64 macos-14 runner, so its test
+        # cross-built from the arm64 macos-15 runner, so its test
         # binaries can't be run directly; ubuntu / windows / arm-mac
         # entries are all native and do exercise the suite.
         include:
           - target: aarch64-apple-darwin
-            runner: macos-14
+            runner: macos-15
             archive: tar.gz
             pdfium_asset: pdfium-mac-arm64.tgz
             pdfium_lib: lib/libpdfium.dylib
             test: true
           - target: x86_64-apple-darwin
-            runner: macos-14
+            runner: macos-15
             archive: tar.gz
             pdfium_asset: pdfium-mac-x64.tgz
             pdfium_lib: lib/libpdfium.dylib
