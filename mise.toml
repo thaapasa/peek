@@ -15,6 +15,7 @@ postinstall = "rustup toolchain install nightly --profile minimal --component ru
 "github:rust-lang/mdBook" = "0.5.4"
 node = "26.13.0"
 "npm:prettier" = "3.9.10"
+vale = "3.27.0"
 
 # Tasks: `mise run <task>`, `mise tasks` lists them. Extra arguments go to the
 # last command of a task without a usage spec.
@@ -35,13 +36,37 @@ run = [
 ]
 
 [tasks.lint]
-description = "Check Rust + Markdown formatting, cargo check + clippy"
+description = "Check Rust + Markdown formatting, docs prose, cargo check + clippy"
 run = [
   "cargo +nightly fmt -- --check",
   "prettier --check --log-level warn '**/*.md'",
+  "mise run lint-prose",
   "cargo check --workspace --all-targets",
   "cargo clippy --workspace --all-targets -- -D warnings",
 ]
+
+# Prose: Vale with the Google developer documentation style, on the docs only
+# (.vale.ini sets the scope). `prose` shows every alert, including
+# suggestions. `lint-prose` is the gate and fails on warnings and errors.
+[tasks.prose]
+description = "Show all prose alerts in the docs; pass paths to narrow"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+[ -d .vale/styles/Google ] || vale sync
+if [ $# -eq 0 ]; then set -- README.md manual/src docs; fi
+vale "$@"
+'''
+
+[tasks.lint-prose]
+description = "Fail on prose warnings and errors in the docs"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+[ -d .vale/styles/Google ] || vale sync
+out=$(vale --minAlertLevel warning --output line README.md manual/src docs || true)
+if [ -n "$out" ]; then echo "$out"; exit 1; fi
+'''
 
 [tasks.test]
 description = "Run all tests"

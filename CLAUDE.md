@@ -121,7 +121,9 @@ scripts/            dev tooling. capture-demos.sh = manual stills (freeze/tmux, 
                     install-local.sh = release build + Pdfium into ~/.local/bin (`mise run install`).
 .github/workflows/  ci.yml + release.yml (5-target matrix) + manual.yml.
 install.sh          POSIX installer for curl | sh.
-mise.toml           tools (node, prettier, mdbook) + dev tasks; mise.dev.toml = opt-in dev tools.
+mise.toml           tools (node, prettier, mdbook, vale) + dev tasks; mise.dev.toml = opt-in dev tools.
+.vale.ini, .vale/   prose linter for docs: Google style (synced, gitignored) + committed Peek style
+                    (heading/acronym exceptions) and vocabulary.
 ```
 
 ## Workflow
@@ -136,6 +138,8 @@ mise.toml           tools (node, prettier, mdbook) + dev tasks; mise.dev.toml = 
   and a single pass doesn't always converge — `mise run format` runs `cargo +nightly fmt` twice for
   that reason. It also runs Prettier on `**/*.md` (`proseWrap: always`; fixtures excluded in
   `.prettierignore`).
+- **Run `mise run lint-prose` after editing docs.** Vale checks README, `manual/src/` and `docs/`
+  against Google developer documentation style. `mise run prose [paths]` also shows suggestions.
 - **Keep checkup-finding IDs (H4, M2, …) out of commit subjects.** Findings doc temporary — ID
   dangles once entry deleted. Body may cite ID when commit touches findings doc; subject reads by
   intent.
@@ -199,5 +203,6 @@ Keep in sync with code:
 - **Flag contradictions, don't resolve them silently.** When normal work has you reading these docs
   / CLAUDE.md / module headers and two instructions conflict, stop and notify the user — name both
   sources. Don't pick one, don't ignore it. User decides the fix.
-- **Keep docs + comments terse.** Lead with the beef, cut boilerplate; tighten verbosity in any doc
-  / `//!` header / comment you touch. Full rule: conventions.md → "Writing".
+- **Write prose in Google developer documentation style.** Follow the `plain-writing` skill. Rewrite
+  the prose you touch in any doc, `//!` header or comment to match. Full rule: conventions.md →
+  "Writing".

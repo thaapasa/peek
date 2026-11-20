@@ -2,29 +2,33 @@
 
 ## Line numbers
 
-Off by default. Enable at startup with `-n` / `--line-numbers`; toggle with `l` in the viewer.
+Line numbers are off by default. To turn them on at startup, use `-n` or `--line-numbers`. To toggle
+them in the viewer, press `l`.
 
-Right-aligned gutter, minimum width 2 digits, painted in the theme's gutter color. In pretty mode
-the numbers count visible pretty-printed lines (the lines actually shown), not source byte lines.
+The line numbers appear in a right-aligned gutter that's at least 2 digits wide. peek paints the
+gutter in the theme's gutter color. In pretty mode, the numbers count the pretty-printed lines that
+you see, not the lines in the source file.
 
 ## Soft wrap
 
-On by default for text views (source, structured pretty/raw, plain text, SVG XML). Each visible
-logical line is sliced into visual rows of width `term_cols - gutter_width`, so the row budget
-accounts for wrapped continuations and the status line never scrolls out of view.
+Soft wrap is on by default for text views. These include source code, structured data in pretty and
+raw form, plain text, and SVG XML. peek splits each logical line into visual rows that fit the
+terminal width minus the gutter width (`term_cols - gutter_width`). The row count includes the
+wrapped rows, so the status line never scrolls out of view.
 
-Toggle with `w`. When wrap is on, the [vertical scroll keys](../keyboard-shortcuts.md#navigation)
-move one **visual row** at a time — long lines no longer make a single keypress jump over all their
-wrapped rows.
+To toggle soft wrap, press `w`. When wrap is on, the
+[vertical scroll keys](../keyboard-shortcuts.md#navigation) move one **visual row** at a time. A
+long line doesn't make a single key press skip all of its wrapped rows.
 
-The line-number gutter shows the real (logical) line number on the first segment; continuation rows
-have a blank gutter of the same width so wrapped content aligns under its first row.
+The gutter shows the logical line number on the first row of each line. The rows that continue the
+line have a blank gutter of the same width, so the wrapped text lines up under the first row.
 
-Status bar shows `Wrap` whenever soft wrap is on (a deliberate always-on reminder — most status
-segments surface only non-default state, but wrap shows even though on is the default).
+The status bar shows `Wrap` whenever soft wrap is on. This reminder is deliberate. Most status bar
+items appear only when a setting differs from its default, but `Wrap` shows even though wrap is on
+by default.
 
 ## Horizontal scrolling
 
-Companion to wrap-off mode: `Left` / `Right` pan the viewport horizontally by 8 columns per press
-(`less -S` feel). Active only when wrap is off — wrap-on makes Left/Right inert because content is
-already fully visible. The gutter does not pan; it stays anchored to the left edge.
+When wrap is off, `Left` and `Right` pan the viewport horizontally by 8 columns per press, like
+`less -S`. When wrap is on, `Left` and `Right` do nothing, because all the content is already
+visible. The gutter doesn't pan. It stays at the left edge.

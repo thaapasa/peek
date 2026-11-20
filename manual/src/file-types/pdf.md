@@ -1,53 +1,84 @@
-# PDF & Adobe Illustrator
+# PDF and Adobe Illustrator
 
-`.pdf` files use [Pdfium](https://pdfium.googlesource.com/pdfium/) (Google's PDF library,
-dynamically loaded from `libpdfium.*` shipped alongside peek — no system install needed).
+peek opens `.pdf` files with [Pdfium](https://pdfium.googlesource.com/pdfium/), the PDF library from
+Google. peek loads Pdfium at run time from the `libpdfium.*` file that ships with peek, so you don't
+need to install it on your system.
 
-`.ai` files (Adobe Illustrator, 2005 onwards) are PDF documents internally, so they open through the
-same modes — the Info section just labels them "Adobe Illustrator". Older PostScript-only
-Illustrator files are not supported. A few `.ai` files keep their artwork only in
-Illustrator-private data behind a blank visible PDF page; those render empty (Preview and QuickLook
-show them blank too).
+`.ai` files from Adobe Illustrator 2005 and later are PDF documents inside, so they open in the same
+modes. The only difference is that the Info section labels them as `Adobe Illustrator`. peek doesn't
+support older Illustrator files that contain only PostScript.
+
+A few `.ai` files keep their artwork only in private Illustrator data, behind a blank visible PDF
+page. These files render empty in peek. Preview and Quick Look also show them blank.
 
 ## Modes
 
-Cycled with Tab:
+To cycle through the modes, press Tab.
 
-- **Read** (default) — paged image render. Each page is rasterized via Pdfium and ASCII-rendered
-  through the shared image pipeline. `n` / `p` step pages; the status line shows `page X/Y`. Zoom /
-  pan via the standard keys ([Zoom & pan](../viewer/zoom-pan.md)). Per-page cache keyed by terminal
-  size + render settings; resize or mode cycling re-renders only the visible page.
+### Read
 
-  `o` toggles the **reconstructed-text overlay**: real words from the PDF's text layer are written
-  over the rendered glyph cells at their page positions, so zooming to roughly one text line per
-  terminal row turns the pixel mush into readable sentences (around 2× zoom for a typical A4 page at
-  full terminal width). Each word is centered in its rendered box and cropped to fit; when zoomed
-  far past 1:1 the word floats inside its (now huge) rendered letters instead of blanking them.
-  Words rendered much smaller than a terminal cell are left alone — zoom in until lines stop
-  colliding. The status line shows `text` while the overlay is active. Only offered when the
-  document has a text layer.
+**Read** is the default mode. It shows a paged image render. peek rasterizes each page with Pdfium
+and renders it as ASCII through the shared image pipeline.
 
-  <!-- peek-skip -->
+- To step to the next or previous page, press `n` or `p`. The status line shows `page X/Y`.
+- To zoom and pan, use the standard keys. For details, see [Zoom and pan](../viewer/zoom-pan.md).
 
-  ![A PDF page rendered as ASCII glyph cells with real words overlaid from the text layer](../img/pdf-render.webp)
+peek caches each rendered page by terminal size and render settings. When you resize the terminal or
+cycle the image mode, peek renders only the visible page again.
 
-  _The Read view with the reconstructed-text overlay (`o`): rasterized page cells underneath, the
-  PDF's own words written over them at their page positions._
+To turn the **reconstructed-text overlay** on or off, press `o`. The overlay writes the real words
+from the PDF's text layer over the rendered glyph cells, at their positions on the page. When you
+zoom in until each text line takes about one terminal row, the blurred pixels turn into readable
+sentences. For a typical A4 page at full terminal width, this happens at about 2× zoom.
 
-  <!-- /peek-skip -->
+- peek centers each word in its rendered box and crops the word to fit.
+- When you zoom far past 1:1, the word floats inside its rendered letters, which are now large,
+  instead of covering them.
+- peek doesn't overlay words that render much smaller than a terminal cell. To see them, zoom in
+  until the lines stop colliding.
 
-- **Text** — width-wrapped text extraction across the whole document, separated by muted
-  `--- Page N ---` markers. Present only when the document has a text layer; image-only scans and
-  outlined-vector artwork (`.ai`) have none, so the tab is omitted rather than shown empty.
-- **Embeds** — listing of every extractable inner item. Covers `/EmbeddedFiles` attachments
-  (`attachments/<name>`) and per-page inline image XObjects (`pages/page{N}/image{M}.{ext}`).
-  `Enter` / `e` extracts the selected entry as a memory-backed source that re-enters peek (an
-  attached CSV opens in a CSV view, an inline image renders as ASCII art, …). Hidden when the PDF
-  has neither attachments nor inline images.
-- **Info** — PDF version, title, author, subject, keywords, description, creation / modification
-  dates, page count, attachment count, inline-image count, and an encrypted flag when set.
+While the overlay is on, the status line shows `text`. peek offers the overlay only when the
+document has a text layer.
 
-Print mode (`--print`) walks every page in order separated by blank lines. `cat file.pdf | peek`
-detects the `%PDF-` magic and routes through the PDF mode stack.
+<!-- peek-skip -->
 
-Encrypted / password-protected PDFs surface the open error in the Info section instead of crashing.
+![A PDF page rendered as ASCII glyph cells with real words overlaid from the text layer](../img/pdf-render.webp)
+
+_The Read view with the reconstructed-text overlay (`o`). The rasterized page cells are underneath,
+and the PDF's own words are written over them at their page positions._
+
+<!-- /peek-skip -->
+
+### Text
+
+**Text** shows the text of the whole document, wrapped to the terminal width. Muted `--- Page N ---`
+markers separate the pages. This mode appears only when the document has a text layer. Scanned
+documents that contain only images and outlined vector artwork (`.ai`) have no text layer, so peek
+leaves out the tab instead of showing it empty.
+
+### Embeds
+
+**Embeds** lists every inner item that you can extract:
+
+- Attachments in `/EmbeddedFiles`, listed as `attachments/<name>`.
+- Inline image XObjects on each page, listed as `pages/page{N}/image{M}.{ext}`.
+
+To extract the selected entry, press `Enter` or `e`. peek opens the extracted item from memory in a
+new peek view. For example, an attached CSV file opens in a CSV view, and an inline image renders as
+ASCII art. peek hides this mode when the PDF has no attachments and no inline images.
+
+### Info
+
+**Info** shows the PDF version, title, author, subject, keywords, description, creation date,
+modification date, page count, attachment count, and inline image count. If the PDF is encrypted,
+Info also shows an encrypted flag.
+
+## Print mode and pipes
+
+In print mode (`--print`), peek writes every page in order, with blank lines between pages.
+
+When you pipe a PDF to peek, as in `cat file.pdf | peek`, peek detects the `%PDF-` magic bytes and
+opens the PDF modes.
+
+If a PDF is encrypted or protected by a password, peek doesn't crash. The Info section shows the
+error from opening the file instead.

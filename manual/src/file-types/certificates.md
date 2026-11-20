@@ -1,58 +1,88 @@
 # Certificates and keys
 
-Certificate and key files open with a rich **Info** sidecar that decodes the cryptographic material:
-X.509 certificates, certificate signing requests (CSRs), certificate revocation lists (CRLs),
-private keys (RSA / EC / Ed25519 / DSA / PKCS#8), public keys, OpenSSH public-key files (`.pub`),
-and JSON Web Keys. The source view depends on the container: PEM shows its text, a JWK shows the
-pretty-printed JSON, and raw DER is binary so it gets the Info sidecar and the
-[hex dump](./binary.md) only.
+Certificate and key files open with a detailed **Info** sidecar that decodes the cryptographic
+material. peek decodes these kinds of files:
 
-A PEM file may contain many entries — a fullchain bundle, for example, holds one or more
-certificates plus an intermediate. A JWK Set holds one key per `keys` member; a DER file is a single
-entry. Every entry is decoded and rendered as its own block in the Info section.
+- X.509 certificates
+- Certificate signing requests (CSRs)
+- Certificate revocation lists (CRLs)
+- Private keys, such as RSA, EC, Ed25519, DSA, and PKCS#8 keys
+- Public keys
+- OpenSSH public-key files (`.pub`)
+- JSON Web Keys (JWK)
+
+The source view depends on the container format. For a PEM file, it shows the text. For a JWK, it
+shows the pretty-printed JSON. Raw DER is binary, so a DER file gets only the Info sidecar and the
+[hex dump](./binary.md).
+
+A PEM file can contain many entries. For example, a full-chain bundle holds one or more certificates
+and an intermediate certificate. A JWK Set holds one key for each `keys` member. A DER file holds a
+single entry. peek decodes every entry and shows it as its own block in the Info section.
 
 ## Detection
 
-- **By extension** — `.pem` / `.csr` / `.crl` / `.key` / `.p7b` / `.p7c` / `.pub` (PEM), `.der`
-  (DER), `.jwk` / `.jwks` (JWK).
-- **By content** — anything that starts with `-----BEGIN ` (any label, PEM), an OpenSSH algorithm
-  prefix (`ssh-rsa`, `ssh-ed25519`, `ecdsa-sha2-…`, including the FIDO/U2F `sk-*` variants), a
-  binary DER certificate, or a JSON object whose `kty` is a known key type.
+peek detects these files in two ways:
 
-`.crt` and `.cer` are intentionally _not_ routed by extension because they carry _either_ encoding.
-A PEM-encoded one is picked up by the `-----BEGIN ` sniff; a DER-encoded one is recognised when its
-bytes decode as an X.509 certificate. (DER carries no label, so peek tries certificate, then CRL,
-CSR, and key in turn.) A JWK saved as `.json` keeps the generic JSON view — the JWK content sniff
-only applies to `.jwk` / `.jwks`, stdin, and extension-less files.
+- **By extension**:
+  - PEM: `.pem`, `.csr`, `.crl`, `.key`, `.p7b`, `.p7c`, and `.pub`
+  - DER: `.der`
+  - JWK: `.jwk` and `.jwks`
+- **By content**:
+  - PEM: any file that starts with `-----BEGIN `, with any label
+  - OpenSSH: a file that starts with an algorithm prefix, such as `ssh-rsa`, `ssh-ed25519`, or
+    `ecdsa-sha2-…`, including the FIDO U2F `sk-*` variants
+  - DER: a binary DER certificate
+  - JWK: a JSON object whose `kty` is a known key type
+
+peek doesn't detect `.crt` and `.cer` files by extension, because these files can use either
+encoding. peek picks up a PEM-encoded file by its `-----BEGIN ` prefix. It recognizes a DER-encoded
+file if the bytes decode as an X.509 certificate. DER carries no label, so peek tries to decode the
+file as a certificate, a CRL, a CSR, and a key, in that order.
+
+If you save a JWK as `.json`, it keeps the generic JSON view. peek checks the content for a JWK only
+in `.jwk` and `.jwks` files, standard input (stdin), and files without an extension.
 
 ## What you see
 
-Per entry, the Info section surfaces:
+For each entry, the Info section shows these details:
 
-- **X.509 certificate** — subject, issuer, serial, NotBefore / NotAfter, days remaining (painted as
-  a warning when ≤ 30 days; expired certs show as `expired N days ago`), public-key algorithm
-  - bits, signature algorithm, Subject Alternative Names (DNS / IP / email / URI), CA flag,
-    self-signed flag, key usage, extended key usage, SHA-1 and SHA-256 fingerprints.
-- **CSR (PKCS#10)** — subject, requested SANs, public-key algorithm + bits, signature algorithm.
-- **CRL** — issuer, This Update / Next Update, revoked entry count, signature algorithm.
-- **Private key** — label, key type (RSA / EC + curve / Ed25519 / DSA / opaque), bit size when
-  derivable. Encrypted (`ENCRYPTED PRIVATE KEY`) and `OPENSSH PRIVATE KEY` blocks show structural
-  info only — no password prompt.
-- **Public key** — label, key type, bit size (parsed from the SPKI envelope).
-- **SSH public key** — algorithm, bits, comment, SHA-256 fingerprint matching `ssh-keygen -l`.
-- **JSON Web Key** — type (RSA / EC / oct / OKP) and curve, bit size, algorithm, use, key
+- **X.509 certificate**:
+  - Subject, issuer, and serial number
+  - The validity period, NotBefore to NotAfter, and the days remaining. If 30 days or fewer remain,
+    peek paints the count as a warning. An expired certificate shows as `expired N days ago`.
+  - Public-key algorithm and key size in bits
+  - Signature algorithm
+  - Subject Alternative Names (SANs), which can be DNS names, IP addresses, email addresses, and
+    URIs
+  - CA flag and self-signed flag
+  - Key usage and extended key usage
+  - SHA-1 and SHA-256 fingerprints
+- **CSR (PKCS#10)**: subject, requested SANs, public-key algorithm and bits, and signature
+  algorithm.
+- **CRL**: issuer, This Update, Next Update, the number of revoked entries, and the signature
+  algorithm.
+- **Private key**: label, key type, and the bit size if peek can work it out. The key type is RSA,
+  EC with its curve, Ed25519, DSA, or opaque. For encrypted blocks (`ENCRYPTED PRIVATE KEY`) and
+  `OPENSSH PRIVATE KEY` blocks, peek shows only the structure. It doesn't ask for a password.
+- **Public key**: label, key type, and bit size. peek reads these from the Subject Public Key Info
+  (SPKI) envelope.
+- **SSH public key**: algorithm, bits, comment, and the SHA-256 fingerprint. The fingerprint matches
+  the output of `ssh-keygen -l`.
+- **JSON Web Key**: key type (RSA, EC, oct, or OKP) and curve, bit size, algorithm, use, key
   operations, key ID, and the RFC 7638 thumbprint.
 
-Decode failures don't suppress the rest of the section. A malformed block surfaces as a per-entry
-**Parse error** row so one bad PEM in a chain doesn't hide the others. Unrecognised PEM labels show
-as `Unknown` entries with the original label and the decoded DER body size.
+If an entry fails to decode, peek still shows the rest of the section. The broken entry gets a
+**Parse error** row, so one bad PEM block in a chain doesn't hide the others. If peek doesn't
+recognize a PEM label, it shows the entry as `Unknown`. The entry shows the original label and the
+size of the decoded DER body.
 
 ## Source view
 
-The default view is the PEM text — exactly what the file contains. Tab or `i` jumps to Info. Hex
-(`x`) is still available; for cert files it's rarely what you want, but it's there.
+For a PEM file, the default view is the PEM text, exactly as the file contains it. To jump to the
+Info view, press Tab or `i`. The hex view (`x`) is still available, though you rarely need it for a
+certificate file.
 
 ## Limitations
 
-PKCS#12 / PFX containers and encrypted PKCS#8 (password prompt) are not yet decoded. They're tracked
-as follow-up work.
+peek doesn't decode PKCS#12 and PFX containers yet. It also doesn't decode encrypted PKCS#8 keys,
+which need a password prompt. Both are planned work.

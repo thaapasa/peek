@@ -1,40 +1,44 @@
 # Operating modes
 
-peek runs in one of four output modes (plus `--extract` / `-x`, which writes a single inner item to
-disk or stdout):
+peek runs in one of four output modes. A fifth option, `--extract` or `-x`, writes a single inner
+item to disk or stdout.
 
-| Mode      | Trigger                           | Behavior                                                                                                         |
-| --------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Viewer    | Stdout is a TTY (default)         | Full-screen interactive viewer                                                                                   |
-| Print     | `--print`/`-p` or stdout is piped | Direct stdout, no interactivity                                                                                  |
-| Info-only | `--info`                          | Print metadata and exit                                                                                          |
-| List-only | `--list`                          | Print container TOC and exit (archives, ISOs, directories, PDF / EPUB / DOCX / ODT / RTF / audio / comic embeds) |
+| Mode      | Trigger                             | Behavior                                                                                                                        |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Viewer    | Stdout is a TTY (default)           | Full-screen interactive viewer                                                                                                  |
+| Print     | `--print`, `-p`, or stdout is piped | Direct stdout, no interactivity                                                                                                 |
+| Info-only | `--info`                            | Print metadata and exit                                                                                                         |
+| List-only | `--list`                            | Print the container TOC and exit. Works for archives, ISOs, directories, and PDF, EPUB, DOCX, ODT, RTF, audio, and comic embeds |
 
-Binary files default to the hex-dump viewer when interactive; piped binary streams a hex dump.
+In interactive mode, binary files open in the hex dump viewer by default. When you pipe a binary
+file, peek streams a hex dump.
 
 ## Input
 
-peek is a **single-file viewer**: at most one positional argument. To view several files, run peek
-once per file.
+peek is a **single-file viewer**. It takes at most one positional argument. To view several files,
+run peek once for each file.
 
-| Scenario         | Stdin is TTY                     | Stdin is piped            |
-| ---------------- | -------------------------------- | ------------------------- |
-| `peek` (no args) | Show short help                  | Read stdin, render        |
-| `peek -`         | Read stdin (blocks until Ctrl-D) | Read stdin, render        |
-| `peek file.rs`   | View file normally               | View file (stdin ignored) |
+| Scenario                 | Stdin is a TTY                     | Stdin is piped              |
+| ------------------------ | ---------------------------------- | --------------------------- |
+| `peek` with no arguments | Show short help                    | Read stdin, render          |
+| `peek -`                 | Read stdin, waiting until `Ctrl-D` | Read stdin, render          |
+| `peek file.rs`           | View the file normally             | View the file, ignore stdin |
 
-Stdin is auto-detected by magic bytes (images, binary) and content sniffing (JSON, YAML, XML, SVG,
-HTML). Plain text falls back to `--language` for syntax highlighting.
+peek detects the type of stdin automatically. It uses magic bytes for images and binary data, and
+content sniffing for JSON, YAML, XML, SVG, and HTML. For plain text, peek uses `--language` to
+choose the syntax highlighting.
 
-After consuming piped stdin, peek reopens the terminal so the interactive viewer's keyboard input
-still works.
+After peek reads piped stdin, it reopens the terminal so that keyboard input in the interactive
+viewer still works.
 
 ## Output
 
-- **Viewer**: full-screen, alt-screen, no scrollback pollution. Quit returns the terminal unchanged.
-- **Print**: streams to stdout. Safe to pipe into `less`, `grep`, `head`. Piped output is plain text
-  by default; `--color truecolor` keeps colors (see [Color modes](./viewer/colors.md)). `--plain` /
-  `-P` also drops pretty-printing and rich renders.
-- **`--info`**: prints the [file info screen](./viewer/info-screen.md) and exits.
-- **`--list`**: prints the container TOC and exits — works for archives, ISOs, directories, and
-  per-page / per-file embed listings in PDF / EPUB / DOCX / ODT / RTF / audio / comic files.
+- **Viewer**: peek uses the full screen in the terminal's alternate screen, so it leaves nothing in
+  the scrollback. When you quit, the terminal returns to its previous state.
+- **Print**: peek streams to stdout. You can safely pipe the output into `less`, `grep`, or `head`.
+  Piped output is plain text by default. To keep the colors, use `--color truecolor`. For details,
+  see [Color modes](./viewer/colors.md). `--plain` or `-P` also turns off pretty-printing and rich
+  renders.
+- **`--info`**: peek prints the [file info screen](./viewer/info-screen.md) and exits.
+- **`--list`**: peek prints the container TOC and exits. This works for archives, ISOs, directories,
+  and for the page and file embed listings of PDF, EPUB, DOCX, ODT, RTF, audio, and comic files.

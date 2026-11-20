@@ -25,7 +25,7 @@ jobs:
       - uses: actions/checkout@v5
 
       # Tools from mise.toml: Rust from rust-toolchain.toml, nightly rustfmt
-      # (postinstall hook), node, prettier, mdbook.
+      # (postinstall hook), node, prettier, mdbook, vale.
       - uses: jdx/mise-action@v5
 
       # rav1d (AVIF decode) assembles its x86 SIMD with nasm at build time.
@@ -46,6 +46,10 @@ jobs:
       - name: Check Markdown formatting
         if: runner.os == 'Linux'
         run: prettier --check --log-level warn "**/*.md"
+
+      - name: Check docs prose
+        if: runner.os == 'Linux'
+        run: mise run lint-prose
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings

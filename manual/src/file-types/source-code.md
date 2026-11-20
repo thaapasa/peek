@@ -1,15 +1,17 @@
 # Source code
 
-Source files render as syntax-highlighted text via [syntect](https://github.com/trishume/syntect)
-with [two-face](https://github.com/Enselic/two-face) / bat extended grammars — 100+ languages
-including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML, Dockerfile.
+peek shows source files as syntax-highlighted text. It uses
+[syntect](https://github.com/trishume/syntect) with the extended grammars from
+[two-face](https://github.com/Enselic/two-face), the same set that bat uses. These cover more than
+100 languages, including Rust, Python, JavaScript, TypeScript, C, C++, Java, Go, Ruby, Shell, TOML,
+and Dockerfile.
 
 ![Rust source rendered with syntax highlighting](../img/source-highlight.svg)
 
-_Highlighting applies automatically when you open a recognized source file; the theme follows the
-active [color theme](../viewer/themes.md)._
+_When you open a recognized source file, peek highlights it automatically. The highlight colors
+follow the active [color theme](../viewer/themes.md)._
 
-If detection misses, force a language with `-L`:
+If peek doesn't detect the language, set it with `-L`:
 
 ```sh
 cat script | peek -L bash
@@ -18,35 +20,50 @@ peek -L rust unknown_file
 
 ## Config files
 
-Config files highlight through the same path — `.ini`, `.cfg`, `.conf`, `.properties`, `.env`,
-`.hcl`, `.tf`, and by-name matches like `Makefile`, `Dockerfile`, `.gitignore`, and `.editorconfig`.
-A few filename special cases cover gaps where the extension misleads or is absent: `.env.local` /
-`.env.production` / `.envrc` highlight as `.env`, `justfile` uses the Makefile grammar, and
-`.dockerignore` uses the gitignore grammar. Formats with no grammar (`.dhall`, `.cue`) show as plain
-text.
+peek highlights config files the same way. These include `.ini`, `.cfg`, `.conf`, `.properties`,
+`.env`, `.hcl`, and `.tf` files. peek also matches files by name, such as `Makefile`, `Dockerfile`,
+`.gitignore`, and `.editorconfig`.
+
+Some file names have a misleading extension or none at all. peek handles a few of these as special
+cases:
+
+- `.env.local`, `.env.production`, and `.envrc` highlight as `.env`.
+- `justfile` uses the Makefile grammar.
+- `.dockerignore` uses the gitignore grammar.
+
+Formats without a grammar, such as `.dhall` and `.cue`, show as plain text.
 
 ## Line numbers
 
-Off by default. Enable at startup with `-n` / `--line-numbers`, or toggle with `l` in the viewer.
+Line numbers are off by default. To turn them on at startup, use `-n` or `--line-numbers`. To toggle
+them in the viewer, press `l`.
 
 ## Soft wrap
 
-On by default. Toggle with `w`. When off, `Left` / `Right` pan the viewport horizontally (`less -S`
-feel).
+Soft wrap is on by default. To toggle it, press `w`. When wrap is off, `Left` and `Right` pan the
+viewport horizontally, like `less -S`.
 
 ## SQL
 
-`.sql` / `.ddl` / `.dml` / `.psql` / `.pgsql` files render as highlighted source. The Info view adds
-an SQL section: dialect guess (PostgreSQL / MySQL / SQLite / T-SQL / generic), statement count
-broken down by category (DDL / DML / DQL / TCL / Other), inventories of created objects (tables,
-views, indexes, functions, triggers), comment-line count, and a flag when an inline `$$ … $$`
-PL/pgSQL block is present.
+peek shows `.sql`, `.ddl`, `.dml`, `.psql`, and `.pgsql` files as highlighted source. The Info view
+adds an SQL section with these details:
+
+- The dialect that peek guesses. It can be PostgreSQL, MySQL, SQLite, T-SQL, or generic.
+- The number of statements in each category. The categories are DDL, DML, DQL, TCL, and Other.
+- Lists of the objects that the file creates: tables, views, indexes, functions, and triggers.
+- The number of comment lines.
+- A flag that shows whether the file has an inline `$$ … $$` PL/pgSQL block.
 
 ## CSS
 
-`.css` files render as highlighted source. The Info view adds a CSS section: style-rule count (CSS
-nesting included), selector count with a per-kind histogram (class / id / element / pseudo /
-attribute / universal), custom-property count, `@media` and `@keyframes` counts, and an `@import`
-list — external URLs flagged. A Colors section shows the stylesheet's colour palette as block
-swatches, most-frequent first. Colour words inside selectors, strings, or comments are not mistaken
-for colours.
+peek shows `.css` files as highlighted source. The Info view adds a CSS section with these details:
+
+- The number of style rules, including nested rules.
+- The number of selectors, with a histogram by kind: class, ID, element, pseudo, attribute, and
+  universal.
+- The number of custom properties.
+- The number of `@media` and `@keyframes` rules.
+- A list of `@import` rules, with external URLs flagged.
+
+A Colors section shows the colors of the stylesheet as block swatches, with the most frequent color
+first. peek doesn't count color words inside selectors, strings, or comments as colors.

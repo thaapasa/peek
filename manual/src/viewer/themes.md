@@ -1,6 +1,6 @@
 # Themes
 
-Selectable via `--theme <name>` or `PEEK_THEME`. Default `idea-dark`.
+To select a theme, pass `--theme <name>` or set `PEEK_THEME`. The default is `idea-dark`.
 
 | Theme                | Description                           |
 | -------------------- | ------------------------------------- |
@@ -11,27 +11,30 @@ Selectable via `--theme <name>` or `PEEK_THEME`. Default `idea-dark`.
 | `vscode-dark-modern` | VS Code Dark Modern                   |
 | `vscode-dark-2026`   | VS Code Dark 2026                     |
 | `vscode-monokai`     | VS Code Monokai                       |
-| `iceberg`            | Iceberg — cold bluish dark            |
-| `iceberg-light`      | Iceberg Light — cold bluish light     |
+| `iceberg`            | Iceberg: cold bluish dark             |
+| `iceberg-light`      | Iceberg Light: cold bluish light      |
 | `graveyard`          | Gothic moonlit night                  |
 | `candy-floss`        | Pastel candy on dark plum             |
 | `victorian`          | Parlour parchment with oxblood        |
 
-With no `--theme` / `PEEK_THEME` set, the default adapts to your terminal: peek probes the terminal
-background (OSC 11) and picks `idea-light` on a light background, `idea-dark` on a dark one. Only
-when output is a terminal — piped output keeps the dark default. An explicit theme always wins.
+If you don't set `--theme` or `PEEK_THEME`, the default adapts to your terminal. peek queries the
+terminal background color with an OSC 11 (Operating System Command) escape sequence. On a light
+background, peek picks `idea-light`, and on a dark one, `idea-dark`. This only happens when the
+output is a terminal. Piped output keeps the dark default. A theme that you set explicitly always
+wins.
 
-Press `t` (or `T` for reverse) in the interactive viewer to cycle live. Cycling repaints the whole
-UI in the new theme — syntax-highlighted code, info screens, help, gradient logo, everything.
+To cycle themes live in the interactive viewer, press `t`. To cycle in reverse, press `T`. Cycling
+repaints the whole UI in the new theme, including syntax-highlighted code, info screens, help, and
+the gradient logo.
 
-The About screen (`a`) doubles as a theme showcase: cycling themes while on About previews how each
-one paints the full palette. The animated logo can be paused / resumed with `Space`.
+The About screen (`a`) doubles as a theme showcase. If you cycle themes while on About, you see how
+each theme paints the full palette. To pause or resume the animated logo, press `Space`.
 
-## How it works
+## How themes work
 
-Each theme is a TextMate `.tmTheme` embedded at compile time. Syntect uses it for syntax scopes;
-peek derives a set of semantic UI roles (`heading`, `label`, `value`, `accent`, `muted`, `warning`,
-`gutter`, `search_match`, `selection`) from the theme's settings + scopes, so non-code UI stays in
-keeping with the syntax colors.
+Each theme is a TextMate `.tmTheme` file that peek embeds at compile time. Syntect uses it for
+syntax scopes. From the theme's settings and scopes, peek also derives a set of semantic UI roles:
+`heading`, `label`, `value`, `accent`, `muted`, `warning`, `gutter`, `search_match`, and
+`selection`. This keeps the rest of the UI in line with the syntax colors.
 
-`--help --theme <name>` works as a theme preview — the help screen itself is themed.
+`--help --theme <name>` works as a theme preview, because the help screen itself uses the theme.

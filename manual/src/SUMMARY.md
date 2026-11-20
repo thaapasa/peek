@@ -2,14 +2,14 @@
 
 [Introduction](./introduction.md)
 
-# Getting Started
+# Getting started
 
 - [Installation](./installation.md)
 - [Quick start](./quick-start.md)
 - [Operating modes](./operating-modes.md)
 - [Keyboard shortcuts](./keyboard-shortcuts.md)
 
-# File Types
+# File types
 
 - [Overview](./file-types/index.md)
   - [Source code](./file-types/source-code.md)
@@ -19,14 +19,14 @@
   - [Email](./file-types/email.md)
   - [Calendar and contacts](./file-types/calendar-contacts.md)
   - [Structured data](./file-types/structured-data.md)
-  - [CSV / TSV](./file-types/csv.md)
+  - [CSV and TSV](./file-types/csv.md)
   - [SQLite databases](./file-types/sqlite.md)
   - [LMDB databases](./file-types/lmdb.md)
   - [Spreadsheets](./file-types/spreadsheets.md)
   - [Presentations](./file-types/presentations.md)
   - [Documents](./file-types/documents.md)
-  - [PDF & Illustrator](./file-types/pdf.md)
-  - [EPS & PostScript](./file-types/eps.md)
+  - [PDF and Illustrator](./file-types/pdf.md)
+  - [EPS and PostScript](./file-types/eps.md)
   - [Ebooks](./file-types/ebooks.md)
   - [Images](./file-types/images.md)
   - [SVG](./file-types/svg.md)
@@ -50,11 +50,11 @@
 - [Help and about](./viewer/help-about.md)
 - [Themes](./viewer/themes.md)
 - [Color modes](./viewer/colors.md)
-- [Line numbers & wrap](./viewer/line-numbers-wrap.md)
-- [Zoom & pan](./viewer/zoom-pan.md)
+- [Line numbers and wrap](./viewer/line-numbers-wrap.md)
+- [Zoom and pan](./viewer/zoom-pan.md)
 - [Extraction](./viewer/extraction.md)
 
 # Reference
 
-- [CLI options](./cli-reference.md)
+- [Command-line options](./cli-reference.md)
 - [Environment variables](./environment.md)

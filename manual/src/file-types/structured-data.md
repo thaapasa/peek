@@ -10,28 +10,32 @@
 | TOML       | `.toml`             |
 | XML        | `.xml`              |
 
-## Pretty vs raw
+## Pretty and raw views
 
-Two sub-modes, toggled with `r` (or `--raw` on the CLI):
+Structured data has two views. To toggle between them, press `r`. To start in the raw view, use
+`--raw` on the command line.
 
-- **Pretty** (default for JSON / JSONL / YAML / TOML / XML) — reformatted, with syntax highlighting.
-- **Raw** — verbatim source, still highlighted unless `--plain` / `-P` is set.
+- **Pretty** shows the reformatted data, with syntax highlighting. This is the default for JSON,
+  JSON Lines, YAML, TOML, and XML.
+- **Raw** shows the source exactly as it's written. peek still highlights it, unless you set
+  `--plain` or `-P`.
 
 <!-- peek-skip -->
 
 ![A JSON-with-comments file syntax-highlighted, comments and all](../img/structured-data.svg)
 
-_Keys, strings, numbers, and booleans each colored — comments preserved, source formatting intact
-(JSONC defaults to raw rather than pretty)._
+_Keys, strings, numbers, and Booleans each have their own color. The comments and the source
+formatting stay intact, because JSONC defaults to the raw view instead of the pretty view._
 
 <!-- /peek-skip -->
 
-JSONC and JSON5 default to **raw** because the pretty path collapses comments and JSON5 syntax;
-press `r` to opt into strict-JSON pretty when needed.
+JSONC and JSON5 default to the **raw** view, because the pretty view drops comments and JSON5
+syntax. To switch to the strict-JSON pretty view, press `r`.
 
-JSON Lines pretty: each non-empty line round-trips through `serde_json` separated by a blank line.
+In the pretty view of a JSON Lines file, peek passes each non-empty line through `serde_json` and
+puts a blank line between the results.
 
 ## Info view
 
-Top-level kind, key/element count, max nesting depth, total node count. For XML, the root element
-name and declared namespaces.
+The Info view shows the top-level kind, the key or element count, the maximum nesting depth, and the
+total node count. For XML, it also shows the root element name and the declared namespaces.

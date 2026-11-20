@@ -1,38 +1,46 @@
-# SVG animation: performance findings + optimization options
+# SVG animation: performance findings and optimization options
 
-> **Status: planning notes (active).** Working doc for the SVG-animation perf queue — measurements +
-> proposed optimizations, not a description of shipped behaviour. Move to `docs/archived/` once the
-> queue drains.
+> **Status: planning notes (active).** This is a working doc for the queue of SVG animation
+> performance work. It holds measurements and proposed optimizations. It doesn't describe shipped
+> behavior. Move it to `docs/archived/` when the queue is empty.
 
-Phase-1 status notes for `types/image/pipeline/svg_anim/` + `types/svg/animation_mode.rs`. Numbers
-measured against `~/Downloads/demo.svg` (termsvg recording, 1550×928.4 viewport, 55 keyframe stops
-over 14.586s, `steps(1, end)` timing) on a 131×40 terminal. Release build.
+These are phase 1 status notes for `types/image/pipeline/svg_anim/` and
+`types/svg/animation_mode.rs`. The numbers come from a release build on a 131×40 terminal. The test
+file was `~/Downloads/demo.svg`, a termsvg recording with these properties:
+
+- A 1550×928.4 viewport
+- 55 stops in its `@keyframes` rule, over 14.586 seconds
+- `steps(1, end)` timing
 
 ## Memory profile
 
-| State                          | RSS     | Notes                                                 |
-| ------------------------------ | ------- | ----------------------------------------------------- |
-| `peek <bitmap.png>` (baseline) | ~27 MB  | Glyph atlas + syntect + theme + image decode          |
-| `peek <demo.svg>` cold start   | ~40 MB  | + `fontdb::load_system_fonts()` (font metadata index) |
-| Demo, after ~2 frames rendered | ~100 MB | LRU partially populated                               |
-| Demo, after 1 full loop        | ~200 MB | LRU full: 55 frames × ~3 MB                           |
-| Demo, replay (steady state)    | ~200 MB | All hits, no allocations                              |
+The table shows the resident set size (RSS) in each state.
 
-`fontdb::load_system_fonts()` is unavoidable — without it `<text>` glyphs drop to nothing. Cost is
-one-time at first SVG parse and shared across all rasterizations via
+| State                          | RSS     | Notes                                                    |
+| ------------------------------ | ------- | -------------------------------------------------------- |
+| `peek <bitmap.png>` (baseline) | ~27 MB  | Glyph atlas, syntect, theme, and image decode            |
+| `peek <demo.svg>` cold start   | ~40 MB  | Adds `fontdb::load_system_fonts()` (font metadata index) |
+| Demo, after ~2 frames rendered | ~100 MB | LRU cache partly filled                                  |
+| Demo, after 1 full loop        | ~200 MB | LRU cache full: 55 frames × ~3 MB                        |
+| Demo, replay (steady state)    | ~200 MB | All cache hits, no allocations                           |
+
+The frame cache is a least recently used (LRU) cache.
+
+You can't avoid `fontdb::load_system_fonts()`. Without it, `<text>` glyphs render as nothing. The
+cost comes once, at the first SVG parse. All rasterizations share the result through an
 `OnceLock<Arc<fontdb::Database>>` in `types/image/pipeline/svg.rs`.
 
 ### Cache size formula
 
-For a `cols × rows` cell grid with `Full` / `Block` / `Geo` / `Contour` modes, prepared image pixels
-= `cols * 8` × `rows * 16`. RGBA = 4 bytes.
+For a grid of `cols × rows` cells in the `Full`, `Block`, `Geo`, and `Contour` modes, the prepared
+image is `cols * 8` × `rows * 16` pixels. Each RGBA pixel takes 4 bytes.
 
 ```
 bytes_per_frame ≈ cols * rows * 8 * 16 * 4 = cols * rows * 512
 ```
 
-Times two (raw + composited intermediate held by `PreparedImage`): real working set is ~2× that.
-Plus marker-substituted SVG strings, which are GC'd promptly.
+`PreparedImage` holds both the raw image and a composited intermediate, so the real working set is
+about twice that. The marker-substituted SVG strings add to this, but they're freed promptly.
 
 | Term size | Per-frame | LRU=64 total |
 | --------- | --------- | ------------ |
@@ -41,114 +49,125 @@ Plus marker-substituted SVG strings, which are GC'd promptly.
 | 200×60    | ~6 MB     | ~370 MB      |
 | 300×80    | ~12 MB    | ~770 MB      |
 
-LRU is currently bound by **frame count**, not bytes. Big terminal + many-frame animation can
-balloon RSS.
+The LRU cache is bounded by **frame count**, not by bytes. A big terminal and an animation with many
+frames can make the RSS balloon.
 
 ## First-loop cost
 
-User-visible: first iteration of demo is **noticeably slow**, even on release builds. Each
-cache-miss frame costs ~50-200 ms depending on visible text density.
+The user sees the first iteration of the demo run **noticeably slowly**, even in release builds.
+Each frame that misses the cache costs about 50–200 ms, depending on how much text is visible.
 
-Per-frame cost breakdown (top-down):
+The cost of each frame breaks down like this, from the top:
 
-1. **Marker substitution** (`render_frame`): cheap. Two `String::replace` passes per target on a ~58
-   KB string. Sub-millisecond.
-2. **`usvg::Tree::from_data`**: reparses the entire SVG every frame. Tokenization + DOM build + CSS
-   resolution + per-`<text>`-element font shaping. Demo has hundreds of `<text>` elements (one per
-   terminal cell of typed output) → text shaping dominates here.
-3. **`resvg::render`** → `tiny_skia` rasterization at full pixel resolution. Off-pixmap content is
-   naturally clipped (cheap), but visible glyphs are individually rasterized.
-4. **`prepare_decoded`**: margin pad + Lanczos resize is skipped for SVG (we rasterize at the target
-   size directly), so this is just the alpha composite against the background.
-5. **`render_prepared`**: glyph-cell matching pass (`Full` mode runs `best_glyph` per cell against
-   the prepared atlas). Linear in cells, fast.
+1. **Marker substitution** (`render_frame`) is cheap. It runs two `String::replace` passes for each
+   target on a string of about 58 KB, and takes less than a millisecond.
+2. **`usvg::Tree::from_data`** parses the whole SVG again for every frame. That covers tokenization,
+   building the document object model (DOM), resolving CSS, and shaping the font for each `<text>`
+   element. The demo has hundreds of `<text>` elements, one for each terminal cell of typed output,
+   so text shaping dominates this step.
+3. **`resvg::render`** rasterizes with `tiny_skia` at full pixel resolution. Content outside the
+   canvas gets clipped, which is cheap, but each visible glyph is rasterized on its own.
+4. **`prepare_decoded`** does only the alpha composite against the background for SVG. It skips the
+   margin padding and the Lanczos resize, because peek rasterizes SVG directly at the target size.
+5. **`render_prepared`** runs the glyph matching pass over the cells. In `Full` mode, it runs
+   `best_glyph` for each cell against the prepared atlas. The cost is linear in the number of cells,
+   and the step is fast.
 
-Step 2 is the biggest target. resvg gives no incremental API: same SVG bytes → same parse work each
-call.
+Step 2 is the biggest target. resvg has no incremental API, so the same SVG bytes cost the same
+parse work on every call.
 
 ## Optimization options
 
-Ranked roughly by impact/effort. None are implemented.
+The options are ranked roughly by impact against effort. None of them is implemented.
 
 ### A. Byte-budget LRU (small, defensive)
 
-Currently `FRAME_CACHE = 64` (count). Replace with `MAX_CACHE_BYTES = 64 MB` (or similar), summing
-`cols * rows * 512 * 2` per entry. Evict from the front until under budget.
+Today `FRAME_CACHE = 64` sets a frame count. Replace it with a byte budget such as
+`MAX_CACHE_BYTES = 64 MB`, and count `cols * rows * 512 * 2` for each entry. Evict from the front
+until the cache is under budget.
 
-- **Impact**: caps memory regardless of terminal/anim size.
-- **Effort**: ~20 lines in `SvgAnimationMode::prepare_current`.
-- **Caveat**: tiny terminals get more cached frames (good); huge terminals fewer. Replay can become
-  non-free for big anims.
+- **Impact.** This caps memory, whatever the size of the terminal or the animation.
+- **Effort.** About 20 lines in `SvgAnimationMode::prepare_current`.
+- **Caveat.** Tiny terminals get more cached frames, which is good. Huge terminals get fewer. Replay
+  can stop being free for big animations.
 
 ### B. Background pre-rasterization (smooth first loop)
 
-Spawn a worker that walks the frame timeline ahead of the playhead and fills the LRU. The render
-thread keeps consuming live input; when the play cursor reaches a frame, it's already prepared.
+Start a worker that walks the frame timeline ahead of the playhead and fills the LRU cache. The
+render thread keeps reading live input. When the play cursor reaches a frame, the frame is already
+prepared.
 
-- **Impact**: hides the 50-200 ms per-frame cost behind idle time. First loop appears as smooth as
-  steady-state replay.
-- **Effort**: medium. Need a worker thread (`std::thread`), a way to push prepared frames back into
-  the cache without holding the mode's `&mut self` (mutex-wrapped cache or `crossbeam-channel`), and
-  cancellation when the user toggles fit/mode/background (cache wipe).
-- **Caveat**: doesn't reduce _total_ CPU, just shifts when it lands. Battery-powered users may
-  dislike this.
-- **Caveat**: terminal is interactive — need to avoid starving the input loop. Worker thread (not
-  blocking-poll) helps.
+- **Impact.** This hides the 50–200 ms cost of each frame behind idle time. The first loop looks as
+  smooth as steady-state replay.
+- **Effort.** Medium. It needs these parts:
+  - A worker thread (`std::thread`).
+  - A way to push prepared frames back into the cache without holding the mode's `&mut self`, such
+    as a cache wrapped in a mutex or a `crossbeam-channel`.
+  - Cancellation when the user toggles fit, mode, or background, which wipes the cache.
+- **Caveat.** This doesn't reduce the _total_ CPU work. It only moves when the work happens. Users
+  on battery power might dislike this.
+- **Caveat.** The terminal is interactive, so the worker must not starve the input loop. A worker
+  thread helps here, compared to a blocking poll.
 
-### C. Reuse parsed `usvg::Tree`, mutate transform per frame
+### C. Reuse the parsed `usvg::Tree` and change the transform for each frame
 
-The big structural fix. Today we generate a fresh SVG string per frame and call `Tree::from_data`.
-Instead:
+This is the big structural fix. Today peek builds a fresh SVG string for each frame and calls
+`Tree::from_data`. The fix works like this instead:
 
-1. Parse the **un-marked** SVG once into a `usvg::Tree`.
-2. Locate the animated subtree (the `<g transform="...">` we'd inject) in the tree post-parse.
-3. Per frame, mutate that node's transform; call `resvg::render`.
+1. Parse the **unmarked** SVG once into a `usvg::Tree`.
+2. After the parse, find the animated subtree in the tree. That's the `<g transform="...">` that
+   peek would inject.
+3. For each frame, change that node's transform and call `resvg::render`.
 
-usvg 0.47 exposes `Tree::root_mut()` and node transforms are mutable. Wrapping the animated
-element's children in a transformed `<g>` ourselves (at parse time) and stashing a handle to that
-`<g>` lets us update its transform without reparse.
+usvg 0.47 exposes `Tree::root_mut()`, and node transforms are mutable. At parse time, peek can wrap
+the children of the animated element in its own transformed `<g>` and keep a handle to that `<g>`.
+It can then update the transform without parsing again.
 
-- **Impact**: largest. Eliminates step 2 entirely after the first frame — text shaping is amortized
-  across all frames. Estimate 5-20× speedup per frame for text-heavy anims.
-- **Effort**: largest. Need to:
-  - Convert byte-marker injection to `usvg::Tree` post-parse mutation (or hand-craft a minimal SVG
-    mutation by inserting the wrap pre-parse, since usvg's tree mutation surface is small).
-  - Handle multi-target anims (multiple wrap nodes, multiple handles).
-  - Reconcile with the prepare_svg pipeline (which currently takes bytes; would need a
-    `prepare_svg_tree(&Tree, ...)` variant).
+- **Impact.** The largest. This removes step 2 completely after the first frame, so the cost of text
+  shaping is spread across all frames. The estimate is a 5–20× speedup per frame for animations with
+  a lot of text.
+- **Effort.** The largest. It needs these changes:
+  - Convert the byte-marker injection to a change of the `usvg::Tree` after the parse. The other
+    option is a minimal hand-written change that inserts the wrapper before the parse, because the
+    tree mutation API of usvg is small.
+  - Handle animations with many targets, which need many wrapper nodes and many handles.
+  - Fit this with the `prepare_svg` pipeline. That pipeline takes bytes today, so it would need a
+    `prepare_svg_tree(&Tree, ...)` variant.
 
-### D. Half-resolution rasterize, upscale to grid
+### D. Rasterize at half resolution and scale up to the grid
 
-ASCII-art output is heavily downsampled anyway (1048×624 px → 131×39 cells, ~25× area reduction in
-the glyph-match step). Rasterize at half resolution (524×312), then nearest/bilinear upscale to the
-prepared size before glyph match.
+The ASCII-art output is heavily downsampled anyway. A 1048×624 pixel image becomes 131×39 cells,
+which cuts the area about 25 times in the glyph matching step. Rasterize at half resolution
+(524×312), then scale up to the prepared size with nearest-neighbor or bilinear sampling before the
+glyph match.
 
-- **Impact**: ~4× speedup on rasterize step (step 3), partial on the expensive step 2 (text shaping
-  is resolution-independent in usvg, so no help there). Net ~1.5-2× per frame.
-- **Effort**: small. Add a render-quality knob in `ImageConfig`, rasterize at half size,
-  `image::imageops::resize`.
-- **Caveat**: visible quality drop on `Full` / `Geo` modes (less glyph detail). `Contour` and
-  `Ascii` mostly unaffected.
+- **Impact.** About 4× faster in the rasterize step (step 3). It doesn't help the expensive step 2,
+  because text shaping in usvg doesn't depend on resolution. The net gain is about 1.5–2× per frame.
+- **Effort.** Small. Add a render quality setting in `ImageConfig`, rasterize at half size, and
+  scale with `image::imageops::resize`.
+- **Caveat.** The quality drops visibly in the `Full` and `Geo` modes, which show less glyph detail.
+  The `Contour` and `Ascii` modes are mostly unaffected.
 
-### E. Eager full-cache precompute on open
+### E. Fill the whole cache when the file opens
 
-For animations with `frames < N`, precompute every frame at open time into the LRU before showing
-the first frame.
+For animations with `frames < N`, compute every frame into the LRU cache when the file opens, before
+the first frame shows.
 
-- **Impact**: shifts the slow first loop into a known startup pause. Some users prefer "wait 5s,
-  then smooth forever" over "stutter for 5s while watching".
-- **Effort**: tiny.
-- **Caveat**: `frames` can be large for `linear` timing. Requires a guard
-  (`frames * grid_bytes < budget` else skip).
+- **Impact.** The slow first loop turns into a known pause at startup. Some users prefer to wait 5
+  seconds and then get smooth playback, rather than watch 5 seconds of stutter.
+- **Effort.** Tiny.
+- **Caveat.** `frames` can be large with `linear` timing. This needs a guard that skips the
+  precompute unless `frames * grid_bytes < budget`.
 
 ## Recommended order
 
-If we revisit perf:
+If someone returns to this performance work, take the options in this order:
 
-1. **(A)** byte-budget LRU — defensive, prevents pathological cases on big anims/terminals.
-2. **(C)** Tree reuse — biggest single win on first-loop latency.
-3. **(B)** background pre-rasterize — polish on top of (C).
-4. **(D)** / **(E)** if (C) + (B) prove insufficient.
+1. **(A)** The byte-budget LRU cache. It's defensive and prevents pathological cases with big
+   animations or big terminals.
+2. **(C)** Tree reuse. It's the biggest single win for first-loop latency.
+3. **(B)** Background pre-rasterization. It's polish on top of (C).
+4. **(D)** or **(E)**, if (C) and (B) together aren't enough.
 
-(D) is a good standalone win for `Contour`/`Ascii` modes specifically, where the rasterize cost is
-paid for output that immediately gets quantized hard.
+(D) is a good win on its own for the `Contour` and `Ascii` modes in particular. In those modes, the
+rasterize cost goes into output that gets quantized hard right away.

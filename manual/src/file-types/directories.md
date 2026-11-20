@@ -1,29 +1,33 @@
 # Directories
 
-`peek <dir>` opens a one-level listing instead of erroring on "is a directory". Columns mirror the
-archive TOC view: permissions, size, mtime, name.
+When you run `peek <dir>`, peek opens a listing of that one directory level. It doesn't fail with an
+`is a directory` error. The columns match the archive TOC view: permissions, size, modification
+time, and name.
 
 <!-- peek-skip -->
 
-![The directory browser listing the peek project root, dirs first then files](../img/dir-browser.svg)
+![The directory browser listing the peek project root, directories first and then files](../img/dir-browser.svg)
 
-_Browsing the project root: directories first (trailing `/`), then files, with a synthetic `..` row
-to walk back up. `Enter` descends into the selected entry._
+_Browsing the project root. Directories come first, with a trailing `/`, and then files. A synthetic
+`..` row lets you walk back up. To descend into the selected entry, press `Enter`._
 
 <!-- /peek-skip -->
 
-Sorted dirs-first, then by case-insensitive name. A synthetic `..` row leads the list (suppressed at
-filesystem root) so the user can walk back up — selecting `..` canonicalizes the current path and
-re-targets to its parent. Walking back up lands the cursor on the subdirectory you came from rather
-than the top of the list, so stepping in and out of sibling directories stays put where you were.
+peek lists directories first and then files. Within each group, peek sorts by name and ignores case.
 
-| Key         | Action                                                                   |
-| ----------- | ------------------------------------------------------------------------ |
-| `Enter`     | Descend (file → push frame; directory → re-target current frame)         |
-| `Backspace` | Up to the parent directory (cursor lands on the directory you came from) |
-| `Esc`       | At a directory listing, exits peek                                       |
+A synthetic `..` row at the top of the list lets you walk back up. peek leaves it out at the file
+system root. When you select `..`, peek resolves the canonical form of the current path and opens
+its parent. The cursor then lands on the subdirectory you came from, not at the top of the list.
+This way, when you step in and out of sibling directories, you stay where you were.
 
-Hidden entries are included. Symlinks are followed for kind classification; broken symlinks still
-show as `l`, and other special files (sockets, FIFOs, devices) show as `?`.
+| Key         | Action                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| `Enter`     | Open the selected entry. A file opens in a new frame. A directory replaces the current listing. |
+| `Backspace` | Go up to the parent directory. The cursor lands on the directory you came from.                 |
+| `Esc`       | In a directory listing, exit peek.                                                              |
 
-`--print` and `--list` both render the listing.
+The listing includes hidden entries. peek follows symbolic links to find the kind of the target. A
+broken symbolic link still shows as `l`. Other special files, such as sockets, FIFOs, and devices,
+show as `?`.
+
+Both `--print` and `--list` render the listing.
