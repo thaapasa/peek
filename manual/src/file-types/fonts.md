@@ -1,8 +1,8 @@
 # Fonts
 
-TrueType and OpenType font files open into a **specimen view** — a sample sentence rasterised
-through the font and routed through peek's ASCII image pipeline — paired with a rich **Info**
-section that decodes every standard OpenType metadata table.
+TrueType and OpenType font files open in a **specimen view**. This view rasterizes a sample sentence
+through the font and renders it with peek's ASCII image pipeline. The **Info** section decodes every
+standard OpenType metadata table.
 
 ```sh
 peek Lobster-Regular.ttf
@@ -11,73 +11,83 @@ peek /System/Library/Fonts/Menlo.ttc
 
 ## Supported formats
 
-- `.ttf` — TrueType outline fonts
-- `.otf` — OpenType / CFF outline fonts
-- `.ttc` / `.otc` — TrueType / OpenType collections (multiple faces in one file)
-- `.woff` / `.woff2` — WOFF 1.0 / 2.0 web fonts (unwrapped to their inner font before display)
+| Extension         | Format                                                                  |
+| ----------------- | ----------------------------------------------------------------------- |
+| `.ttf`            | TrueType outline fonts                                                  |
+| `.otf`            | OpenType outline fonts, including Compact Font Format (CFF) outlines    |
+| `.ttc`, `.otc`    | TrueType and OpenType collections, which hold several faces in one file |
+| `.woff`, `.woff2` | Web Open Font Format (WOFF) 1.0 and 2.0 web fonts                       |
+
+peek unwraps a WOFF font to its inner font before it shows it.
 
 ## Detection
 
-- **By extension** — the four extensions above.
-- **By content** — 4-byte magic at offset 0: `00 01 00 00` (TrueType), `true` (Apple TrueType
-  variant), `OTTO` (OpenType / CFF), `ttcf` (collection). Unnamed sources (stdin, archive entries)
-  still classify.
+peek detects fonts in two ways:
+
+- **By extension:** the extensions in the preceding table.
+- **By content:** a 4-byte magic number at offset 0. The values are `00 01 00 00` for TrueType,
+  `true` for the Apple TrueType variant, `OTTO` for OpenType with CFF outlines, and `ttcf` for a
+  collection. Content detection also works for sources without a name, such as stdin and archive
+  entries.
 
 ## Specimen view
 
-The default open lands on a rasterised sample sentence. The current sampler is a hard-coded ASCII
-pangram plus digits, common punctuation, and a mixed-case alphabet line — enough to show baseline /
-x-height / cap height / descender shapes.
+When you open a font, peek shows a rasterized sample sentence. The sample is a fixed ASCII pangram
+with digits, common punctuation, and a mixed-case alphabet line. This text is enough to show the
+baseline, x-height, cap height, and descender shapes.
 
 ![Specimen view of the Great Vibes TrueType font rendered through peek's ASCII image pipeline](../img/font-render.webp)
 
 Every image-mode key works on the specimen:
 
-| Key | Action                                                  |
-| --- | ------------------------------------------------------- |
-| `m` | Cycle image mode (full / block / geo / ascii / contour) |
-| `b` | Cycle background (auto / black / white / checkerboard)  |
-| `f` | Cycle fit mode (contain / fit width / fit height)       |
+| Key | Action                                                              |
+| --- | ------------------------------------------------------------------- |
+| `m` | Cycle the image mode: `full`, `block`, `geo`, `ascii`, or `contour` |
+| `b` | Cycle the background: auto, black, white, or checkerboard           |
+| `f` | Cycle the fit mode: contain, fit width, or fit height               |
 
-Zoom / pan keys ([Zoom & pan](../viewer/zoom-pan.md)) work on the specimen as well.
+The zoom and pan keys also work on the specimen. For details, see
+[Zoom and pan](../viewer/zoom-pan.md).
 
-A font that the rasteriser can't parse silently falls through to the Info + Hex tail.
+If peek can't rasterize a font, peek shows no specimen and opens the Info and Hex views instead. It
+doesn't show an error.
 
 ## Font collections
 
-For `.ttc` / `.otc` files, `n` / `p` step the active face through the specimen in place. The status
-line shows `Face N/M` and updates as you cycle. The Info screen lists every face's metadata block
-separately — so a four-face Apple system font like `Menlo.ttc` shows the Regular, Bold, Italic, and
-Bold Italic variants in one screen.
+In a `.ttc` or `.otc` file, press `n` or `p` to step the specimen to the next or previous face. The
+status line shows `Face N/M` and updates as you cycle. The Info screen lists the metadata of each
+face in a separate block. For example, the four-face Apple system font `Menlo.ttc` shows the
+Regular, Bold, Italic, and Bold Italic variants on one screen.
 
 ## Info
 
-Per face, the **Font** section surfaces:
+For each face, the **Font** section shows the following:
 
-- **Identity** — family, subfamily (`Regular` / `Bold` / `Italic` / …), full name, Postscript name,
-  version.
-- **OS/2 classification** — weight (`100`..`900` with the canonical name shown alongside, e.g.
-  `400 (Regular)`, `700 (Bold)`), width class (`Normal`, `Condensed`, `Expanded`, …), italic flag,
-  monospaced pitch flag.
-- **Geometry** — glyph count, units per em (design grid resolution).
-- **Coverage** — Unicode codepoint count (summed across every cmap subtable), plus a script list
-  bucketed from cmap ranges: `Latin`, `Latin Extended`, `Greek`, `Cyrillic`, `Hebrew`, `Arabic`,
-  `Devanagari`, `Thai`, `Hangul`, `CJK`, `Emoji`, `Symbols`. The list reflects what glyphs the font
-  carries, not what scripts it claims to support.
-- **Rendering hints** — hinting-present flag (set when `head.flags` bit 0 is set).
-- **Attribution** — designer, vendor URL, copyright, license URL (each row is skipped when the name
-  table doesn't carry the field).
+- **Identity:** family, subfamily (such as `Regular`, `Bold`, or `Italic`), full name, PostScript
+  name, and version.
+- **OS/2 classification:** weight, width class (such as `Normal`, `Condensed`, or `Expanded`),
+  italic flag, and monospaced pitch flag. The weight is a value from `100` to `900`, shown with its
+  canonical name, such as `400 (Regular)` or `700 (Bold)`.
+- **Geometry:** glyph count, and units per em, which is the resolution of the design grid.
+- **Coverage:** the Unicode code point count, summed across every `cmap` subtable. The section also
+  lists scripts, grouped from the `cmap` ranges: `Latin`, `Latin Extended`, `Greek`, `Cyrillic`,
+  `Hebrew`, `Arabic`, `Devanagari`, `Thai`, `Hangul`, `CJK`, `Emoji`, and `Symbols`. The list shows
+  which glyphs the font contains, not which scripts it claims to support.
+- **Rendering hints:** a flag that shows whether the font has hinting. peek sets the flag when bit 0
+  of `head.flags` is set.
+- **Attribution:** designer, vendor URL, copyright, and license URL. peek skips each row when the
+  `name` table doesn't contain the field.
 
-Apple system fonts (Menlo, San Francisco, …) still ship their canonical name records on the
-Macintosh platform in Mac Roman; peek bundles the full Mac Roman upper-half mapping so `©` / `™` /
-accented Latin characters round-trip cleanly.
+Apple system fonts, such as Menlo and San Francisco, still store their canonical name records on the
+Macintosh platform in the Mac Roman encoding. peek includes the full mapping for the upper half of
+Mac Roman, so `©`, `™`, and accented Latin characters display correctly.
 
 ## What you don't see
 
-- The source view is omitted — fonts are binary containers, so the universal hex aux mode (`x`)
-  handles raw byte inspection.
-- The specimen sampler is hard-coded ASCII; multi-script samplers keyed on cmap coverage are
-  planned.
-- Faces in a `.ttc` cycle through the specimen in place; true recursive peek into a single face (its
-  own viewer frame) would need to synthesise a standalone SFNT from the TTC table directory, also
-  tracked as a follow-up.
+- Fonts have no source view. A font is a binary container, so to inspect the raw bytes, use the hex
+  view (`x`), which works for every file.
+- The specimen sample is fixed ASCII text. A planned change picks samples in other scripts from the
+  font's `cmap` coverage.
+- In a `.ttc` file, you cycle faces in place in the specimen. You can't open a single face in its
+  own viewer frame with a recursive peek. That needs peek to build a standalone `sfnt` font from the
+  TTC table directory. This is a planned follow-up.

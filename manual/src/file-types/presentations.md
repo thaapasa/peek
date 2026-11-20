@@ -1,45 +1,49 @@
 # Presentations
 
-`.pptx`, `.pptm`, `.ppsx` (PowerPoint / Office Open XML) and `.odp` (OpenDocument Presentation) open
-as **slide-by-slide text**. Apple Keynote (`.key`) opens as a **preview**.
+PowerPoint files in Office Open XML format (`.pptx`, `.pptm`, and `.ppsx`) and OpenDocument
+Presentation files (`.odp`) open as **text, one slide at a time**. Apple Keynote files (`.key`) open
+as a **preview**.
 
 ## PowerPoint and OpenDocument
 
 ### Modes
 
-Cycled with Tab:
+To switch between modes, press `Tab`:
 
-- **Read** (default) — one slide at a time. The slide title renders as a heading and the body text
-  below it, the same styled prose view documents use.
-- **TOC** — the deck's raw internal entries (a `.pptx` / `.odp` is a zip archive), browsable and
-  extractable like any archive.
-- **Info** — slide / word / image counts, plus document properties (title, author, subject,
-  keywords, dates, creating application) when the file records them.
+- **Read** is the default. It shows one slide at a time. The slide title shows as a heading, with
+  the body text below it. This is the same styled prose view that documents use.
+- **TOC** shows the table of contents of the file. A `.pptx` or `.odp` file is a ZIP archive, and
+  this view lists its raw internal entries. You can browse and extract them like any archive.
+- **Info** shows the slide, word, and image counts. If the file records them, it also shows the
+  document properties: title, author, subject, keywords, dates, and the app that created the file.
 
 ### Navigating slides
 
-`n` and `p` step to the next / previous slide; the status line shows `slide X/Y`. `/` searches the
-current slide's text (while a search is active, `n` / `p` step matches instead — `Esc` clears the
-search to get slide stepping back). `--print` writes every slide in order, separated by a blank
-line.
+To go to the next slide, press `n`. To go to the previous slide, press `p`. The status line shows
+`slide X/Y`.
 
-Embedded pictures appear as `[Image: name]` markers in the slide text. The pictures themselves
-aren't drawn inline, but they're listed in the **TOC** view and can be extracted or peeked into
-directly.
+To search the text of the current slide, press `/`. While a search is active, `n` and `p` step
+through matches instead of slides. To get slide stepping back, press `Esc` to clear the search.
+
+With `--print`, peek writes every slide in order, with a blank line between slides.
+
+Embedded pictures show as `[Image: name]` markers in the slide text. peek doesn't draw the pictures
+inline. They're listed in the **TOC** view, where you can extract them or peek into them directly.
 
 ## Keynote
 
-A `.key` file opens to its embedded **preview** — the deck thumbnail Keynote stores for QuickLook —
-rendered as an image with the usual zoom / pan / fit controls. The **TOC** view lists the package
-contents and **Info** shows the creating Keynote build.
+A `.key` file opens to its embedded **preview**. This is the deck thumbnail that Keynote stores for
+Quick Look. peek shows it as an image with the usual zoom, pan, and fit controls. The **TOC** view
+lists the contents of the package, and the **Info** view shows the Keynote build that created the
+file.
 
-Keynote stores its actual slide text in an undocumented internal format, so peek doesn't extract
-slide text from `.key` files — the preview and the file listing stand in.
+Keynote stores the slide text in an undocumented internal format, so peek doesn't extract slide text
+from `.key` files. The preview and the file listing take its place.
 
 ## Notes
 
-- Detection is by extension: like every Office / OpenDocument file these are zip archives, so a deck
-  with no extension opens as a plain archive instead.
-- `.key` shares its extension with PEM private keys; peek tells them apart by content (the Keynote
-  package is a zip, a key is text).
-- Legacy binary `.ppt` is not supported; use `.pptx` / `.odp`.
+- peek detects these files by their extension. Like every Office and OpenDocument file, they're ZIP
+  archives. A deck with no extension opens as a plain archive.
+- PEM private keys also use the `.key` extension. peek tells the two apart by their content: a
+  Keynote package is a ZIP archive, and a key is text.
+- peek doesn't support the legacy binary `.ppt` format. Use `.pptx` or `.odp` instead.

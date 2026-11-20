@@ -1,24 +1,25 @@
 # Comic archives
 
-| Format | Extension | Spec                                                                                      |
-| ------ | --------- | ----------------------------------------------------------------------------------------- |
-| CBZ    | `.cbz`    | [Comic book ZIP](https://en.wikipedia.org/wiki/Comic_book_archive) — a ZIP of page images |
+| Format | Extension | Spec                                                                                     |
+| ------ | --------- | ---------------------------------------------------------------------------------------- |
+| CBZ    | `.cbz`    | [Comic book ZIP](https://en.wikipedia.org/wiki/Comic_book_archive), a ZIP of page images |
 
 ## Modes
 
-Cycled with Tab:
+A comic archive has three modes. To cycle through them, press `Tab`.
 
-- **Read** (default) — one page at a time via the shared image pipeline. `n` / `p` step pages, the
-  status line shows `page X/Y`. Zoom / pan via the standard keys
-  ([Zoom & pan](../viewer/zoom-pan.md)). Per-page cache keyed by
-  `(cols, rows, style, image-mode, background, fit)`; resizing or cycling render settings re-renders
-  only the visible page.
-- **TOC** — the raw ZIP file tree. `Enter` opens any selected entry as a standalone file.
-- **Info** — format, page count, total uncompressed image bytes.
+- **Read** (default): shows one page at a time through the shared image pipeline.
+  - To step through pages, press `n` or `p`. The status line shows `page X/Y`.
+  - To zoom and pan, use the standard keys. For details, see [Zoom and pan](../viewer/zoom-pan.md).
+  - peek caches each page by the columns, rows, style, image mode, background, and fit mode. When
+    you resize the terminal or cycle a render setting, peek renders only the visible page again.
+- **TOC**: shows the raw ZIP file tree. To open the selected entry as a standalone file, press
+  `Enter`.
+- **Info**: shows the format, the page count, and the total uncompressed size of the images.
 
-Print mode walks every page in order separated by blank lines.
+In print mode, peek writes every page in order, with blank lines between them.
 
-Pages are detected by image extension (`png`, `jpg`, `jpeg`, `webp`, `gif`, `bmp`, `tif`, `tiff`),
-`__MACOSX/` entries are skipped, and the list is sorted by name.
+peek treats an entry as a page if it has an image extension: `png`, `jpg`, `jpeg`, `webp`, `gif`,
+`bmp`, `tif`, or `tiff`. peek skips `__MACOSX/` entries and sorts the pages by name.
 
-Other comic-archive containers (`.cbr` / `.cb7` / `.cbt`) are not supported.
+peek doesn't support other comic archive containers, such as `.cbr`, `.cb7`, or `.cbt`.

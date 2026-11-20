@@ -1,51 +1,54 @@
 # Jupyter notebooks
 
-`.ipynb` files are JSON documents of cells. peek renders the cells instead of dumping the raw JSON,
-with a dual view like Markdown:
+An `.ipynb` file is a JSON document made of cells. peek renders the cells instead of showing the raw
+JSON. Like Markdown, a notebook has more than one view:
 
-- **Rendered** (default) — the notebook is translated to a single Markdown document and rendered
-  through the Markdown pipeline:
-  - **Markdown cells** render as prose (headings, lists, emphasis, tables, …).
-  - **Code cells** show an `In [n]:` label and the source as a fenced block, syntax-highlighted in
-    the kernel language.
-  - **Outputs** appear under each code cell: `stdout` / `stderr` streams and `text/plain` results as
-    fenced text, `error` outputs as a bold `ename: evalue` line followed by the traceback (ANSI
-    colour stripped), and image outputs noted by name (matching the Blocks listing, e.g.
-    `image-1.png`).
+- **Rendered** is the default view. peek translates the notebook into a single Markdown document and
+  renders it the same way as a Markdown file.
+  - **Markdown cells** render as prose, with headings, lists, emphasis, tables, and so on.
+  - **Code cells** show an `In [n]:` label and the source as a fenced block. peek highlights the
+    source in the kernel language.
+  - **Outputs** appear under each code cell:
+    - `stdout` and `stderr` streams and `text/plain` results show as fenced text.
+    - An `error` output shows as a bold `ename: evalue` line, followed by the traceback. peek strips
+      the ANSI color codes from the traceback.
+    - An image output shows by name only. The name matches the one in the Blocks view, for example
+      `image-1.png`.
 
   <!-- peek-skip -->
 
   ![A notebook rendered with a markdown cell, a highlighted code cell, and its output](../img/notebook.svg)
 
-  _The rendered view: markdown prose, an `In [n]:` code cell highlighted in the kernel language, and
-  the cell's output below it._
+  _The rendered view shows Markdown prose, an `In [n]:` code cell highlighted in the kernel
+  language, and the cell's output below it._
 
   <!-- /peek-skip -->
 
-- **Source** — the raw notebook JSON, pretty-printed via the structured content mode. Reachable with
-  Tab; `r` toggles the raw (unformatted) JSON. Becomes the entry view with `--raw`.
-- **Blocks** — a flat table of contents listing every code cell and image output as an ordered
-  sequence with readable names (`code-1.py`, `image-1.png`, …) rather than the notebook's opaque
-  cell ids. From this view you can:
-  - **Extract** (`e`) the selected block — a code cell saves as its `.py` (or kernel-language)
-    source, an image saves as the decoded `.png` / `.jpg` / `.svg`. Same as
-    `peek --extract code-1.py notebook.ipynb`.
-  - **Descend** (Enter) into the block — peek recurses over an in-memory copy: code opens
-    syntax-highlighted, images render as ASCII art. `Esc` returns to the notebook.
-  - `peek --list notebook.ipynb` prints the block names and sizes to stdout.
+- **Source** shows the raw notebook JSON, pretty-printed in the same view as other structured data.
+  To reach it, press `Tab`. To toggle the raw, unformatted JSON, press `r`. To open the notebook in
+  this view, use `--raw`.
+- **Blocks** is a flat table of contents. It lists every code cell and image output in order, with
+  readable names such as `code-1.py` and `image-1.png` instead of the notebook's opaque cell IDs. In
+  this view, you can do the following:
+  - To extract the selected block, press `e`. A code cell saves as its source, as a `.py` file or
+    the kernel language's file type. An image saves as the decoded `.png`, `.jpg`, or `.svg` file.
+    This does the same as `peek --extract code-1.py notebook.ipynb`.
+  - To open the block, press `Enter`. peek opens an in-memory copy of it. Code opens with syntax
+    highlighting, and images render as ASCII art. To return to the notebook, press `Esc`.
+  - To print the block names and sizes to stdout, run `peek --list notebook.ipynb`.
 
-`--plain` drops the rendered view entirely.
+To turn off the rendered view, use `--plain`.
 
-Both nbformat 4 and the older nbformat-3 `worksheets` layout parse.
+peek parses both nbformat 4 and the older `worksheets` layout of nbformat 3.
 
-> In the rendered view, image outputs are noted by name (`🖼 image-1.png`), not drawn inline —
-> drawing them inside the scrolling text is a planned follow-up. To see an image now, open the
-> **Blocks** view and descend (Enter) into it.
+> The rendered view shows image outputs by name (`🖼 image-1.png`) and doesn't draw them inline.
+> Drawing them inside the scrolling text is a planned addition. To see an image now, open the
+> **Blocks** view, select the image, and press `Enter`.
 
-The Info view adds a Notebook section:
+The Info view adds a Notebook section with these fields:
 
-- nbformat version
-- Kernel display name and language (+ version)
-- Cell count, split into code / markdown / raw
-- Output count, with image / error sub-counts
-- Highest execution count
+- The nbformat version
+- The kernel's display name and language, plus the language version
+- The cell count, split into code, Markdown, and raw cells
+- The output count, with image outputs and errors also counted on their own
+- The highest execution count

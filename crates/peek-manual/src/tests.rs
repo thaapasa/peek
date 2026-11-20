@@ -156,9 +156,9 @@ mod toc {
         assert_eq!(src.name(0), "Introduction");
         assert_eq!(src.initial_selection(), Some(0));
 
-        let part = row_index(&src, "File Types");
+        let part = row_index(&src, "File types");
         let overview = row_index(&src, "Overview");
-        let csv = row_index(&src, "CSV / TSV");
+        let csv = row_index(&src, "CSV and TSV");
         assert_eq!(src.parent(overview), Some(part));
         assert_eq!(src.parent(csv), Some(overview));
         assert!(src.extract_target(part).is_none());
@@ -179,11 +179,11 @@ mod toc {
         let src = ManualTocSource::new();
         let theme = make_peek_theme(PeekThemeName::IdeaDark, StyleMode::Plain);
         let part = row_index(&src, "Reference");
-        let cli = row_index(&src, "CLI options");
+        let cli = row_index(&src, "Command-line options");
         assert_eq!(src.flat_line(part, &theme), None);
         assert_eq!(
             src.flat_line(cli, &theme).as_deref(),
-            Some("cli-reference.md\tCLI options")
+            Some("cli-reference.md\tCommand-line options")
         );
     }
 }

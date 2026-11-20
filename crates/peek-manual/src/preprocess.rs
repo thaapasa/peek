@@ -28,7 +28,7 @@ fn options() -> Options {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum SummaryItem {
-    /// `# File Types` part heading.
+    /// `# File types` part heading.
     Part(String),
     /// A chapter link. `depth` is the list nesting level (0 for top-level
     /// items and for prefix chapters outside any list).

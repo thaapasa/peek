@@ -1,28 +1,30 @@
 # Ebooks
 
-| Format | Extension | Spec                                                                                         |
-| ------ | --------- | -------------------------------------------------------------------------------------------- |
-| EPUB   | `.epub`   | [EPUB 3](https://www.w3.org/TR/epub-33/) — a ZIP container with HTML chapters + OPF metadata |
+| Format | Extension | Spec                                                                                          |
+| ------ | --------- | --------------------------------------------------------------------------------------------- |
+| EPUB   | `.epub`   | [EPUB 3](https://www.w3.org/TR/epub-33/), a ZIP container with HTML chapters and OPF metadata |
 
 ![An EPUB chapter rendered as flowed text through the shared HTML pipeline](../img/ebook-render.svg)
 
 ## EPUB
 
-Three views, cycled with Tab:
+An EPUB file has three views. To cycle through them, press `Tab`.
 
-- **Read** (default) — one chapter at a time via the shared HTML rendering pipeline (same
-  `html2text` driver as the standalone [HTML viewer](./html.md)). `n` / `p` step forward / back
-  through the spine; the status line shows `ch X/Y`. Each rendered chapter is cached at the current
-  width so stepping back is instant; a terminal resize re-renders only the visible chapter. `<img>`
-  tags with empty / missing `alt` get a fallback `image: <basename>` label. Cover-style chapters
-  (almost no text + at least one image) render the first image as ASCII inline, so `peek book.epub`
-  opens on the cover.
-- **TOC** — the raw ZIP file tree. Useful for inspecting cover images, stylesheets, or the OPF / NCX
-  metadata files. Recursive peek with `Enter` opens any selected entry.
-- **Info** — Dublin Core metadata from the OPF: title, author (`dc:creator`), language, publisher,
-  date, identifier, description, plus spine length.
+- **Read** (default): shows one chapter at a time through the shared HTML rendering pipeline. It
+  uses the same `html2text` driver as the standalone [HTML viewer](./html.md).
+  - To step forward or back through the spine, press `n` or `p`. The status line shows `ch X/Y`.
+  - peek caches each rendered chapter at the current width, so stepping back is instant. When you
+    resize the terminal, peek renders only the visible chapter again.
+  - If an `<img>` tag has an empty or missing `alt`, peek shows the fallback label
+    `image: <basename>`.
+  - A cover-style chapter has almost no text and at least one image. peek renders its first image
+    inline as ASCII, so `peek book.epub` opens on the cover.
+- **TOC**: shows the raw ZIP file tree. Use it to inspect cover images, stylesheets, or the OPF and
+  NCX metadata files. To open the selected entry in a recursive peek, press `Enter`.
+- **Info**: shows the Dublin Core metadata from the OPF file. This includes the title, author
+  (`dc:creator`), language, publisher, date, identifier, and description, plus the spine length.
 
-Print mode walks every chapter in spine order separated by blank lines, so `peek book.epub | less`
-renders the whole book.
+In print mode, peek writes every chapter in spine order, with blank lines between them. This means
+that `peek book.epub | less` shows the whole book.
 
-Other ebook containers (MOBI, AZW3, FB2) are not yet supported.
+peek doesn't support other ebook containers yet, such as MOBI, AZW3, or FB2.

@@ -1,31 +1,38 @@
 # Spreadsheets
 
-`.xlsx`, `.xlsm`, and `.ods` workbooks. A workbook is a set of named sheets, each a table, so peek
-opens it like a small database: a list of sheets you drill into.
+peek opens `.xlsx`, `.xlsm`, and `.ods` workbooks. A workbook is a set of named sheets, and each
+sheet is a table. peek opens a workbook like a small database: you see a list of sheets and open the
+one you want.
 
 ## Modes
 
-Cycled with Tab:
+To cycle through the modes, press `Tab`.
 
-- **Sheets** (default) — the workbook's sheets. `Enter` opens a sheet as an aligned table; `e` saves
-  a sheet to a CSV file.
-- **Files** — the workbook's raw internal entries (an `.xlsx` / `.ods` is a zip archive), browsable
-  and extractable like any archive.
-- **Info** — sheet count and names, plus document properties (title, author, dates) when the file
-  records them.
+- **Sheets** is the default view. It lists the workbook's sheets.
+  - To open a sheet as an aligned table, press `Enter`.
+  - To save a sheet to a CSV file, press `e`.
+- **Files** shows the raw entries inside the workbook. An `.xlsx` or `.ods` file is a zip archive,
+  so you can browse and extract these entries like in any archive.
+- **Info** shows the sheet count and names. If the file records them, the view also shows document
+  properties such as the title, author, and dates.
 
 ## Sheet table
 
-Opening a sheet shows the same aligned table view as CSV and SQLite: a sticky header row, horizontal
-panning with `Left` / `Right` when the table is wide, and `/` cell search across the whole sheet.
-Numeric columns right-align; text, dates, and booleans left-align. The first row is treated as a
-header when it looks like one; `Shift+H` toggles that.
+When you open a sheet, peek shows it in the same aligned table view as CSV and SQLite files:
 
-Formulas are not evaluated — peek shows the cached values stored in the file (the same values a
-spreadsheet app shows on open).
+- The header row stays in place while you scroll.
+- If the table is wider than the screen, you can pan it with `Left` and `Right`.
+- To search the cells of the whole sheet, press `/`.
+
+Numeric columns align to the right. Text, dates, and Boolean values align to the left. If the first
+row looks like a header, peek treats it as one. To toggle that, press `Shift+H`.
+
+peek doesn't evaluate formulas. It shows the cached values stored in the file, which are the same
+values a spreadsheet app shows when it opens the file.
 
 ## Notes
 
-- A sheet is loaded into memory when you open it (the spreadsheet libraries peek uses don't stream
-  sheet data). One sheet at a time — opening another releases the previous one.
-- Legacy binary `.xls` is not supported; use `.xlsx` / `.ods`.
+- peek loads a sheet into memory when you open it, because the spreadsheet libraries it uses don't
+  stream sheet data. It keeps one sheet in memory at a time. When you open another sheet, peek
+  releases the previous one.
+- peek doesn't support the legacy binary `.xls` format. Use `.xlsx` or `.ods` instead.

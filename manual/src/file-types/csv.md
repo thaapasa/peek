@@ -1,104 +1,120 @@
-# CSV / TSV
+# CSV and TSV
 
 | Format | Extensions |
 | ------ | ---------- |
 | CSV    | `.csv`     |
 | TSV    | `.tsv`     |
 
-peek renders CSV and TSV files as an **aligned table**: sticky header row at the top, body rows
-scrolled underneath, columns padded to a common width per column.
+peek shows CSV and TSV files as an **aligned table**. The header row stays at the top, and the body
+rows scroll underneath it. peek pads each column to a common width.
 
 <!-- peek-skip -->
 
 ![A CSV file shown as an aligned table with a header row and padded columns](../img/csv-table.svg)
 
-_Columns are measured and padded to a common width; numeric columns right-align. The header stays
-pinned as you scroll the body._
+_peek measures the columns and pads each one to a common width. Numeric columns align to the right.
+The header stays pinned as you scroll the body._
 
 <!-- /peek-skip -->
 
 ## View modes
 
-- **Table** (default) — aligned columns with sticky header.
-- **Source** — raw bytes through the text viewer.
-- **Info** — per-column type inference, record count, malformed counter.
+- **Table**: the default. Shows aligned columns with a sticky header.
+- **Source**: shows the raw bytes in the text viewer.
+- **Info**: shows the inferred type of each column, the record count, and a count of malformed
+  records.
 
-Tab cycles between them. `x` opens the hex view; `h` / `?` show the help screen.
+To cycle between the modes, press Tab. To open the hex view, press `x`. To show the help screen,
+press `h` or `?`.
 
 ## Column widths
 
-Widths seed from the first 1000 records on open. As the user scrolls, columns grow monotonically — a
-wider cell scrolling into view bumps its column once and the new width stays (the sticky header
-repaints with the new layout so column titles stay aligned with the body). Columns never shrink on
-their own.
+When you open a file, peek sets the column widths from the first 1000 records. As you scroll,
+columns only grow. When a wider cell scrolls into view, its column widens once and keeps the new
+width. The sticky header repaints with the new layout, so the column titles stay aligned with the
+body. Columns never shrink on their own.
 
-`Shift+R` reflows widths from the records currently visible in the viewport — the opt-in shrink. One
-deliberate press beats constant automatic churn.
+To shrink the columns, press `Shift+R`. peek then recalculates the widths from the records visible
+in the viewport. One deliberate key press is better than columns that keep changing width as you
+scroll.
 
-Cells wider than their column truncate with an ellipsis (`…`). The full value is visible in the
-Source view.
+If a cell is wider than its column, peek truncates it with an ellipsis (`…`). To see the full value,
+use the Source view.
 
 ## Column alignment
 
-Numeric columns (Int / Float only across the seed body) right-align so digits line up; everything
-else stays left-aligned. Alignment is inferred once from the seed and stays stable for the session —
-toggling the header doesn't reshuffle data alignment.
+If a column holds only integers and floating-point numbers in the first 1000 records, it aligns to
+the right so that the digits line up. All other columns align to the left. peek infers the alignment
+once from those records and keeps it for the whole session. If you toggle the header, the data
+alignment doesn't change.
 
 ## Multi-line cells
 
-CSV records may embed `\n` inside a quoted cell. peek collapses each such cell to a single visual
-row, replacing the embedded newline with a muted `↵` marker. Tabs become spaces and carriage returns
-are dropped — none of those characters can break the terminal cursor or push following columns onto
-the next row.
+A CSV record can contain a newline (`\n`) inside a quoted cell. peek shows each such cell on a
+single row and replaces the newline with a muted `↵` marker. Tabs become spaces, and peek drops
+carriage returns. This way, these characters can't move the terminal cursor or push the next columns
+onto the next row.
 
 ## Header detection
 
-Row 0 is treated as a header when every cell in row 0 looks like text (not int, float, bool, or ISO
-date). A typed cell in row 0 turns the heuristic off — clear signal that row 0 is data, not a label.
+peek treats row 0 as a header if every cell in it looks like text. A cell looks like text if it
+isn't an integer, a floating-point number, a Boolean, or an ISO date. If any cell in row 0 has one
+of these types, peek treats row 0 as data, not as a row of labels.
 
-`Shift+H` toggles the header on / off, overriding the heuristic. When off, row 0 is body data and
-the sticky region is empty.
+To turn the header on or off, press `Shift+H`. This overrides the detection. When the header is off,
+row 0 is part of the body and the sticky header area is empty.
 
 ## Horizontal pan
 
-If the table is wider than the terminal, `Left` / `Right` step one column at a time. The sticky
-header pans in lockstep with the body. The status bar shows `col N/total`.
+If the table is wider than the terminal, `Left` and `Right` move one column at a time. The sticky
+header moves together with the body. The status bar shows `col N/total`.
 
 ## Delimiter detection
 
-`.csv` defaults to comma, `.tsv` to tab. The first 64 KiB are sniffed for `,` / `\t` / `;` / `|`; if
-a non-default candidate outscores the default by 3× outside quoted spans, it overrides — covers
-misnamed files.
+The default delimiter is a comma for `.csv` files and a tab for `.tsv` files. peek also checks the
+first 64 KiB for commas, tabs, semicolons, and vertical bars (`,`, `\t`, `;`, and `|`). If another
+delimiter occurs more than 3 times as often as the default outside quoted text, peek uses it
+instead. This handles files with the wrong extension.
 
 ## Encoding
 
-UTF-8 is native. UTF-16 LE and UTF-16 BE inputs are detected by BOM and transparently transcoded to
-UTF-8 at the byte-source boundary. The transcode holds the whole file in memory (unlike the
-streaming UTF-8 path), so it is capped at 32 MB — a larger UTF-16 file opens with the raw Source
-view only, and a warning explains why the table view is missing.
+peek reads UTF-8 directly. It detects UTF-16 LE and UTF-16 BE files by their byte order mark (BOM)
+and converts them to UTF-8 as it reads them. Unlike UTF-8 files, which peek streams, the conversion
+holds the whole file in memory. For this reason, peek converts UTF-16 files of up to 32 MB only. A
+larger UTF-16 file opens in the Source view only, and a warning explains why the table view is
+missing.
 
 ## Malformed records
 
-A record that exceeds 4 MiB or spans more than 10 000 physical lines is treated as malformed
-(defends against unterminated quoted strings). The csv crate's per-record errors (column-count
-mismatch, bad quoting, bad UTF-8) fall into the same bucket.
+peek treats a record as malformed if it's larger than 4 MiB or spans more than 10 000 lines in the
+file. This limit protects against quoted strings that never end. Records that the `csv` crate
+rejects also count as malformed. Examples are a wrong number of columns, bad quoting, and invalid
+UTF-8.
 
-Malformed rows render as a single `<error>` cell painted in the theme's warning color, and the
-status bar shows the running malformed count.
+peek shows a malformed record as a single `<error>` cell in the theme's warning color. The status
+bar shows how many malformed records peek has found so far.
 
 ## Search
 
-`/` opens the search prompt. Matches are scoped to a single cell — a query that would span the comma
-between two columns yields nothing. Substring scan, smart-case (all-lowercase query →
-case-insensitive; any uppercase → case-sensitive). Search reaches past the loaded rows — peek pages
-through the records without loading them all into memory — but the scan is budgeted at 256 MB of
-record data per query so a multi-gigabyte CSV never freezes the viewer; a capped scan marks its
-counts as partial (`12/3400+`, `no match (partial scan)`) and raises a warning. `n` / `p` step
-through matches, wrapping at the ends; the viewport scrolls vertically and pans horizontally to
-bring each match's cell into view. `Esc` clears the search.
+To search, press `/`. Each match must fit inside a single cell, so a query that spans the comma
+between two columns finds nothing. The search finds substrings and uses smart case:
+
+- If the query is all lowercase, the search ignores case.
+- If the query has any uppercase letters, the search matches case.
+
+The search covers rows that peek hasn't loaded yet. peek reads through the records without loading
+them all into memory. To keep a multi-gigabyte CSV from freezing the viewer, peek scans at most 256
+MB of record data for each query. If the scan reaches this limit, peek marks the counts as partial,
+such as `12/3400+` or `no match (partial scan)`, and shows a warning.
+
+To step through the matches, press `n` for the next match and `p` for the previous one. The search
+wraps around at the ends. The viewport scrolls and pans so that the cell with the match is in view.
+To clear the search, press `Esc`.
 
 ## Print mode
 
-`peek --print foo.csv` (or piping into another tool) emits the table to stdout using the seed widths
-only — no auto-widen. A cell wider than its seeded column prints in full and pushes the rest of that
-row past the terminal edge (terminal clips); the next row realigns.
+If you run `peek --print foo.csv` or pipe the output into another tool, peek writes the table to
+standard output (stdout). It uses only the widths that it measured from the first 1000 records, and
+columns don't widen. If a cell is wider than its column, peek prints the full cell and the rest of
+that row moves to the right, past the edge of the terminal. The terminal cuts off the row at its
+edge. The next row is aligned again.

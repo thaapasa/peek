@@ -1,20 +1,22 @@
 # Binary
 
-For files peek doesn't have a specialized viewer for — firmware, unknown formats — the baseline is
-the [hex dump viewer](../viewer/hex-dump.md) plus a file info screen reachable via `i` / Tab.
+Some files have no specialized viewer in peek, such as firmware or unknown formats. For these files,
+peek offers the [hex dump viewer](../viewer/hex-dump.md) and a file info screen. To open the info
+screen, press `i` or `Tab`.
 
-(Executables — ELF, Mach-O, PE — and Java `.class` files have dedicated viewers; see
-[Object files](./object-files.md) and [Java classfiles](./classfiles.md).)
+Executables have dedicated viewers. This covers ELF, Mach-O, and PE files, and Java `.class` files.
+For details, see [Object files](./object-files.md) and [Java classfiles](./classfiles.md).
 
-Binary files default to the hex dump when interactive; piped binary streams a hex dump. The hex view
-is reachable from any file type with `x` — see [Hex dump](../viewer/hex-dump.md).
+When you view a binary file interactively, it opens in the hex dump. When you pipe a binary file,
+peek writes a hex dump to the output. To open the hex view from any file type, press `x`. For
+details, see [Hex dump](../viewer/hex-dump.md).
 
 ## File info
 
-For binary files without a dedicated viewer, the Info view shows:
+For a binary file without a dedicated viewer, the Info view shows the following:
 
-- File type / MIME (detected via magic bytes through the [infer](https://crates.io/crates/infer)
-  crate)
-- Size (exact bytes + human-readable)
-- Filesystem metadata (permissions, timestamps)
-- Detected binary format from magic (SQLite, video, firmware, …)
+- The file type and MIME type. peek detects them from the magic bytes, using the
+  [infer](https://crates.io/crates/infer) crate.
+- The size, both as an exact byte count and in human-readable form.
+- File system metadata, such as permissions and timestamps.
+- The binary format detected from the magic bytes, such as SQLite, video, or firmware.

@@ -1,26 +1,37 @@
 # Markdown
 
-`.md` / `.markdown` / `.mdown` / `.mkd` / `.mkdn` / `.mdwn` files get a dual view, same as HTML and
-PDF:
+Like HTML and PDF files, Markdown files have two views. peek treats files with these extensions as
+Markdown: `.md`, `.markdown`, `.mdown`, `.mkd`, `.mkdn`, and `.mdwn`.
 
-- **Rendered** (default) — pulldown-cmark drives a CommonMark + GFM walker that emits width-wrapped,
-  ANSI-styled text. Styled headings (with H1 / H2 underlines), bullet / ordered / task lists (`☐` /
-  `✓`), blockquote rail, horizontal rules, tables as box-drawing, fenced code blocks
-  syntect-highlighted by their declared language, emphasis / strong / strikethrough, inline code,
-  links (text underlined + dim URL after), images, and footnote references and definitions. YAML
-  (`---`) and TOML (`+++`) frontmatter render as a dim verbatim block at the top so the opening
-  fence doesn't get mistaken for a horizontal rule.
-- **Source** — syntax-highlighted markdown source via `ContentMode`. Reachable with Tab. Becomes the
-  entry view with `--raw`.
+- **Rendered** (default): peek uses pulldown-cmark to walk the CommonMark and GitHub Flavored
+  Markdown (GFM) structure and writes text that wraps to the terminal width and uses ANSI styles.
+  The rendered view supports these elements:
+  - Styled headings. H1 and H2 headings have an underline
+  - Bullet, ordered, and task lists, with `☐` and `✓` for tasks
+  - Blockquotes with a rail
+  - Horizontal rules
+  - Tables drawn with box-drawing characters
+  - Fenced code blocks, highlighted with syntect in their declared language
+  - Emphasis, strong, and strikethrough text
+  - Inline code
+  - Links, shown as underlined text followed by a dim URL
+  - Images
+  - Footnote references and definitions
 
-`--plain` drops the rendered view entirely.
+  YAML (`---`) and TOML (`+++`) frontmatter shows as a dim verbatim block at the top. This keeps the
+  opening fence from looking like a horizontal rule.
+
+- **Source**: the Markdown source with syntax highlighting, through `ContentMode`. To open it, press
+  `Tab`. With `--raw`, peek opens this view first.
+
+`--plain` removes the rendered view.
 
 <!-- peek-skip -->
 
 ![Markdown rendered with styled headings, a callout, and a table of contents](../img/markdown-render.svg)
 
-_The default rendered view: headings, emphasis, strikethrough, blockquotes, and tables styled inline
-rather than shown as raw markup._
+_The default rendered view styles headings, emphasis, strikethrough, blockquotes, and tables inline
+instead of showing the raw markup._
 
 <!-- /peek-skip -->
 
@@ -28,13 +39,13 @@ rather than shown as raw markup._
 You're reading this chapter in the rendered view.
 -->
 
-The Info view adds a Markdown section:
+The Info view adds a Markdown section with these details:
 
-- Heading counts by level (H1..H6)
-- Fenced code-block count + declared languages
-- Inline-code / link / image / table / list-item counts
-- Task-list progress (`done / total + percent`)
-- Blockquote lines, footnote definitions
-- Frontmatter detection (YAML / TOML)
-- Prose word count (excludes fenced code)
-- Reading-time estimate at 230 wpm
+- The number of headings at each level, H1 to H6
+- The number of fenced code blocks, and their declared languages
+- The number of inline code spans, links, images, tables, and list items
+- Task list progress as done, total, and percent
+- The number of blockquote lines and footnote definitions
+- Whether the file has YAML or TOML frontmatter
+- The prose word count, not counting fenced code
+- An estimated reading time at 230 words per minute

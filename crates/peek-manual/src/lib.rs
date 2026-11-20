@@ -29,7 +29,7 @@ pub const SOURCE_NAME: &str = "peek manual";
 
 /// One `SUMMARY.md` row.
 pub(crate) enum TocEntry {
-    /// Part heading (`File Types`).
+    /// Part heading (`File types`).
     Part(&'static str),
     Chapter(Chapter),
 }

@@ -1,55 +1,75 @@
 # Disk images
 
-| Format | Extension             | Spec                                                                      |
-| ------ | --------------------- | ------------------------------------------------------------------------- |
-| ISO    | `.iso`                | [ISO 9660](https://en.wikipedia.org/wiki/ISO_9660) (+ Joliet, El Torito)  |
-| DMG    | `.dmg`                | [Apple Disk Image — UDIF](https://en.wikipedia.org/wiki/Apple_Disk_Image) |
-| Raw    | `.img`, `.bin`, `.dd` | MBR partition table walk; no recognised filesystem header                 |
+| Format | Extension             | Spec                                                                         |
+| ------ | --------------------- | ---------------------------------------------------------------------------- |
+| ISO    | `.iso`                | [ISO 9660](https://en.wikipedia.org/wiki/ISO_9660) plus Joliet and El Torito |
+| DMG    | `.dmg`                | [Apple Disk Image, UDIF](https://en.wikipedia.org/wiki/Apple_Disk_Image)     |
+| Raw    | `.img`, `.bin`, `.dd` | Master Boot Record (MBR) partition table, no known file system header        |
 
-Both parsers are hand-rolled — no extra crate. Hex view (`x`) still works on the raw image bytes.
+peek has its own parsers for both ISO and DMG, so it needs no extra crate. The hex view (`x`) works
+on the raw image bytes for every format.
 
 ## ISO
 
-Opens to a TOC view: one row per file / directory with size, mtime, and 8.3 / Joliet name; depth
-tracked by indented tree glyphs. The walker reads the root directory extent from the PVD (or SVD
-when Joliet is present — preferred for longer Unicode names) and recurses through child extents.
-Bounded depth + entry caps defend against malformed images.
+An ISO image opens in a table of contents (TOC) view. Each file or directory has one row with its
+size, modification time, and 8.3 or Joliet name. Indented tree glyphs show the depth.
+
+peek reads the root directory extent from the Primary Volume Descriptor (PVD) and recurses through
+the child extents. When the image has Joliet extensions, peek reads the Supplementary Volume
+Descriptor (SVD) instead, because it holds longer Unicode names. Limits on depth and entry count
+protect against malformed images.
 
 <!-- peek-skip -->
 
 ![The interactive ISO browser showing a multi-level directory tree](../img/iso-browser.svg)
 
-_The same interactive TOC browser as archives — here a multi-level tree
-(`sub/ ├╴deeper/ │ └╴deep.txt`) read straight from the ISO 9660 directory extents._
+_The ISO browser is the same interactive TOC browser that archives use. This example shows a
+multi-level tree (`sub/ ├╴deeper/ │ └╴deep.txt`) read straight from the ISO 9660 directory extents._
 
 <!-- /peek-skip -->
 
-Per-entry permissions are not surfaced (Rock Ridge SUSP isn't parsed); defaults are `rwxr-xr-x` for
-dirs and `rw-r--r--` for files.
+peek doesn't show permissions for each entry, because it doesn't parse the Rock Ridge System Use
+Sharing Protocol (SUSP) data. Directories show `rwxr-xr-x` and files show `rw-r--r--` as defaults.
 
-Entries can be extracted via `--extract <path>` or `e` in the viewer. ISO extract is zero-copy — a
-`FileRange` view over the backing image, no decompression, no buffering.
+To extract an entry, use `--extract <path>` or press `e` in the viewer. ISO extraction is zero-copy.
+It reads a `FileRange` view over the image file. It doesn't decompress or buffer anything.
 
-The Info view surfaces volume label, volume set, system ID, publisher, data preparer, application,
-volume size in blocks, and the four PVD timestamps (creation / modification / expiration /
-effective). Joliet and El Torito presence are flagged.
+The Info view shows the following:
+
+- The `Volume`, `Volume set`, `System`, `Publisher`, `Data preparer`, and `Application` fields.
+- Volume size in blocks.
+- The four PVD timestamps: creation, modification, expiration, and effective.
+- Whether the image has Joliet and El Torito extensions.
 
 ## DMG
 
-Opens straight to the file info screen — there's no listing path because the inner filesystem (HFS+
-/ APFS / FAT) would need its own walker.
+A DMG image opens straight on the file info screen. peek doesn't list the files, because the inner
+file system (HFS+, APFS, or FAT) would need its own walker.
 
-The Info view parses the 512-byte "koly" trailer at the end of the file: UDIF version, image variant
-(device / partition / mounted system), total uncompressed size, data-fork length, embedded XML
-partition-map size, segment number / count, data + master checksum algorithms, and the documented
-trailer flag bits (flattened, internet-enabled).
+The Info view parses the 512-byte `koly` trailer at the end of the file. It shows the following
+fields:
 
-It also decodes the **partition map** from the embedded plist — one small read, no payload bytes.
-Real filesystems (`Apple_HFS`, `Apple_APFS`, …) each get a detail block; the format scaffolding
-(protective MBR, primary/backup GPT header + table, free-space gaps) collapses into one
-`Partition scheme` block, one line each. Nothing is hidden — the split just puts the real content
-first. Each row carries its image offset (the byte position `mount -o offset=`, `dd skip=`, or
-`mmls` would select on). Example:
+- Universal Disk Image Format (UDIF) version.
+- Image variant: device, partition, or mounted system.
+- Total uncompressed size and data fork length.
+- Size of the embedded XML partition map.
+- Segment number and segment count.
+- Data and master checksum algorithms.
+- The documented trailer flag bits: flattened and internet-enabled.
+
+The Info view also decodes the **partition map** from the embedded property list. This takes one
+small read and no payload bytes. Each real file system, such as `Apple_HFS` or `Apple_APFS`, gets
+its own detail block. The format scaffolding collapses into one `Partition scheme` block with one
+line for each item. The scaffolding includes these items:
+
+- The protective MBR.
+- The primary and backup GUID Partition Table (GPT) headers and tables.
+- Free-space gaps.
+
+peek hides nothing. The split only puts the real content first.
+
+Each row shows its image offset. This is the byte position that you'd pass to `mount -o offset=`,
+`dd skip=`, or `mmls`. For example:
 
 ```
 Partitions    8 (1 filesystem, 7 scheme)
@@ -70,13 +90,16 @@ Partitions    8 (1 filesystem, 7 scheme)
   ...
 ```
 
-Walking each partition's inner filesystem (HFS+ / APFS) is a separate, deferred effort — the
-compression runs are read for their structure, not decompressed. DMG extract is likewise
-unsupported.
+peek doesn't walk the inner file system of each partition (HFS+ or APFS). That's a separate effort
+for later. peek reads the compression runs only for their structure and doesn't decompress them. You
+also can't extract from a DMG image.
 
 ## Raw
 
-Generic raw disk images (`.img` / `.bin` / `.dd`) that don't match a recognised filesystem header.
-The Info view parses the MBR partition table when one is present (partition type, boot flag, LBA
-offset, sector count) and otherwise falls back to a `raw image` label. Listing isn't supported —
-opening the inner filesystem would need a per-FS walker. Hex view (`x`) works on the raw bytes.
+The raw format covers generic disk images (`.img`, `.bin`, and `.dd`) that don't match a known file
+system header. If the image has an MBR partition table, the Info view parses it and shows the
+partition type, boot flag, logical block address (LBA) offset, and sector count. Otherwise it shows
+a `raw image` label.
+
+peek can't list the files in a raw image, because each file system type would need its own walker.
+The hex view (`x`) works on the raw bytes.

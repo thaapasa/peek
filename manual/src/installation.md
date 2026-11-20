@@ -1,34 +1,40 @@
 # Installation
 
-## macOS / Linux (recommended)
+## macOS and Linux (recommended)
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/thaapasa/peek/main/install.sh | sh
 ```
 
-Installs the latest release into `~/.local/bin`. Supported targets: `aarch64` and `x86_64` on both
-platforms.
+The script installs the latest release into `~/.local/bin`. It supports `aarch64` and `x86_64` on
+both platforms.
 
-Overrides:
+To change what the script installs, set these variables:
 
-| Variable           | Effect                           |
-| ------------------ | -------------------------------- |
-| `PEEK_VERSION`     | Pin a release tag, e.g. `v0.3.2` |
-| `PEEK_INSTALL_DIR` | Install to a custom directory    |
+| Variable           | Effect                                  |
+| ------------------ | --------------------------------------- |
+| `PEEK_VERSION`     | Pin a release tag, for example `v0.3.2` |
+| `PEEK_INSTALL_DIR` | Install to a custom directory           |
 
-`curl` doesn't tag downloads with `com.apple.quarantine`, so macOS runs the binary directly — no
-Gatekeeper prompt.
+`curl` doesn't tag downloads with `com.apple.quarantine`, so macOS runs the binary directly without
+a Gatekeeper prompt.
 
 ## Manual download
 
-Grab the `.tar.gz` for your platform from the
-[Releases page](https://github.com/thaapasa/peek/releases), verify against the `.sha256`, extract,
-and move `peek` onto your `PATH`. The archive ships the Pdfium shared library (`libpdfium.dylib` on
-macOS, `libpdfium.so` on Linux) alongside the binary — keep them in the same directory so PDF
-support loads at startup. Without the dylib next to `peek` (or available on the system loader path),
-PDF rendering is disabled; all other formats still work.
+To install peek by hand, follow these steps:
 
-On macOS, if a browser quarantined the archive:
+1. Download the `.tar.gz` file for your platform from the
+   [Releases page](https://github.com/thaapasa/peek/releases).
+1. Verify the download against the `.sha256` file.
+1. Extract the archive.
+1. Move `peek` to a directory on your `PATH`.
+
+The archive includes the Pdfium shared library next to the binary. On macOS, the library is
+`libpdfium.dylib`, and on Linux, it's `libpdfium.so`. Keep the library in the same directory as
+`peek` so that PDF support loads at startup. peek can also load the library from the system loader
+path. If peek can't find the library, PDF rendering is turned off, but all other formats still work.
+
+On macOS, if a browser quarantined the archive, run this command:
 
 ```sh
 xattr -d com.apple.quarantine peek
@@ -36,16 +42,22 @@ xattr -d com.apple.quarantine peek
 
 ## Windows
 
-Download the `.zip` for `x86_64-pc-windows-msvc` from the Releases page, extract, and add the folder
-containing `peek.exe` to your `PATH`. Keep `pdfium.dll` (bundled in the archive) in the same folder
-as `peek.exe` so PDF rendering loads at startup. Piping text into `peek.exe` reopens the console via
-`CONIN$` after consuming the pipe, so the interactive viewer launches the same as on Unix.
+1. Download the `.zip` file for `x86_64-pc-windows-msvc` from the Releases page.
+1. Extract the archive.
+1. Add the folder that contains `peek.exe` to your `PATH`.
+
+Keep `pdfium.dll` from the archive in the same folder as `peek.exe` so that PDF rendering loads at
+startup.
+
+You can pipe text into `peek.exe`. After peek reads the pipe, it reopens the console through
+`CONIN$`, so the interactive viewer starts the same way as on Unix.
 
 ## From source
 
-On x86_64, the build needs [nasm](https://www.nasm.us/) (2.14+) on `PATH` for the AVIF decoder's
-SIMD code (`brew install nasm`, `apt install nasm`, `choco install nasm`). ARM builds don't. The
-build tasks run with [mise](https://mise.jdx.dev/).
+On x86_64, the build needs [nasm](https://www.nasm.us/) 2.14 or later on your `PATH`. The AVIF
+decoder uses it for its SIMD code. To install nasm, run `brew install nasm`, `apt install nasm`, or
+`choco install nasm`. ARM builds don't need nasm. The build tasks run with
+[mise](https://mise.jdx.dev/).
 
 ```sh
 mise install         # Rust toolchain + build tools
@@ -53,30 +65,34 @@ mise run pdfium      # fetch Pdfium dylib for PDF support (skip if you don't nee
 mise run install     # cargo build --release; install to $PEEK_INSTALL_DIR
 ```
 
-`mise run pdfium` downloads
-[bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) for your host platform and
-unpacks it into `.pdfium/`. `mise run install` copies both `peek` and `libpdfium.*` into the install
-dir.
+`mise run pdfium` downloads Pdfium from
+[`bblanchon/pdfium-binaries`](https://github.com/bblanchon/pdfium-binaries) for your host platform
+and unpacks it into `.pdfium/`. `mise run install` copies both `peek` and `libpdfium.*` into the
+install directory.
 
-Pure-cargo alternative (works for everything except PDF unless the dylib is dropped next to the
-binary):
+You can also build with Cargo alone:
 
 ```sh
 cargo install --path .
 ```
 
+This build supports everything except PDF, unless you place the Pdfium library next to the binary.
+
 ## Updating
+
+To update peek, run this command:
 
 ```sh
 peek --update
 ```
 
-Checks GitHub Releases and re-runs `install.sh` if a newer version is available.
+peek checks GitHub Releases. If a newer version is available, it runs `install.sh` again.
 
 ## Shell completions
 
-peek completes its options and their values, such as themes, color modes and `--language` names. Add
-the line for your shell to its startup file:
+peek can complete its options and their values in your shell. The values include themes, color
+modes, and `--language` names. To turn on completions, add the line for your shell to its startup
+file:
 
 ```sh
 # bash: ~/.bashrc
@@ -87,6 +103,6 @@ command -v peek >/dev/null && eval "$(peek --completions zsh)"
 command -q peek; and peek --completions fish | source
 ```
 
-The script comes from the installed binary at each shell start, so it stays in sync after an update.
-The `command -v` check keeps the shell starting cleanly if peek is removed. The zsh script runs
-`compinit` if it has not run yet. `--completions` also takes `elvish` and `powershell`.
+The shell gets the script from the installed binary each time it starts, so the script stays in sync
+after an update. The `command -v` check lets the shell start cleanly if you remove peek. The zsh
+script runs `compinit` if it hasn't run yet. `--completions` also accepts `elvish` and `powershell`.
