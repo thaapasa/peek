@@ -2,16 +2,18 @@
 
 ## Writing (docs + comments)
 
-Terse. Not CLAUDE.md-caveman, but far tighter than prose default. Give the beef, cut the boilerplate
-around it. Assume a sharp reader who wants the point, not 10 sentences of setup.
+All prose follows the `plain-writing` skill, which uses the
+[Google developer documentation style guide](https://developers.google.com/style). If the skill
+isn't loaded, follow the guide and these points:
 
-- **Lead with the fact.** What + _why_ in the first clause. No throat-clearing ("This module is
-  responsible for…" → "Parses X.").
-- **One idea, one line.** Drop filler, hedging, restated context. Fragments fine.
-- **Comment the non-obvious** — invariants, gotchas, _why_ this not that. Don't narrate what the
-  code plainly says.
-- **Fix verbosity in passing.** Editing a doc / `//!` header / comment? Tighten the bloat you touch.
-- **Write new docs terse from the start.**
+- Address the reader as "you", in the active voice and the present tense. Write full sentences with
+  one idea each.
+- A comment gives the reason for the code: an invariant, a constraint or a rejected alternative.
+  Don't retell what the code says.
+- When you edit a doc, a `//!` header or a comment, rewrite the prose you touch to match.
+
+`mise run lint-prose` checks the docs (README, `manual/src/` and `docs/`) with Vale. CI runs the
+same check. `mise run prose` also shows suggestions. Code comments aren't linted.
 
 ## Errors
 

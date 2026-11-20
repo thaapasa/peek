@@ -6,3 +6,7 @@
 .claudelint-cache/
 .DS_Store
 *.local.toml
+# Downloaded by `vale sync`. The Peek style and vocabulary are ours.
+/.vale/styles/*
+!/.vale/styles/Peek/
+!/.vale/styles/config/

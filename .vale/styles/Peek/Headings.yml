@@ -1,0 +1,83 @@
+# Copy of Google.Headings with peek's product and format names as exceptions.
+extends: capitalization
+message: "'%s' should use sentence-style capitalization."
+link: "https://developers.google.com/style/capitalization#capitalization-in-titles-and-headings"
+level: warning
+scope: heading
+match: $sentence
+# No `indicators: [":"]` here. That makes Vale require a capital after a colon,
+# which is the Microsoft convention this rule was originally copied from. This
+# guide says the opposite: "the first word after a colon is generally
+# lowercase" (developers.google.com/style/colons), and Colons.yml enforces
+# exactly that. See issue #58.
+exceptions:
+  - Adobe
+  - Azure
+  - CLI
+  - CSS
+  - CSV
+  - Cargo
+  - Cosmos
+  - DS_Store
+  - Docker
+  - ELF
+  - EPS
+  - EPUB
+  - Emmet
+  - Enter
+  - Esc
+  - Excel
+  - FIDO
+  - GIF
+  - Ghostscript
+  - GitHub
+  - HTML
+  - Homebrew
+  - I
+  - ISO
+  - Illustrator
+  - JSON
+  - Java
+  - Jupyter
+  - Keynote
+  - Kubernetes
+  - LMDB
+  - Linux
+  - Mach-O
+  - Markdown
+  - Marketplace
+  - MongoDB
+  - Numbers
+  - OpenDocument
+  - OpenSSH
+  - PDF
+  - PE
+  - Pages
+  - Pdfium
+  - Peek
+  - PostScript
+  - PowerPoint
+  - REPL
+  - Rust
+  - SQLite
+  - SVG
+  - Studio
+  - TOML
+  - TSV
+  - Tab
+  - TypeScript
+  - URLs
+  - Unicode
+  - VS
+  - Visual
+  - WebP
+  - Windows
+  - Word
+  - X.509
+  - XML
+  - YAML
+  - ZIP
+  - gRPC
+  - iCalendar
+  - macOS
+  - vCard
