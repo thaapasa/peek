@@ -1,22 +1,23 @@
 # Converting external themes to peek `.tmTheme`
 
-peek themes are syntect `.tmTheme` (TextMate plist) files in `crates/peek-theme/themes/`. This guide
-covers porting IntelliJ `.icls` and VS Code JSON themes, plus the syntect quirks that cap fidelity.
+peek themes are syntect `.tmTheme` files, which are TextMate property lists, in
+`crates/peek-theme/themes/`. This guide covers how to port IntelliJ `.icls` themes and VS Code JSON
+themes. It also covers the syntect quirks that limit how closely a port can match the original.
 
 ## Source themes
 
-**VS Code (macOS):**
+**VS Code.** On macOS, the built-in VS Code themes are in this directory:
 
 ```
 /Applications/Visual Studio Code.app/Contents/Resources/app/extensions/theme-defaults/themes/
 ```
 
-Files: `dark_modern.json`, `dark_plus.json`, `dark_vs.json`, `light_modern.json`, etc. VS Code
-themes use an `"include"` chain — read every file in the chain and merge (child overrides parent).
-Dark Modern: `dark_modern → dark_plus → dark_vs`.
+The files include `dark_modern.json`, `dark_plus.json`, `dark_vs.json`, and `light_modern.json`. VS
+Code themes use an `"include"` chain. Read every file in the chain and merge them, so that the child
+overrides the parent. For example, Dark Modern uses the chain `dark_modern → dark_plus → dark_vs`.
 
-**JetBrains:** _Settings → Editor → Color Scheme → ⚙️ → Export_ to `.icls`. Usually drops at
-`~/<Theme>.icls`.
+**JetBrains.** To get a JetBrains theme, go to _Settings → Editor → Color Scheme → ⚙️ → Export_ and
+export it to `.icls`. The file usually lands at `~/<Theme>.icls`.
 
 ## tmTheme structure
 
@@ -70,15 +71,17 @@ Dark Modern: `dark_modern → dark_plus → dark_vs`.
 </plist>
 ```
 
-`PeekTheme::from_syntect` (in `src/theme/peek_theme.rs`) reads `accent`, `gutter_foreground`,
-`find_highlight`, `selection` from globals and derives the rest from scopes — always set those eight
-globals.
+`PeekTheme::from_syntect` in `crates/peek-theme/src/peek_theme.rs` reads `accent`,
+`gutter_foreground`, `find_highlight`, and `selection` from the global settings. It derives the rest
+from the scopes. Always set all eight global settings shown in the template.
 
-## VS Code JSON → tmTheme
+## VS Code JSON to tmTheme
 
-Two relevant top-level keys.
+Two top-level keys matter: `colors` and `tokenColors`.
 
-**`colors`** — UI palette. Map to globals:
+### `colors`
+
+The `colors` key holds the UI palette. Map it to the global settings:
 
 | VS Code key                                               | tmTheme global     |
 | --------------------------------------------------------- | ------------------ |
@@ -89,89 +92,104 @@ Two relevant top-level keys.
 | `editor.lineHighlightBackground` (or `#282828`)           | `lineHighlight`    |
 | `editorLineNumber.foreground`                             | `gutterForeground` |
 | `editor.findMatchBackground`                              | `findHighlight`    |
-| `focusBorder` / `textLink.foreground`                     | `accent`           |
+| `focusBorder` or `textLink.foreground`                    | `accent`           |
 
 **Don't use `editor.selectionBackground` for `selection`.** peek uses `selection` _only_ as the
-status-bar background. VS Code's `editor.selectionBackground` typically carries an alpha (
-`#878b9180`, `#276782dd`) and is meant to be drawn translucently over the editor — strip alpha and
-you get a too-bright status bar with poor text contrast. `statusBar.background` is what VS Code uses
-for its own status bar and works correctly without alpha.
+background of the status bar. In VS Code, `editor.selectionBackground` usually has an alpha channel,
+such as `#878b9180` or `#276782dd`, and VS Code draws it translucently over the editor. If you strip
+the alpha, you get a status bar that is too bright and has poor text contrast. VS Code uses
+`statusBar.background` for its own status bar, and that color works correctly without alpha.
 
-**`tokenColors`** — array of `{ scope, settings: { foreground, fontStyle } }`. Drop into tmTheme
-almost 1:1. `scope` can be string or array; tmTheme expects comma-separated string. `fontStyle`
-transfers directly.
+### `tokenColors`
 
-**Inheritance:** `"include": "./parent.json"` → merge parent's `colors` and `tokenColors` first,
-then let child override. Walk the chain.
+The `tokenColors` key is an array of `{ scope, settings: { foreground, fontStyle } }` entries. They
+map to tmTheme rules almost one to one. In VS Code, `scope` can be a string or an array, but tmTheme
+expects a comma-separated string. `fontStyle` carries over unchanged.
 
-**Semantic tokens:** VS Code also has `semanticTokenColors` and `semanticHighlighting: true`. *
-_syntect has no semantic-token support_* — it only sees TextMate scopes. Skip the
-`semanticTokenColors` block; the result looks like VS Code with semantic highlighting _off_. This is
-why `u8` / `Self` / `None` may render as keyword-blue instead of type-teal in Rust.
+### Inheritance
 
-## IntelliJ `.icls` → tmTheme
+If a theme has `"include": "./parent.json"`, merge the parent's `colors` and `tokenColors` first.
+Then let the child override them. Repeat this for every file in the chain.
 
-XML, two relevant sections.
+### Semantic tokens
 
-**`<colors>`** — UI palette. Map to globals:
+VS Code also has `semanticTokenColors` and `semanticHighlighting: true`. **syntect has no support
+for semantic tokens.** It sees only TextMate scopes. Skip the `semanticTokenColors` block. The
+result looks like VS Code with semantic highlighting turned _off_. This is why `u8`, `Self`, and
+`None` can render in keyword blue instead of type teal in Rust.
 
-| `.icls` option                                   | tmTheme global              |
-| ------------------------------------------------ | --------------------------- |
-| `TEXT` (foreground/background)                   | `foreground` / `background` |
-| `CARET_COLOR`                                    | `caret`                     |
-| `CARET_ROW_COLOR`                                | `lineHighlight`             |
-| `LINE_NUMBERS_COLOR`                             | `gutterForeground`          |
-| (any prominent blue, e.g. `FILESTATUS_MODIFIED`) | `accent`                    |
-| `SEARCH_RESULT_ATTRIBUTES` background            | `findHighlight`             |
+## IntelliJ `.icls` to tmTheme
 
-**`<attributes>`** — named attribute → color. Map IDEA `DEFAULT_*` to TextMate scopes:
+An `.icls` file is XML. Two sections matter: `<colors>` and `<attributes>`.
 
-| `.icls` attribute                                          | tmTheme scope(s)                                                                                         |
-| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_LINE_COMMENT` / `DEFAULT_BLOCK_COMMENT`           | `comment, comment.line, comment.block`                                                                   |
-| `DEFAULT_DOC_COMMENT`                                      | `comment.block.documentation, comment.line.documentation`                                                |
-| `DEFAULT_KEYWORD`                                          | `keyword, keyword.control, storage, storage.type, storage.modifier`                                      |
-| `DEFAULT_OPERATION_SIGN`                                   | `keyword.operator`                                                                                       |
-| `DEFAULT_STRING`                                           | `string, string.quoted`                                                                                  |
-| `DEFAULT_VALID_STRING_ESCAPE`                              | `constant.character.escape`                                                                              |
-| `DEFAULT_NUMBER`                                           | `constant.numeric`                                                                                       |
-| `DEFAULT_CONSTANT`                                         | `constant.language, constant.other, support.constant`                                                    |
-| `DEFAULT_FUNCTION_DECLARATION` / `DEFAULT_INSTANCE_METHOD` | `entity.name.function, support.function, meta.function-call`                                             |
-| `DEFAULT_CLASS_NAME` (or `org.rust.STRUCT` etc.)           | `entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, support.type, support.class` |
-| `DEFAULT_INSTANCE_FIELD`                                   | `variable.other.member, variable.other.property`                                                         |
-| `DEFAULT_METADATA`                                         | `storage.type.annotation, meta.annotation, meta.attribute`                                               |
-| `TYPE_PARAMETER_NAME_ATTRIBUTES`                           | `entity.name.type.parameter, variable.parameter.type`                                                    |
-| `HTML_TAG_NAME` / `XML_TAG_NAME`                           | `entity.name.tag`                                                                                        |
-| `ERRORS_ATTRIBUTES` `EFFECT_COLOR`                         | `invalid, invalid.illegal`                                                                               |
+### `<colors>`
 
-Language-specific overrides (`org.rust.*`, `KOTLIN_*`, `JS.*`) reveal what the IDE _intends_ a token
-to look like. Use them to inform color choices for the generic scope (`org.rust.STRUCT` is the "
-real" struct color even when `DEFAULT_CLASS_REFERENCE` is also defined). Cannot map 1:1 — syntect
-doesn't know IDE-specific scopes.
+The `<colors>` section holds the UI palette. Map it to the global settings:
 
-`FONT_TYPE`: `1` = bold, `2` = italic, `3` = bold+italic. Maps to `fontStyle`.
+| `.icls` option                                        | tmTheme global                |
+| ----------------------------------------------------- | ----------------------------- |
+| `TEXT` (foreground and background)                    | `foreground` and `background` |
+| `CARET_COLOR`                                         | `caret`                       |
+| `CARET_ROW_COLOR`                                     | `lineHighlight`               |
+| `LINE_NUMBERS_COLOR`                                  | `gutterForeground`            |
+| Any prominent blue, for example `FILESTATUS_MODIFIED` | `accent`                      |
+| `SEARCH_RESULT_ATTRIBUTES` background                 | `findHighlight`               |
 
-## syntect Rust-grammar limitations
+### `<attributes>`
 
-Lessons from porting `idea-dark` and `vscode-dark-modern`:
+The `<attributes>` section maps attribute names to colors. Map the IDEA `DEFAULT_*` attributes to
+TextMate scopes:
 
-1. **`storage.type` is overloaded.** `let`, `fn`, `u8`, `i32`, `Self`, `str` all share scope
-   `storage.type.rust`. Can't make `let` blue while making `u8` teal — they're indistinguishable.
-2. **`support.type.rust` covers both containers and enum variants.** `Vec`, `String`, `Some`, `None`
-   all get this scope. Can't split.
-3. **Type references vs declarations.** `entity.name.struct.rust` fires on the declaration site (
-   `pub struct Foo`). The reference site (`impl Foo`, `let x: Foo`) is usually unscoped → renders in
-   default foreground.
-4. **`storage.type.struct/.class/.enum` matches the keyword.** Don't add these to the type rule or
-   the keyword itself turns into the type color. Use specific subscopes instead (
-   `storage.type.numeric/.boolean/.string/.char/.primitive`) — these target primitive types without
+| `.icls` attribute                                         | tmTheme scopes                                                                                           |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_LINE_COMMENT`, `DEFAULT_BLOCK_COMMENT`           | `comment, comment.line, comment.block`                                                                   |
+| `DEFAULT_DOC_COMMENT`                                     | `comment.block.documentation, comment.line.documentation`                                                |
+| `DEFAULT_KEYWORD`                                         | `keyword, keyword.control, storage, storage.type, storage.modifier`                                      |
+| `DEFAULT_OPERATION_SIGN`                                  | `keyword.operator`                                                                                       |
+| `DEFAULT_STRING`                                          | `string, string.quoted`                                                                                  |
+| `DEFAULT_VALID_STRING_ESCAPE`                             | `constant.character.escape`                                                                              |
+| `DEFAULT_NUMBER`                                          | `constant.numeric`                                                                                       |
+| `DEFAULT_CONSTANT`                                        | `constant.language, constant.other, support.constant`                                                    |
+| `DEFAULT_FUNCTION_DECLARATION`, `DEFAULT_INSTANCE_METHOD` | `entity.name.function, support.function, meta.function-call`                                             |
+| `DEFAULT_CLASS_NAME` (or `org.rust.STRUCT` and similar)   | `entity.name.type, entity.name.class, entity.name.struct, entity.name.enum, support.type, support.class` |
+| `DEFAULT_INSTANCE_FIELD`                                  | `variable.other.member, variable.other.property`                                                         |
+| `DEFAULT_METADATA`                                        | `storage.type.annotation, meta.annotation, meta.attribute`                                               |
+| `TYPE_PARAMETER_NAME_ATTRIBUTES`                          | `entity.name.type.parameter, variable.parameter.type`                                                    |
+| `HTML_TAG_NAME`, `XML_TAG_NAME`                           | `entity.name.tag`                                                                                        |
+| `ERRORS_ATTRIBUTES` `EFFECT_COLOR`                        | `invalid, invalid.illegal`                                                                               |
+
+Language-specific overrides such as `org.rust.*`, `KOTLIN_*`, and `JS.*` show how the IDE _intends_
+a token to look. Use them to choose colors for the generic scope. For example, `org.rust.STRUCT`
+holds the real struct color even when `DEFAULT_CLASS_REFERENCE` is also defined. You can't map these
+overrides one to one, because syntect doesn't know the IDE-specific scopes.
+
+`FONT_TYPE` maps to `fontStyle`. The value `1` means bold, `2` means italic, and `3` means bold and
+italic.
+
+## Limits of the syntect Rust grammar
+
+These lessons come from porting `idea-dark` and `vscode-dark-modern`:
+
+1. **`storage.type` is overloaded.** `let`, `fn`, `u8`, `i32`, `Self`, and `str` all share the scope
+   `storage.type.rust`. You can't make `let` blue and `u8` teal, because the theme can't tell them
+   apart.
+2. **`support.type.rust` covers both containers and enum variants.** `Vec`, `String`, `Some`, and
+   `None` all get this scope. You can't split them.
+3. **Type references differ from declarations.** `entity.name.struct.rust` applies at the
+   declaration site, as in `pub struct Foo`. The reference site, as in `impl Foo` or `let x: Foo`,
+   usually has no scope, so it renders in the default foreground color.
+4. **`storage.type.struct`, `storage.type.class`, and `storage.type.enum` match the keyword.** If
+   you add them to the type rule, the keyword itself turns the type color. Use these more specific
+   scopes `storage.type.numeric`, `storage.type.boolean`, `storage.type.string`,
+   `storage.type.char`, and `storage.type.primitive` instead. These target primitive types without
    catching the keyword.
-5. **Rust attributes:** `derive` is `variable.annotation.rust`; macros (`vec!`, `format!`) are
-   `support.macro.rust`. Add both to the function-color rule for an IDE-like look.
-6. **`Self`/`self` split:** `Self` (the type) is `storage.type.rust`; `self` (the
-   expression/binding) is `variable.language.rust` or `variable.parameter.rust`.
+5. **Rust attributes and macros have their own scopes.** `derive` is `variable.annotation.rust`, and
+   macros such as `vec!` and `format!` are `support.macro.rust`. For a look like the IDE's, add both
+   to the rule for the function color.
+6. **`Self` and `self` have different scopes.** `Self`, the type, is `storage.type.rust`. `self`,
+   the expression or binding, is `variable.language.rust` or `variable.parameter.rust`.
 
-When in doubt, dump scopes via a throwaway syntect script:
+If you're not sure which scope a token gets, dump the scopes with a throwaway syntect script:
 
 ```rust
 use syntect::parsing::{ParseState, ScopeStack, SyntaxSet};
@@ -193,17 +211,21 @@ stack.apply(op).unwrap();
 }
 ```
 
-## Registering a new theme
+## Register a new theme
 
-After writing `themes/<name>.tmTheme`:
+After you write `themes/<name>.tmTheme`, follow these steps:
 
-1. **`src/theme/name.rs`** — add `const THEME_<NAME>: &str = include_str!(...)`, add a
-   `PeekThemeName` variant, update `cli_name`, `tmtheme_source`, `next` (pick a sensible cycle
-   position), `help_text`, and the `clap::ValueEnum::value_variants` list. The `#[default]`
-   attribute on the enum determines the CLI default — `cli.rs` reads it via
-   `PeekThemeName::default()`.
-2. **Docs** — update theme tables in `README.md`, `docs/features.md`, and the `themes/` listing in
-   `CLAUDE.md`.
-3. `cargo build && cargo test`.
-4. Smoke test: `cargo run -- --theme <name> --print src/theme/peek_theme.rs` and eyeball against the
-   source theme's reference rendering.
+1. In `crates/peek-theme/src/name.rs`, make these changes:
+   - Add `const THEME_<NAME>: &str = include_str!(...)`.
+   - Add a `PeekThemeName` variant.
+   - Update `cli_name`, `tmtheme_source`, `next`, `help_text`, and the
+     `clap::ValueEnum::value_variants` list. For `next`, pick a sensible position in the cycle.
+
+   The `#[default]` attribute on the enum sets the default for the `--theme` option. `cli.rs` reads
+   it through `PeekThemeName::default()`.
+
+2. Update the docs: the theme tables in `README.md` and `docs/features.md`, and the `themes/`
+   listing in `CLAUDE.md`.
+3. Run `cargo build && cargo test`.
+4. Run a smoke test with `cargo run -- --theme <name> --print crates/peek-theme/src/peek_theme.rs`.
+   Compare the output by eye against the reference rendering of the source theme.

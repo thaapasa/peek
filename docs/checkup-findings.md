@@ -1,67 +1,83 @@
 # Checkup findings
 
-Live tracker for `/checkup` findings. Keeping it up to date:
+This file is the live tracker for `/checkup` findings. To keep it up to date, follow these rules:
 
-- **IDs are stable.** Fixed findings are deleted; remaining IDs keep their numbers so commit / PR
-  references stay valid. New IDs go at the end of a section — don't renumber.
-- **Active findings first**, grouped by severity. A finding decided against moves to _Wontfix
-  records_ at the bottom, compressed to ~5 lines: what was flagged, why declined, what would reopen
-  it.
-- **Durable design rationale lives in `docs/architecture.md`** (or a comment at the site the
-  decision guards), not here — the record links to it. This file only carries the dedup stub.
-- `/checkup` consults the records to avoid re-reporting settled findings. The records are not
-  immunity: if the cited situation has changed — code moved, the declining rationale no longer
-  holds, a reopen trigger fired — checkup must revalidate and surface a fresh finding saying what
-  changed.
+- **IDs are stable.** When a finding is fixed, delete it. The remaining findings keep their IDs, so
+  references in commits and pull requests stay valid. Add new IDs at the end of a section, and don't
+  renumber.
+- **Active findings come first**, grouped by severity. If you decide against a finding, move it to
+  _Won't-fix records_ at the bottom and compress it to about 5 lines. The record says what was
+  flagged, why it was declined, and what would reopen it.
+- **Durable design rationale lives in `docs/architecture.md`**, or in a comment at the site that the
+  decision guards. It doesn't live here. The record links to the rationale, and this file carries
+  only the stub that prevents duplicate reports.
+- `/checkup` reads the records so that it doesn't report settled findings again. The records don't
+  grant immunity. If the situation that a record cites has changed, `/checkup` must check the
+  finding again and report a fresh finding that says what changed. For example, the code may have
+  moved, the reason for declining may no longer hold, or a reopen trigger may have fired.
 
 ## Low
 
-### L14. Fuzzing covers only `peek-detect`; hand-rolled `peek-types` parsers are unfuzzed
+### L14. Fuzzing covers only `peek-detect`, and the hand-rolled `peek-types` parsers have no fuzz coverage
 
-Surfaced by the 2026-06-21 security audit. The stable fuzz floor
-(`peek-detect/tests/fuzz_detect.rs`) + nightly libFuzzer target exercise only the detection layer.
-The hand-rolled binary parsers in `peek-types` (ds_store buddy-allocator, WOFF, the disk-image
-`mish`/`mbr`/`iso_pvd`/`dmg` readers, `ar`/`cpio` headers) are reached only _after_ detection routes
-to them and have no fuzz coverage — they rely on hand-written unit tests (audited clean, and each
-file-controlled length is bounds-checked before allocation, so no reachable panic/OOB was found).
-Future item: add a libFuzzer target per high-value parser to harden the floor against future edits.
-Not urgent — no live bug; this is regression insurance. Reopen as a real finding only if a parser
-change lands without matching adversarial tests.
+The security audit on 2026-06-21 surfaced this finding. The stable fuzz floor
+(`peek-detect/tests/fuzz_detect.rs`) and the nightly libFuzzer target exercise only the detection
+layer.
 
-## Wontfix records
+The hand-rolled binary parsers in `peek-types` have no fuzz coverage. These include the `ds_store`
+buddy allocator, WOFF, the disk-image readers (`mish`, `mbr`, `iso_pvd`, and `dmg`), and the `ar`
+and `cpio` headers. peek reaches them only _after_ detection routes to them. They rely on
+hand-written unit tests instead. The audit found them clean: each file-controlled length is
+bounds-checked before allocation, so it found no reachable panic or out-of-bounds access.
+
+As a future item, add a libFuzzer target for each high-value parser. This hardens the floor against
+future edits. It isn't urgent, because there is no live bug, and the work is regression insurance.
+Reopen this as a real finding only if a parser change lands without matching adversarial tests.
+
+## Won't-fix records
 
 ### M6. Per-type dispatch hubs are a `match file_type` family
 
-`FileTypeRegistry` declined after the 6th-type trigger fired (Notebook, 2026-05-30): detection
-_produces_ `FileType` so it can't join a registry; format sub-enums break a 1:1 type→impl map; the
-explicit matches are compiler-enforced completeness where trait defaults would silently no-op. Full
-rationale: `architecture.md` → "Why the dispatch arms stay explicit". Reopen if a dispatcher can
-someday silently fall through and ship a bug.
+The trigger for the sixth type fired with Notebook on 2026-05-30, and `FileTypeRegistry` was
+declined then. There are three reasons:
+
+- Detection _produces_ `FileType`, so it can't join a registry.
+- Format sub-enums break a one-to-one map from type to implementation.
+- The explicit matches give completeness that the compiler enforces. Trait defaults would silently
+  do nothing instead.
+
+For the full rationale, see "Why the dispatch arms stay explicit" in `architecture.md`. Reopen this
+if a dispatcher can someday silently fall through and ship a bug.
 
 ### M12. `--plain` kept separate from `--color plain`
 
-Merging `--plain` into `--color plain` declined: plain mode additionally suppresses pretty-print,
-the syntect pipeline, and rendered views — none derivable from `StyleMode::Plain`. Rationale:
-`architecture.md` → Registry. The former wart (`main.rs` mutating `args.color`) is gone:
-`cli::parse` computes the effective encoding once, and `args.color_arg` keeps the user's choice.
+Merging `--plain` into `--color plain` was declined. Plain mode also suppresses pretty-printing, the
+syntect pipeline, and rendered views. None of these follow from `StyleMode::Plain`. For the
+rationale, see the Registry section in `architecture.md`.
 
-### M18. `render_window`'s `scroll` parameter is dead for owns-scroll modes
+The former wart, where `main.rs` mutated `args.color`, is gone. `cli::parse` computes the effective
+encoding once, and `args.color_arg` keeps the user's choice.
 
-`ScrolledMode` / `OwnsScrollMode` trait split declined (2026-06-12): it would bifurcate the mode
-vocabulary and `ViewerState` dispatch to remove one ignored argument, and most data modes own scroll
-anyway. Contract is documented on the trait (`viewer/modes/mod.rs`) and in `architecture.md` → Mode
-trait. Reopen if the dead parameter starts shipping real bugs.
+### M18. The `scroll` parameter of `render_window` is dead for owns-scroll modes
+
+A split into `ScrolledMode` and `OwnsScrollMode` traits was declined on 2026-06-12. It would split
+the mode vocabulary and the `ViewerState` dispatch in two just to remove one ignored argument. Most
+data modes own their scroll position anyway. The trait (`viewer/modes/mod.rs`) and the Mode trait
+section in `architecture.md` document the contract. Reopen this if the dead parameter starts
+shipping real bugs.
 
 ### L4. `status_hints(has_return_target)` read only by `HexMode`
 
-Proposed fix can't compile: Cargo layering bars foundation modes from calling back into the bin's
-`ViewerState`, and every workaround (mode-side setter, session-side hex special-casing) costs more
-than one defaulted parameter — it is the channel for session context to reach hint rendering.
-Rationale: `architecture.md` → Mode trait.
+The proposed fix can't compile. Cargo layering bars foundation modes from calling back into the
+`ViewerState` of the bin. Every workaround costs more than one defaulted parameter. The workarounds
+include a setter on the mode side and special-casing hex on the session side. The parameter is the
+channel that carries session context to hint rendering. For the rationale, see the Mode trait
+section in `architecture.md`.
 
-### L13. The whole-doc render cap also bounds in-container image payloads
+### L13. The whole-document render cap also bounds in-container image payloads
 
-Intentional: alloc-abort safety holds for images too, the degrade path is a soft warning, typical
-pages run 1–5 MB. Rationale on `RENDER_MAX_BYTES` (`viewer/modes/rendered_text.rs`). Reopen if a
-real over-cap page/image surfaces; the fix is a second, larger image-payload cap passed into
-`read_zip_entry` per call — not gate removal.
+This is intentional. Safety against allocation aborts holds for images too, the degrade path is a
+soft warning, and typical pages run 1 to 5 MB. The rationale is on `RENDER_MAX_BYTES`
+(`viewer/modes/rendered_text.rs`). Reopen this if a real page or image over the cap surfaces. The
+fix is then a second, larger cap for image payloads, passed into `read_zip_entry` on each call. The
+fix isn't to remove the gate.
