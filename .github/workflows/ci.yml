@@ -47,6 +47,10 @@ jobs:
         if: runner.os == 'Linux'
         run: prettier --check --log-level warn "**/*.md"
 
+      - name: Check docs prose
+        if: runner.os == 'Linux'
+        run: mise run lint-prose
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 

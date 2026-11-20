@@ -36,10 +36,11 @@ run = [
 ]
 
 [tasks.lint]
-description = "Check Rust + Markdown formatting, cargo check + clippy"
+description = "Check Rust + Markdown formatting, docs prose, cargo check + clippy"
 run = [
   "cargo +nightly fmt -- --check",
   "prettier --check --log-level warn '**/*.md'",
+  "mise run lint-prose",
   "cargo check --workspace --all-targets",
   "cargo clippy --workspace --all-targets -- -D warnings",
 ]
